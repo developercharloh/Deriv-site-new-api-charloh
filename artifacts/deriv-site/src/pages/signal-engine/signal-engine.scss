@@ -1,0 +1,1255 @@
+// ─── Outer single card wrapper ────────────────────────────────────────────────
+.se-main-card {
+    border-radius: 16px;
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    background: linear-gradient(160deg, rgba(99, 102, 241, 0.07) 0%, rgba(16, 185, 129, 0.04) 100%);
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+
+    // All inner "cards" become flat sections separated by thin lines
+    .se-hd         { border: none; border-radius: 0; background: none; margin-bottom: 0; box-shadow: none; border-bottom: 1px solid rgba(99, 102, 241, 0.12); }
+    .se-dist-card  { border: none; border-radius: 0; background: none; margin-bottom: 0; box-shadow: none; border-bottom: 1px solid rgba(99, 102, 241, 0.12); }
+    .se-signals-card { border: none; border-radius: 0; background: none; }
+
+    // Keep inner scan-row border consistent
+    .se-hd .se-scan-row { border-radius: 0; }
+
+    // Chi-sq row border inside dist card is fine as-is
+}
+
+.theme--dark .se-main-card {
+    border-color: rgba(99, 102, 241, 0.30);
+    background: linear-gradient(160deg, rgba(99, 102, 241, 0.12) 0%, rgba(16, 185, 129, 0.06) 100%);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+    .se-hd        { border-bottom-color: rgba(255, 255, 255, 0.08); }
+    .se-dist-card { border-bottom-color: rgba(255, 255, 255, 0.08); }
+}
+
+// ─── Header sections ──────────────────────────────────────────────────────────
+.se-hd {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border-radius: 16px;
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    background: linear-gradient(160deg, rgba(99, 102, 241, 0.07) 0%, rgba(16, 185, 129, 0.04) 100%);
+    overflow: hidden;
+    margin-bottom: 0.65rem;
+
+    &__top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.75rem 0.9rem 0.6rem;
+    }
+
+    &__title-block {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        min-width: 0;
+    }
+
+    &__icon {
+        font-size: 1.5rem;
+        line-height: 1;
+        filter: drop-shadow(0 2px 8px rgba(99, 102, 241, 0.55));
+        flex-shrink: 0;
+    }
+
+    &__title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        line-height: 1.15;
+    }
+
+    &__sub {
+        margin: 2px 0 0;
+        font-size: 0.65rem;
+        font-weight: 600;
+        color: var(--text-less-prominent, #94a3b8);
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    &__live-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        flex-shrink: 0;
+        padding: 0.3rem 0.65rem;
+        border-radius: 999px;
+        background: rgba(100, 116, 139, 0.12);
+        border: 1px solid rgba(100, 116, 139, 0.22);
+        font-size: 0.6rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        color: var(--text-less-prominent, #94a3b8);
+        text-transform: uppercase;
+        transition: background 0.3s, color 0.3s, border-color 0.3s;
+
+        &--full {
+            background: rgba(16, 185, 129, 0.12);
+            border-color: rgba(16, 185, 129, 0.35);
+            color: #10b981;
+        }
+    }
+
+    &__live-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: se-pulse 1.4s ease-in-out infinite;
+        flex-shrink: 0;
+    }
+
+    // row 2 — market selector
+    &__selector-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.5rem 0.9rem;
+        border-top: 1px solid rgba(99, 102, 241, 0.12);
+        background: rgba(15, 23, 42, 0.03);
+    }
+
+    &__selector-label {
+        font-size: 0.65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-less-prominent, #94a3b8);
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    &__selector-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        flex: 1;
+        min-width: 0;
+    }
+
+    &__selector-select {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 100%;
+        padding: 0.42rem 2rem 0.42rem 0.7rem;
+        background: rgba(15, 23, 42, 0.06);
+        border: 1.5px solid rgba(99, 102, 241, 0.25);
+        border-radius: 10px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-general, #1e293b);
+        cursor: pointer;
+        outline: none;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+
+        &:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+        }
+    }
+
+    &__selector-chevron {
+        position: absolute;
+        right: 0.55rem;
+        color: #6366f1;
+        pointer-events: none;
+        flex-shrink: 0;
+    }
+
+    // row 3 — scan dots (lives inside se-scan-row below)
+    .se-scan-row {
+        border-top: 1px solid rgba(99, 102, 241, 0.12);
+        border-radius: 0;
+        background: rgba(15, 23, 42, 0.025);
+        margin: 0;
+    }
+}
+
+// Dark-mode header card
+.theme--dark .se-hd {
+    background: linear-gradient(160deg, rgba(99,102,241,0.12) 0%, rgba(16,185,129,0.06) 100%);
+    border-color: rgba(99,102,241,0.30);
+
+    &__selector-select {
+        background: rgba(255,255,255,0.06);
+        color: #f1f5f9;
+        border-color: rgba(99,102,241,0.35);
+    }
+    .se-scan-row { background: rgba(255,255,255,0.02); }
+}
+
+// ─── Live price card ──────────────────────────────────────────────────────────
+.se-price-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.6rem 0.9rem;
+    border-radius: 14px;
+    border: 1px solid rgba(100, 116, 139, 0.18);
+    background: linear-gradient(135deg, rgba(15,23,42,0.04) 0%, rgba(99,102,241,0.04) 100%);
+    margin-bottom: 0.55rem;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+
+.se-digit-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 52px;
+    padding: 0.35rem 0.6rem;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 12px;
+    flex-shrink: 0;
+
+    &__label {
+        font-size: 0.5rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--text-less-prominent, #94a3b8);
+        line-height: 1;
+    }
+
+    &__value {
+        font-size: 1.6rem;
+        font-weight: 900;
+        font-family: 'JetBrains Mono', monospace;
+        line-height: 1;
+    }
+
+    &__spin {
+        color: #6366f1;
+        animation: se-spin 0.8s linear infinite;
+    }
+
+    &__err  { color: #ef4444; }
+    &__wifi { color: #10b981; }
+}
+
+.theme--dark {
+    .se-price-card {
+        background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(99,102,241,0.06) 100%);
+        border-color: rgba(255,255,255,0.10);
+    }
+    .se-digit-pill {
+        background: rgba(99,102,241,0.14);
+        border-color: rgba(99,102,241,0.35);
+    }
+}
+
+// ─── Scan status row (lives inside .se-hd as row 3) ─────────────────────────
+.se-scan-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding: 0.45rem 0.9rem;
+    // border-top is injected by .se-hd .se-scan-row override above
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+
+    &__label {
+        font-size: 0.58rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-less-prominent, #94a3b8);
+        white-space: nowrap;
+        padding-top: 2px;
+        flex-shrink: 0;
+    }
+
+    // Dots fill the remaining width, wrapping onto multiple lines if needed
+    &__dots {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+}
+
+.se-scan-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    cursor: default;
+    transition: background 0.3s;
+
+    &--live        { background: #10b981; }
+    &--connecting  { background: #eab308; animation: se-pulse 1.2s ease-in-out infinite; }
+    &--error       { background: #ef4444; }
+}
+
+// ─── Signal count badge ────────────────────────────────────────────────────────
+.se-signals-card {
+    &__count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #6366f1;
+        color: #fff;
+        font-size: 0.55rem;
+        font-weight: 900;
+        margin-left: 0.35rem;
+        vertical-align: middle;
+    }
+
+    &__header-right {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+}
+
+// ─── Win rate pill ─────────────────────────────────────────────────────────────
+.se-win-rate {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.58rem;
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+// ─── Symbol badge inside signal card ─────────────────────────────────────────
+.se-signal-card {
+    &__sym-badge {
+        display: inline-block;
+        font-size: 0.55rem;
+        font-weight: 800;
+        padding: 0.12rem 0.4rem;
+        border-radius: 4px;
+        background: rgba(100, 116, 139, 0.15);
+        color: var(--text-less-prominent, #94a3b8);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-right: 0.35rem;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    &__head-right {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    // Win / Loss result badge
+    &__result {
+        font-size: 0.56rem;
+        font-weight: 800;
+        padding: 0.12rem 0.4rem;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-family: 'JetBrains Mono', monospace;
+
+        &--win  { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+        &--loss { background: rgba(239, 68, 68, 0.15);  color: #ef4444; }
+    }
+
+    // Sample size + recency row
+    &__meta {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+    }
+
+    &__meta-pill {
+        font-size: 0.56rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-less-prominent, #94a3b8);
+        background: rgba(100, 116, 139, 0.08);
+        padding: 0.1rem 0.4rem;
+        border-radius: 999px;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+    }
+}
+
+// ─── Volatility badge ──────────────────────────────────────────────────────────
+.se-vol-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+
+    &--allow {
+        background: rgba(16, 185, 129, 0.12);
+        color: #10b981;
+        .se-vol-badge__dot { background: #10b981; }
+    }
+    &--block {
+        background: rgba(239, 68, 68, 0.12);
+        color: #ef4444;
+        .se-vol-badge__dot { background: #ef4444; }
+    }
+
+    &__dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        animation: se-pulse 1.5s ease-in-out infinite;
+    }
+}
+
+@keyframes se-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.8); }
+}
+
+// ─── Signals card ─────────────────────────────────────────────────────────────
+.se-signals-card {
+    border-radius: 1rem;
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    background: rgba(99, 102, 241, 0.04);
+    overflow: hidden;
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 0.9rem;
+        border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+        background: rgba(99, 102, 241, 0.07);
+    }
+
+    &__title {
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: #6366f1;
+    }
+
+    &__body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.6rem;
+        min-height: 80px;
+    }
+
+    &__empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        padding: 1rem;
+    }
+
+    &__empty-icon { font-size: 1.4rem; }
+
+    &__empty-text {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--text-less-prominent, #94a3b8);
+        text-align: center;
+    }
+}
+
+// ─── Individual signal card ────────────────────────────────────────────────────
+.se-signal-card {
+    border-radius: 0.8rem;
+    border: 1px solid rgba(var(--sig-color, #6366f1), 0.25);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 0.7rem 0.85rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+
+    &__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    &__badge {
+        font-size: 0.58rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        padding: 0.18rem 0.55rem;
+        border-radius: 999px;
+    }
+
+    &__timer {
+        font-size: 0.62rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-less-prominent, #94a3b8);
+
+        &--urgent { color: #ef4444; animation: se-pulse 0.8s ease-in-out infinite; }
+    }
+
+    &__direction {
+        font-size: 1.35rem;
+        font-weight: 900;
+        font-family: 'JetBrains Mono', monospace;
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+    }
+
+    &__symbol {
+        font-size: 0.62rem;
+        font-weight: 600;
+        color: var(--text-less-prominent, #94a3b8);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    &__models {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    &__model-chip {
+        font-size: 0.56rem;
+        font-weight: 700;
+        padding: 0.15rem 0.45rem;
+        border-radius: 999px;
+        background: rgba(100, 116, 139, 0.12);
+        color: var(--text-less-prominent, #94a3b8);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    &__conf-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-top: 0.1rem;
+    }
+
+    &__conf-label {
+        font-size: 0.58rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-less-prominent, #94a3b8);
+    }
+
+    &__conf-val {
+        font-size: 0.7rem;
+        font-weight: 900;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    &__conf-track {
+        height: 5px;
+        border-radius: 99px;
+        background: rgba(100, 116, 139, 0.15);
+        overflow: hidden;
+    }
+
+    &__conf-fill {
+        height: 100%;
+        border-radius: 99px;
+    }
+
+    &__entry {
+        font-size: 0.65rem;
+        font-weight: 600;
+        color: var(--text-general, #334155);
+        padding: 0.3rem 0.5rem;
+        border-radius: 0.4rem;
+        background: rgba(100, 116, 139, 0.07);
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    &__ttl-track {
+        height: 3px;
+        border-radius: 99px;
+        background: rgba(100, 116, 139, 0.12);
+        overflow: hidden;
+        margin-top: 0.1rem;
+    }
+
+    &__ttl-fill {
+        height: 100%;
+        border-radius: 99px;
+        transition: background 0.4s;
+    }
+}
+
+// ─── Load AI button on signal card ────────────────────────────────────────────
+.se-signal-card {
+    &__ai-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-top: 0.15rem;
+        padding: 0.22rem 0.55rem;
+        border-radius: 999px;
+        border: 1px solid rgba(99, 102, 241, 0.35);
+        background: rgba(99, 102, 241, 0.08);
+        color: #6366f1;
+        font-size: 0.58rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+        transition: background 0.18s, border-color 0.18s;
+        width: 100%;
+        justify-content: center;
+
+        &:hover {
+            background: rgba(99, 102, 241, 0.18);
+            border-color: rgba(99, 102, 241, 0.6);
+        }
+        svg { flex-shrink: 0; }
+    }
+}
+
+// ─── Signal Settings Modal ────────────────────────────────────────────────────
+.se-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.se-modal {
+    background: var(--general-main-1, #fff);
+    border-radius: 1.2rem;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.1rem 0.8rem;
+        border-bottom: 1px solid rgba(100, 116, 139, 0.1);
+    }
+
+    &__title {
+        font-size: 0.9rem;
+        font-weight: 800;
+        color: var(--text-general, #1e293b);
+        letter-spacing: -0.01em;
+    }
+
+    &__engine-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.6rem 1.1rem;
+        border-bottom: 1px solid rgba(100, 116, 139, 0.1);
+        background: rgba(100, 116, 139, 0.03);
+    }
+    &__engine-label-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 0.18rem;
+        min-width: 0;
+    }
+    &__engine-label {
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: var(--text-less-prominent, #64748b);
+        letter-spacing: 0.01em;
+    }
+    &__engine-rec {
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: #10b981;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        strong { font-weight: 800; }
+    }
+    &__engine-star {
+        margin-left: 4px;
+        color: #f59e0b;
+        font-size: 0.7rem;
+        line-height: 1;
+        text-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+    }
+    &__engine-seg {
+        display: flex;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid rgba(100, 116, 139, 0.2);
+        background: rgba(100, 116, 139, 0.06);
+    }
+    &__engine-opt {
+        padding: 5px 16px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        color: var(--text-less-prominent, #64748b);
+        transition: all 0.15s;
+        letter-spacing: 0.01em;
+
+        &--active {
+            background: rgba(100, 116, 139, 0.18);
+            color: var(--text-general, #1e293b);
+        }
+        &--v2 {
+            &.se-modal__engine-opt--v2-active {
+                background: rgba(14, 165, 233, 0.18);
+                color: #0ea5e9;
+            }
+        }
+        &:hover:not(&--active):not(&--v2-active) {
+            background: rgba(100, 116, 139, 0.1);
+        }
+    }
+
+    &__close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(100, 116, 139, 0.1);
+        color: var(--text-less-prominent, #64748b);
+        cursor: pointer;
+        transition: background 0.15s;
+        &:hover { background: rgba(100, 116, 139, 0.2); }
+    }
+
+    // Signal info card at top
+    &__info-card {
+        margin: 0.8rem 1rem;
+        border-radius: 0.8rem;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%);
+        border: 1px solid rgba(99, 102, 241, 0.15);
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    &__info-left {
+        display: flex;
+        flex-direction: column;
+        gap: 0.18rem;
+    }
+
+    &__info-row-label {
+        font-size: 0.6rem;
+        font-weight: 600;
+        color: var(--text-less-prominent, #94a3b8);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    &__info-sym {
+        font-size: 0.72rem;
+        font-weight: 800;
+        color: #6366f1;
+        line-height: 1.2;
+        max-width: 120px;
+    }
+
+    &__info-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.18rem;
+    }
+
+    &__info-dir {
+        font-size: 0.85rem;
+        font-weight: 900;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    &__info-meta {
+        font-size: 0.6rem;
+        font-weight: 600;
+        color: var(--text-less-prominent, #94a3b8);
+        white-space: nowrap;
+    }
+
+    // 2×2 input grid
+    &__inputs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.6rem;
+        padding: 0.2rem 1rem 0.8rem;
+    }
+
+    &__field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+
+        &--full {
+            grid-column: 1 / -1;
+        }
+    }
+
+    &__field-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: var(--text-general, #334155);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+    }
+
+    &__field-hint {
+        font-size: 0.6rem;
+        font-weight: 600;
+        color: var(--text-less-prominent, #94a3b8);
+    }
+
+    &__field-rec {
+        margin-left: auto;
+        font-size: 0.58rem;
+        font-weight: 700;
+        color: #10b981;
+        background: rgba(16, 185, 129, 0.1);
+        padding: 0.12rem 0.45rem;
+        border-radius: 0.4rem;
+        letter-spacing: 0.02em;
+    }
+
+    &__select {
+        appearance: none;
+        -webkit-appearance: none;
+        cursor: pointer;
+        background-image: linear-gradient(45deg, transparent 50%, #6366f1 50%),
+                          linear-gradient(135deg, #6366f1 50%, transparent 50%);
+        background-position: calc(100% - 14px) center, calc(100% - 9px) center;
+        background-size: 5px 5px, 5px 5px;
+        background-repeat: no-repeat;
+        padding-right: 2rem;
+    }
+
+    &__input {
+        width: 100%;
+        padding: 0.55rem 0.7rem;
+        border-radius: 0.6rem;
+        border: 1.5px solid rgba(100, 116, 139, 0.2);
+        background: rgba(100, 116, 139, 0.06);
+        color: var(--text-general, #1e293b);
+        font-size: 0.85rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        outline: none;
+        box-sizing: border-box;
+        transition: border-color 0.15s;
+
+        &:focus { border-color: #6366f1; background: rgba(99, 102, 241, 0.05); }
+
+        // hide number spinners
+        &::-webkit-inner-spin-button,
+        &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        -moz-appearance: textfield;
+    }
+
+    // Footer buttons
+    &__footer {
+        display: flex;
+        gap: 0.6rem;
+        padding: 0.8rem 1rem 1rem;
+        border-top: 1px solid rgba(100, 116, 139, 0.1);
+    }
+
+    &__btn {
+        flex: 1;
+        padding: 0.65rem 1rem;
+        border-radius: 0.7rem;
+        border: none;
+        font-size: 0.75rem;
+        font-weight: 800;
+        cursor: pointer;
+        transition: opacity 0.15s, transform 0.1s;
+        letter-spacing: 0.02em;
+
+        &:active { transform: scale(0.97); }
+
+        &--cancel {
+            background: rgba(100, 116, 139, 0.15);
+            color: var(--text-less-prominent, #64748b);
+            &:hover { background: rgba(100, 116, 139, 0.25); }
+        }
+
+        &--run {
+            background: #10b981;
+            color: #fff;
+            &:hover { opacity: 0.9; }
+        }
+
+        &--close-dl {
+            background: #6366f1;
+            color: #fff;
+            width: 100%;
+            margin-top: 0.8rem;
+            &:hover { opacity: 0.9; }
+        }
+    }
+
+    // Spinning icon inside the Run button while launching
+    &__spin {
+        animation: se-spin 0.8s linear infinite;
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 0.3rem;
+    }
+
+    // Warning / error banner
+    &__warn-banner {
+        margin: 0 1rem 0.8rem;
+        background: rgba(234, 179, 8, 0.08);
+        border: 1.5px solid rgba(234, 179, 8, 0.35);
+        border-radius: 0.9rem;
+        padding: 0.8rem 0.9rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+
+        &--error {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: rgba(239, 68, 68, 0.35);
+        }
+    }
+
+    &__warn-icon {
+        font-size: 1.1rem;
+    }
+
+    &__warn-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+
+        strong {
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: var(--text-general, #1e293b);
+        }
+
+        span {
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: var(--text-less-prominent, #64748b);
+            line-height: 1.4;
+        }
+    }
+
+    &__warn-close {
+        align-self: flex-start;
+        flex: none;
+        padding: 0.4rem 0.9rem;
+        font-size: 0.7rem;
+    }
+}
+
+@keyframes se-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+// ─── Quadrant / circle base layout ──────────────────────────────────────────
+// Two-row digit grid: 0–4 upper band, 5–9 lower band. Each digit cell holds
+// a coloured circle that resizes per tick + a thin distribution bar + the %
+// label. The container DOES NOT shove neighbours when a circle grows — the
+// holder has a fixed height so the radius animation never reflows the row.
+.ez-quadrants {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin: 0.4rem 0 1rem;
+}
+.ez-quadrant {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.85rem 1rem 0.95rem;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.025) 0%, rgba(99, 102, 241, 0.045) 100%);
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 16px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.ez-quadrant--split { gap: 0.7rem; }
+
+.ez-band {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.ez-cursor-layer {
+    position: relative;
+    height: 18px;
+    width: 100%;
+}
+.ez-cursor {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    will-change: left, transform;
+}
+.ez-cursor__arrow {
+    font-size: 0.95rem;
+    line-height: 1;
+    color: #ef4444;
+    text-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+    filter: drop-shadow(0 2px 4px rgba(239, 68, 68, 0.45));
+}
+
+// 5 cells per band, equally spaced. Fixed grid (not flex) so the cursor's
+// `left: (i + 0.5) * 20%` math lines up exactly with each cell centre.
+.ez-circles {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.4rem;
+    width: 100%;
+}
+.ez-circles--grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.4rem;
+}
+.ez-circle-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+}
+.ez-circle-holder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 56px;        // > max circle size (44px) so growth doesn't reflow
+    width: 100%;
+}
+.ez-circle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 800;
+    font-size: 0.95rem;
+    line-height: 1;
+    will-change: width, height, box-shadow, transform;
+    user-select: none;
+}
+.ez-circle__pulse {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0.5;
+}
+.ez-bar-track {
+    width: 100%;
+    height: 4px;
+    background: rgba(15, 23, 42, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.ez-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+}
+.ez-pct {
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.01em;
+}
+
+// ─── χ² significance row ─────────────────────────────────────────────────────
+.se-chisq {
+    margin: 6px 0 4px;
+    padding: 8px 12px;
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 10px;
+
+    &__row {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    &__label {
+        font-size: 0.68rem; font-weight: 800;
+        letter-spacing: 0.06em; text-transform: uppercase;
+        color: #6366f1; flex-shrink: 0;
+    }
+    &__val {
+        font-family: 'JetBrains Mono', 'SF Mono', monospace;
+        font-size: 0.98rem; font-weight: 900; color: #0f172a;
+    }
+    &__stars {
+        font-size: 0.88rem; letter-spacing: 0.05em; margin-left: auto;
+    }
+    &__verdict {
+        margin-top: 3px; font-size: 0.72rem; line-height: 1.35; font-weight: 600;
+    }
+}
+
+// Dark-mode versions
+.theme--dark {
+    .se-chisq {
+        background: rgba(99, 102, 241, 0.12);
+        border-color: rgba(99, 102, 241, 0.28);
+    }
+    .se-chisq__val { color: #f1f5f9; }
+    .ez-quadrant {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(99, 102, 241, 0.07) 100%);
+        border-color: rgba(255, 255, 255, 0.10);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+    .ez-bar-track { background: rgba(255, 255, 255, 0.08); }
+}
+
+// ─── Single distribution card (price + circles + χ²) ─────────────────────────
+.se-dist-card {
+    border-radius: 16px;
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.025) 0%, rgba(99, 102, 241, 0.045) 100%);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    overflow: hidden;
+    margin-bottom: 0.65rem;
+
+    &__price-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+        padding: 0.65rem 0.9rem 0.55rem;
+        border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+    }
+
+    .ez-quadrants {
+        padding: 0.65rem 0.75rem 0.5rem;
+        gap: 0.5rem;
+        margin: 0;
+    }
+
+    .se-chisq {
+        margin: 0;
+        border-radius: 0;
+        border: none;
+        border-top: 1px solid rgba(99, 102, 241, 0.1);
+        background: rgba(99, 102, 241, 0.04);
+        padding: 7px 12px;
+    }
+}
+
+.theme--dark .se-dist-card {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(99, 102, 241, 0.07) 100%);
+    border-color: rgba(255, 255, 255, 0.10);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+    &__price-row { border-bottom-color: rgba(255, 255, 255, 0.07); }
+
+    .se-chisq {
+        border-top-color: rgba(255, 255, 255, 0.07);
+        background: rgba(99, 102, 241, 0.08);
+    }
+}
+
+// ─── Circle size overrides ────────────────────────────────────────────────────
+.se-root {
+    .ez-quadrants  { gap: 0.5rem; }
+    .ez-quadrant   { padding: 0; gap: 0.4rem; border: none; background: none; box-shadow: none; }
+    .ez-quadrant--split { gap: 0.4rem; }
+    .ez-band       { gap: 0.3rem; }
+    .ez-cursor-layer { height: 16px; }
+    .ez-circles    { gap: 0.2rem; justify-content: space-between; }
+    .ez-circles--grid { gap: 0.2rem; }
+    .ez-circle-col { gap: 0.25rem; }
+    .ez-circle-holder { height: 58px; }   // 52px circle + 6px breathing room
+    .ez-circle     { font-size: 1rem; font-weight: 800; }
+    .ez-rank-badge { font-size: 0.5rem; min-height: 10px; }
+    .ez-pct        { font-size: 0.65rem; font-weight: 700; }
+    .ez-bar-track  { height: 3px; }
+    .ez-cursor__arrow { font-size: 0.8rem; }
+}
+
+// ─── Regime Change Alert Banner ───────────────────────────────────────────────
+.se-regime-alert {
+    display:        flex;
+    align-items:    flex-start;
+    gap:            0.75rem;
+    margin:         0.75rem 1rem;
+    padding:        0.875rem 1rem;
+    background:     rgba(239, 68, 68, 0.1);
+    border:         1.5px solid rgba(239, 68, 68, 0.5);
+    border-radius:  10px;
+    animation:      se-regime-pulse 2s ease-in-out infinite;
+
+    &__icon { font-size: 1.25rem; flex-shrink: 0; margin-top: 2px; }
+
+    &__body {
+        strong { display: block; font-size: 0.85rem; font-weight: 700; color: #ef4444; margin-bottom: 0.25rem; }
+        p      { font-size: 0.75rem; color: #6b7280; margin: 0; line-height: 1.4; }
+    }
+}
+.theme--dark .se-regime-alert {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    &__body p { color: #9ca3af; }
+}
+@keyframes se-regime-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    50%       { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12); }
+}

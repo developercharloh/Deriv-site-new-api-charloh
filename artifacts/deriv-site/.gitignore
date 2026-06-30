@@ -1,0 +1,12 @@
+node_modules/
+dist/
+out/
+pnpm-lock.yaml
+.pnpm/
+.cache/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+coverage/
+.env.local
+.env.*.local

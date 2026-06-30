@@ -1,0 +1,400 @@
+.aat {
+    display:        flex;
+    flex-direction: column;
+    gap:            1rem;
+    padding:        1rem;
+    background:     #0d0f1a;
+    min-height:     100%;
+    color:          #e2e8f0;
+    font-family:    system-ui, sans-serif;
+    overflow-y:     auto;
+
+    // ── Header ──────────────────────────────────────────────────────────────
+    &__header {
+        display:       flex;
+        align-items:   flex-start;
+        gap:           0.75rem;
+        background:    #161929;
+        border:        1px solid #2a2d4a;
+        border-radius: 12px;
+        padding:       0.85rem 1rem;
+    }
+    &__brain     { font-size: 1.6rem; flex-shrink: 0; margin-top: 0.1rem; }
+    &__title     { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin-bottom: 0.25rem; }
+    &__subtitle  { font-size: 0.75rem; color: #64748b; line-height: 1.5; }
+
+    // ── Trade type selector ──────────────────────────────────────────────────
+    &__section-label {
+        font-size:      0.68rem;
+        font-weight:    700;
+        letter-spacing: 0.08em;
+        color:          #475569;
+        text-transform: uppercase;
+    }
+
+    &__type-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.6rem;
+    }
+
+    &__type-btn {
+        display:        flex;
+        flex-direction: column;
+        align-items:    center;
+        gap:            0.2rem;
+        padding:        0.75rem 0.5rem;
+        border-radius:  10px;
+        border:         1.5px solid #2a2d4a;
+        background:     #161929;
+        color:          #94a3b8;
+        cursor:         pointer;
+        transition:     border-color 0.15s, background 0.15s, color 0.15s;
+
+        &--active {
+            border-color: #6366f1;
+            background:   rgba(99, 102, 241, 0.12);
+            color:        #e2e8f0;
+        }
+        &:hover:not(&--active) { border-color: #4a4e6a; }
+    }
+    &__type-icon { font-size: 1.4rem; }
+    &__type-name { font-size: 0.85rem; font-weight: 700; }
+    &__type-desc { font-size: 0.68rem; color: #64748b; }
+
+    // ── Scan button ──────────────────────────────────────────────────────────
+    &__scan-btn {
+        width:         100%;
+        padding:       0.85rem 1rem;
+        border-radius: 10px;
+        border:        none;
+        background:    linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+        color:         #fff;
+        font-size:     0.95rem;
+        font-weight:   700;
+        cursor:        pointer;
+        transition:    opacity 0.15s, transform 0.12s;
+
+        &:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+        &:active:not(:disabled) { transform: scale(0.98); }
+        &--scanning { opacity: 0.7; cursor: not-allowed; }
+        &:disabled  { opacity: 0.6; cursor: not-allowed; }
+    }
+
+    // ── Scanning progress card ───────────────────────────────────────────────
+    &__progress-card {
+        background:    #161929;
+        border:        1px solid #2a2d4a;
+        border-radius: 14px;
+        padding:       1.25rem;
+        display:       flex;
+        flex-direction: column;
+        align-items:   center;
+        gap:           0.6rem;
+    }
+
+    &__brain-circle {
+        width:         72px;
+        height:        72px;
+        border-radius: 50%;
+        border:        2px solid #6366f1;
+        display:       flex;
+        align-items:   center;
+        justify-content: center;
+        background:    rgba(99, 102, 241, 0.08);
+        animation:     aat-pulse 2s ease-in-out infinite;
+    }
+    &__brain-emoji { font-size: 2rem; }
+
+    &__market-count {
+        display:     flex;
+        align-items: baseline;
+        gap:         0.2rem;
+        margin-top:  0.2rem;
+    }
+    &__market-num   { font-size: 2.2rem; font-weight: 800; color: #f1f5f9; }
+    &__market-sep   { font-size: 1.4rem; color: #475569; }
+    &__market-total { font-size: 1.4rem; color: #64748b; font-weight: 600; }
+    &__market-label { font-size: 0.8rem; color: #475569; margin-top: -0.2rem; }
+
+    &__steps {
+        width:          100%;
+        display:        flex;
+        flex-direction: column;
+        gap:            0.45rem;
+        margin-top:     0.4rem;
+    }
+
+    &__step {
+        display:     flex;
+        align-items: center;
+        gap:         0.6rem;
+        font-size:   0.82rem;
+
+        &--done   { color: #22c55e; }
+        &--active { color: #a78bfa; }
+        &--idle   { color: #334155; }
+    }
+    &__step-icon  { font-size: 0.9rem; width: 1rem; text-align: center; flex-shrink: 0; }
+    &__step-label { flex: 1; line-height: 1.4; }
+
+    &__scan-bar {
+        width:         100%;
+        height:        4px;
+        border-radius: 2px;
+        background:    #1e2235;
+        overflow:      hidden;
+        margin-top:    0.4rem;
+    }
+    &__scan-bar-fill {
+        height:           100%;
+        border-radius:    2px;
+        background:       linear-gradient(90deg, #6366f1 0%, #22c55e 100%);
+        transition:       width 0.3s ease;
+    }
+
+    // ── Empty / error ────────────────────────────────────────────────────────
+    &__empty {
+        text-align:    center;
+        padding:       1.5rem;
+        color:         #64748b;
+        font-size:     0.9rem;
+        line-height:   1.6;
+        background:    #161929;
+        border:        1px solid #2a2d4a;
+        border-radius: 12px;
+    }
+
+    // ── Result wrapper ───────────────────────────────────────────────────────
+    &__result {
+        display:        flex;
+        flex-direction: column;
+        gap:            0.75rem;
+    }
+
+    // ── Signal card ──────────────────────────────────────────────────────────
+    &__signal-card {
+        display:        flex;
+        flex-direction: column;
+        gap:            0;
+        background:     #161929;
+        border:         1px solid #2a2d4a;
+        border-radius:  14px;
+        overflow:       hidden;
+    }
+
+    // Top bar
+    &__signal-topbar {
+        display:         flex;
+        align-items:     center;
+        justify-content: space-between;
+        padding:         0.7rem 1rem;
+        background:      #1a1d30;
+        border-bottom:   1px solid #2a2d4a;
+    }
+    &__signal-badge {
+        font-size:      0.72rem;
+        font-weight:    800;
+        letter-spacing: 0.08em;
+        color:          #22c55e;
+        background:     rgba(34, 197, 94, 0.12);
+        border:         1px solid rgba(34, 197, 94, 0.3);
+        border-radius:  6px;
+        padding:        0.2rem 0.55rem;
+    }
+    &__mode-toggle {
+        display:     flex;
+        align-items: center;
+        gap:         0.35rem;
+    }
+    &__mode-btn {
+        padding:       0.25rem 0.6rem;
+        border-radius: 6px;
+        border:        1px solid #2a2d4a;
+        background:    transparent;
+        color:         #64748b;
+        font-size:     0.75rem;
+        font-weight:   600;
+        cursor:        pointer;
+        transition:    background 0.12s, color 0.12s;
+
+        &--active {
+            background: rgba(99, 102, 241, 0.18);
+            color:      #a78bfa;
+            border-color: #6366f1;
+        }
+    }
+    &__mode-sep { font-size: 0.72rem; color: #334155; }
+
+    // Confidence
+    &__confidence {
+        display:     flex;
+        align-items: center;
+        gap:         0.75rem;
+        padding:     0.85rem 1rem;
+        border-bottom: 1px solid #1e2235;
+        background:  rgba(34, 197, 94, 0.04);
+    }
+    &__conf-score {
+        display:     flex;
+        align-items: baseline;
+        gap:         0.1rem;
+        flex-shrink: 0;
+    }
+    &__conf-num   { font-size: 2.4rem; font-weight: 900; color: #22c55e; line-height: 1; }
+    &__conf-denom { font-size: 1.1rem; font-weight: 700; color: #475569; }
+    &__conf-right { flex: 1; display: flex; flex-direction: column; gap: 0.25rem; }
+    &__conf-label { font-size: 0.82rem; font-weight: 700; color: #f1f5f9; }
+    &__conf-dots  { display: flex; gap: 0.3rem; }
+    &__conf-dot {
+        width: 11px; height: 11px; border-radius: 50%;
+        background: #1e2235; border: 1.5px solid #334155;
+        &--on { background: #22c55e; border-color: #22c55e; }
+    }
+    &__conf-sub { font-size: 0.7rem; color: #475569; line-height: 1.4; }
+
+    // Best market
+    &__market-found {
+        padding:       0.75rem 1rem;
+        border-bottom: 1px solid #1e2235;
+    }
+    &__market-found-label  { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; color: #475569; text-transform: uppercase; margin-bottom: 0.25rem; }
+    &__market-found-name   { font-size: 1rem; font-weight: 700; color: #f1f5f9; }
+    &__market-found-runner { font-size: 0.75rem; color: #64748b; margin-top: 0.15rem; }
+
+    // Timer
+    &__timer {
+        padding:       0.75rem 1rem;
+        border-bottom: 1px solid #1e2235;
+    }
+    &__timer-row  { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+    &__timer-dot  { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; animation: aat-pulse 1.4s ease-in-out infinite; }
+    &__timer-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; color: #64748b; text-transform: uppercase; flex: 1; }
+    &__timer-value { font-size: 1rem; font-weight: 800; color: #f1f5f9; }
+    &__timer-bar  { height: 5px; border-radius: 3px; background: #1e2235; overflow: hidden; }
+    &__timer-fill { height: 100%; border-radius: 3px; transition: width 0.5s linear; }
+    &__timer-hint { font-size: 0.7rem; color: #334155; margin-top: 0.3rem; }
+
+    // Trade call
+    &__trade-call {
+        padding:       0.9rem 1rem;
+        border-bottom: 1px solid #1e2235;
+        text-align:    center;
+        background:    rgba(99, 102, 241, 0.04);
+    }
+    &__trade-call-label     { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; color: #6366f1; text-transform: uppercase; margin-bottom: 0.2rem; }
+    &__trade-call-direction { font-size: 2rem; font-weight: 900; letter-spacing: 0.04em; line-height: 1.1; }
+    &__trade-call-market    { font-size: 0.8rem; color: #64748b; margin-top: 0.15rem; }
+
+    // Historical win prob
+    &__win-prob {
+        padding:       0.75rem 1rem;
+        border-bottom: 1px solid #1e2235;
+    }
+    &__win-prob-row    { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; }
+    &__win-prob-label  { font-size: 0.8rem; color: #94a3b8; }
+    &__win-prob-pct    { font-size: 0.9rem; font-weight: 800; color: #f1f5f9; }
+    &__win-prob-bar    { height: 5px; border-radius: 3px; background: #1e2235; overflow: hidden; }
+    &__win-prob-fill   { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%); }
+    &__win-prob-sample { font-size: 0.68rem; color: #334155; margin-top: 0.3rem; text-align: right; }
+
+    // Entry digits
+    &__entries {
+        padding:       0.75rem 1rem;
+        border-bottom: 1px solid #1e2235;
+    }
+    &__entries-hint { font-size: 0.78rem; color: #94a3b8; margin-bottom: 0.6rem; line-height: 1.4; }
+    &__entries-row  { display: flex; gap: 0.6rem; margin-bottom: 0.5rem; }
+    &__entry {
+        flex:           1;
+        display:        flex;
+        flex-direction: column;
+        align-items:    center;
+        gap:            0.2rem;
+        padding:        0.6rem 0.5rem;
+        border-radius:  10px;
+        border:         1.5px solid #2a2d4a;
+        background:     #1a1d30;
+        position:       relative;
+
+        &--recommended {
+            border-color: #eab308;
+            background:   rgba(234, 179, 8, 0.06);
+        }
+    }
+    &__entry-star  { font-size: 0.62rem; color: #eab308; font-weight: 700; text-align: center; }
+    &__entry-digit { font-size: 2rem; font-weight: 900; color: #f1f5f9; line-height: 1; }
+    &__entry-rate  { font-size: 0.68rem; color: #64748b; text-align: center; }
+    &__entries-sub { font-size: 0.68rem; color: #334155; line-height: 1.5; }
+
+    // Recommended duration
+    &__duration {
+        display:       flex;
+        align-items:   flex-start;
+        gap:           0.65rem;
+        padding:       0.75rem 1rem;
+        border-bottom: 1px solid #1e2235;
+    }
+    &__duration-icon  { font-size: 1.2rem; flex-shrink: 0; margin-top: 0.1rem; }
+    &__duration-body  { flex: 1; }
+    &__duration-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; color: #475569; text-transform: uppercase; }
+    &__duration-hint  { font-size: 0.72rem; color: #475569; margin-bottom: 0.25rem; }
+    &__duration-value { font-size: 1rem; font-weight: 800; color: #f1f5f9; }
+    &__duration-note  { font-size: 0.72rem; color: #334155; line-height: 1.5; margin-top: 0.25rem; }
+
+    // DTrader setup
+    &__dtrader {
+        padding: 0.75rem 1rem;
+    }
+    &__dtrader-header {
+        display:     flex;
+        align-items: center;
+        gap:         0.6rem;
+        margin-bottom: 0.7rem;
+    }
+    &__dtrader-icon  { font-size: 1.3rem; }
+    &__dtrader-title { font-size: 0.88rem; font-weight: 700; color: #f1f5f9; }
+    &__dtrader-sub   { font-size: 0.72rem; color: #475569; }
+    &__dtrader-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    &__dtrader-step  {
+        display:     flex;
+        align-items: flex-start;
+        gap:         0.6rem;
+        font-size:   0.8rem;
+        color:       #94a3b8;
+        line-height: 1.5;
+
+        strong { color: #6366f1; }
+    }
+    &__dtrader-num {
+        width:         1.5rem;
+        height:        1.5rem;
+        border-radius: 50%;
+        background:    rgba(99, 102, 241, 0.15);
+        color:         #6366f1;
+        font-size:     0.75rem;
+        font-weight:   700;
+        display:       flex;
+        align-items:   center;
+        justify-content: center;
+        flex-shrink:   0;
+    }
+
+    // Bot hint
+    &__bot-hint {
+        display:     flex;
+        align-items: flex-start;
+        gap:         0.65rem;
+        padding:     0.75rem 1rem;
+        background:  rgba(99, 102, 241, 0.05);
+        border-top:  1px solid #1e2235;
+    }
+    &__bot-hint-icon  { font-size: 1.3rem; flex-shrink: 0; margin-top: 0.1rem; }
+    &__bot-hint-title { font-size: 0.85rem; font-weight: 700; color: #f1f5f9; margin-bottom: 0.2rem; }
+    &__bot-hint-desc  { font-size: 0.75rem; color: #64748b; line-height: 1.5; strong { color: #a78bfa; } }
+}
+
+@keyframes aat-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.55; }
+}

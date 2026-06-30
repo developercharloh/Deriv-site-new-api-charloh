@@ -1,0 +1,20 @@
+kind = "web"
+previewPath = "/"
+title = "Deriv Site"
+version = "1.0.0"
+
+[[services]]
+localPort = 3000
+name = "web"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/deriv-site run dev"
+
+[services.production]
+
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/deriv-site", "run", "build"]
+
+[services.production.build.env]
+NODE_ENV = "production"

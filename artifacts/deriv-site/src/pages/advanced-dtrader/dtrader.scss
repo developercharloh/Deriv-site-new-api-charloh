@@ -1,0 +1,1034 @@
+.dtp {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    height: 100%;
+    overflow-y: auto;
+    background: var(--general-section-1, #f8fafc);
+    color: var(--text-prominent, #1e293b);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+
+    // ── Login prompt ─────────────────────────────────────────────────────
+    &__login-prompt {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        height: 100%; padding: 40px 20px; text-align: center; gap: 12px;
+    }
+    &__login-icon  { font-size: 3rem; }
+    &__login-title { font-size: 1.4rem; font-weight: 700; }
+    &__login-msg   { font-size: 0.95rem; color: #64748b; max-width: 320px; }
+
+    // ── Header ───────────────────────────────────────────────────────────
+    &__header {
+        display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+        padding: 10px 12px; background: white; border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    &__sym-wrap  { display: flex; flex-direction: column; gap: 4px; flex: 1 1 220px; min-width: 200px; }
+    &__sym-select {
+        padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+        font-size: 0.9rem; background: white; cursor: pointer;
+    }
+    &__spot-wrap {
+        display: flex; align-items: baseline; gap: 8px;
+        padding: 6px 12px; background: #0f172a; color: #f1f5f9;
+        border-radius: 6px; font-variant-numeric: tabular-nums;
+    }
+
+    // ── Total P/L chip (header) ───────────────────────────────────────────
+    &__pnl-chip {
+        display: flex; flex-direction: column; align-items: flex-end;
+        margin-left: auto; padding: 6px 14px;
+        border-radius: 8px; border: 1.5px solid transparent;
+        font-variant-numeric: tabular-nums;
+        transition: background 0.25s, border-color 0.25s, color 0.25s;
+
+        &--pos {
+            background: #ecfdf5; border-color: #6ee7b7; color: #065f46;
+        }
+        &--neg {
+            background: #fef2f2; border-color: #fca5a5; color: #991b1b;
+        }
+        &--zero {
+            background: #f8fafc; border-color: #e2e8f0; color: #64748b;
+        }
+    }
+    &__pnl-chip-label {
+        font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.07em; opacity: 0.7;
+    }
+    &__pnl-chip-val {
+        font-size: 1.15rem; font-weight: 800;
+        font-family: 'SF Mono', Menlo, monospace; line-height: 1.1;
+        @keyframes dtpPnlPop {
+            0%   { transform: scale(1); }
+            40%  { transform: scale(1.12); }
+            100% { transform: scale(1); }
+        }
+        &--anim { animation: dtpPnlPop 280ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+    }
+    &__spot-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
+    &__spot-value { font-size: 1.05rem; font-weight: 700; font-family: 'SF Mono', Menlo, monospace; }
+    &__spot-digit {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 28px; height: 28px; padding: 0 6px;
+        background: #fbbf24; color: #1e293b; border-radius: 6px;
+        font-weight: 800; font-size: 0.95rem;
+    }
+
+    // ── Body ─────────────────────────────────────────────────────────────
+    &__body {
+        display: grid; grid-template-columns: 1fr 320px; gap: 12px;
+        @media (max-width: 900px) { grid-template-columns: 1fr; }
+    }
+
+    &__form, &__ticket {
+        background: white; border-radius: 8px; padding: 12px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    // ── Category tabs ────────────────────────────────────────────────────
+    &__cat-row {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px;
+        @media (max-width: 600px) { grid-template-columns: repeat(2, 1fr); }
+    }
+    &__cat {
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+        padding: 8px 4px; border: 1px solid #e2e8f0; border-radius: 6px;
+        background: #f8fafc; cursor: pointer; transition: all 120ms;
+        &:hover { background: #f1f5f9; }
+        &--active {
+            background: #eef2ff; border-color: #6366f1; color: #4338ca;
+        }
+    }
+    &__cat-emoji { font-size: 1.1rem; }
+    &__cat-label { font-size: 0.72rem; font-weight: 600; text-align: center; line-height: 1.1; }
+
+    // ── Direction toggle ─────────────────────────────────────────────────
+    &__dir-row {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px;
+    }
+    &__dir {
+        padding: 12px; border: 2px solid transparent; border-radius: 6px;
+        font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: all 120ms;
+        &--up   { background: #dcfce7; color: #15803d; }
+        &--down { background: #fee2e2; color: #b91c1c; }
+        &--active.dtp__dir--up   { border-color: #16a34a; background: #bbf7d0; }
+        &--active.dtp__dir--down { border-color: #dc2626; background: #fecaca; }
+    }
+
+    // ── Inputs grid ──────────────────────────────────────────────────────
+    &__inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    &__field { display: flex; flex-direction: column; gap: 4px; &--full { grid-column: 1 / -1; } }
+    &__field-row { display: flex; gap: 6px; }
+    &__lbl {
+        font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+        color: #64748b; font-weight: 600;
+    }
+    &__input, &__unit-select {
+        padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+        font-size: 0.9rem; font-variant-numeric: tabular-nums;
+        background: white; min-width: 0;
+    }
+    &__input { flex: 1; }
+    &__unit-select { cursor: pointer; }
+    &__dur-select {
+        flex: 1;
+        padding: 8px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        font-variant-numeric: tabular-nums;
+        background: white;
+        cursor: pointer;
+        min-width: 0;
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394a3b8'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        padding-right: 28px;
+        &:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.15); }
+    }
+    &__hint { font-size: 0.7rem; color: #94a3b8; }
+
+    // ── Digit picker (Matches / Differs) ─────────────────────────────────
+    &__digit-row { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+    &__digit {
+        padding: 8px 0; border: 1px solid #e2e8f0; border-radius: 4px;
+        background: #f8fafc; font-weight: 600; cursor: pointer; transition: all 100ms;
+        &:hover { background: #f1f5f9; }
+        &--active { background: #fbbf24; border-color: #f59e0b; color: #1e293b; }
+    }
+
+    // ── Over / Under barrier selector ─────────────────────────────────────
+    &__barrier-wrap {
+        display: flex; flex-direction: column; gap: 10px;
+    }
+    &__barrier-pills {
+        display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px;
+    }
+    &__barrier-pill {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 2px; padding: 8px 2px 6px;
+        border-radius: 10px; border: 2px solid transparent;
+        cursor: pointer; transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+        min-height: 58px;
+        // Default (lose zone)
+        &--lose {
+            background: #fef2f2; color: #ef4444; border-color: #fecaca;
+            &:hover { background: #fee2e2; border-color: #fca5a5; }
+        }
+        // Win zone
+        &--win {
+            background: #f0fdf4; color: #16a34a; border-color: #86efac;
+            &:hover { background: #dcfce7; border-color: #4ade80; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.18); }
+        }
+        // Barrier digit — selected, neither win nor lose
+        &--barrier {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: #fff; border-color: transparent;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.38);
+            transform: scale(1.08);
+            &:hover { box-shadow: 0 6px 20px rgba(99, 102, 241, 0.48); transform: scale(1.1); }
+        }
+    }
+    &__barrier-pill-num {
+        font-size: 1.05rem; font-weight: 900; line-height: 1;
+    }
+    &__barrier-pill-tag {
+        font-size: 0.55rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.04em; opacity: 0.8; line-height: 1;
+    }
+    // Win probability bar + text
+    &__barrier-zone {
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 12px; border-radius: 8px;
+        background: #f8fafc; border: 1px solid #e2e8f0;
+    }
+    &__barrier-win-bar {
+        flex: 1; height: 8px; border-radius: 999px; background: #fee2e2; overflow: hidden;
+        > span {
+            display: block; height: 100%;
+            background: linear-gradient(90deg, #10b981, #6ee7b7);
+            border-radius: 999px; transition: width 300ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    }
+    &__barrier-prob {
+        font-size: 0.8rem; font-weight: 700; color: #374151; white-space: nowrap;
+    }
+    &__barrier-legend {
+        display: flex; gap: 14px; flex-wrap: wrap;
+    }
+    &__barrier-legend-item {
+        font-size: 0.7rem; font-weight: 600; opacity: 0.85;
+        &--win     { color: #16a34a; }
+        &--barrier { color: #6366f1; }
+        &--lose    { color: #ef4444; }
+    }
+
+    // ── Ticket ───────────────────────────────────────────────────────────
+    &__ticket {
+        display: flex; flex-direction: column; gap: 8px;
+        position: sticky; top: 0;
+        @media (max-width: 900px) { position: static; }
+    }
+    &__ticket-title {
+        font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+        font-weight: 700; color: #475569; margin-bottom: 4px;
+    }
+    &__ticket-row { display: flex; justify-content: space-between; align-items: baseline; }
+    &__ticket-key { font-size: 0.78rem; color: #64748b; }
+    &__ticket-val {
+        font-size: 0.92rem; font-weight: 600; font-variant-numeric: tabular-nums;
+        font-family: 'SF Mono', Menlo, monospace;
+        &--big { font-size: 1.15rem; font-weight: 800; }
+    }
+    &__ticket-longcode {
+        margin-top: 4px; padding: 6px 8px; background: #f1f5f9; border-radius: 4px;
+        font-size: 0.7rem; color: #475569; line-height: 1.35;
+    }
+    &__buy-btn {
+        margin-top: 10px; padding: 14px; border: none; border-radius: 6px;
+        background: linear-gradient(135deg, #16a34a, #22c55e);
+        color: white; font-size: 1rem; font-weight: 800;
+        letter-spacing: 0.03em; cursor: pointer; transition: all 120ms;
+        &:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(22,163,74,0.3); }
+        &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+    &__ticket-err {
+        padding: 6px 8px; background: #fee2e2; color: #b91c1c;
+        border-radius: 4px; font-size: 0.78rem; text-align: center;
+    }
+
+    // ── Buy feedback toast (above the BUY button) ────────────────────────
+    &__buy-feedback {
+        display: flex; align-items: flex-start; gap: 8px;
+        padding: 10px 12px; border-radius: 6px;
+        font-size: 0.85rem; font-weight: 600; line-height: 1.3;
+        cursor: pointer; animation: dtpFeedbackIn 220ms ease-out;
+        &--success { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+        &--error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    }
+    &__buy-feedback-icon { font-size: 1.05rem; flex-shrink: 0; }
+    &__buy-feedback-msg  { word-break: break-word; }
+
+    @keyframes dtpFeedbackIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    // ── Category dropdown (replaces grid of category buttons) ────────────
+    &__cat-select {
+        width: 100%; padding: 10px 12px; border-radius: 6px;
+        border: 1px solid #d1d5db; background: #fff; color: #111827;
+        font-size: 0.95rem; font-weight: 600; cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%236b7280'><path d='M8 11L3 6h10z'/></svg>");
+        background-repeat: no-repeat; background-position: right 10px center;
+        background-size: 14px;
+        padding-right: 32px;
+    }
+
+    // ── Totals strip ─────────────────────────────────────────────────────
+    &__totals {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+        padding: 10px 12px; margin: 12px 0;
+        background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+    }
+    &__totals-cell {
+        display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+        min-width: 0;
+    }
+    &__totals-key {
+        font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    &__totals-val {
+        font-size: 0.95rem; font-weight: 700; color: #111827;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+        &--big { font-size: 1.15rem; }
+    }
+
+    // ── Digit-frequency analyzer card ────────────────────────────────────
+    &__digits-card {
+        margin: 12px 0; padding: 12px;
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    &__digits-head {
+        display: flex; align-items: baseline; justify-content: space-between;
+        font-size: 0.85rem; font-weight: 700; color: #111827;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        margin-bottom: 10px;
+    }
+    &__digits-sub {
+        font-size: 0.7rem; font-weight: 500; color: #6b7280;
+        text-transform: none; letter-spacing: 0;
+    }
+    // Two-row, five-column grid → top row 0-4, bottom row 5-9
+    &__digits-grid {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+        // Tiny breathing room so the moving cursor for row 0 doesn't clip
+        // outside the analyzer card on smaller phones.
+        padding-top: 4px;
+    }
+    &__digit-cell {
+        position: relative; // anchors the win/loss badge overlay
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        aspect-ratio: 1 / 1;
+        border-radius: 50%;
+        background: #f3f4f6; color: #6b7280;
+        border: 2px solid transparent;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        min-width: 0; min-height: 48px;
+        // Cap circle size — hard 56 px on desktop, 48 px floor on mobile
+        max-height: 56px;
+        max-width: 56px;
+        // Centre each capped circle within its grid cell
+        justify-self: center;
+        width: 100%;
+    }
+    &__digit-num { font-size: 1.05rem; font-weight: 800; line-height: 1; }
+    &__digit-pct { font-size: 0.7rem; font-weight: 600; opacity: 0.85; margin-top: 2px; }
+
+    // Shading by rank — green / blue / yellow / red
+    &__digit-cell--best  { background: #10b981; color: #fff; }
+    &__digit-cell--good  { background: #3b82f6; color: #fff; }
+    &__digit-cell--bad   { background: #facc15; color: #1f2937; }
+    &__digit-cell--worst { background: #ef4444; color: #fff; }
+
+    // Highlight the live last-digit on top of whatever shading it has
+    &__digit-cell--current {
+        border-color: #111827;
+        box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.15);
+        transform: scale(1.05);
+    }
+
+    // Green ring around every winning-side digit while a digit contract is
+    // OPEN. e.g. UNDER 7 rings 0..6 with green. Disappears the moment the
+    // contract closes. Combines with --current (live cursor digit) cleanly.
+    &__digit-cell--winning {
+        border-color: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
+    }
+    // When a digit is BOTH winning AND the live cursor digit, keep the
+    // green ring but add an inner dark outline for emphasis.
+    &__digit-cell--winning.dtp__digit-cell--current {
+        border-color: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.55),
+                    inset 0 0 0 2px #111827;
+    }
+
+    // Live last-digit cursor — small red dot that slides from circle to
+    // circle as new ticks arrive. Uses pure-CSS positioning driven by --col
+    // and --row variables set in JS, with smooth transition between hops.
+    //
+    //   cell width  = (100% - 4*8px) / 5 = 20% - 6.4px
+    //   x_center(c) = c*(cellW + 8px) + cellW/2 = c*(20% + 1.6px) + 10% - 3.2px
+    //   y_top(r)    = r*(cellH + 8px); container height = 2*cellH + 8px
+    //                so y_top(r) = r*(50% + 4px)
+    &__digit-cursor {
+        position: absolute;
+        pointer-events: none;
+        z-index: 3;
+        width: 14px; height: 14px;
+        border-radius: 50%;
+        background: #ef4444;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 6px rgba(239, 68, 68, 0.55);
+        left: calc(var(--col) * (20% + 1.6px) + 10% - 3.2px);
+        top:  calc(var(--row) * (50% + 4px) - 4px + 4px); // +4px = grid padding-top
+        transform: translate(-50%, 0);
+        transition: left 220ms cubic-bezier(0.4, 0, 0.2, 1),
+                    top  220ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    // Win / Loss result badge that overlays the exit-tick's digit circle
+    // for ~6 seconds after each digit-contract settles.
+    &__digit-result {
+        position: absolute;
+        bottom: -6px; left: 50%;
+        transform: translateX(-50%);
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.65rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+        z-index: 4;
+        animation: dtpResultIn 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        &--win  { background: #10b981; color: #fff; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.45); }
+        &--loss { background: #ef4444; color: #fff; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.45); }
+    }
+    @keyframes dtpResultIn {
+        from { opacity: 0; transform: translate(-50%, -4px) scale(0.8); }
+        to   { opacity: 1; transform: translate(-50%, 0)    scale(1);   }
+    }
+
+    // Hint shown under the ticket when in tap-to-buy (digit) mode in place
+    // of the regular BUY button.
+    &__tap-hint {
+        margin-top: 8px; padding: 8px 10px;
+        background: #f3f4f6; border: 1px dashed #d1d5db; border-radius: 6px;
+        font-size: 0.75rem; color: #6b7280; text-align: center;
+    }
+
+    // Tap-to-buy direction buttons (digit contracts) — show stake below
+    // the label and a subtle pulse to invite tapping.
+    &__dir--tap-buy {
+        flex-direction: column;
+        gap: 2px;
+        padding-top: 10px; padding-bottom: 10px;
+        cursor: pointer;
+        &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+    &__dir-label { font-size: 0.95rem; font-weight: 700; }
+    &__dir-stake { font-size: 0.75rem; font-weight: 600; opacity: 0.85; }
+
+    &__digits-legend {
+        display: flex; flex-wrap: wrap; gap: 10px;
+        margin-top: 10px; font-size: 0.7rem; color: #6b7280;
+        span { display: inline-flex; align-items: center; gap: 4px; }
+    }
+    &__legend-dot {
+        display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+        &--best  { background: #10b981; }
+        &--good  { background: #3b82f6; }
+        &--bad   { background: #facc15; }
+        &--worst { background: #ef4444; }
+    }
+
+    // ── Chi-square significance banner ───────────────────────────────────
+    &__chisq {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-top: 8px; padding: 5px 10px;
+        background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px;
+        font-size: 0.7rem; gap: 8px;
+        &--waiting { color: #94a3b8; font-style: italic; justify-content: center; }
+    }
+    &__chisq-label {
+        color: #475569; font-variant-numeric: tabular-nums;
+        font-weight: 700; white-space: nowrap; font-family: 'SF Mono', Menlo, monospace;
+    }
+    &__chisq-verdict { font-weight: 700; text-align: right; line-height: 1.2; }
+
+    // ── Same-digit streak alert ──────────────────────────────────────────
+    &__streak {
+        margin-top: 6px; padding: 5px 12px;
+        background: linear-gradient(90deg, #fffbeb 0%, #fef9c3 100%);
+        border: 1px solid #fcd34d; border-radius: 6px;
+        font-size: 0.75rem; color: #92400e;
+        animation: dtpStreakIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        strong { color: #78350f; }
+    }
+    @keyframes dtpStreakIn {
+        from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+        to   { opacity: 1; transform: translateY(0)    scale(1);    }
+    }
+
+    // ── Sell button on open positions ────────────────────────────────────
+    &__sell-btn {
+        padding: 4px 10px; border-radius: 4px;
+        background: #f59e0b; color: #fff; border: 0;
+        font-size: 0.75rem; font-weight: 700; cursor: pointer;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        &:hover { background: #d97706; }
+    }
+
+    // ── Lower (positions + log) ──────────────────────────────────────────
+    &__lower {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+        @media (max-width: 900px) { grid-template-columns: 1fr; }
+    }
+    &__positions, &__log {
+        background: white; border-radius: 8px; padding: 12px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        display: flex; flex-direction: column; gap: 8px;
+        min-height: 200px; max-height: 360px;
+    }
+    &__section-head {
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;
+        color: #475569; font-weight: 700;
+    }
+    &__live-dot { color: #16a34a; margin-left: 6px; font-size: 0.7rem; }
+    &__clear-row {
+        display: flex; align-items: center; gap: 6px;
+    }
+    &__clear-btn {
+        padding: 4px 8px; border: 1px solid #e2e8f0; background: white;
+        border-radius: 4px; font-size: 0.7rem; cursor: pointer; color: #475569;
+        transition: background 0.15s, border-color 0.15s;
+        &:hover { background: #f1f5f9; }
+        &--all {
+            border-color: #fca5a5; color: #b91c1c; background: #fff5f5;
+            &:hover { background: #fee2e2; border-color: #f87171; }
+        }
+    }
+    &__empty {
+        flex: 1; display: flex; align-items: center; justify-content: center;
+        color: #94a3b8; font-size: 0.85rem; text-align: center;
+    }
+
+    // ── Position card ────────────────────────────────────────────────────
+    &__pos-list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    &__pos {
+        padding: 8px 10px; border-left: 3px solid #cbd5e1; background: #f8fafc;
+        border-radius: 4px; display: flex; flex-direction: column; gap: 2px;
+        &--open { border-left-color: #6366f1; background: #eef2ff; }
+        &--win  { border-left-color: #16a34a; background: #f0fdf4; }
+        &--loss { border-left-color: #dc2626; background: #fef2f2; }
+    }
+    &__pos-row1 {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 0.78rem; font-weight: 700;
+    }
+    &__pos-type { color: #1e293b; }
+    &__pos-sym  { color: #64748b; font-weight: 500; }
+    &__pos-stake { margin-left: auto; color: #64748b; font-weight: 600; font-variant-numeric: tabular-nums; }
+    &__pos-row2 {
+        display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        font-size: 0.75rem;
+    }
+    &__pos-prices {
+        font-family: 'SF Mono', Menlo, monospace; font-variant-numeric: tabular-nums;
+        color: #475569;
+    }
+    &__pos-pnl { font-weight: 700; font-variant-numeric: tabular-nums; }
+    &__pos-row3 {
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: 0.7rem; color: #94a3b8;
+    }
+
+    // ── Log ──────────────────────────────────────────────────────────────
+    &__log-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+    &__log-line {
+        display: flex; gap: 8px; padding: 4px 6px; border-radius: 3px;
+        font-size: 0.75rem; font-family: 'SF Mono', Menlo, monospace;
+        &--win    { color: #15803d; background: rgba(22,163,74,0.06); }
+        &--loss   { color: #b91c1c; background: rgba(220,38,38,0.06); }
+        &--error  { color: #b91c1c; background: rgba(220,38,38,0.10); }
+        &--system { color: #475569; }
+        &--info   { color: #1e293b; }
+    }
+    &__log-time { color: #94a3b8; flex-shrink: 0; }
+    &__log-msg  { word-break: break-word; }
+}
+
+// Dark-mode hook (matches app convention)
+.theme--dark .dtp {
+    background: #0f172a;
+    color: #f1f5f9;
+
+    &__header, &__form, &__ticket, &__positions, &__log { background: #1e293b; box-shadow: none; }
+    &__sym-select, &__input, &__unit-select { background: #0f172a; color: #f1f5f9; border-color: #334155; }
+    &__cat { background: #0f172a; border-color: #334155; color: #cbd5e1; &--active { background: #312e81; border-color: #818cf8; color: #c7d2fe; } }
+    &__digit { background: #0f172a; border-color: #334155; color: #cbd5e1; &--active { background: #fbbf24; color: #1e293b; } }
+    &__pos { background: #0f172a; }
+    &__pos--open { background: rgba(99,102,241,0.15); }
+    &__pos--win  { background: rgba(22,163,74,0.15); }
+    &__pos--loss { background: rgba(220,38,38,0.15); }
+    &__ticket-longcode { background: #0f172a; color: #cbd5e1; }
+    &__hint, &__lbl, &__section-head { color: #94a3b8; }
+}
+
+// ── Prominent CASH OUT NOW button (open ACCU/MULT) ───────────────────────
+.dtp {
+    &__cashout-btn {
+        margin-top: 10px; padding: 14px 16px; border: none; border-radius: 8px;
+        background: linear-gradient(135deg, #f59e0b, #ea580c);
+        color: white; font-size: 1.02rem; font-weight: 900;
+        letter-spacing: 0.04em; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        box-shadow: 0 4px 14px rgba(234,88,12,0.35);
+        animation: dtpCashoutPulse 1.6s ease-in-out infinite;
+        &:active { transform: translateY(1px); }
+    }
+    &__cashout-icon   { font-size: 1.25rem; }
+    &__cashout-text   { flex: 0 0 auto; }
+    &__cashout-amount { font-family: 'SF Mono', Menlo, monospace; font-size: 0.95rem; opacity: 0.95; }
+    &__cashout-pnl    { font-weight: 800; margin-left: 4px; }
+}
+@keyframes dtpCashoutPulse {
+    0%, 100% { box-shadow: 0 4px 14px rgba(234,88,12,0.35); }
+    50%      { box-shadow: 0 6px 22px rgba(234,88,12,0.65); }
+}
+
+// ── Full-screen popup: TP / SL / Cash-out ────────────────────────────────
+.dtp {
+    &__popup-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(15,23,42,0.72);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px;
+        animation: dtpPopupFadeIn 180ms ease-out;
+    }
+    &__popup {
+        width: 100%; max-width: 380px;
+        background: white; border-radius: 18px;
+        padding: 28px 24px 22px;
+        text-align: center;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+        animation: dtpPopupPop 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        border-top: 8px solid #cbd5e1;
+        &--cashout { border-top-color: #16a34a; }
+        &--tp      { border-top-color: #2563eb; }
+        &--sl      { border-top-color: #dc2626; }
+    }
+    &__popup-emoji {
+        font-size: 3.4rem; line-height: 1; margin-bottom: 10px;
+        animation: dtpPopupEmoji 600ms ease-out;
+    }
+    &__popup-title {
+        font-size: 1.35rem; font-weight: 900; color: #0f172a;
+        letter-spacing: 0.01em;
+    }
+    &__popup-subtitle {
+        margin-top: 4px;
+        font-size: 0.78rem; color: #64748b; font-weight: 600;
+        font-family: 'SF Mono', Menlo, monospace;
+    }
+    &__popup-profit {
+        margin-top: 18px; padding: 14px;
+        background: #f8fafc; border-radius: 10px;
+        font-size: 0.78rem; font-weight: 700; letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+    &__popup-amount {
+        margin-top: 4px;
+        font-size: 1.85rem; font-weight: 900; line-height: 1;
+        font-family: 'SF Mono', Menlo, monospace;
+    }
+    &__popup-btn {
+        margin-top: 20px; width: 100%; padding: 13px;
+        border: none; border-radius: 8px; cursor: pointer;
+        background: #0f172a; color: white;
+        font-size: 0.95rem; font-weight: 800; letter-spacing: 0.05em;
+        &:active { transform: translateY(1px); }
+    }
+}
+@keyframes dtpPopupFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dtpPopupPop {
+    from { transform: scale(0.85); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+}
+@keyframes dtpPopupEmoji {
+    0%   { transform: scale(0.4) rotate(-15deg); }
+    60%  { transform: scale(1.25) rotate(8deg); }
+    100% { transform: scale(1) rotate(0); }
+}
+
+// Dark-mode tweaks
+@media (prefers-color-scheme: dark) {
+    .dtp__popup          { background: #1e293b; }
+    .dtp__popup-title    { color: #f1f5f9; }
+    .dtp__popup-subtitle { color: #94a3b8; }
+    .dtp__popup-profit   { background: #0f172a; }
+}
+
+// ── Live price chart with barrier overlay (ACCU + MULT) ──────────────────
+.dtp {
+    &__accu-chart {
+        margin: 0 0 12px; padding: 10px 10px 8px;
+        background: white;
+        border: 1px solid #e2e8f0; border-radius: 10px;
+        &--broken { border-color: #fca5a5; box-shadow: 0 0 0 3px rgba(220,38,38,0.12); }
+    }
+    &__accu-chart-head {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 6px; font-size: 0.78rem;
+    }
+    &__accu-chart-title { font-weight: 700; color: #0f172a; }
+    &__accu-chart-hint  { color: #94a3b8; font-style: italic; }
+    &__accu-chart-pnl   { font-weight: 800; font-family: 'SF Mono', Menlo, monospace; }
+    &__accu-chart-svg   { display: block; width: 100%; height: 160px; }
+    &__accu-chart-breach {
+        margin-top: 6px; padding: 6px 8px;
+        background: #fee2e2; color: #991b1b;
+        border-radius: 6px; text-align: center;
+        font-size: 0.78rem; font-weight: 800;
+        animation: dtpBreachFlash 700ms ease-out;
+    }
+}
+@keyframes dtpBreachFlash {
+    0%   { background: #fecaca; transform: scale(1.02); }
+    100% { background: #fee2e2; transform: scale(1); }
+}
+@media (prefers-color-scheme: dark) {
+    .dtp__accu-chart       { background: #1e293b; border-color: #334155; }
+    .dtp__accu-chart-title { color: #f1f5f9; }
+    .dtp__accu-chart-hint  { color: #64748b; }
+}
+
+// ── Mobile: keep BUY / CASH OUT in view at all times ─────────────────────
+// Before this fix, on small screens the live price chart + ticket pushed
+// the BUY button below the fold (esp. for ACCU/MULT). Solution: make the
+// chart shorter on mobile AND pin the action buttons to the bottom of the
+// viewport so they're always tappable without scrolling.
+@media (max-width: 720px) {
+    // Shrink the live chart so it doesn't dominate the screen
+    .dtp__accu-chart-svg { height: 110px; }
+    .dtp__accu-chart     { padding: 8px 8px 6px; margin-bottom: 8px; }
+
+    // Reserve space at the bottom of the page for the sticky action bar
+    // (~80px BUY + ~80px CASH OUT + breathing room + iOS home-bar)
+    .dtp { padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px)); }
+
+    // Pin BUY to the viewport bottom so the trader can always see + tap it
+    .dtp__buy-btn {
+        position: fixed;
+        left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+        margin: 0;
+        z-index: 50;
+        box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
+        border-radius: 12px;
+    }
+
+    // CASH OUT sits just above BUY when an ACCU/MULT contract is open
+    .dtp__cashout-btn {
+        position: fixed;
+        left: 8px; right: 8px; bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+        margin: 0;
+        z-index: 51;
+        box-shadow: 0 -4px 16px rgba(220, 38, 38, 0.35);
+        border-radius: 12px;
+    }
+
+    // For digit contracts there's no BUY button, so the cash-out drops to
+    // the very bottom (no BUY underneath it).
+    .dtp:not(:has(.dtp__buy-btn)) .dtp__cashout-btn { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+
+    // Buy feedback toast slides in just above the sticky buttons
+    .dtp__buy-feedback {
+        position: fixed;
+        left: 8px; right: 8px; bottom: calc(156px + env(safe-area-inset-bottom, 0px));
+        z-index: 52;
+        margin: 0;
+    }
+    .dtp:not(:has(.dtp__buy-btn)) .dtp__buy-feedback   { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+    .dtp:not(:has(.dtp__cashout-btn)):not(:has(.dtp__buy-btn)) .dtp__buy-feedback { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+}
+
+// ── Laptop / desktop D-Trader enhancements (min-width: 900px) ────────────────
+@media (min-width: 900px) {
+    // 1. Hide the utility header row (Cashier / Reports / Free Bots / Analysis Tool)
+    //    whenever D-Trader is on screen — frees ~49px of vertical room.
+    //    Uses CSS :has() which is supported in all modern browsers (Chrome 105+, Firefox 121+, Safari 15.4+).
+    body:has(.dtp) .app-header__menu {
+        display: none !important;
+    }
+
+    // 2. Remove the excess padding inside .main so D-Trader gets the full height.
+    .main:has(.dtp) {
+        padding: 4px 8px;
+    }
+
+    // 3. Propagate height through the tab chain so .dtp { height: 100% } works.
+    .main:has(.dtp) .dc-tabs {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .main:has(.dtp) .dc-tabs__content {
+        flex: 1;
+        height: 0;          // flex child trick: overrides auto so flex: 1 gives real pixels
+        overflow: hidden;
+    }
+
+    // 4. Tighten the digit frequency card top margin now that it lives inside the form
+    .dtp__digits-card {
+        margin-top: 0;
+    }
+
+    // 5. Constrain the digit grid column width to prevent any cell exceeding the max
+    .dtp__digits-grid {
+        grid-template-columns: repeat(5, minmax(0, 56px));
+        justify-content: center;
+        gap: 10px;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// dta — D-Trader Analyser (analysis-only page, no execution controls)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+.dta {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    background: #0b1220;
+    color: #f1f5f9;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+.dta__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px 16px 12px;
+    background: #111827;
+    border-bottom: 1px solid #1e293b;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+.dta__brand { display: flex; align-items: center; gap: 10px; }
+.dta__brand-icon { font-size: 24px; }
+.dta__brand-title { font-size: 18px; font-weight: 700; color: #f8fafc; }
+.dta__brand-sub   { font-size: 11px; color: #64748b; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; }
+.dta__header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+// ── Status badge ──────────────────────────────────────────────────────────────
+.dta__badge {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+    &--connecting, &--reconnecting { background: rgba(251,191,36,.15); color: #fbbf24; }
+    &--ready { background: rgba(16,185,129,.15); color: #10b981; }
+    &--error  { background: rgba(239,68,68,.15); color: #ef4444; }
+}
+.dta__badge-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor;
+    .dta__badge--ready & { animation: dtaBlink 1.4s ease-in-out infinite; }
+}
+@keyframes dtaBlink { 0%,100% { opacity:1; } 50% { opacity:.25; } }
+
+// ── Market selector ───────────────────────────────────────────────────────────
+.dta__msel { position: relative; }
+.dta__msel-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; background: #1e293b; border: 1px solid #334155;
+    border-radius: 8px; color: #f1f5f9; font-size: 14px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+    &:hover { background: #253047; border-color: #475569; }
+}
+.dta__msel-arrow { font-size: 10px; color: #64748b; }
+.dta__msel-drop {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    min-width: 260px; max-height: 360px;
+    background: #1e293b; border: 1px solid #334155;
+    border-radius: 10px; box-shadow: 0 16px 48px rgba(0,0,0,.6);
+    z-index: 999; overflow: hidden;
+    display: flex; flex-direction: column;
+}
+.dta__msel-search {
+    padding: 10px 14px; background: #0f172a; border: none; border-bottom: 1px solid #334155;
+    color: #f1f5f9; font-size: 14px; outline: none; width: 100%; box-sizing: border-box;
+    &::placeholder { color: #475569; }
+}
+.dta__msel-list { overflow-y: auto; max-height: 300px; }
+.dta__msel-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; background: none; border: none; cursor: pointer;
+    color: #f1f5f9; font-size: 13px; width: 100%; text-align: left;
+    &:hover { background: #253047; }
+    &--active { background: rgba(16,185,129,.15); color: #10b981; }
+}
+.dta__msel-sym { font-size: 11px; color: #64748b; font-family: monospace; }
+.dta__msel-empty { padding: 16px; color: #64748b; font-size: 13px; text-align: center; }
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+.dta__empty {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 48px 24px; gap: 16px;
+}
+.dta__empty-icon { font-size: 56px; }
+.dta__empty h2 { font-size: 22px; font-weight: 700; margin: 0; color: #f8fafc; }
+.dta__empty p  { font-size: 14px; color: #94a3b8; max-width: 380px; margin: 0; line-height: 1.6; }
+.dta__empty-btn {
+    padding: 12px 28px; background: #3b82f6; color: #fff;
+    border: none; border-radius: 10px; font-size: 15px; font-weight: 700;
+    cursor: pointer; margin-top: 8px;
+    &:hover { background: #2563eb; }
+}
+
+// ── Body ──────────────────────────────────────────────────────────────────────
+.dta__body {
+    flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 16px;
+}
+
+// ── Spot card ─────────────────────────────────────────────────────────────────
+.dta__spot-card {
+    background: #111827; border: 1px solid #1e293b;
+    border-radius: 12px; padding: 16px;
+}
+.dta__spot-market {
+    font-size: 13px; font-weight: 700; color: #3b82f6; text-transform: uppercase;
+    letter-spacing: .04em; margin-bottom: 12px;
+    span { color: #475569; font-weight: 400; }
+}
+.dta__spot-row {
+    display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-end;
+}
+.dta__spot-lbl { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.dta__spot-val { font-size: 28px; font-weight: 800; color: #fbbf24; font-family: 'Roboto Mono', monospace; }
+.dta__spot-digit-wrap { text-align: center; }
+.dta__spot-digit {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(135deg,#1d4ed8,#3b82f6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 900; color: #fff;
+    box-shadow: 0 0 20px rgba(59,130,246,.4);
+}
+.dta__spot-time { font-size: 16px; font-weight: 600; color: #94a3b8; font-family: monospace; }
+.dta__spot-n    { font-size: 16px; font-weight: 600; color: #94a3b8; }
+.dta__spot-loading { color: #64748b; font-size: 14px; padding: 8px 0; }
+
+// ── Streak ────────────────────────────────────────────────────────────────────
+.dta__streak {
+    margin-top: 12px; padding: 8px 14px;
+    background: rgba(251,191,36,.12); border: 1px solid rgba(251,191,36,.3);
+    border-radius: 8px; font-size: 13px; color: #fbbf24;
+    strong { color: #fef08a; }
+}
+
+// ── Mini chart ────────────────────────────────────────────────────────────────
+.dta__mini-chart {
+    background: #111827; border: 1px solid #1e293b;
+    border-radius: 12px; padding: 14px;
+}
+.dta__mini-chart-head {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; color: #64748b; font-weight: 600; margin-bottom: 10px;
+}
+.dta__mini-chart-quote { font-size: 14px; font-weight: 700; color: #f1f5f9; font-family: monospace; }
+.dta__mini-chart-digit { color: #10b981; }
+.dta__mini-chart-svg {
+    width: 100%; height: 90px; display: block;
+    background: #0b1220; border-radius: 6px;
+}
+
+// ── Section heading ───────────────────────────────────────────────────────────
+.dta__section-head {
+    font-size: 12px; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: .07em;
+    span { color: #475569; font-weight: 400; }
+}
+
+// ── Digit grid extra count line ───────────────────────────────────────────────
+.dta__digit-count {
+    font-size: 10px; color: #64748b; margin-top: 2px;
+}
+.dta__digit-grid { margin-top: 6px; }
+.dta__legend { margin-top: 8px; flex-wrap: wrap; gap: 10px; }
+
+// ── Chi-square ────────────────────────────────────────────────────────────────
+.dta__chisq {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 14px; background: #111827; border: 1px solid #1e293b;
+    border-radius: 10px;
+    &--waiting { color: #475569; font-size: 13px; }
+}
+.dta__chisq-label   { font-size: 15px; font-weight: 800; color: #f8fafc; font-family: monospace; }
+.dta__chisq-verdict { font-size: 13px; font-weight: 600; }
+
+// ── Balance panel ─────────────────────────────────────────────────────────────
+.dta__balance {
+    background: #111827; border: 1px solid #1e293b;
+    border-radius: 12px; padding: 16px;
+}
+.dta__balance-row { display: flex; align-items: center; gap: 12px; }
+.dta__balance-sep { color: #475569; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.dta__balance-cell { flex: 1; text-align: center; }
+.dta__balance-val  { font-size: 22px; font-weight: 800; display: block; }
+.dta__balance-lbl  { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.dta__balance-cell--even .dta__balance-val { color: #3b82f6; }
+.dta__balance-cell--odd  .dta__balance-val { color: #a855f7; }
+.dta__balance-cell--high .dta__balance-val { color: #10b981; }
+.dta__balance-cell--low  .dta__balance-val { color: #f59e0b; }
+.dta__balance-bar {
+    height: 6px; background: #1e293b; border-radius: 3px; margin-top: 10px; overflow: hidden;
+}
+.dta__balance-bar-fill {
+    height: 100%; border-radius: 3px; transition: width .4s ease;
+    &--even { background: #3b82f6; }
+    &--high { background: #10b981; }
+}
+
+// ── Quick stats ───────────────────────────────────────────────────────────────
+.dta__stats-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+}
+.dta__stat-card {
+    background: #111827; border: 1px solid #1e293b;
+    border-radius: 10px; padding: 14px; text-align: center;
+}
+.dta__stat-val  { font-size: 20px; font-weight: 800; color: #fbbf24; }
+.dta__stat-lbl  { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+.dta__stat-sub  { font-size: 12px; color: #475569; margin-top: 2px; }
+
+@media (min-width: 640px) {
+    .dta__stats-grid { grid-template-columns: repeat(4, 1fr); }
+    .dta__body { padding: 20px 24px; }
+}

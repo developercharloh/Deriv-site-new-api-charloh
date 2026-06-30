@@ -1,0 +1,279 @@
+.spl {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #050a0d;
+    overflow: hidden;
+
+    opacity: 1;
+    transition: opacity 0.65s ease;
+    &--exit { opacity: 0; pointer-events: none; }
+
+    // ── Scrolling grid ───────────────────────────────────────────────────
+    &__grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(rgba(212,175,55,0.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(212,175,55,0.06) 1px, transparent 1px);
+        background-size: 44px 44px;
+        animation: splGrid 20s linear infinite;
+    }
+    @keyframes splGrid {
+        from { background-position: 0 0; }
+        to   { background-position: 44px 44px; }
+    }
+
+    // ── Floating side candles ────────────────────────────────────────────
+    &__candles { position: absolute; inset: 0; pointer-events: none; }
+
+    &__candle {
+        position: absolute;
+        bottom: 15%;
+        width: 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        height: var(--w);
+        opacity: 0;
+        animation: splCandleFloat linear infinite both;
+
+        &::before { // wick
+            content: '';
+            position: absolute;
+            bottom: calc(var(--b) / 2);
+            width: 2px;
+            height: var(--w);
+            border-radius: 2px;
+        }
+        &::after { // body
+            content: '';
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: var(--b);
+            border-radius: 3px;
+        }
+
+        &--up {
+            &::before { background: rgba(16,185,129,0.7); }
+            &::after  { background: linear-gradient(180deg,#10b981,#059669); }
+        }
+        &--dn {
+            &::before { background: rgba(239,68,68,0.7); }
+            &::after  { background: linear-gradient(180deg,#ef4444,#dc2626); }
+        }
+    }
+
+    @keyframes splCandleFloat {
+        0%   { opacity: 0; transform: translateY(0); }
+        15%  { opacity: 0.7; }
+        85%  { opacity: 0.7; }
+        100% { opacity: 0; transform: translateY(-120px); }
+    }
+
+    // ── Central glow ─────────────────────────────────────────────────────
+    &__glow {
+        position: absolute;
+        width: min(480px, 88vw);
+        height: min(480px, 88vw);
+        border-radius: 50%;
+        background: radial-gradient(circle,
+            rgba(212,175,55,0.16) 0%,
+            rgba(34,85,34,0.08) 45%,
+            transparent 70%);
+        animation: splGlow 2.6s ease-in-out infinite alternate;
+        pointer-events: none;
+    }
+    @keyframes splGlow {
+        from { transform: scale(0.9);  opacity: 0.6; }
+        to   { transform: scale(1.08); opacity: 1; }
+    }
+
+    // ── Content stack ────────────────────────────────────────────────────
+    &__content {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 28px;
+        padding: 0 20px;
+        width: 100%;
+    }
+
+    // ── Logo ─────────────────────────────────────────────────────────────
+    &__logo-wrap {
+        position: relative;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        width: min(260px, 64vw);
+        height: min(260px, 64vw);
+        flex-shrink: 0;
+    }
+
+    &__logo {
+        display: block !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+        object-fit: contain;
+        border-radius: 24px;
+        user-select: none;
+        -webkit-user-drag: none;
+        position: relative;
+        z-index: 2;
+        filter: drop-shadow(0 0 32px rgba(212,175,55,0.5))
+                drop-shadow(0 0 64px rgba(34,85,34,0.25));
+        animation: splLogoBreath 3s ease-in-out infinite alternate;
+    }
+    @keyframes splLogoBreath {
+        from { filter: drop-shadow(0 0 28px rgba(212,175,55,0.4)) drop-shadow(0 0 56px rgba(34,85,34,0.2)); }
+        to   { filter: drop-shadow(0 0 48px rgba(212,175,55,0.7)) drop-shadow(0 0 90px rgba(34,85,34,0.35)); }
+    }
+
+    &__logo-ring {
+        position: absolute;
+        border-radius: 50%;
+        border: 1px solid rgba(212,175,55,0.3);
+        pointer-events: none;
+
+        &--1 {
+            width: min(300px, 72vw);
+            height: min(300px, 72vw);
+            animation: splRing 3s ease-out infinite;
+        }
+        &--2 {
+            width: min(340px, 80vw);
+            height: min(340px, 80vw);
+            animation: splRing 3s ease-out 1s infinite;
+        }
+    }
+    @keyframes splRing {
+        0%   { transform: scale(0.85); opacity: 0.5; }
+        100% { transform: scale(1.2);  opacity: 0; }
+    }
+
+    // ── Phrase cycling ───────────────────────────────────────────────────
+    &__phrase-box {
+        height: 72px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    &__phrase {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        transition: opacity 0.4s ease, transform 0.4s ease;
+
+        &--in   { opacity: 0; transform: translateY(10px); }
+        &--hold { opacity: 1; transform: translateY(0); }
+        &--out  { opacity: 0; transform: translateY(-10px); }
+    }
+
+    &__phrase-top {
+        font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        font-size: clamp(0.95rem, 3.5vw, 1.25rem);
+        font-weight: 400;
+        color: #94a3b8;
+        letter-spacing: 0.04em;
+        text-align: center;
+        text-transform: uppercase;
+    }
+
+    &__phrase-bot {
+        font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        font-size: clamp(1.15rem, 4vw, 1.6rem);
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        text-align: center;
+        background: linear-gradient(135deg, #d4af37, #f0d060, #d4af37);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    // ── Scrolling ticker ─────────────────────────────────────────────────
+    &__ticker {
+        width: 100%;
+        max-width: 600px;
+        overflow: hidden;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(212,175,55,0.12);
+        border-radius: 8px;
+        padding: 8px 0;
+    }
+
+    &__ticker-inner {
+        display: flex;
+        gap: 0;
+        width: max-content;
+        animation: splTicker 22s linear infinite;
+    }
+    @keyframes splTicker {
+        from { transform: translateX(0); }
+        to   { transform: translateX(-50%); }
+    }
+
+    &__ticker-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 18px;
+        border-right: 1px solid rgba(255,255,255,0.06);
+        white-space: nowrap;
+    }
+
+    &__ticker-sym {
+        font-family: 'IBM Plex Sans', monospace, sans-serif;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #e2e8f0;
+        letter-spacing: 0.04em;
+    }
+
+    &__ticker-val {
+        font-family: monospace;
+        font-size: 0.75rem;
+        font-weight: 500;
+
+        &.up { color: #10b981; }
+        &.dn { color: #ef4444; }
+    }
+
+    // ── Progress bar ─────────────────────────────────────────────────────
+    &__bar-track {
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 3px;
+        background: rgba(212,175,55,0.1);
+    }
+
+    &__bar-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #d4af37, #f0d060, #4ade80, #d4af37);
+        background-size: 200% 100%;
+        border-radius: 0 2px 2px 0;
+        animation:
+            splBarFill    linear both,
+            splBarShimmer 1.8s linear infinite;
+    }
+    @keyframes splBarFill {
+        from { width: 0%; }
+        to   { width: 100%; }
+    }
+    @keyframes splBarShimmer {
+        from { background-position: 200% 0; }
+        to   { background-position: -200% 0; }
+    }
+}

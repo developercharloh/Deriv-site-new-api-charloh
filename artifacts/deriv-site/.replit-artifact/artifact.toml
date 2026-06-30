@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Deriv Site"
+version = "1.0.0"
+id = "artifacts/deriv-site"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22438
+
+[services.development]
+run = "pnpm --filter @workspace/deriv-site run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/deriv-site", "run", "build" ]
+publicDir = "artifacts/deriv-site/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22438"
+BASE_PATH = "/"
