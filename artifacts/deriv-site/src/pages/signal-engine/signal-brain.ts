@@ -27,21 +27,21 @@ export const initialMLWeights = (): MLWeights => ({ w: [0, 0, 0, 0, 0], b: 0 });
 interface Vote { model: string; market: MarketType; direction: string; confidence: number; }
 
 // ─── Thresholds ───────────────────────────────────────────────────────────────
-// 10-model consensus system — all markets require 7/10 models to agree.
+// 10-model consensus system — all markets require 6/10 models to agree.
 // Confidence minimums per market type:
-//   MATCHES : 7/10 models, ≥ 70 % avg conf.
-//   DIFFERS : 7/10 models, ≥ 65 % avg conf.
-//   EVEN/ODD: 7/10 models, ≥ 65 % avg conf.
-//   OVR/UND : 7/10 models, ≥ 62 % avg conf  (only safe barriers used).
+//   MATCHES : 6/10 models, ≥ 70 % avg conf.
+//   DIFFERS : 6/10 models, ≥ 65 % avg conf.
+//   EVEN/ODD: 6/10 models, ≥ 65 % avg conf.
+//   OVR/UND : 6/10 models, ≥ 62 % avg conf  (only safe barriers used).
 // Recency gate: last 20 ticks must also confirm direction.
 // TTL: 60 s for 1HZ* (1-second) indices, 120 s for R_* (standard) indices.
 function getThresholds(market: MarketType, prefix: string): { minAgree: number; minConf: number } {
     if (market === 'matches_differs') {
-        if (prefix === 'MATCHES') return { minAgree: 7, minConf: 70 };
-        return { minAgree: 7, minConf: 65 };
+        if (prefix === 'MATCHES') return { minAgree: 6, minConf: 70 };
+        return { minAgree: 6, minConf: 65 };
     }
-    if (market === 'even_odd') return { minAgree: 7, minConf: 65 };
-    return { minAgree: 7, minConf: 62 };     // over_under
+    if (market === 'even_odd') return { minAgree: 6, minConf: 65 };
+    return { minAgree: 6, minConf: 62 };     // over_under
 }
 const EDGE_PCT     = 0.06;       // 6 pp above expected = model detection threshold
 const RECENCY_EDGE = 0.06;       // lowered 0.10 → 0.06 — recency gate was killing valid signals
