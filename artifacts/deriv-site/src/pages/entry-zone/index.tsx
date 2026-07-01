@@ -10,8 +10,8 @@ import { DERIV_VOLATILITIES, type DerivVolatility } from '../../utils/deriv-vola
      2. Clicks "Scan All 10 Markets"
      3. One WebSocket fetches 4000 ticks from every market in parallel
      4. Ten independent models vote on each market
-     5. Market with most votes (must be ≥ 7/10) is shown
-     6. If none reach 7 votes: "No signal — wait"
+     5. Market with most votes (must be ≥ 6/10) is shown
+     6. If none reach 6 votes: "No signal — wait"
    ───────────────────────────────────────────────────────────────────────── */
 
 const DERIV_WS   = 'wss://ws.derivws.com/websockets/v3?app_id=1';
@@ -542,8 +542,8 @@ const EntryZone: React.FC = () => {
                 setTimeout(() => {
                     if (abortRef.current) return;
 
-                    // Threshold: all trade types → 7/10
-                    const minVotes = 7;
+                    // Threshold: all trade types → 6/10
+                    const minVotes = 6;
 
                     if (!best || best.votes.yesCount < minVotes) {
                         const topVotes = best?.votes.yesCount ?? 0;
@@ -634,13 +634,13 @@ const EntryZone: React.FC = () => {
 
     // ── Render ─────────────��──────────────────────────────────────────────
     const voteColor = (n: number) =>
-        n >= 9 ? '#16a34a' : n >= 7 ? '#15803d' : n >= 5 ? '#d97706' : '#dc2626';
+        n >= 9 ? '#16a34a' : n >= 6 ? '#15803d' : n >= 4 ? '#d97706' : '#dc2626';
     const voteLabel = (n: number) =>
         n >= 10 ? 'Unanimous — all 10 models agree'
         : n >= 9  ? 'Near-unanimous (9/10)'
         : n >= 8  ? 'Strong consensus (8/10)'
-        : n >= 7  ? 'Consensus met (7/10) — signal confirmed'
-        : n >= 5  ? 'Moderate — below signal threshold'
+        : n >= 6  ? 'Consensus met (6/10) — signal confirmed'
+        : n >= 4  ? 'Moderate — below signal threshold'
         : 'No consensus';
 
     return (
@@ -651,7 +651,7 @@ const EntryZone: React.FC = () => {
                     <div>
                         <h1 className='ai-tool__title'>AI Analysis Tool</h1>
                         <p className='ai-tool__sub'>
-                            10 independent models scan all 10 markets simultaneously. All trade types require 7/10 models to agree. Signals only fire when the data is genuinely skewed across multiple statistical frameworks.
+                            10 independent models scan all 10 markets simultaneously. All trade types require 6/10 models to agree. Signals only fire when the data is genuinely skewed across multiple statistical frameworks.
                         </p>
                     </div>
                 </div>
@@ -757,7 +757,7 @@ const EntryZone: React.FC = () => {
                     <div className='ai-nosignal__icon'>🔍</div>
                     <h2 className='ai-nosignal__title'>No strong signal right now</h2>
                     <p className='ai-nosignal__sub'>
-                        All 10 markets scanned. Best market achieved {noSigBest?.votes.yesCount ?? 0}/10 votes — need 7/10.
+                        All 10 markets scanned. Best market achieved {noSigBest?.votes.yesCount ?? 0}/10 votes — need 6/10.
                     </p>
                     <div className='ai-nosignal__reason'>
                         <div className='ai-nosignal__reason-title'>Why</div>
