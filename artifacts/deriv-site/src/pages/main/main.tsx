@@ -50,7 +50,7 @@ const AnalysisTool      = lazy(() => import('../ai-analysis-tool'));
 const DCircles          = lazy(() => import('../signal-engine'));
 const FreeBots          = lazy(() => import('../free-bots'));
 const AdvancedDTrader   = lazy(() => import('../advanced-dtrader'));
-const LdpTool           = lazy(() => import('../ldp-tool'));
+
 const AiSignalOrb       = lazy(() => import('../../components/ai-signal-orb/AiSignalOrb'));
 
 class OrbErrorBoundary extends React.Component<{ children: React.ReactNode }, { dead: boolean }> {
@@ -90,7 +90,7 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'chart', 'ldp_tool', 'free_bots', 'ai_analysis'];
+    const hash = ['dashboard', 'bot_builder', 'chart', 'free_bots', 'ai_analysis'];
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -443,18 +443,6 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
-                                        <Localize i18n_default_text='📊 LDP Tool' />
-                                    </>
-                                }
-                                id='id-ldp-tool'
-                            >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading LDP Tool...')} />}>
-                                    <LdpTool />
-                                </Suspense>
-                            </div>
-                            <div
-                                label={
-                                    <>
                                         <LabelPairedPuzzlePieceTwoCaptionBoldIcon
                                             height='24px'
                                             width='24px'
@@ -518,12 +506,12 @@ const AppWrapper = observer(() => {
             <DesktopWrapper>
                 <div className='main__run-strategy-wrapper'>
                     <RunStrategy />
-                    {![3, 5, 7].includes(active_tab) && <RunPanel />}
+                    {![4, 6].includes(active_tab) && <RunPanel />}
                 </div>
                 <ChartModal />
                 <TradingViewModal />
             </DesktopWrapper>
-            <MobileWrapper>{!is_open && ![3, 5, 7].includes(active_tab) && <RunPanel />}</MobileWrapper>
+            <MobileWrapper>{!is_open && ![4, 6].includes(active_tab) && <RunPanel />}</MobileWrapper>
             <Dialog
                 cancel_button_text={cancel_button_text || localize('Cancel')}
                 className='dc-dialog__wrapper--fixed'

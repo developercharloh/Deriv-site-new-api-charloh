@@ -89,6 +89,7 @@
                     overflow-y: hidden;
                     -ms-overflow-style: none;
                     scrollbar-width: none;
+                    flex-wrap: nowrap;
 
                     &::-webkit-scrollbar {
                         display: none;
@@ -162,6 +163,8 @@
                 padding: 0 2rem;
                 width: auto;
                 color: rgba(255, 255, 255, 0.85);
+                flex-shrink: 0;
+                white-space: nowrap;
 
                 @include flex-center;
 
@@ -770,7 +773,6 @@
 // tabs (LDP Tool, Free Bots, AI Analysis) need their own scroll context so
 // users can reach all content on mobile.
 @include mobile-or-tablet-screen {
-    #id-ldp-tool,
     #id-free-bots,
     #id-ai-analysis,
     #id-d-circles,
