@@ -21,6 +21,6 @@ echo "Committing: $COMMIT_MSG"
 git commit -m "$COMMIT_MSG" || echo "Nothing new to commit."
 
 echo "Pushing to GitHub..."
-git push origin main
+git push --force origin main
 
 echo "Done! Vercel will now pick up the changes and deploy."
