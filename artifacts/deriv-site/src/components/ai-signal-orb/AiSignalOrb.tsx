@@ -8,7 +8,7 @@ import './ai-signal-orb.scss';
 const DERIV_WS        = 'wss://ws.derivws.com/websockets/v3?app_id=1';
 const TICK_COUNT      = 4000;
 const ALL_SYMS        = DERIV_VOLATILITIES;
-const MIN_VOTES       = 7;
+const MIN_VOTES       = 6;
 const MIN_WIN_PROB_OU = 0.60;
 
 type TradeType = 'over_under' | 'even_odd' | 'matches_differs';
