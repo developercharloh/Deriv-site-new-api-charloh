@@ -165,8 +165,15 @@
                 color: rgba(255, 255, 255, 0.85);
                 flex-shrink: 0;
                 white-space: nowrap;
+                min-width: 0;
 
                 @include flex-center;
+
+                @include mobile-or-tablet-screen {
+                    padding: 0 1rem;
+                    height: 4rem;
+                    font-size: 1.2rem;
+                }
 
                 span { color: rgba(255, 255, 255, 0.85); }
                 svg path { fill: rgba(255, 255, 255, 0.85); }
@@ -176,7 +183,9 @@
                     margin-inline-end: 0.8rem;
 
                     @include mobile-or-tablet-screen {
-                        margin-inline-end: 0.4rem;
+                        margin-inline-end: 0.3rem;
+                        width: 1.4rem;
+                        height: 1.4rem;
                     }
                 }
 
