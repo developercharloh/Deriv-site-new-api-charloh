@@ -1,0 +1,451 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="ou_v_stake">Stake</variable>
+    <variable id="ou_v_istake">Initial Stake</variable>
+    <variable id="ou_v_tp">Target Profit</variable>
+    <variable id="ou_v_sl">Stop Loss</variable>
+    <variable id="ou_v_mf">Martingale Factor</variable>
+    <variable id="ou_v_um">Use Martingale</variable>
+    <variable id="ou_v_ml">Max Losses</variable>
+    <variable id="ou_v_lc">Loss Counter</variable>
+    <variable id="ou_v_ld">Last Digit</variable>
+    <variable id="ou_v_ed">Entry Digit</variable>
+    <variable id="ou_v_ep">Entry Point</variable>
+    <variable id="ou_v_dir">Direction</variable>
+    <variable id="ou_v_bar">Barrier</variable>
+    <variable id="ou_v_txt">text</variable>
+  </variables>
+
+  <!-- ── TRADE DEFINITION ── -->
+  <block type="trade_definition" id="ou_td" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="ou_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ75V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="ou_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="ou_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="ou_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="ou_rtm" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="ou_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── INITIALIZATION ── -->
+    <statement name="INITIALIZATION">
+      <block type="notify" id="ou_init_n">
+        <field name="NOTIFICATION_TYPE">success</field>
+        <field name="NOTIFICATION_SOUND">silent</field>
+        <value name="MESSAGE">
+          <shadow type="text" id="ou_init_s"><field name="TEXT">abc</field></shadow>
+          <block type="text" id="ou_init_t">
+            <field name="TEXT">Over Under Manual Trading Bot — Trader Charloh💵💷  ·  Waiting for Entry Digit…</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="ou_i_stk">
+            <field name="VAR" id="ou_v_stake">Stake</field>
+            <value name="VALUE"><block type="math_number" id="ou_n_stk"><field name="NUM">1</field></block></value>
+            <next>
+              <block type="variables_set" id="ou_i_istk">
+                <field name="VAR" id="ou_v_istake">Initial Stake</field>
+                <value name="VALUE"><block type="math_number" id="ou_n_istk"><field name="NUM">1</field></block></value>
+                <next>
+                  <block type="variables_set" id="ou_i_tp">
+                    <field name="VAR" id="ou_v_tp">Target Profit</field>
+                    <value name="VALUE"><block type="math_number" id="ou_n_tp"><field name="NUM">15</field></block></value>
+                    <next>
+                      <block type="variables_set" id="ou_i_sl">
+                        <field name="VAR" id="ou_v_sl">Stop Loss</field>
+                        <value name="VALUE"><block type="math_number" id="ou_n_sl"><field name="NUM">50</field></block></value>
+                        <next>
+                          <block type="variables_set" id="ou_i_mf">
+                            <field name="VAR" id="ou_v_mf">Martingale Factor</field>
+                            <value name="VALUE"><block type="math_number" id="ou_n_mf"><field name="NUM">2</field></block></value>
+                            <next>
+                              <block type="variables_set" id="ou_i_um">
+                                <field name="VAR" id="ou_v_um">Use Martingale</field>
+                                <value name="VALUE"><block type="logic_boolean" id="ou_b_um"><field name="BOOL">TRUE</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="ou_i_ml">
+                                    <field name="VAR" id="ou_v_ml">Max Losses</field>
+                                    <value name="VALUE"><block type="math_number" id="ou_n_ml"><field name="NUM">6</field></block></value>
+                                    <next>
+                                      <block type="variables_set" id="ou_i_lc">
+                                        <field name="VAR" id="ou_v_lc">Loss Counter</field>
+                                        <value name="VALUE"><block type="math_number" id="ou_n_lc"><field name="NUM">0</field></block></value>
+                                        <next>
+                                          <block type="variables_set" id="ou_i_bar">
+                                            <field name="VAR" id="ou_v_bar">Barrier</field>
+                                            <value name="VALUE"><block type="math_number" id="ou_n_bar"><field name="NUM">4</field></block></value>
+                                            <next>
+                                              <!-- Entry Digit — user-configurable. ≥5 → buys OVER 4. ≤4 → buys UNDER 5. -->
+                                              <block type="variables_set" id="ou_i_ed">
+                                                <field name="VAR" id="ou_v_ed">Entry Digit</field>
+                                                <value name="VALUE"><block type="math_number" id="ou_n_ed"><field name="NUM">5</field></block></value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── TRADE OPTIONS (PREDICTION = Barrier) ── -->
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="ou_to">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION"><shadow type="math_number_positive" id="ou_dur_s"><field name="NUM">1</field></shadow></value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="ou_amt_s"><field name="NUM">1</field></shadow>
+          <block type="variables_get" id="ou_amt_g"><field name="VAR" id="ou_v_stake">Stake</field></block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="ou_pred_s"><field name="NUM">4</field></shadow>
+          <block type="variables_get" id="ou_pred_g"><field name="VAR" id="ou_v_bar">Barrier</field></block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ── BEFORE PURCHASE: only buy when Last Digit == Entry Digit ── -->
+  <block type="before_purchase" id="ou_bp" deletable="false" x="0" y="840">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="variables_set" id="ou_bp_ld">
+        <field name="VAR" id="ou_v_ld">Last Digit</field>
+        <value name="VALUE"><block type="last_digit" id="ou_ld_blk"></block></value>
+        <next>
+          <!-- IF Last Digit == Entry Digit → buy. Else → wait (no purchase, loops next tick) -->
+          <block type="controls_if" id="ou_gate_if">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="ou_gate_cmp">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="ou_gate_ld"><field name="VAR" id="ou_v_ld">Last Digit</field></block></value>
+                <value name="B"><block type="variables_get" id="ou_gate_ed"><field name="VAR" id="ou_v_ed">Entry Digit</field></block></value>
+              </block>
+            </value>
+
+            <!-- ENTRY HIT → choose direction by Entry Digit value -->
+            <statement name="DO0">
+              <block type="controls_if" id="ou_dir_if">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="ou_dir_cmp">
+                    <field name="OP">GTE</field>
+                    <value name="A"><block type="variables_get" id="ou_dir_ed"><field name="VAR" id="ou_v_ed">Entry Digit</field></block></value>
+                    <value name="B"><block type="math_number" id="ou_dir_five"><field name="NUM">5</field></block></value>
+                  </block>
+                </value>
+
+                <!-- OVER 4 -->
+                <statement name="DO0">
+                  <block type="variables_set" id="ou_dir_ov">
+                    <field name="VAR" id="ou_v_dir">Direction</field>
+                    <value name="VALUE"><block type="text" id="ou_t_ov"><field name="TEXT">OVER</field></block></value>
+                    <next>
+                      <block type="variables_set" id="ou_bar_ov">
+                        <field name="VAR" id="ou_v_bar">Barrier</field>
+                        <value name="VALUE"><block type="math_number" id="ou_n_ov"><field name="NUM">4</field></block></value>
+                        <next>
+                          <block type="variables_set" id="ou_ep_ov">
+                            <field name="VAR" id="ou_v_ep">Entry Point</field>
+                            <value name="VALUE"><block type="text" id="ou_t_ep_ov"><field name="TEXT">OVER 4</field></block></value>
+                            <next>
+                              <block type="text_join" id="ou_tj_ov">
+                                <field name="VARIABLE" id="ou_v_txt">text</field>
+                                <statement name="STACK">
+                                  <block type="text_statement" id="ou_ts_ov1"><value name="TEXT"><shadow type="text"><field name="TEXT">📍 Entry HIT — Digit </field></shadow></value>
+                                    <next><block type="text_statement" id="ou_ts_ov2"><value name="TEXT"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_ld_gov"><field name="VAR" id="ou_v_ld">Last Digit</field></block></value>
+                                      <next><block type="text_statement" id="ou_ts_ov3"><value name="TEXT"><shadow type="text"><field name="TEXT"> matches Entry </field></shadow></value>
+                                        <next><block type="text_statement" id="ou_ts_ov4"><value name="TEXT"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_ed_gov"><field name="VAR" id="ou_v_ed">Entry Digit</field></block></value>
+                                          <next><block type="text_statement" id="ou_ts_ov5"><value name="TEXT"><shadow type="text"><field name="TEXT">. Buying OVER 4 ✅</field></shadow></value></block></next>
+                                        </block></next>
+                                      </block></next>
+                                    </block></next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="notify" id="ou_n_ov">
+                                    <field name="NOTIFICATION_TYPE">success</field>
+                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                    <value name="MESSAGE"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_txt_gov"><field name="VAR" id="ou_v_txt">text</field></block></value>
+                                    <next><block type="purchase" id="ou_buy_ov"><field name="PURCHASE_LIST">DIGITOVER</field></block></next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+
+                <!-- UNDER 5 -->
+                <statement name="ELSE">
+                  <block type="variables_set" id="ou_dir_un">
+                    <field name="VAR" id="ou_v_dir">Direction</field>
+                    <value name="VALUE"><block type="text" id="ou_t_un"><field name="TEXT">UNDER</field></block></value>
+                    <next>
+                      <block type="variables_set" id="ou_bar_un">
+                        <field name="VAR" id="ou_v_bar">Barrier</field>
+                        <value name="VALUE"><block type="math_number" id="ou_n_un"><field name="NUM">5</field></block></value>
+                        <next>
+                          <block type="variables_set" id="ou_ep_un">
+                            <field name="VAR" id="ou_v_ep">Entry Point</field>
+                            <value name="VALUE"><block type="text" id="ou_t_ep_un"><field name="TEXT">UNDER 5</field></block></value>
+                            <next>
+                              <block type="text_join" id="ou_tj_un">
+                                <field name="VARIABLE" id="ou_v_txt">text</field>
+                                <statement name="STACK">
+                                  <block type="text_statement" id="ou_ts_un1"><value name="TEXT"><shadow type="text"><field name="TEXT">📍 Entry HIT — Digit </field></shadow></value>
+                                    <next><block type="text_statement" id="ou_ts_un2"><value name="TEXT"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_ld_gun"><field name="VAR" id="ou_v_ld">Last Digit</field></block></value>
+                                      <next><block type="text_statement" id="ou_ts_un3"><value name="TEXT"><shadow type="text"><field name="TEXT"> matches Entry </field></shadow></value>
+                                        <next><block type="text_statement" id="ou_ts_un4"><value name="TEXT"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_ed_gun"><field name="VAR" id="ou_v_ed">Entry Digit</field></block></value>
+                                          <next><block type="text_statement" id="ou_ts_un5"><value name="TEXT"><shadow type="text"><field name="TEXT">. Buying UNDER 5 ✅</field></shadow></value></block></next>
+                                        </block></next>
+                                      </block></next>
+                                    </block></next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="notify" id="ou_n_un">
+                                    <field name="NOTIFICATION_TYPE">success</field>
+                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                    <value name="MESSAGE"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_txt_gun"><field name="VAR" id="ou_v_txt">text</field></block></value>
+                                    <next><block type="purchase" id="ou_buy_un"><field name="PURCHASE_LIST">DIGITUNDER</field></block></next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+
+            <!-- NO ENTRY → log scan, no purchase (loop next tick) -->
+            <statement name="ELSE">
+              <block type="text_join" id="ou_tj_w">
+                <field name="VARIABLE" id="ou_v_txt">text</field>
+                <statement name="STACK">
+                  <block type="text_statement" id="ou_ts_w1"><value name="TEXT"><shadow type="text"><field name="TEXT">🔍 Scanning… Last </field></shadow></value>
+                    <next><block type="text_statement" id="ou_ts_w2"><value name="TEXT"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_ld_gw"><field name="VAR" id="ou_v_ld">Last Digit</field></block></value>
+                      <next><block type="text_statement" id="ou_ts_w3"><value name="TEXT"><shadow type="text"><field name="TEXT"> ≠ Entry </field></shadow></value>
+                        <next><block type="text_statement" id="ou_ts_w4"><value name="TEXT"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_ed_gw"><field name="VAR" id="ou_v_ed">Entry Digit</field></block></value>
+                          <next><block type="text_statement" id="ou_ts_w5"><value name="TEXT"><shadow type="text"><field name="TEXT"> — waiting…</field></shadow></value></block></next>
+                        </block></next>
+                      </block></next>
+                    </block></next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="notify" id="ou_n_w">
+                    <field name="NOTIFICATION_TYPE">warn</field>
+                    <field name="NOTIFICATION_SOUND">silent</field>
+                    <value name="MESSAGE"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_txt_gw"><field name="VAR" id="ou_v_txt">text</field></block></value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ── AFTER PURCHASE: TP / Win / Loss-with-Martingale / SL / MaxLoss ── -->
+  <block type="after_purchase" id="ou_ap" x="886" y="60">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="ou_tp_chk">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="logic_compare" id="ou_tp_cmp">
+            <field name="OP">GTE</field>
+            <value name="A"><block type="total_profit" id="ou_tp_val"></block></value>
+            <value name="B"><block type="variables_get" id="ou_tp_g"><field name="VAR" id="ou_v_tp">Target Profit</field></block></value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="text_join" id="ou_tp_tj">
+            <field name="VARIABLE" id="ou_v_txt">text</field>
+            <statement name="STACK">
+              <block type="text_statement" id="ou_tp_ts0"><value name="TEXT"><shadow type="text"><field name="TEXT">🎯 Target Profit hit! </field></shadow></value>
+                <next><block type="text_statement" id="ou_tp_ts1"><value name="TEXT"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="total_profit" id="ou_tp_pv"></block></value>
+                  <next><block type="text_statement" id="ou_tp_ts2"><value name="TEXT"><shadow type="text"><field name="TEXT"> USD printed 💲💲 — bot stopped.</field></shadow></value></block></next>
+                </block></next>
+              </block>
+            </statement>
+            <next>
+              <block type="notify" id="ou_tp_n">
+                <field name="NOTIFICATION_TYPE">success</field>
+                <field name="NOTIFICATION_SOUND">earned-money</field>
+                <value name="MESSAGE"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_tp_tg"><field name="VAR" id="ou_v_txt">text</field></block></value>
+              </block>
+            </next>
+          </block>
+        </statement>
+
+        <statement name="ELSE">
+          <block type="controls_if" id="ou_win_chk">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0"><block type="contract_check_result" id="ou_cr"><field name="CHECK_RESULT">win</field></block></value>
+            <statement name="DO0">
+              <block type="variables_set" id="ou_w_stk">
+                <field name="VAR" id="ou_v_stake">Stake</field>
+                <value name="VALUE"><block type="variables_get" id="ou_w_is"><field name="VAR" id="ou_v_istake">Initial Stake</field></block></value>
+                <next>
+                  <block type="variables_set" id="ou_w_lc">
+                    <field name="VAR" id="ou_v_lc">Loss Counter</field>
+                    <value name="VALUE"><block type="math_number" id="ou_w_lc0"><field name="NUM">0</field></block></value>
+                    <next><block type="trade_again" id="ou_ta_win"></block></next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+            <statement name="ELSE">
+              <block type="math_change" id="ou_l_inc">
+                <field name="VAR" id="ou_v_lc">Loss Counter</field>
+                <value name="DELTA"><shadow type="math_number" id="ou_l_d"><field name="NUM">1</field></shadow></value>
+                <next>
+                  <block type="controls_if" id="ou_mg_chk">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0"><block type="variables_get" id="ou_um_g"><field name="VAR" id="ou_v_um">Use Martingale</field></block></value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="ou_mg_s">
+                        <field name="VAR" id="ou_v_stake">Stake</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="ou_mg_m">
+                            <field name="OP">MULTIPLY</field>
+                            <value name="A"><shadow type="math_number"><field name="NUM">1</field></shadow><block type="variables_get" id="ou_sk_g"><field name="VAR" id="ou_v_stake">Stake</field></block></value>
+                            <value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow><block type="variables_get" id="ou_mf_g"><field name="VAR" id="ou_v_mf">Martingale Factor</field></block></value>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="variables_set" id="ou_no_mg">
+                        <field name="VAR" id="ou_v_stake">Stake</field>
+                        <value name="VALUE"><block type="variables_get" id="ou_is_g2"><field name="VAR" id="ou_v_istake">Initial Stake</field></block></value>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="controls_if" id="ou_sl_chk">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="ou_sl_cmp">
+                            <field name="OP">LTE</field>
+                            <value name="A"><block type="total_profit" id="ou_sl_tp"></block></value>
+                            <value name="B">
+                              <block type="math_single" id="ou_sl_neg">
+                                <field name="OP">NEG</field>
+                                <value name="NUM"><shadow type="math_number"><field name="NUM">5</field></shadow><block type="variables_get" id="ou_sl_g"><field name="VAR" id="ou_v_sl">Stop Loss</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="text_join" id="ou_sl_tj">
+                            <field name="VARIABLE" id="ou_v_txt">text</field>
+                            <statement name="STACK">
+                              <block type="text_statement" id="ou_sl_ts1"><value name="TEXT"><shadow type="text"><field name="TEXT">🛑 Stop Loss hit! </field></shadow></value>
+                                <next><block type="text_statement" id="ou_sl_ts2"><value name="TEXT"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="total_profit" id="ou_sl_tp_v"></block></value>
+                                  <next><block type="text_statement" id="ou_sl_ts3"><value name="TEXT"><shadow type="text"><field name="TEXT"> USD — bot stopped.</field></shadow></value></block></next>
+                                </block></next>
+                              </block>
+                            </statement>
+                            <next>
+                              <block type="notify" id="ou_sl_n">
+                                <field name="NOTIFICATION_TYPE">error</field>
+                                <field name="NOTIFICATION_SOUND">error</field>
+                                <value name="MESSAGE"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_sl_txt_g"><field name="VAR" id="ou_v_txt">text</field></block></value>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="controls_if" id="ou_ml_chk">
+                            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                            <value name="IF0">
+                              <block type="logic_compare" id="ou_ml_cmp">
+                                <field name="OP">LTE</field>
+                                <value name="A"><block type="variables_get" id="ou_lc_g"><field name="VAR" id="ou_v_lc">Loss Counter</field></block></value>
+                                <value name="B"><block type="variables_get" id="ou_ml_g"><field name="VAR" id="ou_v_ml">Max Losses</field></block></value>
+                              </block>
+                            </value>
+                            <statement name="DO0"><block type="trade_again" id="ou_ta_loss"></block></statement>
+                            <statement name="ELSE">
+                              <block type="text_join" id="ou_ml_tj">
+                                <field name="VARIABLE" id="ou_v_txt">text</field>
+                                <statement name="STACK">
+                                  <block type="text_statement" id="ou_ml_ts1"><value name="TEXT"><shadow type="text"><field name="TEXT">❌ Max losses hit! </field></shadow></value>
+                                    <next><block type="text_statement" id="ou_ml_ts2"><value name="TEXT"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="total_profit" id="ou_ml_tp_v"></block></value>
+                                      <next><block type="text_statement" id="ou_ml_ts3"><value name="TEXT"><shadow type="text"><field name="TEXT"> USD — bot stopped.</field></shadow></value></block></next>
+                                    </block></next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="notify" id="ou_ml_n">
+                                    <field name="NOTIFICATION_TYPE">error</field>
+                                    <field name="NOTIFICATION_SOUND">error</field>
+                                    <value name="MESSAGE"><shadow type="text"><field name="TEXT">abc</field></shadow><block type="variables_get" id="ou_ml_txt_g"><field name="VAR" id="ou_v_txt">text</field></block></value>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>

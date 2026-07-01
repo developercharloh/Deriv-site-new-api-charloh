@@ -25,24 +25,29 @@ git push --force origin main
 
 echo "Push done!"
 
-# Trigger Vercel deployment via API
+# Deploy to Vercel via CLI prebuilt output (git integration is intentionally disconnected).
+# Build locally (npm works fine here), create .vercel/output, then vercel deploy --prebuilt.
 if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
-  echo "Triggering Vercel deployment..."
-  RESPONSE=$(curl -s -X POST "https://api.vercel.com/v13/deployments" \
-    -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"name\": \"deriv-site-new-api-charloh\",
-      \"gitSource\": {
-        \"type\": \"github\",
-        \"repoId\": \"$(curl -s -H "Authorization: Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" https://api.github.com/repos/developercharloh/Deriv-site-new-api-charloh | node -e "process.stdin.resume();let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).id))")\",
-        \"ref\": \"main\"
-      },
-      \"projectId\": \"${VERCEL_PROJECT_ID}\"
-    }")
-  echo "$RESPONSE" | node -e "process.stdin.resume();let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const j=JSON.parse(d);if(j.url)console.log('Deploying to: https://'+j.url);else console.log('Vercel response:',JSON.stringify(j))})" 2>/dev/null || echo "Vercel triggered (check dashboard for status)"
+  echo "Building site..."
+  (cd artifacts/deriv-site && npm run build)
+
+  echo "Preparing Vercel Build Output..."
+  rm -rf artifacts/deriv-site/.vercel/output
+  mkdir -p artifacts/deriv-site/.vercel/output/static
+  cp -r artifacts/deriv-site/dist/. artifacts/deriv-site/.vercel/output/static/
+  echo '{"version":3}' > artifacts/deriv-site/.vercel/output/config.json
+  mkdir -p artifacts/deriv-site/.vercel
+  echo "{\"orgId\":\"team_BQWnsBcAsW4szAjxsE8X2my1\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" \
+    > artifacts/deriv-site/.vercel/project.json
+
+  echo "Deploying to Vercel..."
+  (cd artifacts/deriv-site && \
+    VERCEL_ORG_ID=team_BQWnsBcAsW4szAjxsE8X2my1 \
+    VERCEL_PROJECT_ID=${VERCEL_PROJECT_ID} \
+    npx vercel@latest deploy --prebuilt --prod --yes --token=${VERCEL_TOKEN})
+  echo "Live at https://www.mrcharlohfx.site"
 else
-  echo "VERCEL_TOKEN or VERCEL_PROJECT_ID not set — skipping Vercel trigger."
+  echo "VERCEL_TOKEN or VERCEL_PROJECT_ID not set — skipping deploy."
 fi
 
 echo "Done!"

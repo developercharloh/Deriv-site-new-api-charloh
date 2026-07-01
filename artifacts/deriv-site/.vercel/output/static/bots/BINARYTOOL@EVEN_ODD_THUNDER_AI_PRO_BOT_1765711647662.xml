@@ -1,0 +1,778 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="eo_scan_text_id">text</variable>
+    <variable id="L4f5`_Bb29Z7N%A:0@yS">Stake</variable>
+    <variable id="FM1`~n6DvK#8Yi`~!oSD">Direction</variable>
+    <variable id=":WPU,akMBs7bn$VYXx-f">Max Loss</variable>
+    <variable id="{_gQ*oKSNI260$_%IiFy">Loss Count</variable>
+    <variable id=".9@YH*1NpucHe+jAsdF1">Target Profit</variable>
+    <variable id="ZC9jlKp0p+PVYAU:n7?-">Win Stake</variable>
+    <variable id="eo_entry_pt_id">entry point</variable>
+    <variable id="eo_last_digit_id">last digit</variable>
+    <variable id="tm_eo_id">trading mode</variable>
+  </variables>
+
+  <!-- ── TRADE DEFINITION ── -->
+  <block type="trade_definition" id="S1,RT~hHPMlVl.L|3!$_" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="W1QDpysz)|HA?v8!^FtU" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">R_100</field>
+        <next>
+          <block type="trade_definition_tradetype" id="biR]#vY0simU/=/ihfop" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="Y^FH)SQiDhUkv]t73%+J" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="ZH,U$~h|;oh/M0mH]I3c" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="L|Ujo`Itmpb%HV@iz^:{" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">TRUE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="^YG1oR[iRR_zWp}Yxt//" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── INITIALIZATION ── -->
+    <statement name="INITIALIZATION">
+      <block type="notify" id="eo_init_welcome">
+        <field name="NOTIFICATION_TYPE">success</field>
+        <field name="NOTIFICATION_SOUND">silent</field>
+        <value name="MESSAGE">
+          <shadow type="text" id="eo_welcome_txt">
+            <field name="TEXT">Trader Charloh💵💷</field>
+          </shadow>
+        </value>
+        <next>
+          <!-- Direction — patchable: EVEN or ODD -->
+          <block type="variables_set" id="eo_dir_init">
+            <field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field>
+            <value name="VALUE">
+              <block type="text" id="eo_dir_text_val">
+                <field name="TEXT">ODD</field>
+              </block>
+            </value>
+            <next>
+              <!-- Stake — patchable -->
+              <block type="variables_set" id="Wa]y_n3s-T4*h(bmYz+k">
+                <field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                <value name="VALUE">
+                  <block type="math_number" id="eo_stake_num">
+                    <field name="NUM">0.55</field>
+                  </block>
+                </value>
+                <next>
+                  <!-- Max Loss — patchable -->
+                  <block type="variables_set" id="Z:R@MLC*=N3%meT)IuPt">
+                    <field name="VAR" id=":WPU,akMBs7bn$VYXx-f">Max Loss</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="eo_ml_num">
+                        <field name="NUM">100</field>
+                      </block>
+                    </value>
+                    <next>
+                      <!-- Target Profit — patchable -->
+                      <block type="variables_set" id=":Vn+w]Y.(QKzgKKENIfo">
+                        <field name="VAR" id=".9@YH*1NpucHe+jAsdF1">Target Profit</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="eo_tp_num">
+                            <field name="NUM">10</field>
+                          </block>
+                        </value>
+                        <next>
+                          <!-- Entry point — patchable -->
+                          <block type="variables_set" id="eo_ep_init_fixed">
+                            <field name="VAR" id="eo_entry_pt_id">entry point</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="eo_ep_num_fixed">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="tm_eo_init">
+                                <field name="VAR" id="tm_eo_id">trading mode</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="tm_eo_zero">
+                                    <field name="NUM">0</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="eo_lc_init">
+                                    <field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="eo_lc_zero">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="eo_ws_init">
+                                        <field name="VAR" id="ZC9jlKp0p+PVYAU:n7?-">Win Stake</field>
+                                        <value name="VALUE">
+                                          <block type="variables_get" id="eo_ws_get">
+                                            <field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── SUBMARKET / stake amount ── -->
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="iOslhQ]VjS5=Pp}`{Qxq">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="eo_dur">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="eo_amt_shadow">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="eo_stake_get">
+            <field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ── AFTER PURCHASE ── -->
+  <block type="after_purchase" id="/_7Uwuj,1wT3wj2==7I}" deletable="false" x="1537" y="60">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="eo_win_loss_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="contract_check_result" id="eo_win_check">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+
+        <!-- WIN branch -->
+        <statement name="DO0">
+          <block type="variables_set" id="eo_lc_reset">
+            <field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field>
+            <value name="VALUE">
+              <block type="math_number" id="eo_lc_reset_num">
+                <field name="NUM">0</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="eo_stake_restore">
+                <field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="eo_ws_restore_get">
+                    <field name="VAR" id="ZC9jlKp0p+PVYAU:n7?-">Win Stake</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="notify" id="eo_victory_notify">
+                    <field name="NOTIFICATION_TYPE">success</field>
+                    <field name="NOTIFICATION_SOUND">silent</field>
+                    <value name="MESSAGE">
+                      <shadow type="text" id="eo_victory_txt">
+                        <field name="TEXT">victory</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+
+        <!-- LOSS branch: notify recovery + 10-level martingale -->
+        <statement name="ELSE">
+          <block type="notify" id="eo_recovery_notify">
+            <field name="NOTIFICATION_TYPE">error</field>
+            <field name="NOTIFICATION_SOUND">silent</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="eo_recovery_txt">
+                <field name="TEXT">recovery</field>
+              </shadow>
+            </value>
+            <next>
+              <block type="math_change" id="eo_lc_inc">
+                <field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field>
+                <value name="DELTA">
+                  <shadow type="math_number" id="eo_lc_delta"><field name="NUM">1</field></shadow>
+                </value>
+                <next>
+                  <!-- Level 1 -->
+                  <block type="controls_if" id="eo_lc_1">
+                    <value name="IF0">
+                      <block type="logic_compare" id="eo_lc1_cmp"><field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="eo_lc1_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                        <value name="B"><block type="math_number" id="eo_lc1_b"><field name="NUM">1</field></block></value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="math_change" id="eo_s_lc1"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                        <value name="DELTA"><shadow type="math_number" id="eo_s1_s"><field name="NUM">1</field></shadow>
+                          <block type="math_arithmetic" id="eo_s1_m"><field name="OP">MULTIPLY</field>
+                            <value name="A"><shadow type="math_number" id="eo_s1_a1"><field name="NUM">1</field></shadow>
+                              <block type="math_single" id="eo_s1_abs"><field name="OP">ABS</field>
+                                <value name="NUM"><shadow type="math_number" id="eo_s1_s9"><field name="NUM">9</field></shadow>
+                                  <block type="variables_get" id="eo_s1_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="B"><shadow type="math_number" id="eo_s1_b"><field name="NUM">1</field></shadow></value>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <next>
+                      <!-- Level 2 -->
+                      <block type="controls_if" id="eo_lc_2">
+                        <value name="IF0">
+                          <block type="logic_compare" id="eo_lc2_cmp"><field name="OP">EQ</field>
+                            <value name="A"><block type="variables_get" id="eo_lc2_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                            <value name="B"><block type="math_number" id="eo_lc2_b"><field name="NUM">2</field></block></value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="math_change" id="eo_s_lc2"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                            <value name="DELTA"><shadow type="math_number" id="eo_s2_s"><field name="NUM">1</field></shadow>
+                              <block type="math_arithmetic" id="eo_s2_m"><field name="OP">MULTIPLY</field>
+                                <value name="A"><shadow type="math_number" id="eo_s2_a1"><field name="NUM">1</field></shadow>
+                                  <block type="math_single" id="eo_s2_abs"><field name="OP">ABS</field>
+                                    <value name="NUM"><shadow type="math_number" id="eo_s2_s9"><field name="NUM">9</field></shadow>
+                                      <block type="variables_get" id="eo_s2_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B"><shadow type="math_number" id="eo_s2_b"><field name="NUM">1</field></shadow></value>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                        <next>
+                          <!-- Level 3 -->
+                          <block type="controls_if" id="eo_lc_3">
+                            <value name="IF0">
+                              <block type="logic_compare" id="eo_lc3_cmp"><field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="eo_lc3_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                                <value name="B"><block type="math_number" id="eo_lc3_b"><field name="NUM">3</field></block></value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="math_change" id="eo_s_lc3"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                                <value name="DELTA"><shadow type="math_number" id="eo_s3_s"><field name="NUM">1</field></shadow>
+                                  <block type="math_arithmetic" id="eo_s3_m"><field name="OP">MULTIPLY</field>
+                                    <value name="A"><shadow type="math_number" id="eo_s3_a1"><field name="NUM">1</field></shadow>
+                                      <block type="math_single" id="eo_s3_abs"><field name="OP">ABS</field>
+                                        <value name="NUM"><shadow type="math_number" id="eo_s3_s9"><field name="NUM">9</field></shadow>
+                                          <block type="variables_get" id="eo_s3_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <value name="B"><shadow type="math_number" id="eo_s3_b"><field name="NUM">1</field></shadow></value>
+                                  </block>
+                                </value>
+                              </block>
+                            </statement>
+                            <next>
+                              <!-- Level 4 -->
+                              <block type="controls_if" id="eo_lc_4">
+                                <value name="IF0">
+                                  <block type="logic_compare" id="eo_lc4_cmp"><field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="eo_lc4_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                                    <value name="B"><block type="math_number" id="eo_lc4_b"><field name="NUM">4</field></block></value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="math_change" id="eo_s_lc4"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                                    <value name="DELTA"><shadow type="math_number" id="eo_s4_s"><field name="NUM">1</field></shadow>
+                                      <block type="math_arithmetic" id="eo_s4_m"><field name="OP">MULTIPLY</field>
+                                        <value name="A"><shadow type="math_number" id="eo_s4_a1"><field name="NUM">1</field></shadow>
+                                          <block type="math_single" id="eo_s4_abs"><field name="OP">ABS</field>
+                                            <value name="NUM"><shadow type="math_number" id="eo_s4_s9"><field name="NUM">9</field></shadow>
+                                              <block type="variables_get" id="eo_s4_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <value name="B"><shadow type="math_number" id="eo_s4_b"><field name="NUM">1</field></shadow></value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <!-- Level 5 -->
+                                  <block type="controls_if" id="eo_lc_5">
+                                    <value name="IF0">
+                                      <block type="logic_compare" id="eo_lc5_cmp"><field name="OP">EQ</field>
+                                        <value name="A"><block type="variables_get" id="eo_lc5_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                                        <value name="B"><block type="math_number" id="eo_lc5_b"><field name="NUM">5</field></block></value>
+                                      </block>
+                                    </value>
+                                    <statement name="DO0">
+                                      <block type="math_change" id="eo_s_lc5"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                                        <value name="DELTA"><shadow type="math_number" id="eo_s5_s"><field name="NUM">1</field></shadow>
+                                          <block type="math_arithmetic" id="eo_s5_m"><field name="OP">MULTIPLY</field>
+                                            <value name="A"><shadow type="math_number" id="eo_s5_a1"><field name="NUM">1</field></shadow>
+                                              <block type="math_single" id="eo_s5_abs"><field name="OP">ABS</field>
+                                                <value name="NUM"><shadow type="math_number" id="eo_s5_s9"><field name="NUM">9</field></shadow>
+                                                  <block type="variables_get" id="eo_s5_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <value name="B"><shadow type="math_number" id="eo_s5_b"><field name="NUM">1</field></shadow></value>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </statement>
+                                    <next>
+                                      <!-- Level 6 -->
+                                      <block type="controls_if" id="eo_lc_6">
+                                        <value name="IF0">
+                                          <block type="logic_compare" id="eo_lc6_cmp"><field name="OP">EQ</field>
+                                            <value name="A"><block type="variables_get" id="eo_lc6_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                                            <value name="B"><block type="math_number" id="eo_lc6_b"><field name="NUM">6</field></block></value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="math_change" id="eo_s_lc6"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                                            <value name="DELTA"><shadow type="math_number" id="eo_s6_s"><field name="NUM">1</field></shadow>
+                                              <block type="math_arithmetic" id="eo_s6_m"><field name="OP">MULTIPLY</field>
+                                                <value name="A"><shadow type="math_number" id="eo_s6_a1"><field name="NUM">1</field></shadow>
+                                                  <block type="math_single" id="eo_s6_abs"><field name="OP">ABS</field>
+                                                    <value name="NUM"><shadow type="math_number" id="eo_s6_s9"><field name="NUM">9</field></shadow>
+                                                      <block type="variables_get" id="eo_s6_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <value name="B"><shadow type="math_number" id="eo_s6_b"><field name="NUM">1</field></shadow></value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </statement>
+                                        <next>
+                                          <!-- Level 7 -->
+                                          <block type="controls_if" id="eo_lc_7">
+                                            <value name="IF0">
+                                              <block type="logic_compare" id="eo_lc7_cmp"><field name="OP">EQ</field>
+                                                <value name="A"><block type="variables_get" id="eo_lc7_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                                                <value name="B"><block type="math_number" id="eo_lc7_b"><field name="NUM">7</field></block></value>
+                                              </block>
+                                            </value>
+                                            <statement name="DO0">
+                                              <block type="math_change" id="eo_s_lc7"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                                                <value name="DELTA"><shadow type="math_number" id="eo_s7_s"><field name="NUM">1</field></shadow>
+                                                  <block type="math_arithmetic" id="eo_s7_m"><field name="OP">MULTIPLY</field>
+                                                    <value name="A"><shadow type="math_number" id="eo_s7_a1"><field name="NUM">1</field></shadow>
+                                                      <block type="math_single" id="eo_s7_abs"><field name="OP">ABS</field>
+                                                        <value name="NUM"><shadow type="math_number" id="eo_s7_s9"><field name="NUM">9</field></shadow>
+                                                          <block type="variables_get" id="eo_s7_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B"><shadow type="math_number" id="eo_s7_b"><field name="NUM">1</field></shadow></value>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <next>
+                                              <!-- Level 8 -->
+                                              <block type="controls_if" id="eo_lc_8">
+                                                <value name="IF0">
+                                                  <block type="logic_compare" id="eo_lc8_cmp"><field name="OP">EQ</field>
+                                                    <value name="A"><block type="variables_get" id="eo_lc8_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                                                    <value name="B"><block type="math_number" id="eo_lc8_b"><field name="NUM">8</field></block></value>
+                                                  </block>
+                                                </value>
+                                                <statement name="DO0">
+                                                  <block type="math_change" id="eo_s_lc8"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                                                    <value name="DELTA"><shadow type="math_number" id="eo_s8_s"><field name="NUM">1</field></shadow>
+                                                      <block type="math_arithmetic" id="eo_s8_m"><field name="OP">MULTIPLY</field>
+                                                        <value name="A"><shadow type="math_number" id="eo_s8_a1"><field name="NUM">1</field></shadow>
+                                                          <block type="math_single" id="eo_s8_abs"><field name="OP">ABS</field>
+                                                            <value name="NUM"><shadow type="math_number" id="eo_s8_s9"><field name="NUM">9</field></shadow>
+                                                              <block type="variables_get" id="eo_s8_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                                            </value>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B"><shadow type="math_number" id="eo_s8_b"><field name="NUM">1</field></shadow></value>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </statement>
+                                                <next>
+                                                  <!-- Level 9 -->
+                                                  <block type="controls_if" id="eo_lc_9">
+                                                    <value name="IF0">
+                                                      <block type="logic_compare" id="eo_lc9_cmp"><field name="OP">EQ</field>
+                                                        <value name="A"><block type="variables_get" id="eo_lc9_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                                                        <value name="B"><block type="math_number" id="eo_lc9_b"><field name="NUM">9</field></block></value>
+                                                      </block>
+                                                    </value>
+                                                    <statement name="DO0">
+                                                      <block type="math_change" id="eo_s_lc9"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                                                        <value name="DELTA"><shadow type="math_number" id="eo_s9_s"><field name="NUM">1</field></shadow>
+                                                          <block type="math_arithmetic" id="eo_s9_m"><field name="OP">MULTIPLY</field>
+                                                            <value name="A"><shadow type="math_number" id="eo_s9_a1"><field name="NUM">1</field></shadow>
+                                                              <block type="math_single" id="eo_s9_abs"><field name="OP">ABS</field>
+                                                                <value name="NUM"><shadow type="math_number" id="eo_s9_s9"><field name="NUM">9</field></shadow>
+                                                                  <block type="variables_get" id="eo_s9_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                                                </value>
+                                                              </block>
+                                                            </value>
+                                                            <value name="B"><shadow type="math_number" id="eo_s9_b"><field name="NUM">1</field></shadow></value>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </statement>
+                                                    <next>
+                                                      <!-- Level 10 -->
+                                                      <block type="controls_if" id="eo_lc_10">
+                                                        <value name="IF0">
+                                                          <block type="logic_compare" id="eo_lc10_cmp"><field name="OP">EQ</field>
+                                                            <value name="A"><block type="variables_get" id="eo_lc10_a"><field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field></block></value>
+                                                            <value name="B"><block type="math_number" id="eo_lc10_b"><field name="NUM">10</field></block></value>
+                                                          </block>
+                                                        </value>
+                                                        <statement name="DO0">
+                                                          <block type="math_change" id="eo_s_lc10"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                                                            <value name="DELTA"><shadow type="math_number" id="eo_s10_s"><field name="NUM">1</field></shadow>
+                                                              <block type="math_arithmetic" id="eo_s10_m"><field name="OP">MULTIPLY</field>
+                                                                <value name="A"><shadow type="math_number" id="eo_s10_a1"><field name="NUM">1</field></shadow>
+                                                                  <block type="math_single" id="eo_s10_abs"><field name="OP">ABS</field>
+                                                                    <value name="NUM"><shadow type="math_number" id="eo_s10_s9"><field name="NUM">9</field></shadow>
+                                                                      <block type="variables_get" id="eo_s10_sg"><field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field></block>
+                                                                    </value>
+                                                                  </block>
+                                                                </value>
+                                                                <value name="B"><shadow type="math_number" id="eo_s10_b"><field name="NUM">1</field></shadow></value>
+                                                              </block>
+                                                            </value>
+                                                          </block>
+                                                        </statement>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+
+        <!-- TP / SL check (runs after every win or loss) -->
+        <next>
+          <block type="controls_if" id="eo_tp_sl_if">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="eo_tp_lt_cmp">
+                <field name="OP">LT</field>
+                <value name="A"><block type="total_profit" id="eo_tp_profit"></block></value>
+                <value name="B"><block type="variables_get" id="eo_tp_get"><field name="VAR" id=".9@YH*1NpucHe+jAsdF1">Target Profit</field></block></value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <!-- Not yet at target: check stop loss, else trade again -->
+              <block type="controls_if" id="eo_sl_if">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_operation" id="eo_sl_op">
+                    <field name="OP">AND</field>
+                    <value name="A">
+                      <block type="math_number_property" id="eo_sl_neg">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" divisor_input="false"></mutation>
+                        <field name="PROPERTY">NEGATIVE</field>
+                        <value name="NUMBER_TO_CHECK">
+                          <shadow type="math_number" id="eo_sl_n0"><field name="NUM">0</field></shadow>
+                          <block type="total_profit" id="eo_sl_tp1"></block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_compare" id="eo_sl_cmp">
+                        <field name="OP">GTE</field>
+                        <value name="A">
+                          <block type="math_single" id="eo_sl_abs">
+                            <field name="OP">ABS</field>
+                            <value name="NUM">
+                              <shadow type="math_number" id="eo_sl_s9"><field name="NUM">9</field></shadow>
+                              <block type="total_profit" id="eo_sl_tp2"></block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="variables_get" id="eo_sl_ml_get"><field name="VAR" id=":WPU,akMBs7bn$VYXx-f">Max Loss</field></block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="text_join" id="eo_sl_tj">
+                    <field name="VARIABLE" id="eo_sl_var">eo_sl_text</field>
+                    <statement name="STACK">
+                      <block type="text_statement" id="eo_sl_s1">
+                        <value name="TEXT"><shadow type="text"><field name="TEXT">🛑 Stop Loss hit! </field></shadow></value>
+                        <next>
+                          <block type="text_statement" id="eo_sl_s2">
+                            <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="total_profit" id="eo_sl_tp"></block></value>
+                            <next>
+                              <block type="text_statement" id="eo_sl_s3">
+                                <value name="TEXT"><shadow type="text"><field name="TEXT"> USD — bot stopped.</field></shadow></value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="notify" id="eo_sl_notify">
+                        <field name="NOTIFICATION_TYPE">error</field>
+                        <field name="NOTIFICATION_SOUND">error</field>
+                        <value name="MESSAGE">
+                          <shadow type="text"><field name="TEXT">abc</field></shadow>
+                          <block type="variables_get" id="eo_sl_vg"><field name="VAR" id="eo_sl_var">eo_sl_text</field></block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="trade_again" id="eo_trade_again"></block>
+                </statement>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <!-- Target profit achieved -->
+              <block type="text_join" id="eo_tp_tj">
+                <field name="VARIABLE" id="eo_tp_var">eo_tp_text</field>
+                <statement name="STACK">
+                  <block type="text_statement" id="eo_tp_s1">
+                    <value name="TEXT"><shadow type="text"><field name="TEXT">🎯 Target Profit hit! </field></shadow></value>
+                    <next>
+                      <block type="text_statement" id="eo_tp_s2">
+                        <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="total_profit" id="eo_tp_tp"></block></value>
+                        <next>
+                          <block type="text_statement" id="eo_tp_s3">
+                            <value name="TEXT"><shadow type="text"><field name="TEXT"> USD printed 💲💲 — bot stopped.</field></shadow></value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="notify" id="eo_tp_achieved_notify">
+                    <field name="NOTIFICATION_TYPE">success</field>
+                    <field name="NOTIFICATION_SOUND">earned-money</field>
+                    <value name="MESSAGE">
+                      <shadow type="text"><field name="TEXT">abc</field></shadow>
+                      <block type="variables_get" id="eo_tp_vg"><field name="VAR" id="eo_tp_var">eo_tp_text</field></block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ── BEFORE PURCHASE ── -->
+  <block type="before_purchase" id="4vMGgAV:uVXot*G5?6YJ" deletable="false" x="0" y="930">
+    <statement name="BEFOREPURCHASE_STACK">
+
+      <!-- Force last digit = entry point when already in trading mode (recovery trades pass scan instantly) -->
+      <block type="controls_if" id="tm_force_entry_eo">
+        <value name="IF0">
+          <block type="logic_compare" id="tm_cmp_eo">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="tm_get_eo"><field name="VAR" id="tm_eo_id">trading mode</field></block></value>
+            <value name="B"><block type="math_number" id="tm_one_eo"><field name="NUM">1</field></block></value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="variables_set" id="force_ld_eq_ep_eo">
+            <field name="VAR" id="eo_last_digit_id">last digit</field>
+            <value name="VALUE">
+              <block type="variables_get" id="force_ep_get_eo">
+                <field name="VAR" id="eo_entry_pt_id">entry point</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+      </block>
+
+      <!-- Read actual last digit -->
+      <block type="variables_set" id="set_ld_eo_scan">
+        <field name="VAR" id="eo_last_digit_id">last digit</field>
+        <value name="VALUE">
+          <block type="last_digit" id="ld_eo_block"></block>
+        </value>
+        <next>
+          <!-- Re-force after read if still in trading mode -->
+          <block type="controls_if" id="re_force_tm_eo">
+            <value name="IF0">
+              <block type="logic_compare" id="re_force_cmp_eo">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="re_force_get_tm"><field name="VAR" id="tm_eo_id">trading mode</field></block></value>
+                <value name="B"><block type="math_number" id="re_force_one"><field name="NUM">1</field></block></value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="variables_set" id="re_force_set_ld">
+                <field name="VAR" id="eo_last_digit_id">last digit</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="re_force_get_ep">
+                    <field name="VAR" id="eo_entry_pt_id">entry point</field>
+                  </block>
+                </value>
+              </block>
+            </statement>
+            <next>
+              <!-- Journal: "Last digit: X | Entry: Y" -->
+              <block type="text_join" id="scan_join_eo">
+                <field name="VARIABLE" id="eo_scan_text_id">text</field>
+                <statement name="STACK">
+                  <block type="text_statement" id="scan_eo1">
+                    <value name="TEXT">
+                      <shadow type="text" id="seo1"><field name="TEXT">Last digit: </field></shadow>
+                    </value>
+                    <next>
+                      <block type="text_statement" id="scan_eo2">
+                        <value name="TEXT">
+                          <shadow type="text" id="seo2"><field name="TEXT"></field></shadow>
+                          <block type="variables_get" id="scan_eo_ld">
+                            <field name="VAR" id="eo_last_digit_id">last digit</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="text_statement" id="scan_eo3">
+                            <value name="TEXT">
+                              <shadow type="text" id="seo3"><field name="TEXT"> | Entry: </field></shadow>
+                            </value>
+                            <next>
+                              <block type="text_statement" id="scan_eo4">
+                                <value name="TEXT">
+                                  <shadow type="text" id="seo4"><field name="TEXT"></field></shadow>
+                                  <block type="variables_get" id="scan_eo_ep">
+                                    <field name="VAR" id="eo_entry_pt_id">entry point</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="notify" id="scan_print_eo">
+                    <field name="NOTIFICATION_TYPE">success</field>
+                    <field name="NOTIFICATION_SOUND">silent</field>
+                    <value name="MESSAGE">
+                      <shadow type="text" id="speo"><field name="TEXT">scanning</field></shadow>
+                      <block type="variables_get" id="scan_eo_text">
+                        <field name="VAR" id="eo_scan_text_id">text</field>
+                      </block>
+                    </value>
+                    <next>
+                      <!-- Entry gate: last digit = entry point → enter trade, no re-scan after -->
+                      <block type="controls_if" id="entry_gate_eo">
+                        <value name="IF0">
+                          <block type="logic_compare" id="entry_cmp_eo">
+                            <field name="OP">EQ</field>
+                            <value name="A"><block type="variables_get" id="eg_ld_eo"><field name="VAR" id="eo_last_digit_id">last digit</field></block></value>
+                            <value name="B"><block type="variables_get" id="eg_ep_eo"><field name="VAR" id="eo_entry_pt_id">entry point</field></block></value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="set_tm_on_eo">
+                            <field name="VAR" id="tm_eo_id">trading mode</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="tm_on_eo_num"><field name="NUM">1</field></block>
+                            </value>
+                            <next>
+                              <block type="controls_if" id="eo_dir_check">
+                                <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+                                <value name="IF0">
+                                  <block type="logic_compare" id="eo_dir_even_cmp">
+                                    <field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="eo_dir_even_get"><field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field></block></value>
+                                    <value name="B"><block type="text" id="eo_even_txt"><field name="TEXT">EVEN</field></block></value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="purchase" id="eo_buy_even"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
+                                </statement>
+                                <value name="IF1">
+                                  <block type="logic_compare" id="eo_dir_odd_cmp">
+                                    <field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="eo_dir_odd_get"><field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field></block></value>
+                                    <value name="B"><block type="text" id="eo_odd_txt"><field name="TEXT">ODD</field></block></value>
+                                  </block>
+                                </value>
+                                <statement name="DO1">
+                                  <block type="purchase" id="eo_buy_odd"><field name="PURCHASE_LIST">DIGITODD</field></block>
+                                </statement>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

@@ -1,0 +1,1 @@
+- [Vercel deployment via CLI prebuilt](vercel-deploy-approach.md) — git integration is disconnected; deploy with `vercel deploy --prebuilt` using local dist build
