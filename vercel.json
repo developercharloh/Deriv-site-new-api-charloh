@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd artifacts/deriv-site && npm install --legacy-peer-deps && npm run build",
+  "outputDirectory": "artifacts/deriv-site/dist",
+  "installCommand": "echo skip",
+  "framework": null
+}
