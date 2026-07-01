@@ -83,6 +83,7 @@
             &__list {
                 background: #4a13a8 !important;
                 justify-content: start;
+                align-items: center;
 
                 @include mobile-or-tablet-screen {
                     overflow-x: auto;
@@ -90,6 +91,8 @@
                     -ms-overflow-style: none;
                     scrollbar-width: none;
                     flex-wrap: nowrap;
+                    align-items: center;
+                    height: 4.4rem;
 
                     &::-webkit-scrollbar {
                         display: none;
@@ -191,7 +194,7 @@
 
                 &__icon {
                     @include mobile-or-tablet-screen {
-                        padding-top: 0.5rem;
+                        padding-top: 0;
                     }
                 }
             }
