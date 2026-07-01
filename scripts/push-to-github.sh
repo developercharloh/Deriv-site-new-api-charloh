@@ -9,7 +9,7 @@ if [ -z "$GITHUB_PERSONAL_ACCESS_TOKEN" ]; then
   exit 1
 fi
 
-REPO_URL="https://developercharloh:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/developercharloh/Deriv-Site-Faster.git"
+REPO_URL="https://developercharloh:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/developercharloh/Deriv-site-new-api-charloh.git"
 
 git --no-optional-locks remote set-url origin "$REPO_URL"
 
