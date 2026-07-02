@@ -355,38 +355,86 @@ const DTraderPage = observer(() => {
         return null;
     }, [categoryKey, spot, sellableOpen, proposal]);
 
-    // ── Proximity history — rolling window for momentum detection ─────────
-    // Kept in a ref so pushes don't cause re-renders on every tick.
-    const proximityHistRef = useRef<number[]>([]);
-    useEffect(() => {
-        if (barrierProximity === null) { proximityHistRef.current = []; return; }
-        const h = proximityHistRef.current;
-        h.push(barrierProximity);
-        if (h.length > 8) h.shift();
-    }, [barrierProximity]);
+    // ── Tick-size analysis (ACCU only, from priceWindow) ─────────────────
+    // Computes average absolute move per tick over the last 10 ticks, plus
+    // the magnitude of the most recent tick. Used for countdown + spike logic.
+    const tickAnalysis = useMemo(() => {
+        if (categoryKey !== 'accumulators') return null;
+        if (priceWindow.length < 2) return null;
+        const slice = priceWindow.slice(-11);
+        const moves: number[] = [];
+        for (let i = 1; i < slice.length; i++) moves.push(Math.abs(slice[i] - slice[i - 1]));
+        if (moves.length === 0) return null;
+        const avg = moves.reduce((a, b) => a + b, 0) / moves.length;
+        return { avgTickMove: avg, lastTickMove: moves[moves.length - 1] };
+    }, [categoryKey, priceWindow]);
 
-    // ── Derived alert level: position + momentum ──────────────────────────
-    // Thresholds (tighter than v1 so the warning fires earlier):
-    //   <45%  → danger by position alone
-    //   45–65% → warn by position; upgrades to danger if approaching fast
-    //   ≥65%  → safe; upgrades to warn if approaching fast
-    //
-    // "Approaching fast" = 3 or more consecutive ticks where proximity
-    // is strictly decreasing (price moving toward the barrier).
+    // ── Raw price distance to nearest barrier ─────────────────────────────
+    const barrierDistPrice = useMemo((): number | null => {
+        if (categoryKey !== 'accumulators') return null;
+        const spotNum = parseFloat(spot);
+        if (!isFinite(spotNum)) return null;
+        let hb: number | null = null, lb: number | null = null;
+        if (sellableOpen?.highBarrier != null && sellableOpen?.lowBarrier != null) {
+            hb = sellableOpen.highBarrier; lb = sellableOpen.lowBarrier;
+        } else if (proposal?.previewHighBarrier && proposal?.previewLowBarrier) {
+            hb = proposal.previewHighBarrier; lb = proposal.previewLowBarrier;
+        }
+        if (hb === null || lb === null) return null;
+        return Math.min(hb - spotNum, spotNum - lb);
+    }, [categoryKey, spot, sellableOpen, proposal]);
+
+    // ── Estimated ticks remaining before barrier breach ───────────────────
+    // ticksToBarrier = distance ÷ average tick size.
+    // Null if we don't have enough price history yet.
+    const ticksToBarrier = useMemo((): number | null => {
+        if (barrierDistPrice === null || !tickAnalysis) return null;
+        if (tickAnalysis.avgTickMove <= 0) return null;
+        return barrierDistPrice / tickAnalysis.avgTickMove;
+    }, [barrierDistPrice, tickAnalysis]);
+
+    // ── Spike detector ────────────────────────────────────────────────────
+    // A "spike toward barrier" is when the last tick was ≥2× the recent
+    // average AND it moved the price closer to the nearest barrier.
+    // Uses priceWindow directly — no ref needed.
+    const isSpikeTowardBarrier = useMemo((): boolean => {
+        if (categoryKey !== 'accumulators') return false;
+        if (!tickAnalysis || tickAnalysis.avgTickMove <= 0) return false;
+        if (tickAnalysis.lastTickMove < tickAnalysis.avgTickMove * 2) return false;
+        if (priceWindow.length < 2) return false;
+        const spotNow  = priceWindow[priceWindow.length - 1];
+        const spotPrev = priceWindow[priceWindow.length - 2];
+        let hb: number | null = null, lb: number | null = null;
+        if (sellableOpen?.highBarrier != null && sellableOpen?.lowBarrier != null) {
+            hb = sellableOpen.highBarrier; lb = sellableOpen.lowBarrier;
+        } else if (proposal?.previewHighBarrier && proposal?.previewLowBarrier) {
+            hb = proposal.previewHighBarrier; lb = proposal.previewLowBarrier;
+        }
+        if (hb === null || lb === null) return false;
+        const distNow  = Math.min(hb - spotNow,  spotNow  - lb);
+        const distPrev = Math.min(hb - spotPrev, spotPrev - lb);
+        return distNow < distPrev;
+    }, [categoryKey, tickAnalysis, priceWindow, sellableOpen, proposal]);
+
+    // ── Combined alert level ──────────────────────────────────────────────
+    // Priority order:
+    //   1. Spike toward barrier → instant danger (regardless of distance)
+    //   2. Tick countdown ≤ 3  → danger
+    //   3. Tick countdown ≤ 7  → warn
+    //   4. Position fallback   → danger <45%, warn <65%, safe otherwise
     const barrierAlertLevel = useMemo((): 'safe' | 'warn' | 'danger' | null => {
         if (barrierProximity === null) return null;
-        const hist = proximityHistRef.current;
-        let run = 0;
-        for (let i = hist.length - 1; i > 0; i--) {
-            if (hist[i] < hist[i - 1]) run++;
-            else break;
+        if (isSpikeTowardBarrier) return 'danger';
+        if (ticksToBarrier !== null) {
+            if (ticksToBarrier <= 3) return 'danger';
+            if (ticksToBarrier <= 7) return 'warn';
+            return barrierProximity < 65 ? 'warn' : 'safe';
         }
-        const approachingFast = run >= 3;
-
+        // Fallback when priceWindow is too short to compute tick size
         if (barrierProximity < 45) return 'danger';
-        if (barrierProximity < 65) return approachingFast ? 'danger' : 'warn';
-        return approachingFast ? 'warn' : 'safe';
-    }, [barrierProximity]);
+        if (barrierProximity < 65) return 'warn';
+        return 'safe';
+    }, [barrierProximity, ticksToBarrier, isSpikeTowardBarrier]);
 
     // Whether the current contract category cares about last-digit frequencies
     const showsDigitCard = category.needsPrediction || categoryKey === 'even_odd';
@@ -1018,24 +1066,32 @@ const DTraderPage = observer(() => {
                             {barrierAlertLevel === 'safe' ? '🟢' : barrierAlertLevel === 'warn' ? '🟡' : '🔴'}
                         </span>
                         <div className='dtp__barrier-alert-body'>
+                            {/* Spike banner — shown above the normal message when detected */}
+                            {isSpikeTowardBarrier && (
+                                <span className='dtp__barrier-alert-spike'>
+                                    ⚡ SPIKE toward barrier detected!
+                                </span>
+                            )}
                             <span className='dtp__barrier-alert-title'>
                                 {barrierAlertLevel === 'safe' && (sellableOpen
                                     ? 'Price well centred — safe to hold'
                                     : '✅ Good time to BUY — price stable in safe zone')}
                                 {barrierAlertLevel === 'warn' && (sellableOpen
-                                    ? (barrierProximity >= 65
-                                        ? '⚠️ Price trending toward barrier — prepare to cash out'
-                                        : '⚠️ Getting close to barrier — consider cashing out soon')
-                                    : (barrierProximity >= 65
-                                        ? '⚠️ Price trending toward barrier — avoid buying now'
-                                        : '⚠️ Price drifting toward barrier — wait for stability'))}
+                                    ? '⚠️ Barrier approaching — consider cashing out soon'
+                                    : '⚠️ Price moving toward barrier — avoid buying now')}
                                 {barrierAlertLevel === 'danger' && (sellableOpen
-                                    ? (barrierProximity >= 45
-                                        ? '🚨 Price approaching barrier fast — CASH OUT NOW!'
-                                        : '🚨 CASH OUT NOW — barrier almost broken!')
-                                    : (barrierProximity >= 45
-                                        ? '🚨 Barrier approach detected — do NOT buy!'
-                                        : '🚨 Too close to barrier — do NOT buy yet, wait!'))}
+                                    ? '🚨 CASH OUT NOW — barrier breach imminent!'
+                                    : '🚨 Do NOT buy — price too close to barrier!')}
+                            </span>
+                            {/* Tick countdown — the most actionable number */}
+                            <span className='dtp__barrier-countdown'>
+                                {ticksToBarrier !== null
+                                    ? (ticksToBarrier <= 1
+                                        ? '⚠️ Less than 1 tick to barrier!'
+                                        : `~${Math.round(ticksToBarrier)} tick${Math.round(ticksToBarrier) === 1 ? '' : 's'} to barrier at current pace`)
+                                    : `${barrierProximity.toFixed(0)}% gap remaining`}
+                                {sellableOpen && barrierAlertLevel === 'danger' && ' — tap CASH OUT ↓'}
+                                {!sellableOpen && barrierAlertLevel === 'safe' && ' — tap BUY ↓'}
                             </span>
                             <div className='dtp__barrier-bar'>
                                 <div
@@ -1043,11 +1099,6 @@ const DTraderPage = observer(() => {
                                     style={{ width: `${barrierProximity}%` }}
                                 />
                             </div>
-                            <span className='dtp__barrier-pct'>
-                                {barrierProximity.toFixed(0)}% from barrier
-                                {sellableOpen && barrierAlertLevel === 'danger' && ' — tap CASH OUT NOW ↓'}
-                                {!sellableOpen && barrierAlertLevel === 'safe' && ' — tap BUY ↓'}
-                            </span>
                         </div>
                     </div>
                 )}
