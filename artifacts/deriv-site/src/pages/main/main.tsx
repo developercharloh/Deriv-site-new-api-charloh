@@ -43,7 +43,6 @@ import RunPanel from '../../components/run-panel';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
-import HomeGrid from './home-grid';
 import './main.scss';
 
 const ChartWrapper      = lazy(() => import('../chart/chart-wrapper'));
@@ -97,10 +96,6 @@ const AppWrapper = observer(() => {
     const navigate = useNavigate();
     const [left_tab_shadow, setLeftTabShadow] = useState<boolean>(false);
     const [right_tab_shadow, setRightTabShadow] = useState<boolean>(false);
-    // Home launcher screen — shown first; tapping a tile switches to that
-    // tab underneath. The tab content stays mounted (just visually hidden)
-    // so live trading connections/subscriptions are never interrupted.
-    const [showHome, setShowHome] = useState<boolean>(true);
 
     // Trade type modal state
     const [tradeTypeModalState, setTradeTypeModalState] = useState(getModalState());
@@ -390,25 +385,8 @@ const AppWrapper = observer(() => {
                     className={classNames('main__container', {
                         'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
                     })}
-                    style={{ position: 'relative' }}
                 >
-                    {showHome && (
-                        <HomeGrid
-                            onSelect={(tab_index: number) => {
-                                handleTabChange(tab_index);
-                                setShowHome(false);
-                            }}
-                        />
-                    )}
-                    <div style={showHome ? { display: 'none' } : undefined}>
-                        <button
-                            type='button'
-                            className='main__home-btn'
-                            onClick={() => setShowHome(true)}
-                            aria-label='Home'
-                        >
-                            🏠
-                        </button>
+                    <div>
                         {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}{' '}
                         <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top>
                             <div
@@ -525,19 +503,15 @@ const AppWrapper = observer(() => {
                     </div>
                 </div>
             </div>
-            {!showHome && (
-                <DesktopWrapper>
-                    <div className='main__run-strategy-wrapper'>
-                        <RunStrategy />
-                        {![4, 6].includes(active_tab) && <RunPanel />}
-                    </div>
-                    <ChartModal />
-                    <TradingViewModal />
-                </DesktopWrapper>
-            )}
-            {!showHome && (
-                <MobileWrapper>{!is_open && ![4, 6].includes(active_tab) && <RunPanel />}</MobileWrapper>
-            )}
+            <DesktopWrapper>
+                <div className='main__run-strategy-wrapper'>
+                    <RunStrategy />
+                    {![4, 6].includes(active_tab) && <RunPanel />}
+                </div>
+                <ChartModal />
+                <TradingViewModal />
+            </DesktopWrapper>
+            <MobileWrapper>{!is_open && ![4, 6].includes(active_tab) && <RunPanel />}</MobileWrapper>
             <Dialog
                 cancel_button_text={cancel_button_text || localize('Cancel')}
                 className='dc-dialog__wrapper--fixed'
