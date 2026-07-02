@@ -104,12 +104,15 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
             winProb = 1 - freq[differDig] / N; winFn = d => d !== differDig;
         }
     } else {
-        const allOptions: { side: 'OVER' | 'UNDER'; b: number; prob: number }[] = [];
+        const allOptions: { side: 'OVER' | 'UNDER'; b: number; prob: number; edge: number }[] = [];
         for (let b = 1; b <= 8; b++) {
-            allOptions.push({ side: 'OVER',  b, prob: digits.filter(d => d > b).length / N });
-            allOptions.push({ side: 'UNDER', b, prob: digits.filter(d => d < b).length / N });
+            const ovP = digits.filter(d => d > b).length / N;
+            const unP = digits.filter(d => d < b).length / N;
+            allOptions.push({ side: 'OVER',  b, prob: ovP, edge: ovP - (9 - b) / 10 });
+            allOptions.push({ side: 'UNDER', b, prob: unP, edge: unP - b / 10 });
         }
-        allOptions.sort((a, b2) => b2.prob - a.prob);
+        // Sort by statistical edge (actual − expected), raw prob as tie-break
+        allOptions.sort((a, b2) => b2.edge - a.edge || b2.prob - a.prob);
         const best = allOptions[0];
         const oppositeOptions = allOptions.filter(o => o.side !== best.side);
         const recovery = oppositeOptions[0] ?? allOptions[1] ?? best;
