@@ -1112,3 +1112,69 @@
         &__time    { color: #374151; }
     }
 }
+
+// ─── Recovery plan section ────────────────────────────────────────────────────
+.ai-result__recovery {
+    background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(236,72,153,0.04));
+    border: 1px solid rgba(99,102,241,0.20);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 0;
+
+    &-hd {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    &-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+    &-title { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 2px; }
+    &-sub   { font-size: 12px; color: #64748b; line-height: 1.45; }
+
+    &-body {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+    &-main {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        flex: 1;
+        min-width: 120px;
+        &--rec { background: rgba(34,197,94,0.06); border-color: rgba(34,197,94,0.30); }
+    }
+    &-lbl  { font-size: 10px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
+    &-val  { font-size: 13px; font-weight: 800; color: #1e293b; flex: 1; }
+    &-prob { font-size: 12px; font-weight: 700; color: #6366f1; }
+    &-arrow { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+
+    &-rule {
+        font-size: 11px;
+        color: #92400e;
+        background: rgba(245,158,11,0.10);
+        border: 1px solid rgba(245,158,11,0.25);
+        border-radius: 8px;
+        padding: 8px 10px;
+        line-height: 1.45;
+    }
+}
+
+.dark-theme, [data-theme='dark'] {
+    .ai-result__recovery {
+        background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(236,72,153,0.06));
+        border-color: rgba(99,102,241,0.25);
+        &-title { color: #f1f5f9; }
+        &-sub   { color: #64748b; }
+        &-main  { background: #1e293b; border-color: #334155;
+                  &--rec { background: rgba(34,197,94,0.10); border-color: rgba(34,197,94,0.30); } }
+        &-val   { color: #f1f5f9; }
+        &-rule  { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.25); color: #fde68a; }
+    }
+}
