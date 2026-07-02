@@ -1055,3 +1055,60 @@
     }
     .ai-dtrader__rule { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.30); color: #fca5a5; }
 }
+
+// ─── Signal strength line in consensus badge ──────────────────────────────────
+.ai-consensus__strength {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+    strong { font-weight: 700; }
+}
+
+// ─── Signal history ───────────────────────────────────────────────────────────
+.ai-history {
+    margin-top: 24px;
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+
+    &__title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 10px;
+    }
+
+    &__row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 0;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 12px;
+        &:last-child { border-bottom: none; }
+    }
+
+    &__market  { font-weight: 700; color: #334155; min-width: 50px; }
+    &__dir     { flex: 1; color: #475569; font-size: 11px; }
+    &__votes   { font-weight: 600; color: #6366f1; }
+    &__strength { color: #10b981; font-weight: 600; min-width: 36px; text-align: right; }
+    &__time    { color: #94a3b8; font-size: 10px; white-space: nowrap; }
+}
+
+@media (prefers-color-scheme: dark) {
+    .ai-consensus__strength { color: #475569; }
+    .ai-history {
+        background: #0f172a;
+        border-color: #1e293b;
+        &__title   { color: #475569; }
+        &__row     { border-bottom-color: #1e293b; }
+        &__market  { color: #cbd5e1; }
+        &__dir     { color: #64748b; }
+        &__votes   { color: #818cf8; }
+        &__strength { color: #34d399; }
+        &__time    { color: #374151; }
+    }
+}

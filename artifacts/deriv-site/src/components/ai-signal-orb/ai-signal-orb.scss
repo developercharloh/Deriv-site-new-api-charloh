@@ -752,3 +752,27 @@
     strong { color: #a5b4fc; }
 }
 .ai-panel__hint-cta-icon { font-size: 16px; flex-shrink: 0; }
+
+// ─── Signal history in panel ──────────────────────────────────────────────────
+.ai-panel__history {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-bottom: 0;
+}
+
+.ai-panel__history-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 10px;
+    &:last-child { border-bottom: none; }
+}
+
+.ai-panel__history-market { font-weight: 700; color: #c7d2fe; min-width: 38px; }
+.ai-panel__history-dir    { flex: 1; color: #64748b; font-size: 9.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-panel__history-votes  { color: #818cf8; font-weight: 600; }
+.ai-panel__history-str    { color: #34d399; font-weight: 600; min-width: 32px; text-align: right; }
+.ai-panel__history-time   { color: #374151; font-size: 9px; white-space: nowrap; }

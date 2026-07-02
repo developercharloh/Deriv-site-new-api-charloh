@@ -6,9 +6,16 @@ import './ai-signal-orb.scss';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DERIV_WS        = 'wss://ws.derivws.com/websockets/v3?app_id=1';
-const TICK_COUNT      = 4000;
+const TICK_COUNT      = 6000;
 const ALL_SYMS        = DERIV_VOLATILITIES;
 const MIN_VOTES       = 6;
+
+function getSymbolMinVotes(symCode: string): number {
+    if (symCode.includes('75') || symCode.includes('100')) return 7;
+    if (symCode.endsWith('10V') || symCode.endsWith('25V') ||
+        symCode.includes('_10') || symCode.includes('_25')) return 5;
+    return 6;
+}
 const MIN_WIN_PROB_OU = 0.60;
 
 type TradeType = 'over_under' | 'even_odd' | 'matches_differs';
@@ -36,6 +43,16 @@ interface MarketResult {
     sampleSize:           number;
     votes:                ModelVotes;
     entryDigits:          { digit: number; recommended: boolean; conditional: number }[];
+    segmentAgrees:        boolean;
+    signalStrength:       number;
+}
+
+interface OrbHistoryEntry {
+    market:    string;
+    direction: string;
+    votes:     number;
+    strength:  number;
+    time:      number;
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -231,7 +248,12 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         markov: m6, linearTrend: m7, entropy: m8, ngram: m9, quartile: m10,
         yesCount, totalScore,
     };
-    return { sym, direction, contractType, barrier, recoveryBarrier, recoveryContractType, recoveryDirection, winProb, sampleSize: N, votes, entryDigits };
+    return {
+        sym, direction, contractType, barrier, recoveryBarrier, recoveryContractType,
+        recoveryDirection, winProb, sampleSize: N, votes, entryDigits,
+        segmentAgrees:  true,
+        signalStrength: Math.round((totalScore / 10) * 100),
+    };
 }
 
 // ─── Scan all markets ─────────────────────────────────────────────────────────
@@ -251,10 +273,20 @@ async function scanAllMarkets(
             ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
             try { ws.close(); } catch { /* */ }
             const results: MarketResult[] = [];
-            priceMap.forEach(({ prices, pip, sym }) => { if (prices.length >= 100) results.push(runModels(prices, pip, sym, tradeType)); });
+            priceMap.forEach(({ prices, pip, sym }) => {
+                if (prices.length < 100) return;
+                const full = runModels(prices, pip, sym, tradeType);
+                if (prices.length >= 1600) {
+                    const seg = runModels(prices.slice(-1500), pip, sym, tradeType);
+                    full.segmentAgrees = seg.direction === full.direction && seg.votes.yesCount >= 4;
+                }
+                results.push(full);
+            });
             results.sort((a, b) => b.votes.yesCount - a.votes.yesCount || b.votes.totalScore - a.votes.totalScore || b.winProb - a.winProb);
             const best = results.find(r =>
-                r.votes.yesCount >= MIN_VOTES &&
+                r.votes.yesCount >= getSymbolMinVotes(r.sym.code) &&
+                r.segmentAgrees &&
+                r.votes.recentEdge.vote &&
                 (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU)
             ) ?? null;
             resolve({ best, noVotesBest: best ? null : (results[0] ?? null), allResults: results });
@@ -323,6 +355,11 @@ const AiSignalOrb: React.FC = () => {
     // Session discipline counter
     const [sessionCount, setSessionCount] = useState<number>(0);
 
+    // Signal history log
+    const [orbHistory, setOrbHistory] = useState<OrbHistoryEntry[]>(() => {
+        try { return JSON.parse(localStorage.getItem('orb-signal-history') ?? '[]'); } catch { return []; }
+    });
+
     // Sync editable state when result arrives
     useEffect(() => {
         if (!result) return;
@@ -375,8 +412,23 @@ const AiSignalOrb: React.FC = () => {
         setHasSignal(false); setSessionCount(0);
         try {
             const { best, noVotesBest } = await scanAllMarkets(tradeType, n => setProgress(n));
-            if (best) { setResult(best); setScanState('done'); }
-            else      { setNoSigBest(noVotesBest); setScanState('no-signal'); }
+            if (best) {
+                setResult(best);
+                setScanState('done');
+                try {
+                    const entry: OrbHistoryEntry = {
+                        market:    best.sym.short,
+                        direction: best.direction,
+                        votes:     best.votes.yesCount,
+                        strength:  best.signalStrength,
+                        time:      Date.now(),
+                    };
+                    const prev: OrbHistoryEntry[] = JSON.parse(localStorage.getItem('orb-signal-history') ?? '[]');
+                    const next = [entry, ...prev].slice(0, 5);
+                    localStorage.setItem('orb-signal-history', JSON.stringify(next));
+                    setOrbHistory(next);
+                } catch { /* ignore */ }
+            } else { setNoSigBest(noVotesBest); setScanState('no-signal'); }
         } catch { setScanState('idle'); }
     }, [tradeType]);
 
@@ -549,7 +601,11 @@ const AiSignalOrb: React.FC = () => {
 
                             {/* Model vote grid */}
                             <div className='ai-panel__models'>
-                                <span className='ai-panel__section-lbl'>Model Consensus — {result.votes.yesCount}/10</span>
+                                <span className='ai-panel__section-lbl'>
+                                    Model Consensus — {result.votes.yesCount}/10
+                                    &nbsp;·&nbsp;Strength: <strong style={{ color: vc }}>{result.signalStrength}%</strong>
+                                    &nbsp;·&nbsp;Segment: <strong style={{ color: result.segmentAgrees ? '#22c55e' : '#ef4444' }}>✓</strong>
+                                </span>
                                 <div className='ai-panel__model-grid'>
                                     {models.map(m => (
                                         <div key={m.name} className={`ai-panel__model-chip${m.vote ? ' ai-panel__model-chip--yes' : ' ai-panel__model-chip--no'}`}>
@@ -720,6 +776,24 @@ const AiSignalOrb: React.FC = () => {
                                     <div className='ai-panel__session-hint'>Tap + after each contract · tap ↺ to reset</div>
                                 )}
                             </div>
+
+                            {/* Signal history */}
+                            {orbHistory.length > 0 && (
+                                <div className='ai-panel__history'>
+                                    <span className='ai-panel__section-lbl'>Recent Signals</span>
+                                    {orbHistory.map((h, i) => (
+                                        <div key={i} className='ai-panel__history-row'>
+                                            <span className='ai-panel__history-market'>{h.market}</span>
+                                            <span className='ai-panel__history-dir'>{h.direction}</span>
+                                            <span className='ai-panel__history-votes'>{h.votes}/10</span>
+                                            <span className='ai-panel__history-str'>{h.strength}%</span>
+                                            <span className='ai-panel__history-time'>
+                                                {new Date(h.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
 
                             {/* Hint to bot builder */}
                             <div className='ai-panel__hint-cta'>
