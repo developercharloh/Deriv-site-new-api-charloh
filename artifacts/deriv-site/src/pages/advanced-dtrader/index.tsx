@@ -324,6 +324,37 @@ const DTraderPage = observer(() => {
         [positions],
     );
 
+    // ── Barrier proximity (ACCU only) ─────────────────────────────────────
+    // Returns 0–100 where 100 = price dead-centre, 0 = touching a barrier.
+    // Used to drive the buy/cashout alert banner below the chart.
+    const barrierProximity = useMemo((): number | null => {
+        if (categoryKey !== 'accumulators') return null;
+        const spotNum = parseFloat(spot);
+        if (!isFinite(spotNum)) return null;
+
+        // Live contract: real barriers
+        if (sellableOpen && sellableOpen.highBarrier !== null && sellableOpen.lowBarrier !== null) {
+            const hb = sellableOpen.highBarrier;
+            const lb = sellableOpen.lowBarrier;
+            const band = hb - lb;
+            if (band <= 0) return null;
+            const distNearest = Math.min(hb - spotNum, spotNum - lb);
+            return Math.max(0, Math.min(100, (distNearest / (band / 2)) * 100));
+        }
+
+        // No open contract: use preview barriers from proposal
+        if (proposal?.previewHighBarrier && proposal?.previewLowBarrier) {
+            const hb = proposal.previewHighBarrier;
+            const lb = proposal.previewLowBarrier;
+            const band = hb - lb;
+            if (band <= 0) return null;
+            const distNearest = Math.min(hb - spotNum, spotNum - lb);
+            return Math.max(0, Math.min(100, (distNearest / (band / 2)) * 100));
+        }
+
+        return null;
+    }, [categoryKey, spot, sellableOpen, proposal]);
+
     // Whether the current contract category cares about last-digit frequencies
     const showsDigitCard = category.needsPrediction || categoryKey === 'even_odd';
 
@@ -945,6 +976,43 @@ const DTraderPage = observer(() => {
                         multiplier={multiplier}
                         currency={currency}
                     />
+                )}
+
+                {/* ── Barrier proximity alert (ACCU only) ───────────────── */}
+                {category.needsGrowthRate && barrierProximity !== null && (
+                    <div className={`dtp__barrier-alert dtp__barrier-alert--${
+                        barrierProximity >= 65 ? 'safe' : barrierProximity >= 30 ? 'warn' : 'danger'
+                    }`}>
+                        <span className='dtp__barrier-alert-icon'>
+                            {barrierProximity >= 65 ? '🟢' : barrierProximity >= 30 ? '🟡' : '🔴'}
+                        </span>
+                        <div className='dtp__barrier-alert-body'>
+                            <span className='dtp__barrier-alert-title'>
+                                {barrierProximity >= 65
+                                    ? (sellableOpen
+                                        ? 'Price well centred — safe to hold'
+                                        : '✅ Good time to BUY — price stable in safe zone')
+                                    : barrierProximity >= 30
+                                    ? (sellableOpen
+                                        ? '⚠️ Getting close to barrier — watch closely'
+                                        : '⚠️ Price drifting toward barrier — wait for stability')
+                                    : (sellableOpen
+                                        ? '🚨 CASH OUT NOW — barrier almost broken!'
+                                        : '🚨 Too close to barrier — do NOT buy yet, wait!')}
+                            </span>
+                            <div className='dtp__barrier-bar'>
+                                <div
+                                    className='dtp__barrier-bar-fill'
+                                    style={{ width: `${barrierProximity}%` }}
+                                />
+                            </div>
+                            <span className='dtp__barrier-pct'>
+                                {barrierProximity.toFixed(0)}% from barrier
+                                {sellableOpen && barrierProximity < 30 && ' — tap CASH OUT NOW ↓'}
+                                {!sellableOpen && barrierProximity >= 65 && ' — tap BUY ↓'}
+                            </span>
+                        </div>
+                    </div>
                 )}
 
                 {/* ── Ticket (proposal + buy) ────────────────────────────── */}
