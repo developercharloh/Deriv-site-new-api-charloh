@@ -51,11 +51,14 @@ interface ModelVotes {
 }
 
 interface MarketResult {
-    sym:            DerivVolatility;
-    direction:      string;
-    contractType:   string;
-    barrier:        number | null;
-    winProb:        number;
+    sym:                  DerivVolatility;
+    direction:            string;
+    contractType:         string;
+    barrier:              number | null;
+    recoveryBarrier:      number | null;
+    recoveryContractType: string | null;
+    recoveryDirection:    string | null;
+    winProb:              number;
     sampleSize:     number;
     votes:          ModelVotes;
     entryDigits:    { digit: number; recommended: boolean; conditional: number }[];
@@ -115,6 +118,8 @@ function runModels(
 
     // ── Direction: pick best trade direction for this market ──────────────
     let direction = '', contractType = '', barrier: number | null = null, winProb = 0;
+    let recoveryBarrier: number | null = null, recoveryContractType: string | null = null;
+    let recoveryDirection: string | null = null;
     let winFn: (d: number) => boolean;
 
     if (tradeType === 'even_odd') {
@@ -154,18 +159,28 @@ function runModels(
             winFn        = d => d !== differDig;
         }
     } else {
-        let best = { side: 'OVER' as 'OVER' | 'UNDER', b: 5, prob: 0 };
+        const ouOpts: { side: 'OVER' | 'UNDER'; b: number; prob: number; edge: number }[] = [];
         for (let b = 1; b <= 8; b++) {
-            const ov = digits.filter(d => d > b).length / N;
-            const un = digits.filter(d => d < b).length / N;
-            if (ov > best.prob) best = { side: 'OVER',  b, prob: ov };
-            if (un > best.prob) best = { side: 'UNDER', b, prob: un };
+            const ovP = digits.filter(d => d > b).length / N;
+            const unP = digits.filter(d => d < b).length / N;
+            ouOpts.push({ side: 'OVER',  b, prob: ovP, edge: ovP - (9 - b) / 10 });
+            ouOpts.push({ side: 'UNDER', b, prob: unP, edge: unP - b / 10 });
         }
-        barrier      = best.b;
-        direction    = `${best.side} ${best.b}`;
-        contractType = best.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER';
-        winProb      = best.prob;
-        winFn        = d => best.side === 'OVER' ? d > best.b : d < best.b;
+        // Pick by best statistical edge (actual − expected); fallback to raw prob
+        const validOuOpts = ouOpts
+            .filter(o => o.prob >= 0.55)
+            .sort((a, b) => b.edge - a.edge || b.prob - a.prob);
+        const bestOu  = validOuOpts[0] ?? [...ouOpts].sort((a, b) => b.prob - a.prob)[0];
+        // Recovery: best edge from the opposite side
+        const recovOu = validOuOpts.find(o => o.side !== bestOu.side) ?? null;
+        barrier              = bestOu.b;
+        direction            = `${bestOu.side} ${bestOu.b}`;
+        contractType         = bestOu.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER';
+        winProb              = bestOu.prob;
+        winFn                = d => bestOu.side === 'OVER' ? d > bestOu.b : d < bestOu.b;
+        recoveryBarrier      = recovOu?.b ?? null;
+        recoveryContractType = recovOu ? (recovOu.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER') : null;
+        recoveryDirection    = recovOu ? `${recovOu.side} ${recovOu.b}` : null;
     }
 
     // ── Entry digits — strict: min 100 samples, Wilson LB ≥ baseline+10pp ──
@@ -457,9 +472,12 @@ function runModels(
 
     return {
         sym, direction, contractType, barrier, winProb, sampleSize: N, votes, entryDigits,
-        digitFreq:      freqPct,
-        segmentAgrees:  true,
-        signalStrength: Math.round((totalScore / 10) * 100),
+        digitFreq:           freqPct,
+        segmentAgrees:       true,
+        signalStrength:      Math.round((totalScore / 10) * 100),
+        recoveryBarrier,
+        recoveryContractType,
+        recoveryDirection,
     };
 }
 
@@ -971,6 +989,36 @@ const EntryZone: React.FC = () => {
                             </div>
                             <div className='ai-result__prob-meta'>Sample: {best.sampleSize.toLocaleString()} ticks</div>
                         </div>
+
+                        {/* Recovery plan */}
+                        {best.recoveryDirection && (
+                            <div className='ai-result__recovery'>
+                                <div className='ai-result__recovery-hd'>
+                                    <span className='ai-result__recovery-icon'>🔄</span>
+                                    <div>
+                                        <div className='ai-result__recovery-title'>Recovery plan after a loss</div>
+                                        <div className='ai-result__recovery-sub'>
+                                            If your trade loses, switch to the opposite barrier — it carries the next-strongest edge on this market.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className='ai-result__recovery-body'>
+                                    <div className='ai-result__recovery-main'>
+                                        <span className='ai-result__recovery-lbl'>Primary</span>
+                                        <span className='ai-result__recovery-val'>{best.direction}</span>
+                                        <span className='ai-result__recovery-prob'>{(best.winProb * 100).toFixed(1)}%</span>
+                                    </div>
+                                    <div className='ai-result__recovery-arrow'>→ on loss →</div>
+                                    <div className='ai-result__recovery-main ai-result__recovery-main--rec'>
+                                        <span className='ai-result__recovery-lbl'>Recovery</span>
+                                        <span className='ai-result__recovery-val'>{best.recoveryDirection}</span>
+                                    </div>
+                                </div>
+                                <div className='ai-result__recovery-rule'>
+                                    ⚠️ Only switch to recovery after a confirmed loss. Re-scan before the recovery trade — conditions may have changed.
+                                </div>
+                            </div>
+                        )}
 
                         {/* Entry digits */}
                         <div className='ai-result__entry'>
