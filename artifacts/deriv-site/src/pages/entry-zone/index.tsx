@@ -15,8 +15,15 @@ import { DERIV_VOLATILITIES, type DerivVolatility } from '../../utils/deriv-vola
    ───────────────────────────────────────────────────────────────────────── */
 
 const DERIV_WS   = 'wss://ws.derivws.com/websockets/v3?app_id=1';
-const TICK_COUNT = 4000;   // 4× more data → strong statistical reliability
+const TICK_COUNT = 6000;   // 6000 ticks per market — stronger statistical reliability
 const ALL_SYMS   = DERIV_VOLATILITIES;
+
+function getSymbolMinVotes(symCode: string): number {
+    if (symCode.includes('75') || symCode.includes('100')) return 7;
+    if (symCode.endsWith('10V') || symCode.endsWith('25V') ||
+        symCode.includes('_10') || symCode.includes('_25')) return 5;
+    return 6;
+}
 
 type TradeType = 'over_under' | 'even_odd' | 'matches_differs';
 
@@ -44,15 +51,25 @@ interface ModelVotes {
 }
 
 interface MarketResult {
-    sym:         DerivVolatility;
-    direction:   string;
-    contractType:string;
-    barrier:     number | null;
-    winProb:     number;
-    sampleSize:  number;
-    votes:       ModelVotes;
-    entryDigits: { digit: number; recommended: boolean; conditional: number }[];
-    digitFreq:   number[];
+    sym:            DerivVolatility;
+    direction:      string;
+    contractType:   string;
+    barrier:        number | null;
+    winProb:        number;
+    sampleSize:     number;
+    votes:          ModelVotes;
+    entryDigits:    { digit: number; recommended: boolean; conditional: number }[];
+    digitFreq:      number[];
+    segmentAgrees:  boolean;
+    signalStrength: number;   // 0–100 weighted %
+}
+
+interface HistoryEntry {
+    market:    string;
+    direction: string;
+    votes:     number;
+    strength:  number;
+    time:      number;
 }
 
 interface ConsensusResult {
@@ -438,14 +455,19 @@ function runModels(
         yesCount, totalScore,
     };
 
-    return { sym, direction, contractType, barrier, winProb, sampleSize: N, votes, entryDigits, digitFreq: freqPct };
+    return {
+        sym, direction, contractType, barrier, winProb, sampleSize: N, votes, entryDigits,
+        digitFreq:      freqPct,
+        segmentAgrees:  true,
+        signalStrength: Math.round((totalScore / 10) * 100),
+    };
 }
 
 // ─── Scan stages ───���──────────────────────────────────────────────────────────
 type StageId = 'connect' | 'fetch' | 'analyse' | 'select';
 const STAGES: { id: StageId; label: string; icon: string }[] = [
     { id: 'connect', label: 'Connecting to live data feed',          icon: '📡' },
-    { id: 'fetch',   label: 'Fetching 4000 ticks × 10 markets',       icon: '⬇️' },
+    { id: 'fetch',   label: 'Fetching 6000 ticks × 10 markets',       icon: '⬇️' },
     { id: 'analyse', label: 'Running 10-model analysis per market',  icon: '🧮' },
     { id: 'select',  label: 'Selecting best market by consensus',     icon: '🎯' },
 ];
@@ -461,6 +483,9 @@ const EntryZone: React.FC = () => {
     const [noSigBest,    setNoSigBest]    = useState<MarketResult | null>(null);
     const [error,        setError]        = useState<string>('');
     const [now,          setNow]          = useState<number>(() => Date.now());
+    const [history,      setHistory]      = useState<HistoryEntry[]>(() => {
+        try { return JSON.parse(localStorage.getItem('ez-signal-history') ?? '[]'); } catch { return []; }
+    });
 
     const wsRef    = useRef<WebSocket | null>(null);
     const abortRef = useRef<boolean>(false);
@@ -527,7 +552,13 @@ const EntryZone: React.FC = () => {
 
                 const results: MarketResult[] = [];
                 data.forEach(({ prices, pip, sym }) => {
-                    if (prices.length >= 100) results.push(runModels(prices, pip, sym, tradeType));
+                    if (prices.length < 100) return;
+                    const full = runModels(prices, pip, sym, tradeType);
+                    if (prices.length >= 1600) {
+                        const seg = runModels(prices.slice(-1500), pip, sym, tradeType);
+                        full.segmentAgrees = seg.direction === full.direction && seg.votes.yesCount >= 4;
+                    }
+                    results.push(full);
                 });
 
                 // Sort by (yesCount DESC, totalScore DESC)
@@ -542,17 +573,20 @@ const EntryZone: React.FC = () => {
                 setTimeout(() => {
                     if (abortRef.current) return;
 
-                    // Threshold: all trade types → 6/10
-                    const minVotes = 6;
+                    const minVotes = best ? getSymbolMinVotes(best.sym.code) : 6;
+                    const segOk    = !best || best.segmentAgrees;
+                    const freshOk  = !best || best.votes.recentEdge.vote;
 
-                    if (!best || best.votes.yesCount < minVotes) {
+                    if (!best || best.votes.yesCount < minVotes || !segOk || !freshOk) {
                         const topVotes = best?.votes.yesCount ?? 0;
-                        setNoSigReason(
-                            `The best market (${best?.sym.label ?? 'none'}) only achieved ${topVotes}/10 model votes. ` +
-                            `At least ${minVotes}/10 models must agree for a signal to be shown. ` +
-                            `All 10 markets were scanned — none met the consensus threshold. ` +
-                            `Wait 2–3 minutes and re-scan. Markets shift quickly.`
-                        );
+                        const reason   = !best
+                            ? 'No markets returned enough data.'
+                            : !freshOk
+                            ? `${best.sym.label}'s edge is not confirmed in the last 100 ticks — the pattern may be fading. Wait and re-scan.`
+                            : !segOk
+                            ? `The recent 1500-tick window disagrees with the full-period direction on ${best.sym.label} — conflicting signals. Wait and re-scan.`
+                            : `The best market (${best.sym.label}) only achieved ${topVotes}/10 model votes — need ${minVotes}/10 for this market. All 10 markets scanned. Wait 2–3 minutes and re-scan.`;
+                        setNoSigReason(reason);
                         setNoSigBest(best ?? null);
                         setStatus('no-signal');
                         return;
@@ -560,6 +594,22 @@ const EntryZone: React.FC = () => {
 
                     const validityMs = (best.sym.tickEvery === 1 ? 300 : 420) * 1000;
                     const scannedAt  = Date.now();
+
+                    // Save to history
+                    try {
+                        const entry: HistoryEntry = {
+                            market:    best.sym.short,
+                            direction: best.direction,
+                            votes:     best.votes.yesCount,
+                            strength:  best.signalStrength,
+                            time:      scannedAt,
+                        };
+                        const prev: HistoryEntry[] = JSON.parse(localStorage.getItem('ez-signal-history') ?? '[]');
+                        const next = [entry, ...prev].slice(0, 5);
+                        localStorage.setItem('ez-signal-history', JSON.stringify(next));
+                        setHistory(next);
+                    } catch { /* ignore */ }
+
                     setResult({ best, runner, scannedAt, validityMs, expiresAt: scannedAt + validityMs });
                     setNow(Date.now());
                     setStatus('ready');
@@ -757,7 +807,8 @@ const EntryZone: React.FC = () => {
                     <div className='ai-nosignal__icon'>🔍</div>
                     <h2 className='ai-nosignal__title'>No strong signal right now</h2>
                     <p className='ai-nosignal__sub'>
-                        All 10 markets scanned. Best market achieved {noSigBest?.votes.yesCount ?? 0}/10 votes — need 6/10.
+                        All 10 markets scanned. Best market achieved {noSigBest?.votes.yesCount ?? 0}/10 votes —{' '}
+                        need {noSigBest ? getSymbolMinVotes(noSigBest.sym.code) : 6}/10 for that market.
                     </p>
                     <div className='ai-nosignal__reason'>
                         <div className='ai-nosignal__reason-title'>Why</div>
@@ -833,6 +884,10 @@ const EntryZone: React.FC = () => {
                                 </div>
                                 <div className='ai-consensus__sub'>
                                     {best.votes.yesCount} of 10 independent models agree on this trade
+                                </div>
+                                <div className='ai-consensus__strength'>
+                                    Signal strength: <strong style={{ color: vc }}>{best.signalStrength}%</strong>
+                                    &nbsp;·&nbsp;Segment: <strong style={{ color: best.segmentAgrees ? '#22c55e' : '#ef4444' }}>✓</strong>
                                 </div>
                                 <div className='ai-consensus__dots'>
                                     {[0,1,2,3,4,5,6,7,8,9].map(i => (
@@ -1068,6 +1123,24 @@ const EntryZone: React.FC = () => {
                         </p>
 
                         <button type='button' className='ai-rerun' onClick={launch}>🔄 Re-scan all 10 markets</button>
+
+                        {/* Signal history */}
+                        {history.length > 0 && (
+                            <div className='ai-history'>
+                                <div className='ai-history__title'>Recent signals</div>
+                                {history.map((h, i) => (
+                                    <div key={i} className='ai-history__row'>
+                                        <span className='ai-history__market'>{h.market}</span>
+                                        <span className='ai-history__dir'>{h.direction}</span>
+                                        <span className='ai-history__votes'>{h.votes}/10</span>
+                                        <span className='ai-history__strength'>{h.strength}%</span>
+                                        <span className='ai-history__time'>
+                                            {new Date(h.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </section>
                 );
             })()}
