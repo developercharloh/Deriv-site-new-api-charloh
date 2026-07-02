@@ -355,6 +355,39 @@ const DTraderPage = observer(() => {
         return null;
     }, [categoryKey, spot, sellableOpen, proposal]);
 
+    // ── Proximity history — rolling window for momentum detection ─────────
+    // Kept in a ref so pushes don't cause re-renders on every tick.
+    const proximityHistRef = useRef<number[]>([]);
+    useEffect(() => {
+        if (barrierProximity === null) { proximityHistRef.current = []; return; }
+        const h = proximityHistRef.current;
+        h.push(barrierProximity);
+        if (h.length > 8) h.shift();
+    }, [barrierProximity]);
+
+    // ── Derived alert level: position + momentum ──────────────────────────
+    // Thresholds (tighter than v1 so the warning fires earlier):
+    //   <45%  → danger by position alone
+    //   45–65% → warn by position; upgrades to danger if approaching fast
+    //   ≥65%  → safe; upgrades to warn if approaching fast
+    //
+    // "Approaching fast" = 3 or more consecutive ticks where proximity
+    // is strictly decreasing (price moving toward the barrier).
+    const barrierAlertLevel = useMemo((): 'safe' | 'warn' | 'danger' | null => {
+        if (barrierProximity === null) return null;
+        const hist = proximityHistRef.current;
+        let run = 0;
+        for (let i = hist.length - 1; i > 0; i--) {
+            if (hist[i] < hist[i - 1]) run++;
+            else break;
+        }
+        const approachingFast = run >= 3;
+
+        if (barrierProximity < 45) return 'danger';
+        if (barrierProximity < 65) return approachingFast ? 'danger' : 'warn';
+        return approachingFast ? 'warn' : 'safe';
+    }, [barrierProximity]);
+
     // Whether the current contract category cares about last-digit frequencies
     const showsDigitCard = category.needsPrediction || categoryKey === 'even_odd';
 
@@ -979,26 +1012,30 @@ const DTraderPage = observer(() => {
                 )}
 
                 {/* ── Barrier proximity alert (ACCU only) ───────────────── */}
-                {category.needsGrowthRate && barrierProximity !== null && (
-                    <div className={`dtp__barrier-alert dtp__barrier-alert--${
-                        barrierProximity >= 65 ? 'safe' : barrierProximity >= 30 ? 'warn' : 'danger'
-                    }`}>
+                {category.needsGrowthRate && barrierProximity !== null && barrierAlertLevel !== null && (
+                    <div className={`dtp__barrier-alert dtp__barrier-alert--${barrierAlertLevel}`}>
                         <span className='dtp__barrier-alert-icon'>
-                            {barrierProximity >= 65 ? '🟢' : barrierProximity >= 30 ? '🟡' : '🔴'}
+                            {barrierAlertLevel === 'safe' ? '🟢' : barrierAlertLevel === 'warn' ? '🟡' : '🔴'}
                         </span>
                         <div className='dtp__barrier-alert-body'>
                             <span className='dtp__barrier-alert-title'>
-                                {barrierProximity >= 65
-                                    ? (sellableOpen
-                                        ? 'Price well centred — safe to hold'
-                                        : '✅ Good time to BUY — price stable in safe zone')
-                                    : barrierProximity >= 30
-                                    ? (sellableOpen
-                                        ? '⚠️ Getting close to barrier — watch closely'
-                                        : '⚠️ Price drifting toward barrier — wait for stability')
-                                    : (sellableOpen
-                                        ? '🚨 CASH OUT NOW — barrier almost broken!'
-                                        : '🚨 Too close to barrier — do NOT buy yet, wait!')}
+                                {barrierAlertLevel === 'safe' && (sellableOpen
+                                    ? 'Price well centred — safe to hold'
+                                    : '✅ Good time to BUY — price stable in safe zone')}
+                                {barrierAlertLevel === 'warn' && (sellableOpen
+                                    ? (barrierProximity >= 65
+                                        ? '⚠️ Price trending toward barrier — prepare to cash out'
+                                        : '⚠️ Getting close to barrier — consider cashing out soon')
+                                    : (barrierProximity >= 65
+                                        ? '⚠️ Price trending toward barrier — avoid buying now'
+                                        : '⚠️ Price drifting toward barrier — wait for stability'))}
+                                {barrierAlertLevel === 'danger' && (sellableOpen
+                                    ? (barrierProximity >= 45
+                                        ? '🚨 Price approaching barrier fast — CASH OUT NOW!'
+                                        : '🚨 CASH OUT NOW — barrier almost broken!')
+                                    : (barrierProximity >= 45
+                                        ? '🚨 Barrier approach detected — do NOT buy!'
+                                        : '🚨 Too close to barrier — do NOT buy yet, wait!'))}
                             </span>
                             <div className='dtp__barrier-bar'>
                                 <div
@@ -1008,8 +1045,8 @@ const DTraderPage = observer(() => {
                             </div>
                             <span className='dtp__barrier-pct'>
                                 {barrierProximity.toFixed(0)}% from barrier
-                                {sellableOpen && barrierProximity < 30 && ' — tap CASH OUT NOW ↓'}
-                                {!sellableOpen && barrierProximity >= 65 && ' — tap BUY ↓'}
+                                {sellableOpen && barrierAlertLevel === 'danger' && ' — tap CASH OUT NOW ↓'}
+                                {!sellableOpen && barrierAlertLevel === 'safe' && ' — tap BUY ↓'}
                             </span>
                         </div>
                     </div>
