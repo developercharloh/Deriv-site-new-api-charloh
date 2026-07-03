@@ -499,6 +499,7 @@ const EntryZone: React.FC = () => {
     const [result,       setResult]       = useState<ConsensusResult | null>(null);
     const [noSigReason,  setNoSigReason]  = useState<string>('');
     const [noSigBest,    setNoSigBest]    = useState<MarketResult | null>(null);
+    const [noSigGate,    setNoSigGate]    = useState<'votes' | 'segment' | 'fresh' | 'none'>('votes');
     const [error,        setError]        = useState<string>('');
     const [now,          setNow]          = useState<number>(() => Date.now());
     const [history,      setHistory]      = useState<HistoryEntry[]>(() => {
@@ -597,6 +598,13 @@ const EntryZone: React.FC = () => {
 
                     if (!best || best.votes.yesCount < minVotes || !segOk || !freshOk) {
                         const topVotes = best?.votes.yesCount ?? 0;
+                        const gate: 'votes' | 'segment' | 'fresh' | 'none' = !best
+                            ? 'none'
+                            : !freshOk
+                            ? 'fresh'
+                            : !segOk
+                            ? 'segment'
+                            : 'votes';
                         const reason   = !best
                             ? 'No markets returned enough data.'
                             : !freshOk
@@ -606,6 +614,7 @@ const EntryZone: React.FC = () => {
                             : `The best market (${best.sym.label}) only achieved ${topVotes}/10 model votes — need ${minVotes}/10 for this market. All 10 markets scanned. Wait 2–3 minutes and re-scan.`;
                         setNoSigReason(reason);
                         setNoSigBest(best ?? null);
+                        setNoSigGate(gate);
                         setStatus('no-signal');
                         return;
                     }
@@ -825,8 +834,26 @@ const EntryZone: React.FC = () => {
                     <div className='ai-nosignal__icon'>🔍</div>
                     <h2 className='ai-nosignal__title'>No strong signal right now</h2>
                     <p className='ai-nosignal__sub'>
-                        All 10 markets scanned. Best market achieved {noSigBest?.votes.yesCount ?? 0}/10 votes —{' '}
-                        need {noSigBest ? getSymbolMinVotes(noSigBest.sym.code) : 6}/10 for that market.
+                        {noSigGate === 'votes' && (
+                            <>
+                                All 10 markets scanned. Best market achieved {noSigBest?.votes.yesCount ?? 0}/10 votes —{' '}
+                                need {noSigBest ? getSymbolMinVotes(noSigBest.sym.code) : 6}/10 for that market.
+                            </>
+                        )}
+                        {noSigGate === 'segment' && noSigBest && (
+                            <>
+                                All 10 markets scanned. {noSigBest.sym.label} passed the {noSigBest.votes.yesCount}/10 vote
+                                threshold, but the recent price window disagrees with the full-period trend —
+                                too risky to trade until they realign.
+                            </>
+                        )}
+                        {noSigGate === 'fresh' && noSigBest && (
+                            <>
+                                All 10 markets scanned. {noSigBest.sym.label} passed the {noSigBest.votes.yesCount}/10 vote
+                                threshold, but its edge isn't confirmed in the most recent ticks yet.
+                            </>
+                        )}
+                        {noSigGate === 'none' && 'No markets returned enough data to analyse.'}
                     </p>
                     <div className='ai-nosignal__reason'>
                         <div className='ai-nosignal__reason-title'>Why</div>
