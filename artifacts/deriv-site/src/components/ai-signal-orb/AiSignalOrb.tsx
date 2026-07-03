@@ -1,7 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, X, Zap, RefreshCw } from '@/utils/lucide-shim';
+import { Loader2, X, Zap, RefreshCw, PlayCircle } from '@/utils/lucide-shim';
 import { DERIV_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatilities';
+import { useStore } from '@/hooks/useStore';
+import { DBOT_TABS } from '@/constants/bot-contents';
+import { destroyerBotIdFromDirection, fetchAndPatchBot, type BotSignal } from '@/utils/bot-patch';
 import './ai-signal-orb.scss';
+
+const ORB_RUN_CFG_KEY = 'orb_destroyer_cfg';
+interface OrbRunConfig { stake: string; takeProfit: string; stopLoss: string; martingale: string; }
+type RunState = 'idle' | 'launching' | 'no-ws' | 'error';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -361,6 +368,14 @@ const AiSignalOrb: React.FC = () => {
     // Session discipline counter
     const [sessionCount, setSessionCount] = useState<number>(0);
 
+    // Selected entry point digit (defaults to AI-recommended digit on new result)
+    const [editEntryPoint, setEditEntryPoint] = useState<number>(0);
+
+    // Save & Run — pushes the current signal straight into the Over/Under Destroyer bot
+    const store = useStore();
+    const [runState, setRunState] = useState<RunState>('idle');
+    const [runErr,   setRunErr]   = useState('');
+
     // Signal history log
     const [orbHistory, setOrbHistory] = useState<OrbHistoryEntry[]>(() => {
         try { return JSON.parse(localStorage.getItem('orb-signal-history') ?? '[]'); } catch { return []; }
@@ -381,12 +396,14 @@ const AiSignalOrb: React.FC = () => {
         } else {
             setEditDir((result.direction as 'EVEN' | 'ODD') ?? 'EVEN');
         }
+        setEditEntryPoint(result.entryDigits[0]?.digit ?? 0);
         setHasSignal(true);
     }, [result, tradeType]);
 
     // Reset on trade type change
     useEffect(() => {
         setResult(null); setNoSigBest(null); setScanState('idle'); setHasSignal(false);
+        setRunState('idle'); setRunErr('');
     }, [tradeType]);
 
     // ── Drag handlers ─────────────────────────────────────────────────────────
@@ -437,6 +454,59 @@ const AiSignalOrb: React.FC = () => {
             } else { setNoSigBest(noVotesBest); setScanState('no-signal'); }
         } catch { setScanState('idle'); }
     }, [tradeType]);
+
+    // ── Save and Run — writes the AI-selected parameters straight into the
+    //    matching Over/Under Destroyer bot and auto-starts it ──────────────────
+    const handleSaveAndRun = useCallback(async () => {
+        if (!result || tradeType !== 'over_under') return;
+        setRunState('launching'); setRunErr('');
+        try {
+            let cfg: OrbRunConfig = { stake: '0.5', takeProfit: '10', stopLoss: '30', martingale: '1.5' };
+            try {
+                const raw = localStorage.getItem(ORB_RUN_CFG_KEY);
+                if (raw) cfg = JSON.parse(raw);
+            } catch { /* ignore */ }
+
+            const direction = `${editDir} ${editBarrier}`;
+            const botId = destroyerBotIdFromDirection(direction);
+
+            const signal: BotSignal = {
+                symbol:           result.sym.code,
+                symbolLabel:      result.sym.label,
+                direction,
+                entryPoint:       `Digit ${editEntryPoint}`,
+                confidence:       result.signalStrength,
+                market:           'over_under',
+                recoveryBarrier:  editRecoveryBarrier ?? result.recoveryBarrier ?? editBarrier,
+            };
+
+            const stake      = parseFloat(cfg.stake)      || 0.5;
+            const takeProfit = parseFloat(cfg.takeProfit) || 10;
+            const stopLoss   = parseFloat(cfg.stopLoss)   || 30;
+            const martingale = parseFloat(cfg.martingale) || 1.5;
+
+            const doc    = await fetchAndPatchBot(botId, signal, stake, takeProfit, stopLoss, martingale);
+            const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
+
+            const Blockly = (window as any).Blockly;
+            if (!Blockly?.derivWorkspace) { setRunState('no-ws'); return; }
+
+            const dom = Blockly.utils.xml.textToDom(xmlStr);
+            Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
+            Blockly.derivWorkspace.cleanUp();
+            Blockly.derivWorkspace.clearUndo();
+
+            store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+
+            setTimeout(() => {
+                if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
+                setRunState('idle');
+            }, 500);
+        } catch (e: any) {
+            setRunState('error');
+            setRunErr(e?.message || 'Failed to launch bot.');
+        }
+    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editEntryPoint, store]);
 
     // ── Layout helpers ────────────────────────────────────────────────────────
     const orbStyle: React.CSSProperties = dragged
@@ -719,19 +789,31 @@ const AiSignalOrb: React.FC = () => {
                             {/* Entry points */}
                             {result.entryDigits.length > 0 && (
                                 <div className='ai-panel__entries'>
-                                    <span className='ai-panel__section-lbl'>Entry Points (last digit before trade)</span>
+                                    <span className='ai-panel__section-lbl'>
+                                        Entry Points (last digit before trade)
+                                        {tradeType === 'over_under' && <em className='ai-panel__section-hint'> — tap to select</em>}
+                                    </span>
                                     <div className='ai-panel__entry-grid'>
-                                        {result.entryDigits.slice(0, 2).map((e, i) => (
-                                            <div key={e.digit} className={`ai-panel__entry-card${i === 0 ? ' ai-panel__entry-card--rec' : ''}`}>
-                                                <div className='ai-panel__entry-digit' style={{ color: i === 0 ? vc : '#e2e8f0' }}>{e.digit}</div>
-                                                <div className='ai-panel__entry-meta'>
-                                                    <span className='ai-panel__entry-tag'>{i === 0 ? '★ Recommended' : '◎ Alternate'}</span>
-                                                    <span className='ai-panel__entry-pct' style={{ color: i === 0 ? vc : '#94a3b8' }}>
-                                                        {(e.conditional * 100).toFixed(1)}%
-                                                    </span>
+                                        {result.entryDigits.slice(0, 2).map((e, i) => {
+                                            const selected = tradeType === 'over_under' && editEntryPoint === e.digit;
+                                            return (
+                                                <div
+                                                    key={e.digit}
+                                                    className={`ai-panel__entry-card${i === 0 ? ' ai-panel__entry-card--rec' : ''}${selected ? ' ai-panel__entry-card--selected' : ''}`}
+                                                    role={tradeType === 'over_under' ? 'button' : undefined}
+                                                    style={tradeType === 'over_under' ? { cursor: 'pointer', outline: selected ? `2px solid ${vc}` : 'none' } : undefined}
+                                                    onClick={tradeType === 'over_under' ? () => setEditEntryPoint(e.digit) : undefined}
+                                                >
+                                                    <div className='ai-panel__entry-digit' style={{ color: i === 0 ? vc : '#e2e8f0' }}>{e.digit}</div>
+                                                    <div className='ai-panel__entry-meta'>
+                                                        <span className='ai-panel__entry-tag'>{i === 0 ? '★ Recommended' : '◎ Alternate'}</span>
+                                                        <span className='ai-panel__entry-pct' style={{ color: i === 0 ? vc : '#94a3b8' }}>
+                                                            {(e.conditional * 100).toFixed(1)}%
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -801,11 +883,35 @@ const AiSignalOrb: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Hint to bot builder */}
-                            <div className='ai-panel__hint-cta'>
-                                <span className='ai-panel__hint-cta-icon'>⚡</span>
-                                <span>Open the <strong>Bot Builder</strong> tab to execute this signal</span>
-                            </div>
+                            {/* Execute */}
+                            {tradeType === 'over_under' ? (
+                                <div className='ai-panel__run-cta'>
+                                    <button
+                                        className='ai-panel__run-btn'
+                                        disabled={runState === 'launching'}
+                                        onClick={handleSaveAndRun}
+                                    >
+                                        {runState === 'launching'
+                                            ? <><Loader2 size={16} className='ai-panel__spin' /> Launching…</>
+                                            : <><PlayCircle size={16} /> Save &amp; Run on {editDir === 'UNDER' ? 'Under' : 'Over'} Destroyer</>
+                                        }
+                                    </button>
+                                    <span className='ai-panel__run-hint'>
+                                        Saves market, barrier {editBarrier}, recovery {editRecoveryBarrier ?? editBarrier}, entry digit {editEntryPoint} and volatility into the bot, then auto-runs it.
+                                    </span>
+                                    {runState === 'no-ws' && (
+                                        <div className='ai-panel__run-err'>Open the <strong>Bot Builder</strong> tab once first, then try Save &amp; Run again.</div>
+                                    )}
+                                    {runState === 'error' && (
+                                        <div className='ai-panel__run-err'>{runErr}</div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className='ai-panel__hint-cta'>
+                                    <span className='ai-panel__hint-cta-icon'>⚡</span>
+                                    <span>Open the <strong>Bot Builder</strong> tab to execute this signal</span>
+                                </div>
+                            )}
 
                         </div>
                     )}

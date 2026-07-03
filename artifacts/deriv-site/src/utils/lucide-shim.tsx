@@ -37,6 +37,15 @@ export const RefreshCw = ({ size = 24, className, strokeWidth = 2, color, style 
     </svg>
 );
 
+export const PlayCircle = ({ size = 24, className, strokeWidth = 2, color, style }: IconProps) => (
+    <svg xmlns='http://www.w3.org/2000/svg' width={size} height={size} viewBox='0 0 24 24'
+        fill='none' stroke={color ?? 'currentColor'} strokeWidth={strokeWidth}
+        strokeLinecap='round' strokeLinejoin='round' className={className} style={style}>
+        <circle cx='12' cy='12' r='10'/>
+        <polygon points='10 8 16 12 10 16 10 8'/>
+    </svg>
+);
+
 export const TrendingUp = ({ size = 24, className, strokeWidth = 2, color, style }: IconProps) => (
     <svg xmlns='http://www.w3.org/2000/svg' width={size} height={size} viewBox='0 0 24 24'
         fill='none' stroke={color ?? 'currentColor'} strokeWidth={strokeWidth}

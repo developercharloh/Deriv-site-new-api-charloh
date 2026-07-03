@@ -19,7 +19,7 @@ catalogs:
       specifier: ^5.90.21
       version: 5.101.0
     '@types/node':
-      specifier: ^25.3.3
+      specifier: 25.9.4
       version: 25.9.4
     '@types/react':
       specifier: ^19.2.0
@@ -447,6 +447,9 @@ importers:
       '@types/js-cookie':
         specifier: ^3.0.6
         version: 3.0.6
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.9.4
       '@types/react':
         specifier: ^18.3.3
         version: 18.3.31

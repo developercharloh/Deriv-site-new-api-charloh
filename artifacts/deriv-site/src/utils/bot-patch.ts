@@ -30,7 +30,15 @@ export const BOT_XML_PATHS: Record<string, string> = {
     'over-under-signal':        '/bots/OverUnder_Signal_Bot.xml',
     'elite-entry-scanner':      '/bots/Elite_Entry_Scanner_Bot.xml',
     'over-under-ai-signals':    '/bots/Over_Under_AI_Signals_Bot.xml',
+    'over-destroyer':           '/bots/Over_Destroyer_Bot.xml',
+    'under-destroyer':          '/bots/Under_Destroyer_Bot.xml',
 };
+
+// Resolve which Destroyer bot to use from an OVER/UNDER direction string
+// (e.g. "OVER 1", "UNDER 6"). Used by the AI Signal Orb's "Save and Run" flow.
+export function destroyerBotIdFromDirection(direction: string): string {
+    return direction.trim().toUpperCase().startsWith('UNDER') ? 'under-destroyer' : 'over-destroyer';
+}
 
 // Resolve which bot to use from a signal's market + direction
 export function botIdFromSignal(signal: Pick<BotSignal, 'market' | 'direction'>): string {
@@ -338,6 +346,42 @@ export function getBotPatches(
                 { blockId: '9.jN~btog59cUwf8:lPl',  numValue: takeProfit      }, // Expected Profit
                 { blockId: 'MpN0,W8A;joH2n#IXF@!',  numValue: stopLoss        }, // Stop Loss
                 { blockId: ':y8AYtv{x`8LFslg8@Pc',  numValue: martingale      }, // Martingale Split
+            ];
+        }
+
+        case 'over-destroyer': {
+            // Over Destroyer Bot — PREDICTION 1 = "OVER" (primary barrier),
+            // "UNDER PREDICTION" = recovery barrier used after the first loss.
+            const primaryBarrier  = parseDigitFrom(signal.direction);
+            const recoveryBarrier = signal.recoveryBarrier ?? primaryBarrier;
+            const entryPt         = parseDigitFrom(signal.entryPoint);
+            return [
+                { blockId: 'Gg%p@Y?OHMC(yjmQxovG', numValue: primaryBarrier  }, // OVER (primary)
+                { blockId: 'b+#U5h8+OZ)rLx{!tpHW', numValue: recoveryBarrier }, // UNDER PREDICTION (recovery)
+                { blockId: 'dest_ep_init',          numValue: entryPt         }, // Entry Point
+                { blockId: ']~SrY@L1iu:F3H)e`G@.',  numValue: stake           }, // Stake
+                { blockId: 'p84`5MQ~#2$;K~tmMi/Z',  numValue: stake           }, // Initial Stake
+                { blockId: 'm|-pU=u@u#bdSa{:i4`M',  numValue: takeProfit      }, // Take Profit
+                { blockId: 'HhFFo1CV-bJ!l|0*]9xP',  numValue: stopLoss        }, // Stop Loss
+                { blockId: 'mFGMZRBBZt[SYAEOxi|F',  numValue: martingale      }, // Matingale
+            ];
+        }
+
+        case 'under-destroyer': {
+            // Under Destroyer Bot — "UNDER PREDICTION" = primary barrier,
+            // "OVER PREDICTION 2" = recovery barrier used after the first loss.
+            const primaryBarrier  = parseDigitFrom(signal.direction);
+            const recoveryBarrier = signal.recoveryBarrier ?? primaryBarrier;
+            const entryPt         = parseDigitFrom(signal.entryPoint);
+            return [
+                { blockId: 'Gg%p@Y?OHMC(yjmQxovG', numValue: primaryBarrier  }, // UNDER PREDICTION (primary)
+                { blockId: 'b+#U5h8+OZ)rLx{!tpHW', numValue: recoveryBarrier }, // OVER PREDICTION 2 (recovery)
+                { blockId: 'dest_ep_init',          numValue: entryPt         }, // Entry Point
+                { blockId: ']~SrY@L1iu:F3H)e`G@.',  numValue: stake           }, // Stake
+                { blockId: 'p84`5MQ~#2$;K~tmMi/Z',  numValue: stake           }, // Initial Stake
+                { blockId: 'm|-pU=u@u#bdSa{:i4`M',  numValue: takeProfit      }, // Take Profit
+                { blockId: 'HhFFo1CV-bJ!l|0*]9xP',  numValue: stopLoss        }, // Stop Loss
+                { blockId: 'mFGMZRBBZt[SYAEOxi|F',  numValue: martingale      }, // Matingale
             ];
         }
 
