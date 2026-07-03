@@ -406,26 +406,9 @@
   </block>
   <block type="before_purchase" id="_W[[0jGL5i,Q+}HZF3,3" deletable="false" x="0" y="1424">
     <statement name="BEFOREPURCHASE_STACK">
-      <block type="controls_if" id="dest_ep_gate_check">
+      <block type="controls_if" id="hB6n*5]JO,+98[r.c9TQ">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
         <value name="IF0">
-          <block type="logic_compare" id="dest_ep_gate_cmp">
-            <field name="OP">EQ</field>
-            <value name="A">
-              <block type="variables_get" id="dest_ep_gate_tick1">
-                <field name="VAR" id="dest_var_tick1">Tick 1</field>
-              </block>
-            </value>
-            <value name="B">
-              <block type="variables_get" id="dest_ep_gate_ep">
-                <field name="VAR" id="dest_var_ep">Entry Point</field>
-              </block>
-            </value>
-          </block>
-        </value>
-        <statement name="DO0">
-          <block type="controls_if" id="hB6n*5]JO,+98[r.c9TQ">
-            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
-            <value name="IF0">
               <block type="logic_compare" id="d0]9JynCKHX[yuQIEMoe">
                 <field name="OP">EQ</field>
                 <value name="A">
@@ -440,6 +423,23 @@
                 </value>
               </block>
             </value>
+        <statement name="DO0">
+          <block type="controls_if" id="dest_ep_gate_check">
+            <value name="IF0">
+          <block type="logic_compare" id="dest_ep_gate_cmp">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="dest_ep_gate_tick1">
+                <field name="VAR" id="dest_var_tick1">Tick 1</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="variables_get" id="dest_ep_gate_ep">
+                <field name="VAR" id="dest_var_ep">Entry Point</field>
+              </block>
+            </value>
+          </block>
+        </value>
             <statement name="DO0">
               <block type="text_join" id="dest_buy_pri_tj">
                 <field name="VARIABLE" id="dest_buy_pri_var">dest_buy_pri_text</field>
@@ -500,9 +500,11 @@
                 </next>
               </block>
             </statement>
-            <statement name="ELSE">
-              <block type="controls_if" id="QaLo;%nRkJ)f57eax.j.">
-                <value name="IF0">
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="controls_if" id="QaLo;%nRkJ)f57eax.j.">
+            <value name="IF0">
                   <block type="logic_compare" id="])]IEEaTkz8e@FZrUY;D">
                     <field name="OP">GTE</field>
                     <value name="A">
@@ -517,8 +519,8 @@
                     </value>
                   </block>
                 </value>
-                <statement name="DO0">
-                  <block type="text_join" id="dest_buy_rec_tj">
+            <statement name="DO0">
+              <block type="text_join" id="dest_buy_rec_tj">
                     <field name="VARIABLE" id="dest_buy_rec_var">dest_buy_rec_text</field>
                     <statement name="STACK">
                       <block type="text_statement" id="dest_buy_rec_s1">
@@ -576,19 +578,13 @@
                       </block>
                     </next>
                   </block>
-                </statement>
-                <next>
-                  <block type="purchase" id="_KFv(i~3#rJ2wAfq?tey">
-                    <field name="PURCHASE_LIST">DIGITOVER</field>
-                  </block>
-                </next>
-              </block>
             </statement>
           </block>
         </statement>
       </block>
     </statement>
   </block>
+
   <block type="tick_analysis" id="dest_tick_analysis" x="0" y="1980">
     <statement name="TICKANALYSIS_STACK">
       <block type="variables_set" id="dest_tick1_set">
