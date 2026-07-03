@@ -337,15 +337,15 @@
         </value>
         <statement name="DO0">
           <!-- Already trading — buy immediately, no re-scan -->
-          <block type="purchase" id="purchase_tm_differ">
-            <field name="PURCHASE_LIST">DIGITDIFF</field>
+          <block type="notify" id="bought_notify_d1">
+            <field name="NOTIFICATION_TYPE">success</field>
+            <field name="NOTIFICATION_SOUND">silent</field>
+            <value name="MESSAGE">
+              <shadow type="text"><field name="TEXT">Contract bought: Volatility 100 Index — DIFFERS</field></shadow>
+            </value>
             <next>
-              <block type="notify" id="bought_notify_d1">
-                <field name="NOTIFICATION_TYPE">success</field>
-                <field name="NOTIFICATION_SOUND">silent</field>
-                <value name="MESSAGE">
-                  <shadow type="text"><field name="TEXT">Contract bought: Volatility 100 Index — DIFFERS</field></shadow>
-                </value>
+              <block type="purchase" id="purchase_tm_differ">
+                <field name="PURCHASE_LIST">DIGITDIFF</field>
               </block>
             </next>
           </block>
@@ -428,15 +428,15 @@
                               <block type="math_number" id="tm_on_d"><field name="NUM">1</field></block>
                             </value>
                             <next>
-                              <block type="purchase" id="3gY]+Jgf|.cUv=kM+t=1">
-                                <field name="PURCHASE_LIST">DIGITDIFF</field>
+                              <block type="notify" id="bought_notify_d2">
+                                <field name="NOTIFICATION_TYPE">success</field>
+                                <field name="NOTIFICATION_SOUND">silent</field>
+                                <value name="MESSAGE">
+                                  <shadow type="text"><field name="TEXT">Contract bought: Volatility 100 Index — DIFFERS</field></shadow>
+                                </value>
                                 <next>
-                                  <block type="notify" id="bought_notify_d2">
-                                    <field name="NOTIFICATION_TYPE">success</field>
-                                    <field name="NOTIFICATION_SOUND">silent</field>
-                                    <value name="MESSAGE">
-                                      <shadow type="text"><field name="TEXT">Contract bought: Volatility 100 Index — DIFFERS</field></shadow>
-                                    </value>
+                                  <block type="purchase" id="3gY]+Jgf|.cUv=kM+t=1">
+                                    <field name="PURCHASE_LIST">DIGITDIFF</field>
                                   </block>
                                 </next>
                               </block>

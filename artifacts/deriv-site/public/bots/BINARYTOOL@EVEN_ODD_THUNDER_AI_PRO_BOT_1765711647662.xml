@@ -748,15 +748,15 @@
                                   </block>
                                 </value>
                                 <statement name="DO0">
-                                  <block type="purchase" id="eo_buy_even">
-                                    <field name="PURCHASE_LIST">DIGITEVEN</field>
+                                  <block type="notify" id="bought_notify_eo_even">
+                                    <field name="NOTIFICATION_TYPE">success</field>
+                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                    <value name="MESSAGE">
+                                      <shadow type="text"><field name="TEXT">Contract bought: Volatility 100 Index — EVEN</field></shadow>
+                                    </value>
                                     <next>
-                                      <block type="notify" id="bought_notify_eo_even">
-                                        <field name="NOTIFICATION_TYPE">success</field>
-                                        <field name="NOTIFICATION_SOUND">silent</field>
-                                        <value name="MESSAGE">
-                                          <shadow type="text"><field name="TEXT">Contract bought: Volatility 100 Index — EVEN</field></shadow>
-                                        </value>
+                                      <block type="purchase" id="eo_buy_even">
+                                        <field name="PURCHASE_LIST">DIGITEVEN</field>
                                       </block>
                                     </next>
                                   </block>
@@ -769,15 +769,15 @@
                                   </block>
                                 </value>
                                 <statement name="DO1">
-                                  <block type="purchase" id="eo_buy_odd">
-                                    <field name="PURCHASE_LIST">DIGITODD</field>
+                                  <block type="notify" id="bought_notify_eo_odd">
+                                    <field name="NOTIFICATION_TYPE">success</field>
+                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                    <value name="MESSAGE">
+                                      <shadow type="text"><field name="TEXT">Contract bought: Volatility 100 Index — ODD</field></shadow>
+                                    </value>
                                     <next>
-                                      <block type="notify" id="bought_notify_eo_odd">
-                                        <field name="NOTIFICATION_TYPE">success</field>
-                                        <field name="NOTIFICATION_SOUND">silent</field>
-                                        <value name="MESSAGE">
-                                          <shadow type="text"><field name="TEXT">Contract bought: Volatility 100 Index — ODD</field></shadow>
-                                        </value>
+                                      <block type="purchase" id="eo_buy_odd">
+                                        <field name="PURCHASE_LIST">DIGITODD</field>
                                       </block>
                                     </next>
                                   </block>

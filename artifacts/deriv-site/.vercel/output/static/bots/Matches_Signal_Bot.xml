@@ -455,15 +455,15 @@
         </value>
         <statement name="DO0">
           <!-- Already trading — buy immediately, no re-scan -->
-          <block type="purchase" id="purchase_tm_matches">
-            <field name="PURCHASE_LIST">DIGITMATCH</field>
+          <block type="notify" id="bought_notify_m1">
+            <field name="NOTIFICATION_TYPE">success</field>
+            <field name="NOTIFICATION_SOUND">silent</field>
+            <value name="MESSAGE">
+              <shadow type="text"><field name="TEXT">Contract bought: Volatility 75 Index — MATCHES</field></shadow>
+            </value>
             <next>
-              <block type="notify" id="bought_notify_m1">
-                <field name="NOTIFICATION_TYPE">success</field>
-                <field name="NOTIFICATION_SOUND">silent</field>
-                <value name="MESSAGE">
-                  <shadow type="text"><field name="TEXT">Contract bought: Volatility 75 Index — MATCHES</field></shadow>
-                </value>
+              <block type="purchase" id="purchase_tm_matches">
+                <field name="PURCHASE_LIST">DIGITMATCH</field>
               </block>
             </next>
           </block>
@@ -546,15 +546,15 @@
                               <block type="math_number" id="tm_on_m"><field name="NUM">1</field></block>
                             </value>
                             <next>
-                              <block type="purchase" id="931G$P,-ijefg=1+UIuF">
-                                <field name="PURCHASE_LIST">DIGITMATCH</field>
+                              <block type="notify" id="bought_notify_m2">
+                                <field name="NOTIFICATION_TYPE">success</field>
+                                <field name="NOTIFICATION_SOUND">silent</field>
+                                <value name="MESSAGE">
+                                  <shadow type="text"><field name="TEXT">Contract bought: Volatility 75 Index — MATCHES</field></shadow>
+                                </value>
                                 <next>
-                                  <block type="notify" id="bought_notify_m2">
-                                    <field name="NOTIFICATION_TYPE">success</field>
-                                    <field name="NOTIFICATION_SOUND">silent</field>
-                                    <value name="MESSAGE">
-                                      <shadow type="text"><field name="TEXT">Contract bought: Volatility 75 Index — MATCHES</field></shadow>
-                                    </value>
+                                  <block type="purchase" id="931G$P,-ijefg=1+UIuF">
+                                    <field name="PURCHASE_LIST">DIGITMATCH</field>
                                   </block>
                                 </next>
                               </block>
