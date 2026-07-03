@@ -800,6 +800,121 @@
     strong { color: #fca5a5; }
 }
 
+// ─── Run-config banner (Stake / Take Profit / Stop Loss / Martingale) ─────────
+
+.ai-runcfg__overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(8,10,20,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+    padding: 16px;
+}
+.ai-runcfg {
+    width: 100%;
+    max-width: 320px;
+    background: #12141f;
+    border: 1px solid rgba(99,102,241,0.35);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.ai-runcfg__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #f1f5f9;
+}
+.ai-runcfg__close {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    display: flex;
+    padding: 2px;
+    &:hover:not(:disabled) { color: #f1f5f9; }
+    &:disabled { opacity: 0.5; cursor: default; }
+}
+.ai-runcfg__sub { font-size: 10.5px; color: #94a3b8; line-height: 1.45; strong { color: #c7d2fe; } }
+.ai-runcfg__field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    span { font-size: 10.5px; font-weight: 700; color: #cbd5e1; letter-spacing: 0.02em; text-transform: uppercase; }
+    input {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(148,163,184,0.25);
+        border-radius: 9px;
+        padding: 9px 11px;
+        color: #f1f5f9;
+        font-size: 13px;
+        font-weight: 600;
+        outline: none;
+        &:focus { border-color: rgba(99,102,241,0.6); }
+    }
+}
+.ai-runcfg__mart {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.ai-runcfg__mart-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #cbd5e1;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    input[type='checkbox'] { width: 15px; height: 15px; accent-color: #10b981; cursor: pointer; }
+}
+.ai-runcfg__mart-input {
+    width: 90px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(148,163,184,0.25);
+    border-radius: 9px;
+    padding: 8px 10px;
+    color: #f1f5f9;
+    font-size: 13px;
+    font-weight: 600;
+    outline: none;
+    text-align: right;
+    &:focus { border-color: rgba(99,102,241,0.6); }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+.ai-runcfg__mart-hint { font-size: 9.5px; color: #64748b; line-height: 1.4; margin-top: -6px; }
+.ai-runcfg__execute {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 14px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #f0fdf4;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(16,185,129,0.35);
+    transition: all 0.15s;
+    &:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+    &:active:not(:disabled) { transform: scale(0.98); }
+    &:disabled { opacity: 0.7; cursor: default; }
+}
+
 // ─── Signal history in panel ──────────────────────────────────────────────────
 .ai-panel__history {
     display: flex;

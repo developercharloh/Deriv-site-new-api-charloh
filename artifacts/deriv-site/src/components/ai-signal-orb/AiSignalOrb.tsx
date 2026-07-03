@@ -7,7 +7,8 @@ import { destroyerBotIdFromDirection, fetchAndPatchBot, type BotSignal } from '@
 import './ai-signal-orb.scss';
 
 const ORB_RUN_CFG_KEY = 'orb_destroyer_cfg';
-interface OrbRunConfig { stake: string; takeProfit: string; stopLoss: string; martingale: string; }
+interface OrbRunConfig { stake: string; takeProfit: string; stopLoss: string; martingale: string; martingaleOn: boolean; }
+const DEFAULT_RUN_CFG: OrbRunConfig = { stake: '0.5', takeProfit: '10', stopLoss: '30', martingale: '1.5', martingaleOn: true };
 type RunState = 'idle' | 'launching' | 'no-ws' | 'error';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -376,6 +377,14 @@ const AiSignalOrb: React.FC = () => {
     const [runState, setRunState] = useState<RunState>('idle');
     const [runErr,   setRunErr]   = useState('');
 
+    // Run-config banner (Stake / Take Profit / Stop Loss / Martingale on-off)
+    const [showRunConfig, setShowRunConfig] = useState(false);
+    const [cfgStake,        setCfgStake]        = useState(DEFAULT_RUN_CFG.stake);
+    const [cfgTakeProfit,   setCfgTakeProfit]   = useState(DEFAULT_RUN_CFG.takeProfit);
+    const [cfgStopLoss,     setCfgStopLoss]     = useState(DEFAULT_RUN_CFG.stopLoss);
+    const [cfgMartingale,   setCfgMartingale]   = useState(DEFAULT_RUN_CFG.martingale);
+    const [cfgMartingaleOn, setCfgMartingaleOn] = useState(DEFAULT_RUN_CFG.martingaleOn);
+
     // Signal history log
     const [orbHistory, setOrbHistory] = useState<OrbHistoryEntry[]>(() => {
         try { return JSON.parse(localStorage.getItem('orb-signal-history') ?? '[]'); } catch { return []; }
@@ -455,20 +464,40 @@ const AiSignalOrb: React.FC = () => {
         } catch { setScanState('idle'); }
     }, [tradeType]);
 
-    // ── Save and Run — writes the AI-selected parameters straight into the
+    // ── Open the run-config banner — loads the last-used Stake / Take Profit /
+    //    Stop Loss / Martingale values (or defaults) so the trader can review
+    //    or adjust them before actually deploying the bot ─────────────────────
+    const openRunConfig = useCallback(() => {
+        if (!result) return;
+        let cfg: OrbRunConfig = DEFAULT_RUN_CFG;
+        try {
+            const raw = localStorage.getItem(ORB_RUN_CFG_KEY);
+            if (raw) cfg = { ...DEFAULT_RUN_CFG, ...JSON.parse(raw) };
+        } catch { /* ignore */ }
+        setCfgStake(cfg.stake);
+        setCfgTakeProfit(cfg.takeProfit);
+        setCfgStopLoss(cfg.stopLoss);
+        setCfgMartingale(cfg.martingale);
+        setCfgMartingaleOn(cfg.martingaleOn);
+        setRunState('idle'); setRunErr('');
+        setShowRunConfig(true);
+    }, [result]);
+
+    // ── Execute Trades — writes the AI-selected parameters plus the trader's
+    //    Stake / Take Profit / Stop Loss / Martingale straight into the
     //    matching bot for the current trade type and auto-starts it ───────────
     //    over_under      → Over Destroyer / Under Destroyer
     //    even_odd        → Even Odd Entry Scanner Bot
     //    matches_differs → Matches Bot / Differ V2 Bot
-    const handleSaveAndRun = useCallback(async () => {
+    const handleExecuteTrade = useCallback(async () => {
         if (!result) return;
         setRunState('launching'); setRunErr('');
         try {
-            let cfg: OrbRunConfig = { stake: '0.5', takeProfit: '10', stopLoss: '30', martingale: '1.5' };
-            try {
-                const raw = localStorage.getItem(ORB_RUN_CFG_KEY);
-                if (raw) cfg = JSON.parse(raw);
-            } catch { /* ignore */ }
+            const cfg: OrbRunConfig = {
+                stake: cfgStake, takeProfit: cfgTakeProfit, stopLoss: cfgStopLoss,
+                martingale: cfgMartingale, martingaleOn: cfgMartingaleOn,
+            };
+            try { localStorage.setItem(ORB_RUN_CFG_KEY, JSON.stringify(cfg)); } catch { /* ignore */ }
 
             let direction: string;
             let botId: string;
@@ -493,10 +522,11 @@ const AiSignalOrb: React.FC = () => {
                 recoveryBarrier:  tradeType === 'over_under' ? (editRecoveryBarrier ?? result.recoveryBarrier ?? editBarrier) : undefined,
             };
 
-            const stake      = parseFloat(cfg.stake)      || 0.5;
-            const takeProfit = parseFloat(cfg.takeProfit) || 10;
-            const stopLoss   = parseFloat(cfg.stopLoss)   || 30;
-            const martingale = parseFloat(cfg.martingale) || 1.5;
+            const stake      = parseFloat(cfgStake)      || 0.5;
+            const takeProfit = parseFloat(cfgTakeProfit) || 10;
+            const stopLoss   = parseFloat(cfgStopLoss)   || 30;
+            // Martingale OFF → reset the martingale block to 0 (no stake increase after a loss).
+            const martingale = cfgMartingaleOn ? (parseFloat(cfgMartingale) || 1.5) : 0;
 
             const doc    = await fetchAndPatchBot(botId, signal, stake, takeProfit, stopLoss, martingale);
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
@@ -514,12 +544,14 @@ const AiSignalOrb: React.FC = () => {
             setTimeout(() => {
                 if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
                 setRunState('idle');
+                setShowRunConfig(false);
             }, 500);
         } catch (e: any) {
             setRunState('error');
             setRunErr(e?.message || 'Failed to launch bot.');
         }
-    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editMatchesSide, editTargetDigit, editEntryPoint, store]);
+    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editMatchesSide, editTargetDigit, editEntryPoint,
+        cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, store]);
 
     // ── Layout helpers ────────────────────────────────────────────────────────
     const orbStyle: React.CSSProperties = dragged
@@ -906,31 +938,111 @@ const AiSignalOrb: React.FC = () => {
                                 <button
                                     className='ai-panel__run-btn'
                                     disabled={runState === 'launching'}
-                                    onClick={handleSaveAndRun}
+                                    onClick={openRunConfig}
                                 >
-                                    {runState === 'launching'
-                                        ? <><Loader2 size={16} className='ai-panel__spin' /> Launching…</>
-                                        : <><PlayCircle size={16} /> Save &amp; Run on {runTargetLabel}</>
-                                    }
+                                    <PlayCircle size={16} /> Save &amp; Run on {runTargetLabel}
                                 </button>
                                 <span className='ai-panel__run-hint'>
                                     {tradeType === 'over_under'
-                                        ? `Saves market, barrier ${editBarrier}, recovery ${editRecoveryBarrier ?? editBarrier}, entry digit ${editEntryPoint} and volatility into the bot, then auto-runs it.`
+                                        ? `Saves market, barrier ${editBarrier}, recovery ${editRecoveryBarrier ?? editBarrier}, entry digit ${editEntryPoint} and volatility into the bot, then lets you set stake/profit/loss/martingale before running it.`
                                         : tradeType === 'matches_differs'
-                                            ? `Saves market, ${editMatchesSide.toLowerCase()} digit ${editTargetDigit}, entry digit ${editEntryPoint} and volatility into the bot, then auto-runs it.`
-                                            : `Saves market, ${editDir.toLowerCase()} prediction, entry digit ${editEntryPoint} and volatility into the bot, then auto-runs it.`
+                                            ? `Saves market, ${editMatchesSide.toLowerCase()} digit ${editTargetDigit}, entry digit ${editEntryPoint} and volatility into the bot, then lets you set stake/profit/loss/martingale before running it.`
+                                            : `Saves market, ${editDir.toLowerCase()} prediction, entry digit ${editEntryPoint} and volatility into the bot, then lets you set stake/profit/loss/martingale before running it.`
                                     }
                                 </span>
-                                {runState === 'no-ws' && (
-                                    <div className='ai-panel__run-err'>Open the <strong>Bot Builder</strong> tab once first, then try Save &amp; Run again.</div>
-                                )}
-                                {runState === 'error' && (
-                                    <div className='ai-panel__run-err'>{runErr}</div>
-                                )}
                             </div>
 
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* ── Run-config banner: Stake / Take Profit / Stop Loss / Martingale ── */}
+            {showRunConfig && (
+                <div className='ai-runcfg__overlay' onClick={() => runState !== 'launching' && setShowRunConfig(false)}>
+                    <div className='ai-runcfg' onClick={e => e.stopPropagation()}>
+                        <div className='ai-runcfg__header'>
+                            <span>Set Trade Parameters</span>
+                            <button
+                                className='ai-runcfg__close'
+                                disabled={runState === 'launching'}
+                                onClick={() => setShowRunConfig(false)}
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className='ai-runcfg__sub'>
+                            Deploying to <strong>{runTargetLabel}</strong> — market, prediction and entry point are already set from the AI signal.
+                        </div>
+
+                        <label className='ai-runcfg__field'>
+                            <span>Stake</span>
+                            <input
+                                type='number' min='0' step='0.01'
+                                value={cfgStake}
+                                onChange={e => setCfgStake(e.target.value)}
+                            />
+                        </label>
+
+                        <label className='ai-runcfg__field'>
+                            <span>Target Profit</span>
+                            <input
+                                type='number' min='0' step='0.01'
+                                value={cfgTakeProfit}
+                                onChange={e => setCfgTakeProfit(e.target.value)}
+                            />
+                        </label>
+
+                        <label className='ai-runcfg__field'>
+                            <span>Stop Loss</span>
+                            <input
+                                type='number' min='0' step='0.01'
+                                value={cfgStopLoss}
+                                onChange={e => setCfgStopLoss(e.target.value)}
+                            />
+                        </label>
+
+                        <div className='ai-runcfg__mart'>
+                            <label className='ai-runcfg__mart-toggle'>
+                                <input
+                                    type='checkbox'
+                                    checked={cfgMartingaleOn}
+                                    onChange={e => setCfgMartingaleOn(e.target.checked)}
+                                />
+                                <span>Martingale</span>
+                            </label>
+                            <input
+                                type='number' min='0' step='0.1'
+                                value={cfgMartingale}
+                                disabled={!cfgMartingaleOn}
+                                onChange={e => setCfgMartingale(e.target.value)}
+                                className='ai-runcfg__mart-input'
+                            />
+                        </div>
+                        <span className='ai-runcfg__mart-hint'>
+                            {cfgMartingaleOn
+                                ? 'Stake multiplies by this factor after a loss.'
+                                : 'Off — martingale is reset to 0, stake stays flat after a loss.'}
+                        </span>
+
+                        <button
+                            className='ai-runcfg__execute'
+                            disabled={runState === 'launching'}
+                            onClick={handleExecuteTrade}
+                        >
+                            {runState === 'launching'
+                                ? <><Loader2 size={16} className='ai-panel__spin' /> Launching…</>
+                                : <><PlayCircle size={16} /> Execute Trades</>
+                            }
+                        </button>
+
+                        {runState === 'no-ws' && (
+                            <div className='ai-panel__run-err'>Open the <strong>Bot Builder</strong> tab once first, then try again.</div>
+                        )}
+                        {runState === 'error' && (
+                            <div className='ai-panel__run-err'>{runErr}</div>
+                        )}
+                    </div>
                 </div>
             )}
         </>
