@@ -512,15 +512,15 @@
                       <block type="variables_get" id="dest_buy_pri_notify_vg"><field name="VAR" id="dest_buy_pri_var">dest_buy_pri_text</field></block>
                     </value>
                     <next>
-                      <block type="purchase" id="4y{oJ}JR+rPE+*k/d7zV">
-                        <field name="PURCHASE_LIST">DIGITUNDER</field>
-                      <next>
-    <block type="variables_set" id="dest_started_set_pri_un">
-      <field name="VAR" id="dest_var_started">TRADING STARTED</field>
-      <value name="VALUE"><block type="math_number" id="dest_started_one_pri_un"><field name="NUM">1</field></block></value>
-    </block>
-  </next>
-</block>
+                      <block type="variables_set" id="dest_started_set_pri_un">
+                        <field name="VAR" id="dest_var_started">TRADING STARTED</field>
+                        <value name="VALUE"><block type="math_number" id="dest_started_one_pri_un"><field name="NUM">1</field></block></value>
+                        <next>
+                          <block type="purchase" id="4y{oJ}JR+rPE+*k/d7zV">
+                            <field name="PURCHASE_LIST">DIGITUNDER</field>
+                          </block>
+                        </next>
+                      </block>
                     </next>
                   </block>
                 </next>
@@ -595,15 +595,15 @@
                           <block type="variables_get" id="dest_buy_rec_notify_vg"><field name="VAR" id="dest_buy_rec_var">dest_buy_rec_text</field></block>
                         </value>
                         <next>
-                          <block type="purchase" id="JTxBKT[gw:s;+QK9bw,!">
-                            <field name="PURCHASE_LIST">DIGITOVER</field>
-                          <next>
-    <block type="variables_set" id="dest_started_set_rec_un">
-      <field name="VAR" id="dest_var_started">TRADING STARTED</field>
-      <value name="VALUE"><block type="math_number" id="dest_started_one_rec_un"><field name="NUM">1</field></block></value>
-    </block>
-  </next>
-</block>
+                          <block type="variables_set" id="dest_started_set_rec_un">
+                            <field name="VAR" id="dest_var_started">TRADING STARTED</field>
+                            <value name="VALUE"><block type="math_number" id="dest_started_one_rec_un"><field name="NUM">1</field></block></value>
+                            <next>
+                              <block type="purchase" id="JTxBKT[gw:s;+QK9bw,!">
+                                <field name="PURCHASE_LIST">DIGITOVER</field>
+                              </block>
+                            </next>
+                          </block>
                         </next>
                       </block>
                     </next>
