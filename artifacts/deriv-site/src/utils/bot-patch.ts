@@ -364,6 +364,7 @@ export function getBotPatches(
                 { blockId: 'm|-pU=u@u#bdSa{:i4`M',  numValue: takeProfit      }, // Take Profit
                 { blockId: 'HhFFo1CV-bJ!l|0*]9xP',  numValue: stopLoss        }, // Stop Loss
                 { blockId: 'mFGMZRBBZt[SYAEOxi|F',  numValue: martingale      }, // Matingale
+                { blockId: 'dest_symlabel_init',    textValue: signal.symbolLabel }, // Journal: symbol label
             ];
         }
 
@@ -382,6 +383,7 @@ export function getBotPatches(
                 { blockId: 'm|-pU=u@u#bdSa{:i4`M',  numValue: takeProfit      }, // Take Profit
                 { blockId: 'HhFFo1CV-bJ!l|0*]9xP',  numValue: stopLoss        }, // Stop Loss
                 { blockId: 'mFGMZRBBZt[SYAEOxi|F',  numValue: martingale      }, // Matingale
+                { blockId: 'dest_symlabel_init',    textValue: signal.symbolLabel }, // Journal: symbol label
             ];
         }
 

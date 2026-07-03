@@ -545,6 +545,7 @@ const AiSignalOrb: React.FC = () => {
                 if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
                 setRunState('idle');
                 setShowRunConfig(false);
+                setOpen(false);
             }, 500);
         } catch (e: any) {
             setRunState('error');
