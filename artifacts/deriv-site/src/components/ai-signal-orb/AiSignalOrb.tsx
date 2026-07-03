@@ -6,7 +6,10 @@ import './ai-signal-orb.scss';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DERIV_WS        = 'wss://ws.derivws.com/websockets/v3?app_id=1';
-const TICK_COUNT      = 6000;
+// Capped at 1000 ticks to match Deriv's own digit-analysis window — using
+// more history risks basing signals on a market regime that has already
+// shifted (reversals happen gradually and old ticks stop being relevant).
+const TICK_COUNT      = 1000;
 const ALL_SYMS        = DERIV_VOLATILITIES;
 const MIN_VOTES       = 6;
 

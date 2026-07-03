@@ -216,9 +216,10 @@ function useMultiMarket(selectedSym: string): MultiMarketHook {
                         buf.distribution = buildDist(buf.digits);
                         buf.status       = 'live';
                         pushSnap(sym);
-                        if (buf.tickCount % 10 === 0) {
-                            setTickEvt({ sym, tc: buf.tickCount });
-                        }
+                        // Fire on every tick (not throttled) so the entry-point
+                        // banner reflects the current anchor digit instantly —
+                        // the market can flip before the next execution.
+                        setTickEvt({ sym, tc: buf.tickCount });
                     }
                 };
 
