@@ -1,7 +1,6 @@
 import React from 'react';
 import { observer } from 'mobx-react-lite';
 import Text from '@/components/shared_ui/text';
-import { useStore } from '@/hooks/useStore';
 import { navigateToUrl, reloadPage } from '@/utils/navigation-utils';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
 import { LegacyClose1pxIcon } from '@deriv/quill-icons/Legacy';
@@ -10,14 +9,12 @@ import Dialog from './shared_ui/dialog';
 import { standalone_routes } from './shared';
 
 const BotStopped = observer(() => {
-    const { dashboard } = useStore();
-    const { is_web_socket_intialised } = dashboard;
     const onClickClose = () => {
         reloadPage();
     };
     return (
         <Dialog
-            is_visible={!is_web_socket_intialised}
+            is_visible={false}
             is_mobile_full_width
             className={'dc-dialog bot-stopped-dialog'}
             cancel_button_text={localize('Go to Reports')}
