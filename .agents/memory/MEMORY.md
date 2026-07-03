@@ -1,2 +1,3 @@
 - [Vercel deployment via CLI prebuilt](vercel-deploy-approach.md) — git integration is disconnected; deploy with `vercel deploy --prebuilt` using local dist build
 - [Deriv-site Tabs id stripping](deriv-site-tabs-scroll.md) — custom Tabs component drops the wrapper div's `id`, so id-based mobile scroll/height CSS silently no-ops.
+- [Deriv-site AI orb testing quirks](deriv-site-ai-orb-testing.md) — floating orb has a perpetual bounce animation that breaks Playwright's normal click; live bot runs always hit a login gate unrelated to the feature under test.
