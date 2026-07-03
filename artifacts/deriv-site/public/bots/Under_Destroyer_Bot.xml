@@ -12,6 +12,7 @@
     <variable id="dest_var_ep">Entry Point</variable>
     <variable id="dest_var_tick1">Tick 1</variable>
     <variable id="dest_var_symlabel">Symbol Label</variable>
+    <variable id="dest_var_started">TRADING STARTED</variable>
   </variables>
   <block type="trade_definition" id="FG~MzWk0;8*obV@6N.aK" deletable="false" x="0" y="50">
     <statement name="TRADE_OPTIONS">
@@ -127,7 +128,13 @@
                                                 <field name="TEXT">Volatility Index</field>
                                               </block>
                                             </value>
-                                          </block>
+                                          <next>
+        <block type="variables_set" id="dest_started_init_un">
+          <field name="VAR" id="dest_var_started">TRADING STARTED</field>
+          <value name="VALUE"><block type="math_number" id="dest_started_init_num_un"><field name="NUM">0</field></block></value>
+        </block>
+      </next>
+    </block>
                                         </next>
                                       </block>
                                     </next>
@@ -406,9 +413,39 @@
   </block>
   <block type="before_purchase" id="_W[[0jGL5i,Q+}HZF3,3" collapsed="true" deletable="false" x="0" y="1092">
     <statement name="BEFOREPURCHASE_STACK">
-      <block type="controls_if" id="hB6n*5]JO,+98[r.c9TQ">
-        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+      <block type="controls_if" id="dest_started_or_ep_gate_un">
         <value name="IF0">
+          <block type="logic_operation" id="dest_gate_or_un">
+            <field name="OP">OR</field>
+            <value name="A">
+              <block type="logic_compare" id="dest_started_cmp_un">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="dest_started_get_un"><field name="VAR" id="dest_var_started">TRADING STARTED</field></block></value>
+                <value name="B"><block type="math_number" id="dest_started_one_cmp_un"><field name="NUM">1</field></block></value>
+              </block>
+            </value>
+            <value name="B">
+              <block type="logic_compare" id="dest_ep_gate_cmp">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="dest_ep_gate_tick1">
+                <field name="VAR" id="dest_var_tick1">Tick 1</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="variables_get" id="dest_ep_gate_ep">
+                <field name="VAR" id="dest_var_ep">Entry Point</field>
+              </block>
+            </value>
+          </block>
+        
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="controls_if" id="hB6nunrestruct">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
               <block type="logic_compare" id="d0]9JynCKHX[yuQIEMoe">
                 <field name="OP">EQ</field>
                 <value name="A">
@@ -423,23 +460,6 @@
                 </value>
               </block>
             </value>
-        <statement name="DO0">
-          <block type="controls_if" id="dest_ep_gate_check">
-            <value name="IF0">
-          <block type="logic_compare" id="dest_ep_gate_cmp">
-            <field name="OP">EQ</field>
-            <value name="A">
-              <block type="variables_get" id="dest_ep_gate_tick1">
-                <field name="VAR" id="dest_var_tick1">Tick 1</field>
-              </block>
-            </value>
-            <value name="B">
-              <block type="variables_get" id="dest_ep_gate_ep">
-                <field name="VAR" id="dest_var_ep">Entry Point</field>
-              </block>
-            </value>
-          </block>
-        </value>
             <statement name="DO0">
               <block type="text_join" id="dest_buy_pri_tj">
                 <field name="VARIABLE" id="dest_buy_pri_var">dest_buy_pri_text</field>
@@ -494,17 +514,21 @@
                     <next>
                       <block type="purchase" id="4y{oJ}JR+rPE+*k/d7zV">
                         <field name="PURCHASE_LIST">DIGITUNDER</field>
-                      </block>
+                      <next>
+    <block type="variables_set" id="dest_started_set_pri_un">
+      <field name="VAR" id="dest_var_started">TRADING STARTED</field>
+      <value name="VALUE"><block type="math_number" id="dest_started_one_pri_un"><field name="NUM">1</field></block></value>
+    </block>
+  </next>
+</block>
                     </next>
                   </block>
                 </next>
               </block>
             </statement>
-          </block>
-        </statement>
-        <statement name="ELSE">
-          <block type="controls_if" id="QaLo;%nRkJ)f57eax.j.">
-            <value name="IF0">
+            <statement name="ELSE">
+              <block type="controls_if" id="QaLounrestruct">
+                <value name="IF0">
                   <block type="logic_compare" id="])]IEEaTkz8e@FZrUY;D">
                     <field name="OP">GTE</field>
                     <value name="A">
@@ -519,8 +543,8 @@
                     </value>
                   </block>
                 </value>
-            <statement name="DO0">
-              <block type="text_join" id="dest_buy_rec_tj">
+                <statement name="DO0">
+                  <block type="text_join" id="dest_buy_rec_tj">
                     <field name="VARIABLE" id="dest_buy_rec_var">dest_buy_rec_text</field>
                     <statement name="STACK">
                       <block type="text_statement" id="dest_buy_rec_s1">
@@ -573,17 +597,26 @@
                         <next>
                           <block type="purchase" id="JTxBKT[gw:s;+QK9bw,!">
                             <field name="PURCHASE_LIST">DIGITOVER</field>
-                          </block>
+                          <next>
+    <block type="variables_set" id="dest_started_set_rec_un">
+      <field name="VAR" id="dest_var_started">TRADING STARTED</field>
+      <value name="VALUE"><block type="math_number" id="dest_started_one_rec_un"><field name="NUM">1</field></block></value>
+    </block>
+  </next>
+</block>
                         </next>
                       </block>
                     </next>
                   </block>
+                </statement>
+              </block>
             </statement>
           </block>
         </statement>
       </block>
     </statement>
   </block>
+
 
   <block type="tick_analysis" id="dest_tick_analysis" x="0" y="1980">
     <statement name="TICKANALYSIS_STACK">
