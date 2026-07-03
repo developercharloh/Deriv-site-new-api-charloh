@@ -1,1 +1,2 @@
 - [Vercel deployment via CLI prebuilt](vercel-deploy-approach.md) — git integration is disconnected; deploy with `vercel deploy --prebuilt` using local dist build
+- [Deriv-site Tabs id stripping](deriv-site-tabs-scroll.md) — custom Tabs component drops the wrapper div's `id`, so id-based mobile scroll/height CSS silently no-ops.

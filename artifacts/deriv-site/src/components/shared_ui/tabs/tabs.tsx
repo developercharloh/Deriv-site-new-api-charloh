@@ -226,6 +226,13 @@ const Tabs = ({
                     if (index !== active_tab_index) {
                         return undefined;
                     }
+                    if (child.props.id) {
+                        return (
+                            <div id={child.props.id} className='dc-tabs__content-panel'>
+                                {child.props.children}
+                            </div>
+                        );
+                    }
                     return child.props.children;
                 })}
             </div>

@@ -875,7 +875,7 @@
 // ── Mobile compression ────────────────────────────────────────────────
 @media (max-width: 720px) {
     // ── Page chrome ──
-    .ai-tool              { padding: 8px 8px 16px; border-radius: 10px; }
+    .ai-tool              { padding: 6px 6px 14px; border-radius: 9px; max-width: 100%; }
     .ai-tool__head        { margin-bottom: 6px; }
     .ai-tool__brand       { gap: 6px; }
     .ai-tool__brand-emoji { font-size: 1.4rem; }
