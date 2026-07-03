@@ -1,0 +1,556 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="M/|n$8JlTj$=kzUvIu*!">Stake</variable>
+    <variable id="Yr;3)QjI6B(*V==vy?)`">Take Profit</variable>
+    <variable id="{u=;Y4i^Kbk)y6GgYeEA">Prediction</variable>
+    <variable id="9z#sGgpVjansrQStBc^[">Stop Loss</variable>
+    <variable id="o!{PFl/W8aEOa~eLkPHa">Recovery Mode</variable>
+    <variable id="FUNSq0[Xe/DtOPg`S%VX">Stake[]</variable>
+    <variable id="zQotV5Ya=J)XM$Z2AG1F">Martingale</variable>
+    <variable id="4d0=~980OMm,MrM~As1p">No. of VirtualHook Losses</variable>
+  </variables>
+
+  <!-- ═══════════════ TRADE DEFINITION ═══════════════ -->
+  <block type="trade_definition" id="P6,4RS-gGwXH-^9HQXt." deletable="false" x="0" y="110">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="R6n0#zj6501Zoakxu5p=" deletable="false" movable="false">
+        <mutation vh_enabled="false" vh_max_steps="1" vh_min_trades="1" vh_stake="0.35"></mutation>
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ10V</field>
+        <field name="ALTERNATE_MARKETS">FALSE</field>
+        <field name="ALTERNATE_EVERY">1</field>
+        <field name="MULTI_MARKET">FALSE</field>
+        <field name="VH_ENABLED">FALSE</field>
+        <field name="VH_SETTINGS_BTN">VH Settings</field>
+        <next>
+          <block type="trade_definition_tradetype" id="1;YE*Ij#H|V-Bc9X@;sB" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="?X#.62KMb`fKmsJtI9E!" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="-h.mj2Dxe?:lHr5meynt" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="#M/mv)x=s5o~1f,x(.dJ" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="(YU*.*C/rT*;*7xWL`zk" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- INITIALIZATION -->
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="L*Gmzr))xF@$#@9+seB1">
+        <field name="VAR" id="M/|n$8JlTj$=kzUvIu*!">Stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="}QI_xqF%V;k;9-@]`$T}">
+            <field name="NUM">0.5</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="8Ri.*gA$r5lKprg}ucA8">
+            <field name="VAR" id="Yr;3)QjI6B(*V==vy?)`">Take Profit</field>
+            <value name="VALUE">
+              <block type="math_number" id="-B{NIP8(_8@5((Q@nS%)">
+                <field name="NUM">5</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="0Qf4Ani4g$y^PHS=oogQ">
+                <field name="VAR" id="9z#sGgpVjansrQStBc^[">Stop Loss</field>
+                <value name="VALUE">
+                  <block type="math_number" id="(bOKicSdvT11Yu~M#|kr">
+                    <field name="NUM">30</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="w6uP8RiJ2Yw#)b*;a]~`">
+                    <field name="VAR" id="zQotV5Ya=J)XM$Z2AG1F">Martingale</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="]p^.flPMFu:9mVVwY]Wv">
+                        <field name="NUM">2</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="#d%JhwvEY6GcT92`xroS">
+                        <field name="VAR" id="{u=;Y4i^Kbk)y6GgYeEA">Prediction</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="oj49HF|3KXTp9b=fA)ms">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="NCj,{V7k!ParLv)CkM^j">
+                            <field name="VAR" id="4d0=~980OMm,MrM~As1p">No. of VirtualHook Losses</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="+,4u(6lAnp)mqw6V2K{=">
+                                <field name="NUM">2</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="procedures_callnoreturn" id="uyNQu;Ep_RtG:s*[=.!a">
+                                <mutation name="Fixed Variables"></mutation>
+                                <data>Xk-H`K+::fW|P(!iTpM?</data>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- TRADE OPTIONS -->
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="U(LK9.DIDiCGKZ@N_c-x">
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="maxZ`po[!D]2[7/|.YxG">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="m9}HJD.4l`B/_H(zdUy^">
+            <field name="NUM">0.35</field>
+          </shadow>
+          <block type="variables_get" id="bI99zW-atp%N_e7*jsso">
+            <field name="VAR" id="M/|n$8JlTj$=kzUvIu*!">Stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="pORnw9k^}#Ei?!n,mXuD" inline="true">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="!%D}h#NJ;=ZjpH4Lb%:R">
+            <field name="VAR" id="{u=;Y4i^Kbk)y6GgYeEA">Prediction</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════ AFTER PURCHASE ═══════════════ -->
+  <block type="after_purchase" id="Tr3Xt|p6?!SCde!fdR(_" x="1231" y="110">
+    <statement name="AFTERPURCHASE_STACK">
+
+      <!-- Guard: only run win/loss/stake logic when NOT in virtual phase -->
+      <block type="controls_if" id="vh_phase_guard">
+        <mutation></mutation>
+        <value name="IF0">
+          <block type="logic_negate" id="vh_negate">
+            <value name="BOOL">
+              <block type="vh_is_virtual_phase" id="vh_phase_chk"></block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <!-- Win / Loss + stake management -->
+          <block type="controls_if" id="c`zU|J4:b6$A?*8l+_}Z" collapsed="true">
+            <mutation else="1"></mutation>
+            <value name="IF0">
+              <block type="contract_check_result" id="Tb_xvBR=d/W4UsoHKk;4">
+                <field name="CHECK_RESULT">loss</field>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="controls_if" id="Gw)V6~V!p~vnx/mWF$G=">
+                <mutation else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="=KN;SXhyC}!~Iol4sNI=">
+                    <field name="OP">EQ</field>
+                    <value name="A">
+                      <block type="variables_get" id="M0C$xmw*/@]mqGVXSDka">
+                        <field name="VAR" id="o!{PFl/W8aEOa~eLkPHa">Recovery Mode</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_boolean" id="3Z|FNt|#bVQMl+eOIDl6">
+                        <field name="BOOL">FALSE</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <!-- First OVER loss: activate Recovery Mode -->
+                  <block type="variables_set" id="9F%I+pR,SDP7uG@I{FD}">
+                    <field name="VAR" id="o!{PFl/W8aEOa~eLkPHa">Recovery Mode</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="P6mQMy.4z)J8*s7/ddq~">
+                        <field name="BOOL">TRUE</field>
+                      </block>
+                    </value>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <!-- Real EVEN/ODD lost while Recovery Mode already TRUE: enter repeat mode -->
+                  <block type="vh_handle_real_loss" id="vhrl_001"></block>
+                </statement>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <!-- Win: reset stake and recovery mode -->
+              <block type="variables_set" id="}.twMy8T6U@]_`l6+Ies">
+                <field name="VAR" id="M/|n$8JlTj$=kzUvIu*!">Stake</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="4C2^J/k|M[;$4p!~72,]">
+                    <field name="VAR" id="FUNSq0[Xe/DtOPg`S%VX">Stake[]</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="HXC|gw1(9whK7$pAd-r3">
+                    <field name="VAR" id="o!{PFl/W8aEOa~eLkPHa">Recovery Mode</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="!~7vz30[XBf|h0|7m2oQ">
+                        <field name="BOOL">FALSE</field>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+
+        <!-- TP / SL / trade_again always runs (next of the guard block) -->
+        <next>
+          <block type="controls_if" id="[|*gb$nrtrw;[g[s,GfG" collapsed="true">
+            <mutation elseif="1" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="{}{?8/2Ag51-79~vv?sA">
+                <field name="OP">GTE</field>
+                <value name="A">
+                  <block type="total_profit" id=";|Y0$8^mhv#Uq~waz[f)"></block>
+                </value>
+                <value name="B">
+                  <block type="variables_get" id="AXC)acPbOm%-qX2j.NDA">
+                    <field name="VAR" id="Yr;3)QjI6B(*V==vy?)`">Take Profit</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="text_join" id="hook_tp_tj">
+                <field name="VARIABLE" id="hook_tp_var">hook_tp_text</field>
+                <statement name="STACK">
+                  <block type="text_statement" id="hook_tp_s1">
+                    <value name="TEXT"><shadow type="text"><field name="TEXT">🎯 Target Profit hit! </field></shadow></value>
+                    <next>
+                      <block type="text_statement" id="hook_tp_s2">
+                        <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="total_profit" id="hook_tp_tp"></block></value>
+                        <next>
+                          <block type="text_statement" id="hook_tp_s3">
+                            <value name="TEXT"><shadow type="text"><field name="TEXT"> USD printed 💲💲 — bot stopped.</field></shadow></value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="notify" id="hook_tp_notify">
+                    <field name="NOTIFICATION_TYPE">success</field>
+                    <field name="NOTIFICATION_SOUND">earned-money</field>
+                    <value name="MESSAGE">
+                      <shadow type="text"><field name="TEXT">abc</field></shadow>
+                      <block type="variables_get" id="hook_tp_vg"><field name="VAR" id="hook_tp_var">hook_tp_text</field></block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <value name="IF1">
+              <block type="logic_compare" id=":Ocrki,k!yHBZ`pO@V-O">
+                <field name="OP">LTE</field>
+                <value name="A">
+                  <block type="total_profit" id="nmkBWA,W*J?un,CfxF=Q"></block>
+                </value>
+                <value name="B">
+                  <block type="math_single" id="8uYA2:E@#!Y]P}oR?|G!">
+                    <field name="OP">NEG</field>
+                    <value name="NUM">
+                      <shadow type="math_number" id="lD#:8aPQV)5lt=Z,F6?1">
+                        <field name="NUM">9</field>
+                      </shadow>
+                      <block type="variables_get" id="DV7/ktErg/%Ggj%AgaPH">
+                        <field name="VAR" id="9z#sGgpVjansrQStBc^[">Stop Loss</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO1">
+              <block type="text_join" id="hook_sl_tj">
+                <field name="VARIABLE" id="hook_sl_var">hook_sl_text</field>
+                <statement name="STACK">
+                  <block type="text_statement" id="hook_sl_s1">
+                    <value name="TEXT"><shadow type="text"><field name="TEXT">🛑 Stop Loss hit! </field></shadow></value>
+                    <next>
+                      <block type="text_statement" id="hook_sl_s2">
+                        <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="total_profit" id="hook_sl_tp"></block></value>
+                        <next>
+                          <block type="text_statement" id="hook_sl_s3">
+                            <value name="TEXT"><shadow type="text"><field name="TEXT"> USD — bot stopped.</field></shadow></value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="notify" id="hook_sl_notify">
+                    <field name="NOTIFICATION_TYPE">error</field>
+                    <field name="NOTIFICATION_SOUND">error</field>
+                    <value name="MESSAGE">
+                      <shadow type="text"><field name="TEXT">abc</field></shadow>
+                      <block type="variables_get" id="hook_sl_vg"><field name="VAR" id="hook_sl_var">hook_sl_text</field></block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="trade_again" id="TkKELrpzK[|YLR/w!$6J"></block>
+            </statement>
+          </block>
+        </next>
+      </block>
+
+    </statement>
+  </block>
+
+  <!-- ═══════════════ BEFORE PURCHASE ═══════════════ -->
+  <block type="before_purchase" id="?fZtV?i~Plh*8y1`~mN}" deletable="false" x="0" y="1184">
+    <statement name="BEFOREPURCHASE_STACK">
+
+      <!-- Always log stats every tick -->
+      <block type="log_digit_stats" id="lds_001">
+        <next>
+
+          <!-- Main purchase decision tree -->
+          <block type="controls_if" id="o%Jg,9zm*rpD11pcz%|F">
+            <mutation else="1"></mutation>
+            <value name="IF0">
+              <!-- If Recovery Mode = FALSE → normal DIGITOVER trade -->
+              <block type="logic_compare" id="5*09EDl1suq;qRw+/1#v">
+                <field name="OP">EQ</field>
+                <value name="A">
+                  <block type="variables_get" id=".Q(8@|n,PIw;mbClT3+P">
+                    <field name="VAR" id="o!{PFl/W8aEOa~eLkPHa">Recovery Mode</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="logic_boolean" id="m:pho6EkAmk+WI?0(c:Y">
+                    <field name="BOOL">FALSE</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="apollo_purchase" id="vnp_001">
+                <field name="PURCHASE_LIST">DIGITOVER</field>
+              </block>
+            </statement>
+            <statement name="ELSE">
+
+              <!-- Phase 4b check first, then normal VH signal conditions -->
+              <block type="controls_if" id="ASk#@469MZnaITa*I=^Y">
+                <mutation elseif="2" else="1"></mutation>
+
+                <!-- Condition 0: Phase 4b repeat mode active → buy same direction at compounding stake -->
+                <value name="IF0">
+                  <block type="vh_is_repeat_mode" id="vh_rm_chk_001"></block>
+                </value>
+                <statement name="DO0">
+                  <block type="vh_repeat_purchase" id="vhrp_phase4b_001"></block>
+                </statement>
+
+                <!-- Condition 1: Even% > Odd% AND last digit is ODD → track DIGITEVEN virtually -->
+                <value name="IF1">
+                  <block type="logic_operation" id="|a~Sk*A+e_LS-V9Dn@vA">
+                    <field name="OP">AND</field>
+                    <value name="A">
+                      <block type="logic_compare" id="JItdu8}A:^)K+K[6)`E`">
+                        <field name="OP">GT</field>
+                        <value name="A">
+                          <block type="even_odd_analysis" id="y`DCSu=4dx6gp,g2stHy">
+                            <field name="ANALYSIS_TYPE">EVEN_PERCENTAGE</field>
+                            <value name="N">
+                              <shadow type="math_number" id="Z2Xjkp7CsBQMxDAUW[#E">
+                                <field name="NUM">30</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="even_odd_analysis" id="{]b*nBxT@5Pv;Nq)MOeX">
+                            <field name="ANALYSIS_TYPE">ODD_PERCENTAGE</field>
+                            <value name="N">
+                              <shadow type="math_number" id="N^RBj@?;N.[McnASxFlj">
+                                <field name="NUM">30</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number_property" id="ab]I=Ij4!aG(i,ucWS?r">
+                        <mutation divisor_input="false"></mutation>
+                        <field name="PROPERTY">ODD</field>
+                        <value name="NUMBER_TO_CHECK">
+                          <shadow type="math_number" id="}t!,R^i^^b+/tDBe16A@">
+                            <field name="NUM">0</field>
+                          </shadow>
+                          <block type="last_digit" id="r8(|)Mb)dXtsC!/7I+Lh"></block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO1">
+                  <block type="apollo_purchase2" id="vhp_even_001">
+                    <field name="PURCHASE_LIST">DIGITEVEN</field>
+                  </block>
+                </statement>
+
+                <!-- Condition 2: Odd% > Even% AND last digit is EVEN → track DIGITODD virtually -->
+                <value name="IF2">
+                  <block type="logic_operation" id="}Q`2[].P)BSncg(dpZ8D">
+                    <field name="OP">AND</field>
+                    <value name="A">
+                      <block type="logic_compare" id="zK9zighq?V;)xhbT*B-+">
+                        <field name="OP">GT</field>
+                        <value name="A">
+                          <block type="even_odd_analysis" id="{{mcu2XmN%EE(v|d79`o">
+                            <field name="ANALYSIS_TYPE">ODD_PERCENTAGE</field>
+                            <value name="N">
+                              <shadow type="math_number" id="]W5BtGSE~O~%m(Riua~8">
+                                <field name="NUM">30</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="even_odd_analysis" id="i{[RHri2ym.zEfgwOpp0">
+                            <field name="ANALYSIS_TYPE">EVEN_PERCENTAGE</field>
+                            <value name="N">
+                              <shadow type="math_number" id="4td+g4n*?Rj2^A9wq[fv">
+                                <field name="NUM">30</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number_property" id="8N@d:8Yq*Mviecv/Pa?7">
+                        <mutation divisor_input="false"></mutation>
+                        <field name="PROPERTY">EVEN</field>
+                        <value name="NUMBER_TO_CHECK">
+                          <shadow type="math_number" id="}t!,R^i^^b+/tDBe16A@2">
+                            <field name="NUM">0</field>
+                          </shadow>
+                          <block type="last_digit" id="GStdV::HD_*mqhwBBbk="></block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO2">
+                  <block type="apollo_purchase2" id="vhp_odd_001">
+                    <field name="PURCHASE_LIST">DIGITODD</field>
+                  </block>
+                </statement>
+
+                <!-- Neither condition met: buy neutral DIGITOVER filler, preserve tracking state -->
+                <statement name="ELSE">
+                  <block type="vh_reset_purchase" id="vhrp_001"></block>
+                </statement>
+
+              </block>
+            </statement>
+          </block>
+
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════ FIXED VARIABLES PROCEDURE ═══════════════ -->
+  <block type="procedures_defnoreturn" id="Xk-H`K+::fW|P(!iTpM?" collapsed="true" x="0" y="1832">
+    <field name="NAME">Fixed Variables</field>
+    <comment pinned="false" h="80" w="160">Describe this function...</comment>
+    <statement name="STACK">
+      <block type="enable_virtual_hook" id="Mdco~Vkd~Zu{htX|f`a*" collapsed="true">
+        <field name="ENABLE_VIRTUAL_HOOK">disable</field>
+        <next>
+          <block type="vh_settings" id="9AnQouTO5Hj2;jE$TMDx" collapsed="true">
+            <statement name="STATEMENT">
+              <block type="max_steps" id="{3^xig`Zf:w_Ho`$n@Xo" deletable="false" movable="false">
+                <value name="MAX_STEPS">
+                  <shadow type="math_number" id="#S?DyvN5/dKS/7V@**}E">
+                    <field name="NUM">2</field>
+                  </shadow>
+                  <block type="variables_get" id="vWF!ihedBN)C^|43v7pB">
+                    <field name="VAR" id="4d0=~980OMm,MrM~As1p">No. of VirtualHook Losses</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="min_trades" id="L-66l4y1i/P6q8[i-S8=" deletable="false" movable="false">
+                    <value name="MIN_TRADES">
+                      <shadow type="math_number" id="-H6924+*^Z7P;DN*Ox.A">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <next>
+              <block type="variables_set" id="U7R=h8hZIqsPTou^`6,e" collapsed="true">
+                <field name="VAR" id="FUNSq0[Xe/DtOPg`S%VX">Stake[]</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="hFf{/BkIiKoiiy8xZ$*{">
+                    <field name="VAR" id="M/|n$8JlTj$=kzUvIu*!">Stake</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="wO)wO1@vnlD73*B_g$D2" collapsed="true">
+                    <field name="VAR" id="o!{PFl/W8aEOa~eLkPHa">Recovery Mode</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="}R0BT]o%(^jr*+UWT)8W">
+                        <field name="BOOL">FALSE</field>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

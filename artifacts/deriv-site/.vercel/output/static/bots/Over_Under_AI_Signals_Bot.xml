@@ -1,0 +1,715 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="ouai_var_pred1">Prediction 1</variable>
+    <variable id="ouai_var_pred2">Prediction 2</variable>
+    <variable id="ouai_var_pred">Prediction</variable>
+    <variable id="ouai_var_ep">Entry Point</variable>
+    <variable id="ouai_var_stake">Stake</variable>
+    <variable id="ouai_var_init_stake">Initial Stake</variable>
+    <variable id="ouai_var_tp">Take Profit</variable>
+    <variable id="ouai_var_sl">Stop Loss</variable>
+    <variable id="ouai_var_mart">Martingale</variable>
+    <variable id="ouai_var_analysis">Analysis</variable>
+    <variable id="ouai_var_tick1">Tick 1</variable>
+    <variable id="ouai_var_text">Text</variable>
+    <variable id="ouai_var_active">Active</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════
+       TRADE DEFINITION
+       ═══════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="ouai_trade_def" deletable="false" x="0" y="110">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="ouai_market" deletable="false" movable="false">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" vh_enabled="false" vh_max_steps="3" vh_min_trades="1" vh_stake="0.35"></mutation>
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ10V</field>
+        <field name="ALTERNATE_MARKETS">FALSE</field>
+        <field name="ALTERNATE_EVERY">1</field>
+        <field name="MULTI_MARKET">FALSE</field>
+        <field name="VH_ENABLED">FALSE</field>
+        <field name="VH_SETTINGS_BTN">VH Settings</field>
+        <next>
+          <block type="trade_definition_tradetype" id="ouai_tradetype" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="ouai_contracttype" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITOVER</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="ouai_candle" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="ouai_restart" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="ouai_restarterr" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── INITIALIZATION ───────────────────────────────── -->
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="ouai_pred1_init">
+        <field name="VAR" id="ouai_var_pred1">Prediction 1</field>
+        <value name="VALUE">
+          <block type="math_number" id="ouai_pred1_num"><field name="NUM">1</field></block>
+        </value>
+        <next>
+          <block type="variables_set" id="ouai_pred2_init">
+            <field name="VAR" id="ouai_var_pred2">Prediction 2</field>
+            <value name="VALUE">
+              <block type="math_number" id="ouai_pred2_num"><field name="NUM">8</field></block>
+            </value>
+            <next>
+              <block type="variables_set" id="ouai_ep_init">
+                <field name="VAR" id="ouai_var_ep">Entry Point</field>
+                <value name="VALUE">
+                  <block type="math_number" id="ouai_ep_num"><field name="NUM">0</field></block>
+                </value>
+                <next>
+                  <block type="variables_set" id="ouai_stake_init">
+                    <field name="VAR" id="ouai_var_stake">Stake</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="ouai_stake_num"><field name="NUM">0.35</field></block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="ouai_tp_init">
+                        <field name="VAR" id="ouai_var_tp">Take Profit</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="ouai_tp_num"><field name="NUM">10</field></block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="ouai_sl_init">
+                            <field name="VAR" id="ouai_var_sl">Stop Loss</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="ouai_sl_num"><field name="NUM">10</field></block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="ouai_mart_init">
+                                <field name="VAR" id="ouai_var_mart">Martingale</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="ouai_mart_num"><field name="NUM">2</field></block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="ouai_init_stake_set">
+                                    <field name="VAR" id="ouai_var_init_stake">Initial Stake</field>
+                                    <value name="VALUE">
+                                      <block type="variables_get" id="ouai_init_stake_from_stake">
+                                        <field name="VAR" id="ouai_var_stake">Stake</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="ouai_pred_set_init">
+                                        <field name="VAR" id="ouai_var_pred">Prediction</field>
+                                        <value name="VALUE">
+                                          <block type="variables_get" id="ouai_pred_from_pred1">
+                                            <field name="VAR" id="ouai_var_pred1">Prediction 1</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="ouai_analysis_init">
+                                            <field name="VAR" id="ouai_var_analysis">Analysis</field>
+                                            <value name="VALUE">
+                                              <block type="text" id="ouai_analysis_primary_init_text">
+                                                <field name="TEXT">primary</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="ouai_active_init">
+                                                <field name="VAR" id="ouai_var_active">Active</field>
+                                                <value name="VALUE">
+                                                  <block type="text" id="ouai_active_false_text">
+                                                    <field name="TEXT">false</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── SUBMARKET (trade options) ────────────────────── -->
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="ouai_tradeopts">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <field name="TRADE_EACH_TICK">FALSE</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="ouai_dur_shadow"><field name="NUM">1</field></shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="ouai_amt_shadow"><field name="NUM">1</field></shadow>
+          <block type="variables_get" id="ouai_amt_stake_get">
+            <field name="VAR" id="ouai_var_stake">Stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="ouai_pred_shadow"><field name="NUM">1</field></shadow>
+          <block type="variables_get" id="ouai_pred_active_get">
+            <field name="VAR" id="ouai_var_pred">Prediction</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════
+       AFTER PURCHASE
+       ═══════════════════════════════════════════════════════ -->
+  <block type="after_purchase" id="ouai_after_purchase" x="714" y="110">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="ouai_tp_sl_check">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+
+        <!-- ── IF: Take Profit hit ──────────────────────── -->
+        <value name="IF0">
+          <block type="logic_compare" id="ouai_tp_cmp">
+            <field name="OP">GT</field>
+            <value name="A"><block type="total_profit" id="ouai_tp_profit_a"></block></value>
+            <value name="B">
+              <block type="variables_get" id="ouai_tp_get_b">
+                <field name="VAR" id="ouai_var_tp">Take Profit</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="notify" id="ouai_tp_notify">
+            <field name="NOTIFICATION_TYPE">success</field>
+            <field name="NOTIFICATION_SOUND">job-done</field>
+            <value name="MESSAGE">
+              <shadow type="text"><field name="TEXT">abc</field></shadow>
+              <block type="text" id="ouai_tp_msg"><field name="TEXT">🎯 Take Profit reached — bot stopped.</field></block>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ── ELIF: Stop Loss hit ──────────────────────── -->
+        <value name="IF1">
+          <block type="logic_compare" id="ouai_sl_cmp">
+            <field name="OP">LTE</field>
+            <value name="A"><block type="total_profit" id="ouai_sl_profit_a"></block></value>
+            <value name="B">
+              <block type="math_single" id="ouai_sl_neg">
+                <field name="OP">NEG</field>
+                <value name="NUM">
+                  <shadow type="math_number"><field name="NUM">9</field></shadow>
+                  <block type="variables_get" id="ouai_sl_get_b">
+                    <field name="VAR" id="ouai_var_sl">Stop Loss</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="notify" id="ouai_sl_notify">
+            <field name="NOTIFICATION_TYPE">error</field>
+            <field name="NOTIFICATION_SOUND">error</field>
+            <value name="MESSAGE">
+              <shadow type="text"><field name="TEXT">abc</field></shadow>
+              <block type="text" id="ouai_sl_msg"><field name="TEXT">🛑 Stop Loss hit — bot stopped.</field></block>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ── ELSE: TP/SL not hit — handle result ─────── -->
+        <statement name="ELSE">
+          <block type="controls_if" id="ouai_result_check">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+
+            <!-- IF loss -->
+            <value name="IF0">
+              <block type="contract_check_result" id="ouai_loss_check">
+                <field name="CHECK_RESULT">loss</field>
+              </block>
+            </value>
+            <statement name="DO0">
+              <!-- Was it a primary loss or recovery loss? -->
+              <block type="controls_if" id="ouai_loss_mode_check">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="ouai_primary_cmp">
+                    <field name="OP">EQ</field>
+                    <value name="A">
+                      <block type="variables_get" id="ouai_analysis_loss_get">
+                        <field name="VAR" id="ouai_var_analysis">Analysis</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="text" id="ouai_primary_label_loss"><field name="TEXT">primary</field></block>
+                    </value>
+                  </block>
+                </value>
+
+                <!-- Primary LOSS: switch to recovery -->
+                <statement name="DO0">
+                  <block type="variables_set" id="ouai_set_recovery_mode">
+                    <field name="VAR" id="ouai_var_analysis">Analysis</field>
+                    <value name="VALUE">
+                      <block type="text" id="ouai_recovery_label"><field name="TEXT">recovery</field></block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="ouai_pred_to_pred2">
+                        <field name="VAR" id="ouai_var_pred">Prediction</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="ouai_get_pred2_swap">
+                            <field name="VAR" id="ouai_var_pred2">Prediction 2</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="ouai_mart_stake_set">
+                            <field name="VAR" id="ouai_var_stake">Stake</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="ouai_mart_multiply">
+                                <field name="OP">MULTIPLY</field>
+                                <value name="A">
+                                  <shadow type="math_number"><field name="NUM">1</field></shadow>
+                                  <block type="variables_get" id="ouai_stake_for_mart">
+                                    <field name="VAR" id="ouai_var_stake">Stake</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <shadow type="math_number"><field name="NUM">2</field></shadow>
+                                  <block type="variables_get" id="ouai_mart_multiplier_get">
+                                    <field name="VAR" id="ouai_var_mart">Martingale</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="notify" id="ouai_primary_loss_notify">
+                                <field name="NOTIFICATION_TYPE">error</field>
+                                <field name="NOTIFICATION_SOUND">error</field>
+                                <value name="MESSAGE">
+                                  <shadow type="text"><field name="TEXT">abc</field></shadow>
+                                  <block type="text" id="ouai_primary_loss_msg">
+                                    <field name="TEXT">❌ Prediction 1 LOSS — switching to Prediction 2 (recovery)</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+
+                <!-- Recovery LOSS: stay in recovery, apply martingale again -->
+                <statement name="ELSE">
+                  <block type="variables_set" id="ouai_rec_loss_mart_stake">
+                    <field name="VAR" id="ouai_var_stake">Stake</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="ouai_rec_mart_multiply">
+                        <field name="OP">MULTIPLY</field>
+                        <value name="A">
+                          <shadow type="math_number"><field name="NUM">1</field></shadow>
+                          <block type="variables_get" id="ouai_rec_stake_for_mart">
+                            <field name="VAR" id="ouai_var_stake">Stake</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number"><field name="NUM">2</field></shadow>
+                          <block type="variables_get" id="ouai_rec_mart_get">
+                            <field name="VAR" id="ouai_var_mart">Martingale</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="notify" id="ouai_rec_loss_notify">
+                        <field name="NOTIFICATION_TYPE">error</field>
+                        <field name="NOTIFICATION_SOUND">error</field>
+                        <value name="MESSAGE">
+                          <shadow type="text"><field name="TEXT">abc</field></shadow>
+                          <block type="text" id="ouai_rec_loss_msg">
+                            <field name="TEXT">❌ Prediction 2 LOSS — martingale applied, continuing recovery</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+
+            <!-- WIN: reset everything to primary -->
+            <statement name="ELSE">
+              <block type="variables_set" id="ouai_win_analysis_reset">
+                <field name="VAR" id="ouai_var_analysis">Analysis</field>
+                <value name="VALUE">
+                  <block type="text" id="ouai_win_primary_label"><field name="TEXT">primary</field></block>
+                </value>
+                <next>
+                  <block type="variables_set" id="ouai_pred_back_to_pred1_win">
+                    <field name="VAR" id="ouai_var_pred">Prediction</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="ouai_get_pred1_win">
+                        <field name="VAR" id="ouai_var_pred1">Prediction 1</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="ouai_reset_stake_win">
+                        <field name="VAR" id="ouai_var_stake">Stake</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="ouai_init_stake_win">
+                            <field name="VAR" id="ouai_var_init_stake">Initial Stake</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="notify" id="ouai_win_notify">
+                            <field name="NOTIFICATION_TYPE">success</field>
+                            <field name="NOTIFICATION_SOUND">job-done</field>
+                            <value name="MESSAGE">
+                              <shadow type="text"><field name="TEXT">abc</field></shadow>
+                              <block type="text" id="ouai_win_msg">
+                                <field name="TEXT">✅ WIN — stake reset, back to Prediction 1</field>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+            <next>
+              <block type="trade_again" id="ouai_trade_again"></block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════
+       BEFORE PURCHASE
+       First tick ever: scan for entry point digit match → set Active = "true"
+       All subsequent ticks (Active == "true"): buy immediately based on Analysis
+       ═══════════════════════════════════════════════════════ -->
+  <block type="before_purchase" id="ouai_before_purchase" deletable="false" x="0" y="1368">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="ouai_bp_active_check">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+
+        <!-- IF Active == "false": still waiting for entry point -->
+        <value name="IF0">
+          <block type="logic_compare" id="ouai_bp_active_cmp">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="ouai_bp_active_get">
+                <field name="VAR" id="ouai_var_active">Active</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="text" id="ouai_bp_false_label"><field name="TEXT">false</field></block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <!-- Check if last digit == entry point -->
+          <block type="controls_if" id="ouai_ep_match_check">
+            <value name="IF0">
+              <block type="logic_compare" id="ouai_ep_cmp">
+                <field name="OP">EQ</field>
+                <value name="A">
+                  <block type="variables_get" id="ouai_tick1_ep_check">
+                    <field name="VAR" id="ouai_var_tick1">Tick 1</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="variables_get" id="ouai_ep_ep_check">
+                    <field name="VAR" id="ouai_var_ep">Entry Point</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <!-- Entry point matched — activate continuous trading -->
+              <block type="variables_set" id="ouai_set_active_true">
+                <field name="VAR" id="ouai_var_active">Active</field>
+                <value name="VALUE">
+                  <block type="text" id="ouai_active_true_text"><field name="TEXT">true</field></block>
+                </value>
+                <next>
+                  <!-- Log Prediction 1 entry to journal -->
+                  <block type="text_join" id="ouai_pred1_tj">
+                    <field name="VARIABLE" id="ouai_var_text">Text</field>
+                    <statement name="STACK">
+                      <block type="text_statement" id="ouai_pred1_ts1">
+                        <value name="TEXT">
+                          <shadow type="text"><field name="TEXT"></field></shadow>
+                          <block type="text" id="ouai_pred1_t1"><field name="TEXT">📊 Prediction 1 — Entry: </field></block>
+                        </value>
+                        <next>
+                          <block type="text_statement" id="ouai_pred1_ts2">
+                            <value name="TEXT">
+                              <shadow type="text"><field name="TEXT"></field></shadow>
+                              <block type="variables_get" id="ouai_ep_for_pred1_log">
+                                <field name="VAR" id="ouai_var_ep">Entry Point</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="text_statement" id="ouai_pred1_ts3">
+                                <value name="TEXT">
+                                  <shadow type="text"><field name="TEXT"></field></shadow>
+                                  <block type="text" id="ouai_pred1_t3"><field name="TEXT"> | Barrier: </field></block>
+                                </value>
+                                <next>
+                                  <block type="text_statement" id="ouai_pred1_ts4">
+                                    <value name="TEXT">
+                                      <shadow type="text"><field name="TEXT"></field></shadow>
+                                      <block type="variables_get" id="ouai_pred1_for_log">
+                                        <field name="VAR" id="ouai_var_pred1">Prediction 1</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="notify" id="ouai_pred1_print">
+                        <field name="NOTIFICATION_TYPE">info</field>
+                        <field name="NOTIFICATION_SOUND">silent</field>
+                        <value name="MESSAGE">
+                          <shadow type="text"><field name="TEXT">abc</field></shadow>
+                          <block type="variables_get" id="ouai_pred1_print_get">
+                            <field name="VAR" id="ouai_var_text">Text</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="purchase" id="ouai_primary_buy">
+                            <field name="PURCHASE_LIST">DIGITOVER</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+
+        <!-- ELSE: Active == "true" — buy immediately every tick, no entry point scan -->
+        <statement name="ELSE">
+          <block type="controls_if" id="ouai_bp_analysis_check">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+
+            <!-- IF primary: buy primary direction -->
+            <value name="IF0">
+              <block type="logic_compare" id="ouai_bp_primary_cmp">
+                <field name="OP">EQ</field>
+                <value name="A">
+                  <block type="variables_get" id="ouai_bp_analysis_get">
+                    <field name="VAR" id="ouai_var_analysis">Analysis</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="text" id="ouai_bp_primary_label"><field name="TEXT">primary</field></block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="text_join" id="ouai_pred1_active_tj">
+                <field name="VARIABLE" id="ouai_var_text">Text</field>
+                <statement name="STACK">
+                  <block type="text_statement" id="ouai_pred1_active_ts1">
+                    <value name="TEXT">
+                      <shadow type="text"><field name="TEXT"></field></shadow>
+                      <block type="text" id="ouai_pred1_active_t1"><field name="TEXT">📊 Prediction 1 — Barrier: </field></block>
+                    </value>
+                    <next>
+                      <block type="text_statement" id="ouai_pred1_active_ts2">
+                        <value name="TEXT">
+                          <shadow type="text"><field name="TEXT"></field></shadow>
+                          <block type="variables_get" id="ouai_pred1_active_log">
+                            <field name="VAR" id="ouai_var_pred1">Prediction 1</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="notify" id="ouai_pred1_active_print">
+                    <field name="NOTIFICATION_TYPE">info</field>
+                    <field name="NOTIFICATION_SOUND">silent</field>
+                    <value name="MESSAGE">
+                      <shadow type="text"><field name="TEXT">abc</field></shadow>
+                      <block type="variables_get" id="ouai_pred1_active_print_get">
+                        <field name="VAR" id="ouai_var_text">Text</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="purchase" id="ouai_primary_buy_active">
+                        <field name="PURCHASE_LIST">DIGITOVER</field>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+            <!-- ELSE recovery: buy recovery direction -->
+            <statement name="ELSE">
+              <block type="text_join" id="ouai_pred2_tj">
+                <field name="VARIABLE" id="ouai_var_text">Text</field>
+                <statement name="STACK">
+                  <block type="text_statement" id="ouai_pred2_ts1">
+                    <value name="TEXT">
+                      <shadow type="text"><field name="TEXT"></field></shadow>
+                      <block type="text" id="ouai_pred2_t1"><field name="TEXT">🔄 Prediction 2 (recovery) — Barrier: </field></block>
+                    </value>
+                    <next>
+                      <block type="text_statement" id="ouai_pred2_ts2">
+                        <value name="TEXT">
+                          <shadow type="text"><field name="TEXT"></field></shadow>
+                          <block type="variables_get" id="ouai_pred2_for_log">
+                            <field name="VAR" id="ouai_var_pred2">Prediction 2</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="notify" id="ouai_pred2_print">
+                    <field name="NOTIFICATION_TYPE">info</field>
+                    <field name="NOTIFICATION_SOUND">silent</field>
+                    <value name="MESSAGE">
+                      <shadow type="text"><field name="TEXT">abc</field></shadow>
+                      <block type="variables_get" id="ouai_pred2_print_get">
+                        <field name="VAR" id="ouai_var_text">Text</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="purchase" id="ouai_recovery_buy">
+                        <field name="PURCHASE_LIST">DIGITUNDER</field>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════
+       TICK ANALYSIS — last digit + entry point on journal
+       ═══════════════════════════════════════════════════════ -->
+  <block type="tick_analysis" id="ouai_tick_analysis" x="0" y="1464">
+    <statement name="TICKANALYSIS_STACK">
+      <!-- Get last digit from tick list -->
+      <block type="variables_set" id="ouai_tick1_set">
+        <field name="VAR" id="ouai_var_tick1">Tick 1</field>
+        <value name="VALUE">
+          <block type="lists_getIndex" id="ouai_last_digit_get">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+            <field name="MODE">GET</field>
+            <field name="WHERE">FROM_END</field>
+            <value name="VALUE">
+              <block type="lastDigitList" id="ouai_digit_list"></block>
+            </value>
+            <value name="AT">
+              <block type="math_number" id="ouai_digit_at"><field name="NUM">1</field></block>
+            </value>
+          </block>
+        </value>
+        <next>
+          <!-- Log last digit and entry point to journal every tick -->
+          <block type="text_join" id="ouai_tick_tj">
+            <field name="VARIABLE" id="ouai_var_text">Text</field>
+            <statement name="STACK">
+              <block type="text_statement" id="ouai_tick_ts1">
+                <value name="TEXT">
+                  <shadow type="text"><field name="TEXT"></field></shadow>
+                  <block type="text" id="ouai_tick_t1"><field name="TEXT">Last Digit: </field></block>
+                </value>
+                <next>
+                  <block type="text_statement" id="ouai_tick_ts2">
+                    <value name="TEXT">
+                      <shadow type="text"><field name="TEXT"></field></shadow>
+                      <block type="variables_get" id="ouai_tick1_log">
+                        <field name="VAR" id="ouai_var_tick1">Tick 1</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="text_statement" id="ouai_tick_ts3">
+                        <value name="TEXT">
+                          <shadow type="text"><field name="TEXT"></field></shadow>
+                          <block type="text" id="ouai_tick_t3"><field name="TEXT">  |  Entry Point: </field></block>
+                        </value>
+                        <next>
+                          <block type="text_statement" id="ouai_tick_ts4">
+                            <value name="TEXT">
+                              <shadow type="text"><field name="TEXT"></field></shadow>
+                              <block type="variables_get" id="ouai_ep_log">
+                                <field name="VAR" id="ouai_var_ep">Entry Point</field>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <next>
+              <block type="notify" id="ouai_tick_print">
+                <field name="NOTIFICATION_TYPE">info</field>
+                <field name="NOTIFICATION_SOUND">silent</field>
+                <value name="MESSAGE">
+                  <shadow type="text"><field name="TEXT">abc</field></shadow>
+                  <block type="variables_get" id="ouai_tick_print_get">
+                    <field name="VAR" id="ouai_var_text">Text</field>
+                  </block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>
