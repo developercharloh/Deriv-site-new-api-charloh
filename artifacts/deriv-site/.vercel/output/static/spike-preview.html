@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spike Detector Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f172a;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 24px;
+    padding: 32px 24px;
+    min-height: 100vh;
+    color: #e2e8f0;
+  }
+
+  .col { display: flex; flex-direction: column; gap: 12px; }
+  .col-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #64748b;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
+  /* ── Orb ── */
+  .orb-wrap { position: relative; width: 64px; height: 64px; margin: 0 auto; }
+  .orb {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: linear-gradient(135deg,#1e1b4b,#312e81);
+    border: 1.5px solid rgba(99,102,241,.4);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; position: relative; box-shadow: 0 0 18px rgba(99,102,241,.25);
+  }
+  .orb .icon { font-size: 20px; line-height: 1; }
+  .orb .lbl  { font-size: 8px; font-weight: 700; color: #a5b4fc; letter-spacing: .1em; margin-top: 1px; }
+
+  .badge {
+    position: absolute; top: 4px; right: 4px;
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 1.5px solid #0f172a;
+  }
+  .badge--signal  { background: #6366f1; animation: pulse 1.5s infinite; }
+  .badge--spike   { background: #f97316; animation: pulse-o 1s infinite; }
+  .badge--clear   { background: #10b981; }
+
+  @keyframes pulse   { 0%,100%{box-shadow:0 0 0 0 rgba(99,102,241,.6)} 50%{box-shadow:0 0 0 5px rgba(99,102,241,0)} }
+  @keyframes pulse-o { 0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,.7)}  50%{box-shadow:0 0 0 6px rgba(249,115,22,0)} }
+
+  /* ── Panel ── */
+  .panel {
+    width: 340px;
+    background: #0f172a;
+    border: 1px solid rgba(99,102,241,.25);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  }
+
+  /* header */
+  .panel__hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid rgba(99,102,241,.15);
+    background: linear-gradient(135deg,rgba(99,102,241,.12),rgba(168,85,247,.08));
+  }
+  .panel__hd-left { display: flex; align-items: center; gap: 10px; }
+  .panel__hd-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg,#6366f1,#a855f7);
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+  }
+  .panel__title   { display: block; font-size: 13px; font-weight: 700; color: #f1f5f9; }
+  .panel__sub     { display: block; font-size: 9px; color: #94a3b8; letter-spacing: .05em; text-transform: uppercase; margin-top: 1px; }
+  .panel__close   { background: rgba(255,255,255,.06); border: none; color: #94a3b8; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 14px; display:flex;align-items:center;justify-content:center; }
+
+  /* ── SPIKE ALERT BANNER ── */
+  .spike-banner {
+    margin: 12px 12px 0;
+    background: rgba(249,115,22,.1);
+    border: 1.5px solid rgba(249,115,22,.45);
+    border-radius: 10px;
+    padding: 11px 13px;
+  }
+  .spike-banner__row1 {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  }
+  .spike-banner__icon {
+    font-size: 18px; flex-shrink: 0;
+  }
+  .spike-banner__title {
+    font-size: 12px; font-weight: 700; color: #f97316; line-height: 1.3;
+  }
+  .spike-banner__sub {
+    font-size: 10px; color: #fb923c; margin-top: 1px; display: block;
+  }
+  .spike-banner__badge-row {
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .spike-chip {
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(249,115,22,.18);
+    border: 1px solid rgba(249,115,22,.35);
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 10px; color: #fdba74; font-weight: 600;
+  }
+  .spike-chip__dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #f97316; animation: pulse-o 1s infinite;
+    flex-shrink: 0;
+  }
+
+  /* spike stats row */
+  .spike-stats {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px; margin: 8px 12px 0;
+  }
+  .spike-stat {
+    background: rgba(249,115,22,.07);
+    border: 1px solid rgba(249,115,22,.2);
+    border-radius: 8px; padding: 8px 6px; text-align: center;
+  }
+  .spike-stat__val { display: block; font-size: 15px; font-weight: 700; color: #f97316; }
+  .spike-stat__lbl { display: block; font-size: 9px; color: #94a3b8; margin-top: 2px; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* blocked scan btn */
+  .blocked-btn {
+    margin: 10px 12px;
+    background: rgba(249,115,22,.12);
+    border: 1.5px solid rgba(249,115,22,.35);
+    border-radius: 10px;
+    padding: 11px 14px;
+    display: flex; align-items: center; gap: 10px;
+    cursor: not-allowed;
+  }
+  .blocked-btn__icon { font-size: 16px; flex-shrink: 0; }
+  .blocked-btn__text { font-size: 11px; font-weight: 600; color: #fb923c; line-height: 1.4; }
+  .blocked-btn__sub  { font-size: 10px; color: #78350f; display: block; margin-top: 1px; }
+
+  /* countdown */
+  .countdown {
+    margin: 0 12px 12px;
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(15,23,42,.6);
+    border: 1px solid rgba(99,102,241,.2);
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+  .countdown__bar-track {
+    flex: 1; height: 4px; background: rgba(255,255,255,.08); border-radius: 2px; overflow: hidden;
+  }
+  .countdown__bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg,#f97316,#fbbf24);
+    border-radius: 2px;
+    width: 38%;
+    transition: width .3s;
+  }
+  .countdown__lbl { font-size: 10px; color: #94a3b8; white-space: nowrap; }
+  .countdown__val { font-size: 10px; font-weight: 700; color: #f97316; white-space: nowrap; }
+
+  /* ── CLEAR STATE variant ── */
+  .clear-banner {
+    margin: 12px 12px 0;
+    background: rgba(16,185,129,.08);
+    border: 1.5px solid rgba(16,185,129,.35);
+    border-radius: 10px;
+    padding: 11px 13px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .clear-banner__icon { font-size: 20px; flex-shrink: 0; }
+  .clear-banner__title { font-size: 12px; font-weight: 700; color: #10b981; }
+  .clear-banner__sub   { font-size: 10px; color: #6ee7b7; display: block; margin-top: 2px; }
+
+  /* spacer */
+  .gap { height: 10px; }
+
+  /* section labels */
+  .sec-lbl {
+    font-size: 9px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: #64748b;
+    padding: 10px 12px 0;
+  }
+
+  /* scan btn normal */
+  .scan-btn {
+    margin: 10px 12px 12px;
+    background: linear-gradient(135deg,rgba(99,102,241,.18),rgba(168,85,247,.14));
+    border: 1.5px solid rgba(99,102,241,.45);
+    border-radius: 10px; padding: 11px 14px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    color: #a5b4fc; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+
+  /* divider */
+  .divider { height: 1px; background: rgba(99,102,241,.1); margin: 0 12px; }
+
+  /* legend */
+  .legend {
+    margin-top: 32px;
+    background: rgba(15,23,42,.8);
+    border: 1px solid rgba(99,102,241,.2);
+    border-radius: 12px;
+    padding: 16px 18px;
+    max-width: 380px;
+  }
+  .legend h3 { font-size: 12px; font-weight: 700; color: #a5b4fc; margin-bottom: 12px; }
+  .legend-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 3px;
+  }
+  .legend-row p { font-size: 11px; color: #94a3b8; line-height: 1.5; }
+  .legend-row strong { color: #e2e8f0; }
+</style>
+</head>
+<body>
+
+<!-- ── STATE 1: SPIKE ACTIVE ── -->
+<div class="col">
+  <div class="col-label">State 1 — Spike Detected · Signal Blocked</div>
+
+  <!-- Orb -->
+  <div class="orb-wrap">
+    <div class="orb" style="border-color:rgba(249,115,22,.5);box-shadow:0 0 18px rgba(249,115,22,.3);">
+      <div class="icon">⚡</div>
+      <div class="lbl" style="color:#fb923c;">AI</div>
+    </div>
+    <div class="badge badge--spike"></div>
+  </div>
+
+  <!-- Panel -->
+  <div class="panel">
+    <div class="panel__hd">
+      <div class="panel__hd-left">
+        <div class="panel__hd-icon">⚡</div>
+        <div>
+          <span class="panel__title">AI Signals</span>
+          <span class="panel__sub">10-Model Consensus Scanner</span>
+        </div>
+      </div>
+      <button class="panel__close">✕</button>
+    </div>
+
+    <!-- Spike Alert Banner -->
+    <div class="spike-banner">
+      <div class="spike-banner__row1">
+        <span class="spike-banner__icon">⚡</span>
+        <div>
+          <span class="spike-banner__title">Market Spike Detected — Signal Blocked</span>
+          <span class="spike-banner__sub">Abnormal price movement detected. Signal generation paused until market stabilises.</span>
+        </div>
+      </div>
+      <div class="spike-banner__badge-row">
+        <div class="spike-chip"><div class="spike-chip__dot"></div> V75 (1s)</div>
+        <div class="spike-chip"><div class="spike-chip__dot"></div> Boom 300</div>
+      </div>
+    </div>
+
+    <!-- Spike stats -->
+    <div class="spike-stats">
+      <div class="spike-stat">
+        <span class="spike-stat__val">4.7σ</span>
+        <span class="spike-stat__lbl">Spike size</span>
+      </div>
+      <div class="spike-stat">
+        <span class="spike-stat__val">12s</span>
+        <span class="spike-stat__lbl">Ago</span>
+      </div>
+      <div class="spike-stat">
+        <span class="spike-stat__val">2</span>
+        <span class="spike-stat__lbl">Mkts spiked</span>
+      </div>
+    </div>
+
+    <!-- Countdown -->
+    <div style="margin-top:8px"></div>
+    <div class="countdown">
+      <span class="countdown__lbl">Cooldown</span>
+      <div class="countdown__bar-track">
+        <div class="countdown__bar-fill"></div>
+      </div>
+      <span class="countdown__val">~38s left</span>
+    </div>
+
+    <!-- Blocked scan button -->
+    <div class="blocked-btn">
+      <span class="blocked-btn__icon">🚫</span>
+      <div>
+        <span class="blocked-btn__text">Scan Blocked During Spike</span>
+        <span class="blocked-btn__sub">Will auto-unlock when market stabilises · or scan anyway to override</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── STATE 2: MARKET CLEAR ── -->
+<div class="col">
+  <div class="col-label">State 2 — Market Clear · Ready to Scan</div>
+
+  <!-- Orb -->
+  <div class="orb-wrap">
+    <div class="orb">
+      <div class="icon">⚡</div>
+      <div class="lbl">AI</div>
+    </div>
+    <div class="badge badge--clear"></div>
+  </div>
+
+  <!-- Panel -->
+  <div class="panel">
+    <div class="panel__hd">
+      <div class="panel__hd-left">
+        <div class="panel__hd-icon">⚡</div>
+        <div>
+          <span class="panel__title">AI Signals</span>
+          <span class="panel__sub">10-Model Consensus Scanner</span>
+        </div>
+      </div>
+      <button class="panel__close">✕</button>
+    </div>
+
+    <!-- Clear Banner -->
+    <div class="clear-banner">
+      <span class="clear-banner__icon">✅</span>
+      <div>
+        <span class="clear-banner__title">Market Clear — Safe to Scan</span>
+        <span class="clear-banner__sub">No spikes detected in the last 60 seconds. All markets are stable.</span>
+      </div>
+    </div>
+
+    <!-- Normal scan button -->
+    <div class="scan-btn" style="margin-top:10px;">
+      🔄 &nbsp;Scan All 10 Markets
+    </div>
+
+  </div>
+</div>
+
+<!-- ── STATE 3: SIGNAL + SPIKE WARNING ── -->
+<div class="col">
+  <div class="col-label">State 3 — Signal Found BUT Spike on Same Market</div>
+
+  <!-- Orb -->
+  <div class="orb-wrap">
+    <div class="orb" style="border-color:rgba(249,115,22,.5);box-shadow:0 0 18px rgba(249,115,22,.3);">
+      <div class="icon">⚡</div>
+      <div class="lbl" style="color:#fb923c;">AI</div>
+    </div>
+    <div class="badge badge--spike"></div>
+  </div>
+
+  <!-- Panel -->
+  <div class="panel">
+    <div class="panel__hd">
+      <div class="panel__hd-left">
+        <div class="panel__hd-icon">⚡</div>
+        <div>
+          <span class="panel__title">AI Signals</span>
+          <span class="panel__sub">10-Model Consensus Scanner</span>
+        </div>
+      </div>
+      <button class="panel__close">✕</button>
+    </div>
+
+    <!-- inline spike warning inside a signal result -->
+    <div class="spike-banner" style="margin-bottom:0;">
+      <div class="spike-banner__row1">
+        <span class="spike-banner__icon">⚠️</span>
+        <div>
+          <span class="spike-banner__title">Spike Warning on Signal Market</span>
+          <span class="spike-banner__sub">V75 (1s) spiked 32s ago. Signal data may be distorted. Proceed with caution or wait.</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin:10px 12px; background:rgba(99,102,241,.08); border:1px solid rgba(99,102,241,.25); border-radius:10px; padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:12px;font-weight:700;color:#f1f5f9;">V75 (1s) — Volatility 75</span>
+        <span style="font-size:11px;font-weight:700;color:#6366f1;background:rgba(99,102,241,.15);padding:3px 8px;border-radius:6px;">9/10 STRONG</span>
+      </div>
+      <div style="font-size:11px;color:#94a3b8;">Direction: <strong style="color:#6366f1;">OVER 3</strong> &nbsp;·&nbsp; Win Prob: <strong style="color:#6366f1;">67.4%</strong></div>
+    </div>
+
+    <!-- Run btn — orange-tinted to signal risk -->
+    <div style="margin:0 12px 12px; background:rgba(249,115,22,.12); border:1.5px solid rgba(249,115,22,.35); border-radius:10px; padding:11px 14px; display:flex;align-items:center;gap:10px;">
+      <span style="font-size:16px;">⚠️</span>
+      <div>
+        <span style="font-size:11px;font-weight:600;color:#fb923c;display:block;">Run with caution — spike on this market</span>
+        <span style="font-size:10px;color:#78350f;display:block;margin-top:2px;">Wait 60s for data to stabilise, or proceed at your own risk.</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── LEGEND ── -->
+<div class="col">
+  <div class="col-label">How it works</div>
+  <div class="legend">
+    <h3>⚡ Spike Detector — What it does</h3>
+    <div class="legend-row">
+      <div class="legend-dot" style="background:#f97316;"></div>
+      <p><strong>Detection:</strong> Scans the same 1,000 tick prices the orb already fetches. Calculates the rolling standard deviation of price changes. Any jump &gt; 3σ from the mean = spike flag.</p>
+    </div>
+    <div class="legend-row">
+      <div class="legend-dot" style="background:#f97316;"></div>
+      <p><strong>Blocking:</strong> If a spike occurred in the last 60 seconds on any market, signal generation is blocked for that market. Other clean markets can still produce signals.</p>
+    </div>
+    <div class="legend-row">
+      <div class="legend-dot" style="background:#fbbf24;"></div>
+      <p><strong>Countdown:</strong> A cooldown bar shows how long until the spike clears. Auto-unlocks when market is stable again.</p>
+    </div>
+    <div class="legend-row">
+      <div class="legend-dot" style="background:#f97316;"></div>
+      <p><strong>Orb badge:</strong> Orange pulsing badge = spike active. Green = all clear. The ⚡ icon itself turns orange so you notice it instantly even when the panel is closed.</p>
+    </div>
+    <div class="legend-row">
+      <div class="legend-dot" style="background:#10b981;"></div>
+      <p><strong>No false positives:</strong> Only flags statistically significant jumps — normal market noise won't trigger it. Boom/Crash indices have a wider threshold since they spike by design.</p>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
