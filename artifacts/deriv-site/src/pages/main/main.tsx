@@ -465,7 +465,10 @@ const AppWrapper = observer(() => {
                                             width='24px'
                                             fill='var(--text-general)'
                                         />
-                                        <Localize i18n_default_text='🧠 AI Analysis Tool' />
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            <Localize i18n_default_text='🧠 AI Analysis Tool' />
+                                            <span className='tab-coming-soon-badge'>Coming Soon</span>
+                                        </span>
                                     </>
                                 }
                                 id='id-ai-analysis'

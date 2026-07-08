@@ -66,6 +66,26 @@ interface OrbHistoryEntry {
     time:      number;
 }
 
+interface SpikeInfo { code: string; label: string; sigma: number; }
+
+// ─── Spike detection ──────────────────────────────────────────────────────────
+
+const SPIKE_SIGMA    = 3.0;   // σ threshold — jumps above this are flagged
+const SPIKE_LOOKBACK = 200;   // ticks used to build the baseline distribution
+
+function detectSpike(prices: number[]): { spiked: boolean; sigma: number } {
+    if (prices.length < 20) return { spiked: false, sigma: 0 };
+    const win     = prices.slice(-Math.min(SPIKE_LOOKBACK, prices.length));
+    const returns = win.slice(1).map((p, i) => Math.abs(p - win[i]));
+    if (returns.length < 10) return { spiked: false, sigma: 0 };
+    const mean    = returns.reduce((s, r) => s + r, 0) / returns.length;
+    const std     = Math.sqrt(returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length);
+    if (std === 0) return { spiked: false, sigma: 0 };
+    // Centered z-score: (move - baseline_mean) / std
+    const maxSigma = Math.max(...returns.slice(-5).map(r => (r - mean) / std));
+    return { spiked: maxSigma >= SPIKE_SIGMA, sigma: maxSigma };
+}
+
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 const lastDigitOf = (q: number, pip: number): number => {
@@ -275,7 +295,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
 async function scanAllMarkets(
     tradeType:  TradeType,
     onProgress: (received: number) => void,
-): Promise<{ best: MarketResult | null; noVotesBest: MarketResult | null; allResults: MarketResult[] }> {
+): Promise<{ best: MarketResult | null; noVotesBest: MarketResult | null; allResults: MarketResult[]; spikedMarkets: SpikeInfo[] }> {
     return new Promise(resolve => {
         const ws = new WebSocket(DERIV_WS);
         const priceMap = new Map<number, { prices: number[]; pip: number; sym: DerivVolatility }>();
@@ -287,8 +307,11 @@ async function scanAllMarkets(
             ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
             try { ws.close(); } catch { /* */ }
             const results: MarketResult[] = [];
+            const detectedSpikes: SpikeInfo[] = [];
             priceMap.forEach(({ prices, pip, sym }) => {
                 if (prices.length < 100) return;
+                const { spiked, sigma } = detectSpike(prices);
+                if (spiked) detectedSpikes.push({ code: sym.code, label: sym.short, sigma: Math.round(sigma * 10) / 10 });
                 const full = runModels(prices, pip, sym, tradeType);
                 if (prices.length >= 1600) {
                     const seg = runModels(prices.slice(-1500), pip, sym, tradeType);
@@ -297,13 +320,17 @@ async function scanAllMarkets(
                 results.push(full);
             });
             results.sort((a, b) => b.votes.yesCount - a.votes.yesCount || b.votes.totalScore - a.votes.totalScore || b.winProb - a.winProb);
+            const spikedCodes = new Set(detectedSpikes.map(s => s.code));
             const best = results.find(r =>
+                !spikedCodes.has(r.sym.code) &&
                 r.votes.yesCount >= getSymbolMinVotes(r.sym.code) &&
                 r.segmentAgrees &&
                 r.votes.recentEdge.vote &&
                 (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU)
             ) ?? null;
-            resolve({ best, noVotesBest: best ? null : (results[0] ?? null), allResults: results });
+            // noVotesBest also skips spiked markets so a distorted market is never shown as "best fallback"
+            const noVotesBest = best ? null : (results.find(r => !spikedCodes.has(r.sym.code)) ?? results[0] ?? null);
+            resolve({ best, noVotesBest, allResults: results, spikedMarkets: detectedSpikes });
         };
 
         ws.onopen = () => {
@@ -358,6 +385,7 @@ const AiSignalOrb: React.FC = () => {
     const [result,     setResult]     = useState<MarketResult | null>(null);
     const [noSigBest,  setNoSigBest]  = useState<MarketResult | null>(null);
     const [hasSignal,  setHasSignal]  = useState(false);
+    const [spikedMarkets, setSpikedMarkets] = useState<SpikeInfo[]>([]);
 
     // Editable prediction (for reference display)
     const [editDir,    setEditDir]    = useState<'OVER' | 'UNDER' | 'EVEN' | 'ODD'>('OVER');
@@ -412,7 +440,7 @@ const AiSignalOrb: React.FC = () => {
     // Reset on trade type change
     useEffect(() => {
         setResult(null); setNoSigBest(null); setScanState('idle'); setHasSignal(false);
-        setRunState('idle'); setRunErr('');
+        setSpikedMarkets([]); setRunState('idle'); setRunErr('');
     }, [tradeType]);
 
     // ── Drag handlers ─────────────────────────────────────────────────────────
@@ -441,9 +469,10 @@ const AiSignalOrb: React.FC = () => {
     // ── Scan ──────────────────────────────────────────────────────────────────
     const handleScan = useCallback(async () => {
         setScanState('scanning'); setProgress(0); setResult(null); setNoSigBest(null);
-        setHasSignal(false); setSessionCount(0);
+        setHasSignal(false); setSessionCount(0); setSpikedMarkets([]);
         try {
-            const { best, noVotesBest } = await scanAllMarkets(tradeType, n => setProgress(n));
+            const { best, noVotesBest, spikedMarkets: spikes } = await scanAllMarkets(tradeType, n => setProgress(n));
+            setSpikedMarkets(spikes);
             if (best) {
                 setResult(best);
                 setScanState('done');
@@ -607,7 +636,8 @@ const AiSignalOrb: React.FC = () => {
                         </svg>
                     </div>
                 )}
-                {hasSignal && !open && <span className='ai-orb__badge' />}
+                {!open && spikedMarkets.length > 0 && <span className='ai-orb__badge ai-orb__badge--spike' />}
+                {!open && hasSignal && spikedMarkets.length === 0 && <span className='ai-orb__badge' />}
             </div>
 
             {/* ── Panel ── */}
@@ -658,6 +688,20 @@ const AiSignalOrb: React.FC = () => {
                             }
                         </button>
                     </div>
+
+                    {/* Spike warning banner */}
+                    {spikedMarkets.length > 0 && scanState !== 'scanning' && (
+                        <div className='ai-panel__spike-banner'>
+                            <span className='ai-panel__spike-icon'>⚡</span>
+                            <div className='ai-panel__spike-content'>
+                                <span className='ai-panel__spike-title'>Spike Detected — Markets Skipped</span>
+                                <span className='ai-panel__spike-mkts'>
+                                    {spikedMarkets.map(s => `${s.label} (${s.sigma}σ)`).join(' · ')}
+                                </span>
+                                <span className='ai-panel__spike-hint'>Signal generated from clean markets only.</span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Progress dots */}
                     {scanState === 'scanning' && (
