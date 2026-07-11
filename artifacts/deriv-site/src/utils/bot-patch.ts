@@ -249,6 +249,25 @@ export function patchBotXml(
         }
     }
 
+    // 2b. Patch shadow elements by ID.
+    // Some bots (e.g. even-odd-scanner) encode adjustable values like martingale
+    // multiplier in <shadow> elements rather than <block> elements. The step-2
+    // block walker skips shadows, so we do a dedicated shadow pass here.
+    const allShadows = doc.getElementsByTagName('shadow');
+    for (let i = 0; i < allShadows.length; i++) {
+        const shadow = allShadows[i];
+        const sid    = shadow.getAttribute('id') ?? '';
+        const patch  = patches.find(p => p.blockId === sid);
+        if (!patch) continue;
+        const sFields = shadow.getElementsByTagName('field');
+        for (let j = 0; j < sFields.length; j++) {
+            if (patch.numValue  !== undefined && sFields[j].getAttribute('name') === 'NUM')
+                sFields[j].textContent = String(patch.numValue);
+            if (patch.textValue !== undefined && sFields[j].getAttribute('name') === 'TEXT')
+                sFields[j].textContent = patch.textValue;
+        }
+    }
+
     // 3. Replace hardcoded market names in notify shadow TEXT fields.
     //
     // Some bots (e.g. even-odd-scanner) have notify messages like
@@ -317,14 +336,29 @@ export function getBotPatches(
                 { blockId: 'h~GA!H78SVi}._e5N:ur',   numValue: stopLoss },  // stop loss
             ];
 
-        case 'even-odd-scanner':
+        case 'even-odd-scanner': {
+            // The bot uses: Stake += ABS(Stake) * B at each loss level.
+            // So multiplier M corresponds to B = M - 1.
+            // Block IDs eo_s2_b … eo_s10_b are <shadow> elements (patched via step 2b).
+            const eoB = Math.max(0, martingale - 1);
             return [
                 { blockId: 'eo_dir_init',            textValue: signal.direction.trim().toUpperCase() }, // Direction: EVEN or ODD
                 { blockId: 'Wa]y_n3s-T4*h(bmYz+k',  numValue: stake },      // Stake
                 { blockId: 'Z:R@MLC*=N3%meT)IuPt',   numValue: stopLoss },  // Max Loss
                 { blockId: ':Vn+w]Y.(QKzgKKENIfo',   numValue: takeProfit }, // Target Profit
-                { blockId: 'eo_ep_init_fixed',         numValue: entry },     // entry point
+                { blockId: 'eo_ep_init_fixed',         numValue: entry },     // Entry point
+                // Martingale multiplier — patched into shadow B values at each loss level
+                { blockId: 'eo_s2_b',  numValue: eoB },
+                { blockId: 'eo_s3_b',  numValue: eoB },
+                { blockId: 'eo_s4_b',  numValue: eoB },
+                { blockId: 'eo_s5_b',  numValue: eoB },
+                { blockId: 'eo_s6_b',  numValue: eoB },
+                { blockId: 'eo_s7_b',  numValue: eoB },
+                { blockId: 'eo_s8_b',  numValue: eoB },
+                { blockId: 'eo_s9_b',  numValue: eoB },
+                { blockId: 'eo_s10_b', numValue: eoB },
             ];
+        }
 
         case 'over-under-signal': {
             const dirText  = signal.direction.split(' ')[0].toUpperCase();

@@ -814,11 +814,12 @@ function buildEntry(market: MarketType, direction: string, digits: number[]): st
     }
 
     if (market === 'even_odd') {
-        const isEven = direction === 'EVEN';
-        const isWin  = isEven ? (n: number) => n % 2 === 0 : (n: number) => n % 2 !== 0;
-        const r      = findAnchorDigit(digits, isWin, 0.5);
+        const isEven    = direction === 'EVEN';
+        const winDigits = isEven ? '0 2 4 6 8' : '1 3 5 7 9';
+        const isWin     = isEven ? (n: number) => n % 2 === 0 : (n: number) => n % 2 !== 0;
+        const r         = findAnchorDigit(digits, isWin, 0.5);
         if (r.anchor !== null) {
-            return `Wait digit ${r.anchor} → P(${isEven ? 'EVEN' : 'ODD'} | ${r.anchor}) ≈ ${(r.condProb * 100).toFixed(0)}%`;
+            return `Wait digit ${r.anchor} → wins on: ${winDigits}`;
         }
         // fallback: most-frequent digit of the target parity in last 100 ticks
         const d100       = digits.slice(-100);
@@ -826,7 +827,7 @@ function buildEntry(market: MarketType, direction: string, digits: number[]): st
         const cnt        = Array(10).fill(0) as number[];
         d100.forEach(d => cnt[d]++);
         const entryDig   = parityDigs.reduce((best, d) => cnt[d] > cnt[best] ? d : best, parityDigs[0]);
-        return `Entry digit: ${entryDig}`;
+        return `Entry digit: ${entryDig} · wins on: ${winDigits}`;
     }
 
     // matches_differs — anchor still helps trigger the trade after the right precursor
@@ -968,6 +969,28 @@ function modelRegimeVotes(digits: number[]): Vote[] {
     return votes;
 }
 
+// ─── Multi-window Even/Odd convergence gate ───────────────────────────────────
+// For Even/Odd we require the SAME direction to dominate across every available
+// window in [20, 50, 100, 500, 1000] ticks.  A single window dissenting means
+// the pattern is not reliable enough — suppress the signal.
+// Returns 'EVEN', 'ODD', or null (no consensus).
+function multiWindowEvenOddGate(digits: number[]): 'EVEN' | 'ODD' | null {
+    const windows = [20, 50, 100, 500, 1000] as const;
+    let agreed: 'EVEN' | 'ODD' | null = null;
+    for (const w of windows) {
+        const slice = digits.slice(-w);
+        if (slice.length < 15) continue;   // not enough data for this window — skip
+        const evenR = slice.filter(d => d % 2 === 0).length / slice.length;
+        const dir: 'EVEN' | 'ODD' = evenR > 0.5 ? 'EVEN' : 'ODD';
+        if (agreed === null) {
+            agreed = dir;
+        } else if (agreed !== dir) {
+            return null;   // windows disagree — no convergence
+        }
+    }
+    return agreed;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function analyzeSignals(
@@ -1001,9 +1024,15 @@ export function analyzeSignals(
     const ttl = symbol.startsWith('1HZ') ? 60_000 : 120_000;
     const now = Date.now();
 
+    // Multi-window convergence gate for Even/Odd: run once, reuse per signal.
+    const eoGate = multiWindowEvenOddGate(digits);
+
     return agreed
         .filter(r => !activeMarkets.has(r.market))
         .map(r => {
+            // Even/Odd: all windows [20→50→100→500→1000] must agree on direction.
+            if (r.market === 'even_odd' && eoGate !== r.direction) return null;
+
             const rec = checkRecency(digits, r.direction, r.market);
             if (!rec.passing) return null; // pattern fading — suppress signal
             return {
@@ -1017,7 +1046,9 @@ export function analyzeSignals(
                 entryPoint:     buildEntry(r.market, r.direction, digits),
                 createdAt:      now,
                 expiresAt:      now + ttl,
-                sampleSize:     Math.min(digits.length, 100),
+                sampleSize:     r.market === 'even_odd'
+                                    ? Math.min(digits.length, 1000)
+                                    : Math.min(digits.length, 100),
                 recentScore:    rec.score,
                 recentTotal:    rec.total,
                 recommendedTicks:  recommendTicks(r.market, r.direction),
