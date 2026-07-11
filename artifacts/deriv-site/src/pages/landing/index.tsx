@@ -186,8 +186,8 @@ const LandingPage: React.FC = () => {
             {/* ── Sticky Nav ─────────────────────────────────────────────── */}
             <nav className='lp-nav'>
                 <div className='lp-nav__brand'>
-                    <img src='/logo.png' alt='Derex Master' className='lp-nav__logo' />
-                    <span className='lp-nav__name'>Derex <span className='lp-nav__name-accent'>Master</span></span>
+                    <img src='/logo.png' alt='Trader Charloh' className='lp-nav__logo' />
+                    <span className='lp-nav__name'>Trader <span className='lp-nav__name-accent'>Charloh</span></span>
                 </div>
                 <div className='lp-nav__actions'>
                     <button className='lp-nav__login-btn' onClick={handleLogin} disabled={loginLoading}>
@@ -382,13 +382,13 @@ const LandingPage: React.FC = () => {
             {/* ── Footer ──────────────────────────────────────────────────── */}
             <footer className='lp-footer'>
                 <div className='lp-footer__brand'>
-                    <img src='/logo.png' alt='Derex Master' className='lp-footer__logo' />
-                    <span className='lp-footer__name'>Derex Master</span>
+                    <img src='/logo.png' alt='Trader Charloh' className='lp-footer__logo' />
+                    <span className='lp-footer__name'>Trader Charloh</span>
                 </div>
                 <p className='lp-footer__disclaimer'>
                     Trading involves risk. Synthetic indices are offered by Deriv. Past performance does not guarantee future results. Trade responsibly.
                 </p>
-                <p className='lp-footer__copy'>© {new Date().getFullYear()} Derex Master · Powered by Deriv</p>
+                <p className='lp-footer__copy'>© {new Date().getFullYear()} Trader Charloh · Powered by Deriv</p>
             </footer>
         </div>
     );
