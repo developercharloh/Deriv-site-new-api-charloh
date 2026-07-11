@@ -838,6 +838,147 @@
     line-height:  1.4;
 }
 
+// ─── Recent Dominance Gauge ───────────────────────────────────────────────────
+
+@keyframes dom-hot-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
+    55%       { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+}
+@keyframes dom-cold-flash {
+    0%, 100% { border-color: rgba(239,68,68,0.35); }
+    50%       { border-color: rgba(239,68,68,0.70); }
+}
+
+.ai-panel__dom {
+    padding:       11px 12px 9px;
+    border-radius: 12px;
+    border:        1px solid rgba(255,255,255,0.08);
+    background:    rgba(255,255,255,0.025);
+    margin-bottom: 10px;
+    display:       flex;
+    flex-direction: column;
+    gap:           7px;
+
+    &--dominant { border-color: rgba(16,185,129,0.40); background: rgba(16,185,129,0.07); animation: dom-hot-pulse 1.8s ease-in-out infinite; }
+    &--active   { border-color: rgba(16,185,129,0.25); background: rgba(16,185,129,0.04); }
+    &--neutral  { border-color: rgba(245,158,11,0.25); background: rgba(245,158,11,0.04); }
+    &--cooling  { border-color: rgba(239,68,68,0.22);  background: rgba(239,68,68,0.04); }
+    &--reversed { border-color: rgba(239,68,68,0.40);  background: rgba(239,68,68,0.07); animation: dom-cold-flash 1.4s ease-in-out infinite; }
+}
+
+.ai-panel__dom-hd {
+    display:     flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.ai-panel__dom-title-row {
+    display:     flex;
+    flex-direction: column;
+    gap:         1px;
+}
+.ai-panel__dom-title { font-size: 11px; font-weight: 800; color: #e2e8f0; letter-spacing: 0.02em; }
+.ai-panel__dom-sub   { font-size: 9px;  color: #475569; }
+
+.ai-panel__dom-pill {
+    font-size:    9px;
+    font-weight:  900;
+    padding:      3px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.06em;
+    white-space:  nowrap;
+    &--dominant { background: rgba(16,185,129,0.2); border: 1px solid #10b981; color: #6ee7b7; }
+    &--active   { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.5); color: #6ee7b7; }
+    &--neutral  { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.5); color: #fcd34d; }
+    &--cooling  { background: rgba(239,68,68,0.12);  border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
+    &--reversed { background: rgba(239,68,68,0.20);  border: 1px solid #ef4444; color: #fca5a5; }
+}
+
+// Per-tick pip dots — the last 20 ticks shown as green/red dots
+.ai-panel__dom-pips {
+    display: flex;
+    gap:     3px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+.ai-panel__dom-pip {
+    width:        12px;
+    height:       12px;
+    border-radius: 3px;
+    flex-shrink:  0;
+    &--win  { background: #10b981; box-shadow: 0 0 4px rgba(16,185,129,0.6); }
+    &--loss { background: #ef4444; box-shadow: 0 0 4px rgba(239,68,68,0.5); }
+}
+
+// Progress bar with threshold markers
+.ai-panel__dom-bar-track {
+    position:     relative;
+    height:       8px;
+    border-radius: 4px;
+    background:   rgba(255,255,255,0.06);
+    overflow:     visible;
+}
+.ai-panel__dom-bar-fill {
+    height:       100%;
+    border-radius: 4px;
+    background:   linear-gradient(90deg, #ef4444, #f59e0b 40%, #10b981);
+    transition:   width 0.4s ease;
+    min-width:    4px;
+}
+.ai-panel__dom-mark {
+    position:  absolute;
+    top:       -3px;
+    width:     2px;
+    height:    14px;
+    border-radius: 1px;
+    display:   flex;
+    flex-direction: column;
+    align-items: center;
+    &--cold { background: rgba(239,68,68,0.8); }
+    &--hot  { background: rgba(16,185,129,0.8); }
+}
+.ai-panel__dom-mark-label {
+    position:    absolute;
+    bottom:      -14px;
+    font-size:   8px;
+    font-weight: 800;
+    white-space: nowrap;
+    .ai-panel__dom-mark--cold & { color: #f87171; }
+    .ai-panel__dom-mark--hot  & { color: #6ee7b7; }
+}
+
+.ai-panel__dom-stats {
+    display:     flex;
+    gap:         10px;
+    align-items: center;
+    font-size:   10px;
+    color:       #64748b;
+    strong      { font-weight: 900; }
+}
+.ai-panel__dom-stat { display: flex; align-items: center; gap: 2px; }
+
+.ai-panel__dom-hot-msg {
+    font-size:   10px;
+    font-weight: 800;
+    color:       #6ee7b7;
+    background:  rgba(16,185,129,0.12);
+    border:      1px solid rgba(16,185,129,0.3);
+    padding:     5px 8px;
+    border-radius: 7px;
+}
+
+// No-signal dominance block reason
+.ai-panel__nosig-dom-warn {
+    font-size:    10px;
+    font-weight:  700;
+    color:        #fca5a5;
+    background:   rgba(239,68,68,0.08);
+    border:       1px solid rgba(239,68,68,0.3);
+    padding:      6px 9px;
+    border-radius: 8px;
+    line-height:  1.45;
+    margin-bottom: 4px;
+}
+
 // ─── Session discipline ───────────────────────────────────────────────────────
 
 .ai-panel__session {

@@ -66,6 +66,18 @@ interface MarketResult {
     regimeOk:             boolean;  // medium + long windows agree with signal direction
     gapDetected:          boolean;  // recent timestamp gap > 2 min (maintenance indicator)
     tfAgreement:          number;   // 0–4 timeframes pointing same direction
+    // Recent Dominance — short-window momentum check (last 20 & 50 ticks)
+    // PRIMARY guard against consecutive losses: if market reversed recently, block the signal.
+    recentDominance: {
+        last20WinPct:  number;   // fraction of last 20 ticks on win side (0–1)
+        last50WinPct:  number;   // fraction of last 50 ticks on win side (0–1)
+        winsLast20:    number;   // raw count
+        winsLast50:    number;
+        last20Results: boolean[]; // per-tick win(true)/loss(false) — for pip display
+        isHot:         boolean;  // ≥65% of last 20 on win side → strong momentum
+        isCold:        boolean;  // ≤35% of last 20 on win side → market reversed, BLOCK trade
+        label:         'DOMINANT' | 'ACTIVE' | 'NEUTRAL' | 'COOLING' | 'REVERSED';
+    };
 }
 
 interface OrbHistoryEntry {
@@ -220,6 +232,30 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         winProb      = best.prob;
         winFn        = d => best.side === 'OVER' ? d > best.b : d < best.b;
     }
+
+    // ── Recent Dominance — the #1 guard against consecutive losses ───────────
+    // Consecutive losses happen when the long-term signal says "OVER 5" but the
+    // market has already reversed in the last 15–20 ticks. This model detects
+    // that reversal by checking what fraction of the last 20 ticks fell on the
+    // WIN side of the signal. If ≤35%, the signal is blocked regardless of votes.
+    const last20digits  = digits.slice(-20);
+    const last50digits  = digits.slice(-50);
+    const last20Results = last20digits.map(d => winFn(d));
+    const wins20        = last20Results.filter(Boolean).length;
+    const wins50        = last50digits.filter(d => winFn(d)).length;
+    const dom20         = wins20 / Math.max(1, last20digits.length);
+    const dom50         = wins50 / Math.max(1, last50digits.length);
+    const recentDominance = {
+        last20WinPct:  dom20,
+        last50WinPct:  dom50,
+        winsLast20:    wins20,
+        winsLast50:    wins50,
+        last20Results,
+        isHot:  dom20 >= 0.65,   // 13/20+ on win side — hot streak, enter
+        isCold: dom20 <= 0.35,   // ≤7/20 on win side — reversed, BLOCK
+        label:  (dom20 >= 0.70 ? 'DOMINANT' : dom20 >= 0.55 ? 'ACTIVE' : dom20 >= 0.45 ? 'NEUTRAL' : dom20 >= 0.30 ? 'COOLING' : 'REVERSED') as
+                'DOMINANT' | 'ACTIVE' | 'NEUTRAL' | 'COOLING' | 'REVERSED',
+    };
 
     // ── Entry digits — frequency-weighted scoring ─────────────────────────────
     // Problem: picking purely by conditional win-rate can select rare digits
@@ -381,6 +417,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         recoveryDirection, winProb, sampleSize: N, votes, entryDigits, pip,
         segmentAgrees:  true,
         signalStrength: Math.round((totalScore / 10) * 100),
+        recentDominance,
         // Regime fields — overridden by scanAllMarkets spread; defaults for direct calls
         regimeScore: 100, regimeOk: true, gapDetected: false, tfAgreement: 4,
     };
@@ -460,8 +497,9 @@ async function scanAllMarkets(
                 r.votes.yesCount >= getSymbolMinVotes(r.sym.code) &&
                 r.segmentAgrees &&
                 r.votes.recentEdge.vote &&
-                r.regimeOk &&        // ← cross-timeframe consistency required
-                !r.gapDetected &&    // ← no maintenance gap allowed
+                r.regimeOk &&                      // ← cross-timeframe consistency required
+                !r.gapDetected &&                  // ← no maintenance gap allowed
+                !r.recentDominance.isCold &&       // ← DOMINANCE GUARD: recent 20 ticks not reversed
                 (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU)
             ) ?? null;
 
@@ -968,6 +1006,12 @@ const AiSignalOrb: React.FC = () => {
                                     <span className='ai-panel__nosig-need'>(need {MIN_VOTES}/10)</span>
                                 </div>
                             )}
+                            {noSigBest && noSigBest.recentDominance?.isCold && (
+                                <div className='ai-panel__nosig-dom-warn'>
+                                    ⛔ Best candidate blocked — last 20 ticks only {noSigBest.recentDominance.winsLast20}/20 on win side.
+                                    Market recently reversed. Wait for momentum to recover.
+                                </div>
+                            )}
                             <span className='ai-panel__nosig-hint'>Try again in a few minutes or switch trade type.</span>
                         </div>
                     )}
@@ -999,6 +1043,64 @@ const AiSignalOrb: React.FC = () => {
                             <div className='ai-panel__call' style={{ borderColor: `${vc}40` }}>
                                 <span className='ai-panel__call-lbl'>Signal Direction</span>
                                 <span className='ai-panel__call-val' style={{ color: vc }}>{result.direction}</span>
+                            </div>
+
+                            {/* ── Recent Dominance Gauge ── */}
+                            {/* This is the PRIMARY anti-loss guard: shows how many of the last 20 ticks */}
+                            {/* landed on the WIN side. If reversed (≤7/20), the signal is blocked.    */}
+                            <div className={`ai-panel__dom ai-panel__dom--${result.recentDominance.label.toLowerCase()}`}>
+                                <div className='ai-panel__dom-hd'>
+                                    <div className='ai-panel__dom-title-row'>
+                                        <span className='ai-panel__dom-title'>Digit Dominance</span>
+                                        <span className='ai-panel__dom-sub'>last 20 ticks</span>
+                                    </div>
+                                    <span className={`ai-panel__dom-pill ai-panel__dom-pill--${result.recentDominance.label.toLowerCase()}`}>
+                                        {result.recentDominance.label}
+                                    </span>
+                                </div>
+
+                                {/* Per-tick pip row — green = win tick, red = loss tick */}
+                                <div className='ai-panel__dom-pips'>
+                                    {result.recentDominance.last20Results.map((win, idx) => (
+                                        <span key={idx} className={`ai-panel__dom-pip${win ? ' ai-panel__dom-pip--win' : ' ai-panel__dom-pip--loss'}`} />
+                                    ))}
+                                </div>
+
+                                {/* Bar track with hot/cold threshold markers */}
+                                <div className='ai-panel__dom-bar-track'>
+                                    <div className='ai-panel__dom-bar-fill'
+                                        style={{ width: `${result.recentDominance.last20WinPct * 100}%` }} />
+                                    {/* Cold threshold at 35% — below = BLOCKED */}
+                                    <div className='ai-panel__dom-mark ai-panel__dom-mark--cold' style={{ left: '35%' }}>
+                                        <span className='ai-panel__dom-mark-label'>Block</span>
+                                    </div>
+                                    {/* Hot threshold at 65% — above = strong entry */}
+                                    <div className='ai-panel__dom-mark ai-panel__dom-mark--hot' style={{ left: '65%' }}>
+                                        <span className='ai-panel__dom-mark-label'>Hot</span>
+                                    </div>
+                                </div>
+
+                                <div className='ai-panel__dom-stats'>
+                                    <span className='ai-panel__dom-stat'>
+                                        <strong style={{ color: result.recentDominance.last20WinPct >= 0.65 ? '#10b981' : result.recentDominance.last20WinPct <= 0.35 ? '#ef4444' : '#f59e0b' }}>
+                                            {result.recentDominance.winsLast20}/20
+                                        </strong>
+                                        {' '}win side
+                                    </span>
+                                    <span className='ai-panel__dom-stat'>
+                                        <strong>{result.recentDominance.winsLast50}/50</strong>
+                                        {' '}(50 ticks)
+                                    </span>
+                                    <span className='ai-panel__dom-stat'>
+                                        {(result.recentDominance.last20WinPct * 100).toFixed(0)}%
+                                    </span>
+                                </div>
+
+                                {result.recentDominance.isHot && (
+                                    <div className='ai-panel__dom-hot-msg'>
+                                        🔥 Market is HOT on this signal — enter on next entry digit
+                                    </div>
+                                )}
                             </div>
 
                             {/* Win prob bar */}
