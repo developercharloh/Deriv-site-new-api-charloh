@@ -31,6 +31,23 @@ export default Engine =>
 
                 if (this.is_proposal_subscription_required) {
                     this.renewProposalsOnPurchase();
+                } else {
+                    // ── Direct buy path: explicit POC subscription ────────────────
+                    // When buying with `buy: '1'` (no prior proposal subscription),
+                    // Deriv does NOT automatically push proposal_open_contract updates.
+                    // The subscribe:1 field in the buy body is only honoured for
+                    // proposal-id buys; for direct buys it is silently ignored.
+                    // Without this request, observeOpenContract never receives the
+                    // is_sold message and watch('during') hangs forever, freezing the
+                    // bot at "Contract bought" indefinitely.
+                    doUntilDone(
+                        () => api_base.api.send({
+                            proposal_open_contract: 1,
+                            contract_id: buy.contract_id,
+                            subscribe: 1,
+                        }),
+                        ['PriceMoved']
+                    );
                 }
 
                 delayIndex = 0;

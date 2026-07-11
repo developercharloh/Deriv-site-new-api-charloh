@@ -63,12 +63,13 @@ export function parseDigitFrom(str: string): number {
 // Walks the bot XML by block ID and updates math_number/text values in-place.
 
 export function patchBotXml(
-    xmlText:              string,
-    symbol:               string,
-    patches:              BlockPatch[],
-    duration?:            number,
-    contractType?:        string,
+    xmlText:               string,
+    symbol:                string,
+    patches:               BlockPatch[],
+    duration?:             number,
+    contractType?:         string,
     recoveryContractType?: string,
+    symbolLabel?:          string,
 ): Document {
     const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
 
@@ -245,6 +246,34 @@ export function patchBotXml(
                 }
             }
             break;
+        }
+    }
+
+    // 3. Replace hardcoded market names in notify shadow TEXT fields.
+    //
+    // Some bots (e.g. even-odd-scanner) have notify messages like
+    // "Contract bought: Volatility 100 Index — EVEN" baked into <shadow> elements.
+    // <shadow> elements can't be targeted by block-id patches, so we scan every
+    // TEXT field inside a <shadow> and replace any known default with the real label.
+    if (symbolLabel) {
+        const knownDefaults = ['Volatility 100 Index', 'Volatility 25 Index', 'Volatility 10 Index',
+                               'Volatility 50 Index', 'Volatility 75 Index', 'Volatility 10 (1s) Index',
+                               'Volatility 25 (1s) Index', 'Volatility 50 (1s) Index',
+                               'Volatility 100 (1s) Index', 'Volatility 75 (1s) Index'];
+        const shadowEls = doc.getElementsByTagName('shadow');
+        for (let i = 0; i < shadowEls.length; i++) {
+            if (shadowEls[i].getAttribute('type') !== 'text') continue;
+            const fields = shadowEls[i].getElementsByTagName('field');
+            for (let f = 0; f < fields.length; f++) {
+                if (fields[f].getAttribute('name') !== 'TEXT') continue;
+                const cur = fields[f].textContent ?? '';
+                for (const def of knownDefaults) {
+                    if (cur.includes(def)) {
+                        fields[f].textContent = cur.replace(def, symbolLabel);
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -455,7 +484,7 @@ export async function fetchAndPatchBot(
           : effectiveCt === 'DIGITOVER'  ? 'DIGITUNDER'
           : undefined);
 
-    const doc = patchBotXml(rawXml, signal.symbol, patches, duration, effectiveCt, effectiveRecCt);
+    const doc = patchBotXml(rawXml, signal.symbol, patches, duration, effectiveCt, effectiveRecCt, signal.symbolLabel);
 
     if (doc.querySelector('parsererror')) throw new Error('Bot XML parse error — check the bot file.');
     return doc;
