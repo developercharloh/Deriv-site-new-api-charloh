@@ -470,17 +470,9 @@ const AppWrapper = observer(() => {
                                 }
                                 id='id-ai-analysis'
                             >
-                                <div className='ai-analysis-coming-soon'>
-                                    <div className='ai-analysis-coming-soon__inner'>
-                                        <div className='ai-analysis-coming-soon__icon'>🧠</div>
-                                        <h2 className='ai-analysis-coming-soon__title'>AI Analysis Tool</h2>
-                                        <p className='ai-analysis-coming-soon__sub'>Something powerful is being built here.</p>
-                                        <span className='ai-analysis-coming-soon__badge'>Coming Soon</span>
-                                        <p className='ai-analysis-coming-soon__hint'>
-                                            Advanced multi-model market analysis, deeper insights, and more trading intelligence — dropping soon.
-                                        </p>
-                                    </div>
-                                </div>
+                                <Suspense fallback={<ChunkLoader message={localize('Loading AI Analysis...')} />}>
+                                    <AnalysisTool />
+                                </Suspense>
                             </div>
                             <div
                                 label={

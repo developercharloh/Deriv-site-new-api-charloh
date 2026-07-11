@@ -1,0 +1,319 @@
+Build a premium mobile-first AI Deriv Analysis Tool component that integrates into an existing dashboard page and does NOT include navigation bars, sidebars, headers, footers, settings pages or dashboards because those already exist in the parent website.
+
+The component should have a futuristic dark theme with glassmorphism cards, neon accents, smooth animations, rounded corners and a premium fintech/trading app appearance.
+
+====================
+CORE REQUIREMENTS
+====================
+
+Connect to Deriv WebSocket API:
+
+wss://ws.derivws.com/websockets/v3?app_id=1089
+
+The system must subscribe to live ticks for the selected volatility index and update instantly without page refresh.
+
+====================
+VOLATILITY DROPDOWN
+====================
+
+Provide a dropdown selector for:
+
+- Volatility 10
+- Volatility 25
+- Volatility 50
+- Volatility 75
+- Volatility 100
+- Volatility 10 (1s)
+- Volatility 25 (1s)
+- Volatility 50 (1s)
+- Volatility 75 (1s)
+- Volatility 100 (1s)
+- Jump 10
+- Jump 25
+- Jump 50
+- Jump 75
+- Jump 100
+
+Changing volatility should automatically unsubscribe from the previous stream and subscribe to the new one.
+
+====================
+ANALYSIS TYPE DROPDOWN
+====================
+
+Allow switching between:
+
+- Even/Odd
+- Matches/Differs
+- Rise/Fall
+- Higher/Lower
+- Over/Under
+- Asians High
+- Asians Low
+- Only Ups
+- Only Downs
+
+====================
+TICK WINDOW DROPDOWN
+====================
+
+Allow selection of:
+
+- 100 ticks
+- 500 ticks
+- 1000 ticks
+- 5000 ticks
+
+All calculations must use the selected tick history.
+
+====================
+LIVE PRICE CARD
+====================
+
+Display:
+
+- Current live price
+- Price direction
+- Tick speed indicator
+- Market connection status
+- Pulsing live indicator
+
+Animate price updates smoothly.
+
+====================
+LIVE PATTERN STREAM
+====================
+
+Display animated pattern blocks moving from right to left.
+
+Even/Odd:
+E E O O E O O E E O
+
+Matches/Differs:
+M M D D D D M D D M
+
+Rise/Fall:
+R R F F R F R R F
+
+Higher/Lower:
+H H L H H L L H
+
+Over/Under:
+O O U O U U O O
+
+Only Ups:
+UP UP UP UP
+
+Only Downs:
+DOWN DOWN DOWN
+
+Asians High:
+AH AH AH
+
+Asians Low:
+AL AL AL
+
+Newest tick appears first.
+
+Maximum visible patterns:
+30
+
+====================
+DIGIT DISTRIBUTION
+====================
+
+Display live digit percentages:
+
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+Show:
+
+- percentage
+- count
+- animated progress bar
+
+Highlight:
+
+Green = most frequent digit
+Blue = second most frequent digit
+Red = least frequent digit
+
+====================
+AI ENGINE
+====================
+
+Create 3 independent AI models.
+
+Model 1:
+Pattern momentum model.
+
+Model 2:
+Digit distribution model.
+
+Model 3:
+Trend persistence model.
+
+Signals only appear when at least 2 of the 3 models agree.
+
+Display:
+
+Model 1: EVEN
+Model 2: EVEN
+Model 3: ODD
+
+Agreement:
+2/3
+
+====================
+AI RECOMMENDATION
+====================
+
+Display:
+
+Recommended signal
+Confidence percentage
+Strength level
+
+Example:
+
+Recommendation:
+EVEN
+
+Confidence:
+93%
+
+Strength:
+VERY STRONG
+
+Use animated circular confidence gauge.
+
+====================
+OVER UNDER LOGIC
+====================
+
+Support:
+
+OVER 0
+OVER 1
+OVER 2
+OVER 3
+OVER 4
+OVER 5
+OVER 6
+OVER 7
+OVER 8
+
+UNDER 1
+UNDER 2
+UNDER 3
+UNDER 4
+UNDER 5
+UNDER 6
+UNDER 7
+UNDER 8
+UNDER 9
+
+Allow user selection.
+
+====================
+EVEN ODD LOGIC
+====================
+
+Display:
+
+- Live E/O stream
+- Even percentage
+- Odd percentage
+- Dominant side
+- Confidence
+
+====================
+MATCHES DIFFERS LOGIC
+====================
+
+Display:
+
+- Live M/D stream
+- Match percentage
+- Differ percentage
+- Dominant side
+
+====================
+RISE FALL LOGIC
+====================
+
+Display:
+
+- Live R/F stream
+- Rise percentage
+- Fall percentage
+- Dominant side
+
+====================
+HIGHER LOWER LOGIC
+====================
+
+Display:
+
+- Live H/L stream
+- Higher percentage
+- Lower percentage
+- Dominant side
+
+====================
+ONLY UPS
+====================
+
+Detect:
+
+- consecutive upward movements
+- streak size
+- probability of continuation
+
+====================
+ONLY DOWNS
+====================
+
+Detect:
+
+- consecutive downward movements
+- streak size
+- probability of continuation
+
+====================
+DESIGN REQUIREMENTS
+====================
+
+Use:
+
+- HTML
+- CSS
+- Vanilla JavaScript only
+
+No frameworks.
+
+Must be:
+
+- responsive
+- mobile first
+- smooth animations
+- premium trading UI
+- optimized for performance
+
+The component should look similar to TradingView combined with Binance Futures mobile and a premium AI trading terminal.
+
+Generate complete production-ready code including:
+
+- index.html
+- style.css
+- script.js
+
+Return complete files with no placeholders and no omitted sections.
