@@ -228,47 +228,47 @@ function runAI(prices: number[], pip: number, type: AnalysisType, barrier: numbe
 // ─── Sparkline ────────────────────────────────────────────────────────────────
 const Sparkline: React.FC<{ prices: number[] }> = ({ prices }) => {
     if (prices.length < 2) return null;
-    const W = 120, H = 40;
+    const W = 90, H = 30;
     const mn = Math.min(...prices), mx = Math.max(...prices);
     const range = mx - mn || 1;
     const pts = prices.map((p, i) => {
         const x = (i / (prices.length - 1)) * W;
-        const y = H - ((p - mn) / range) * H;
+        const y = H - ((p - mn) / range) * (H - 2) - 1;
         return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
     return (
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className='aat-sparkline'>
             <defs>
                 <linearGradient id='spkGrad' x1='0' y1='0' x2='1' y2='0'>
-                    <stop offset='0%' stopColor='#00e676' stopOpacity='0.5' />
+                    <stop offset='0%' stopColor='#00e676' stopOpacity='0.4' />
                     <stop offset='100%' stopColor='#00e676' />
                 </linearGradient>
             </defs>
-            <polyline points={pts} fill='none' stroke='url(#spkGrad)' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' />
+            <polyline points={pts} fill='none' stroke='url(#spkGrad)' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round' />
         </svg>
     );
 };
 
 // ─── Confidence Gauge ─────────────────────────────────────────────────────────
 const ConfidenceGauge: React.FC<{ pct: number; strength: string }> = ({ pct, strength }) => {
-    const R = 42, C = 2 * Math.PI * R;
+    const R = 32, C = 2 * Math.PI * R;
     const fill = (pct / 100) * C;
     const col = pct >= 80 ? '#00e676' : pct >= 65 ? '#ffd600' : '#ff3d57';
     return (
         <div className='aat-gauge'>
-            <svg width='100' height='100' viewBox='0 0 100 100'>
-                <circle cx='50' cy='50' r={R} fill='none' stroke='rgba(255,255,255,0.07)' strokeWidth='8' />
-                <circle cx='50' cy='50' r={R} fill='none' stroke={col} strokeWidth='8'
+            <svg width='78' height='78' viewBox='0 0 78 78'>
+                <circle cx='39' cy='39' r={R} fill='none' stroke='rgba(255,255,255,0.07)' strokeWidth='6' />
+                <circle cx='39' cy='39' r={R} fill='none' stroke={col} strokeWidth='6'
                     strokeLinecap='round'
                     strokeDasharray={`${fill} ${C}`}
                     strokeDashoffset={C * 0.25}
-                    transform='rotate(-90 50 50)'
+                    transform='rotate(-90 39 39)'
                     style={{ transition: 'stroke-dasharray 0.8s ease' }}
                 />
-                <text x='50' y='46' textAnchor='middle' dominantBaseline='middle' fill='#fff' fontSize='17' fontWeight='900'>{pct}%</text>
-                <text x='50' y='63' textAnchor='middle' fill={col} fontSize='7' fontWeight='800' letterSpacing='0.5'>{strength}</text>
+                <text x='39' y='36' textAnchor='middle' dominantBaseline='middle' fill='#fff' fontSize='14' fontWeight='900'>{pct}%</text>
+                <text x='39' y='50' textAnchor='middle' fill={col} fontSize='6' fontWeight='800' letterSpacing='0.5'>{strength}</text>
             </svg>
-            <span className='aat-gauge__lbl' style={{ color: col }}>High Confidence</span>
+            <span className='aat-gauge__lbl' style={{ color: col }}>Confidence</span>
         </div>
     );
 };
