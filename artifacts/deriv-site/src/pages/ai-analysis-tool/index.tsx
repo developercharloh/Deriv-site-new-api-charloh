@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import TradeAnimation from '@/components/trade-animation';
 import './ai-analysis-tool.scss';
 
 // ─── Markets ──────────────────────────────────────────────────────────────────
@@ -603,6 +604,24 @@ const AiAnalysisTool: React.FC = () => {
                     <span className='aat__stat-lbl'>Odd %</span>
                     <span className='aat__stat-val aat__stat-val--red'>{oddPct}%</span>
                     <span className='aat__stat-sub'>(1,3,5,7,9)</span>
+                </div>
+            </div>
+
+            {/* ── Bot Run Section ──────────────────────────────────── */}
+            <div className='aat__bot-section'>
+                <div className='aat__bot-header'>
+                    <span className='aat__bot-title'>
+                        <span className='aat__bot-icon'>🤖</span>
+                        Run a Bot
+                    </span>
+                    <span className='aat__bot-sub'>Execute from here after analysing</span>
+                </div>
+                <div className='aat__bot-body'>
+                    <div className='controls__section'>
+                        <div className='controls__buttons'>
+                            <TradeAnimation className='controls__animation' should_show_overlay />
+                        </div>
+                    </div>
                 </div>
             </div>
 

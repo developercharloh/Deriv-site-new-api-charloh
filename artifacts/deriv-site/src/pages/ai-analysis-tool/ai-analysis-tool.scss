@@ -1,12 +1,12 @@
-// AI Analysis Tool — compact mobile-first dark design
+// AI Analysis Tool — matches site theme via CSS variables
 
 @keyframes aat-pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.45; transform: scale(0.8); }
+    50%       { opacity: 0.4; transform: scale(0.8); }
 }
 @keyframes aat-blink {
     0%, 100% { opacity: 1; }
-    50%       { opacity: 0.25; }
+    50%       { opacity: 0.2; }
 }
 @keyframes aat-slide-in {
     from { opacity: 0; transform: translateX(10px); }
@@ -21,10 +21,10 @@
     display:        flex;
     flex-direction: column;
     gap:            5px;
-    padding:        6px 8px 60px;
-    background:     #080b12;
+    padding:        6px 8px 70px;
+    background:     var(--general-main-1);
     min-height:     100%;
-    color:          #e2e8f0;
+    color:          var(--text-prominent);
     font-family:    -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     overflow-y:     auto;
     -webkit-overflow-scrolling: touch;
@@ -39,9 +39,9 @@
     padding:         0 0 2px;
 }
 .aat__hd-left   { display: flex; flex-direction: column; gap: 1px; }
-.aat__hd-title  { font-size: 12px; font-weight: 900; letter-spacing: 0.06em; color: #fff; text-transform: uppercase; line-height: 1; }
+.aat__hd-title  { font-size: 12px; font-weight: 900; letter-spacing: 0.06em; color: var(--text-prominent); text-transform: uppercase; line-height: 1; }
 .aat__hd-accent { color: #00e676; }
-.aat__hd-sub    { font-size: 9px; color: #64748b; letter-spacing: 0.03em; }
+.aat__hd-sub    { font-size: 9px; color: var(--text-less-prominent); letter-spacing: 0.03em; }
 
 .aat__status {
     display:       flex;
@@ -53,9 +53,9 @@
     border-radius: 20px;
     border:        1px solid;
 
-    &--live        { color: #00e676; border-color: rgba(0,230,118,0.3); background: rgba(0,230,118,0.07); }
-    &--connecting  { color: #ffd600; border-color: rgba(255,214,0,0.3); background: rgba(255,214,0,0.07); }
-    &--error       { color: #ff3d57; border-color: rgba(255,61,87,0.3); background: rgba(255,61,87,0.07); }
+    &--live       { color: #00e676; border-color: rgba(0,230,118,0.35); background: rgba(0,230,118,0.08); }
+    &--connecting { color: #ffd600; border-color: rgba(255,214,0,0.35); background: rgba(255,214,0,0.08); }
+    &--error      { color: #ff3d57; border-color: rgba(255,61,87,0.35);  background: rgba(255,61,87,0.08);  }
 }
 .aat__status-dot {
     width: 6px; height: 6px;
@@ -77,8 +77,8 @@
     flex-direction: column;
     gap:            2px;
     padding:        6px 8px 5px;
-    background:     #111520;
-    border:         1px solid rgba(255,255,255,0.07);
+    background:     var(--general-section-1);
+    border:         1px solid rgba(255,255,255,0.06);
     border-radius:  9px;
 }
 .aat__drop-lbl {
@@ -86,13 +86,13 @@
     font-weight:    700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    color:          #64748b;
+    color:          var(--text-less-prominent);
 }
 .aat__drop {
     appearance:    none;
     background:    transparent;
     border:        none;
-    color:         #e2e8f0;
+    color:         var(--text-prominent);
     font-size:     10px;
     font-weight:   700;
     cursor:        pointer;
@@ -103,7 +103,7 @@
     overflow:      hidden;
     text-overflow: ellipsis;
 
-    option { background: #111520; color: #e2e8f0; }
+    option { background: var(--general-section-1); color: var(--text-prominent); }
     &:focus { color: #00e676; }
 }
 
@@ -113,18 +113,18 @@
     align-items: center;
     gap:         6px;
 }
-.aat__barrier-lbl { font-size: 9px; color: #64748b; font-weight: 700; flex-shrink: 0; }
+.aat__barrier-lbl { font-size: 9px; color: var(--text-less-prominent); font-weight: 700; flex-shrink: 0; }
 .aat__barrier-btns { display: flex; gap: 3px; flex-wrap: wrap; }
 .aat__barrier-btn {
     width:         24px; height: 24px;
-    border-radius: 5px;
-    border:        1px solid rgba(255,255,255,0.08);
-    background:    rgba(255,255,255,0.03);
-    color:         #64748b;
+    border-radius: 50%;
+    border:        1px solid rgba(255,255,255,0.1);
+    background:    var(--general-section-1);
+    color:         var(--text-general);
     font-size:     10px; font-weight: 700;
     cursor:        pointer;
     transition:    all 0.12s;
-    &:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+    &:hover { background: var(--general-section-3); color: var(--text-prominent); }
     &--sel  { background: rgba(0,230,118,0.15); border-color: #00e676; color: #00e676; }
 }
 
@@ -134,14 +134,14 @@
     align-items:     center;
     justify-content: space-between;
     padding:         8px 10px;
-    background:      linear-gradient(135deg, #111520 0%, #0f1825 100%);
-    border:          1px solid rgba(0,230,118,0.15);
+    background:      var(--general-section-1);
+    border:          1px solid rgba(0,230,118,0.18);
     border-radius:   11px;
-    box-shadow:      0 0 16px rgba(0,230,118,0.04);
+    box-shadow:      0 0 14px rgba(0,230,118,0.04);
 }
 .aat__price-left  { display: flex; flex-direction: column; gap: 2px; }
 .aat__price-hd    { display: flex; align-items: center; gap: 5px; }
-.aat__price-label { font-size: 9px; font-weight: 700; color: #94a3b8; }
+.aat__price-label { font-size: 9px; font-weight: 700; color: var(--text-general); }
 .aat__price-streaming { font-size: 9px; font-weight: 600; color: #00e676; }
 
 .aat__price-dot {
@@ -172,8 +172,8 @@
 // ─── Pattern Stream ───────────────────────────────────────────────────────────
 .aat__pattern-card {
     padding:       7px 8px 6px;
-    background:    #111520;
-    border:        1px solid rgba(255,255,255,0.07);
+    background:    var(--general-section-1);
+    border:        1px solid rgba(255,255,255,0.06);
     border-radius: 11px;
 }
 .aat__pattern-hd {
@@ -182,12 +182,12 @@
     justify-content: space-between;
     margin-bottom:   5px;
 }
-.aat__pattern-title { font-size: 10px; font-weight: 800; color: #e2e8f0; }
-.aat__pattern-sub   { font-size: 8.5px; color: #64748b; }
+.aat__pattern-title { font-size: 10px; font-weight: 800; color: var(--text-prominent); }
+.aat__pattern-sub   { font-size: 8.5px; color: var(--text-less-prominent); }
 
 .aat__pattern-stream {
     display:    flex;
-    gap:        3px;
+    gap:        4px;
     overflow-x: auto;
     padding-bottom: 1px;
     scrollbar-width: none;
@@ -195,19 +195,22 @@
 }
 .aat__pattern-block {
     flex-shrink:   0;
-    width:         26px; height: 24px;
-    border-radius: 6px;
+    // ── CIRCLES ──────────────────────────────────────────────────────────────
+    width:         27px;
+    height:        27px;
+    border-radius: 50%;
     display:       flex;
     align-items:   center;
     justify-content: center;
-    font-size:     10px; font-weight: 900;
+    font-size:     10px;
+    font-weight:   900;
     animation:     aat-slide-in 0.2s ease;
     letter-spacing: -0.02em;
 
-    &--win  { background: rgba(0,230,118,0.15); border: 1px solid rgba(0,230,118,0.4); color: #00e676; }
-    &--lose { background: rgba(255,61,87,0.15);  border: 1px solid rgba(255,61,87,0.4);  color: #ff3d57; }
+    &--win  { background: rgba(0,230,118,0.15); border: 1.5px solid rgba(0,230,118,0.5); color: #00e676; box-shadow: 0 0 6px rgba(0,230,118,0.2); }
+    &--lose { background: rgba(255,61,87,0.15);  border: 1.5px solid rgba(255,61,87,0.5);  color: #ff3d57; box-shadow: 0 0 6px rgba(255,61,87,0.15); }
 }
-.aat__pattern-more { display: flex; align-items: center; color: #475569; font-size: 14px; padding: 0 3px; }
+.aat__pattern-more { display: flex; align-items: center; color: var(--text-less-prominent); font-size: 14px; padding: 0 3px; }
 
 // ─── AI Row ───────────────────────────────────────────────────────────────────
 .aat__ai-row {
@@ -218,8 +221,8 @@
 
 .aat__rec-card, .aat__conf-card {
     padding:        8px;
-    background:     #111520;
-    border:         1px solid rgba(255,255,255,0.07);
+    background:     var(--general-section-1);
+    border:         1px solid rgba(255,255,255,0.06);
     border-radius:  11px;
     display:        flex;
     flex-direction: column;
@@ -232,7 +235,7 @@
     gap:         4px;
     font-size:   9px;
     font-weight: 700;
-    color:       #94a3b8;
+    color:       var(--text-general);
 }
 .aat__rec-icon, .aat__conf-icon { font-size: 10px; }
 
@@ -258,9 +261,9 @@
     &--weak        { background: rgba(255,61,87,0.15);  color: #ff3d57; border: 1px solid rgba(255,61,87,0.3); }
 }
 
-.aat__rec-prob-lbl  { font-size: 8px; color: #64748b; font-weight: 600; }
+.aat__rec-prob-lbl  { font-size: 8px; color: var(--text-less-prominent); font-weight: 600; }
 .aat__rec-prob-val  { font-size: 15px; font-weight: 900; color: #00e676; line-height: 1; }
-.aat__rec-prob-bar  { height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+.aat__rec-prob-bar  { height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
 .aat__rec-prob-fill {
     height:        100%;
     border-radius: 2px;
@@ -280,18 +283,18 @@
     font-weight:   700;
 
     &--yes { background: rgba(0,230,118,0.08); border: 1px solid rgba(0,230,118,0.2); }
-    &--no  { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); color: #475569; }
+    &--no  { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); color: var(--text-less-prominent); }
 }
 .aat__model-chip-dot {
     width: 4px; height: 4px;
     border-radius: 50%;
     flex-shrink: 0;
     .aat__model-chip--yes & { background: #00e676; }
-    .aat__model-chip--no  & { background: #374151; }
+    .aat__model-chip--no  & { background: var(--text-less-prominent); }
 }
 .aat__model-chip-name { flex: 1; }
-.aat__model-chip-pct  { font-weight: 800; color: #94a3b8; }
-.aat__rec-loading { font-size: 10px; color: #374151; padding: 4px 0; }
+.aat__model-chip-pct  { font-weight: 800; color: var(--text-general); }
+.aat__rec-loading { font-size: 10px; color: var(--text-less-prominent); padding: 4px 0; }
 
 // ─── Confidence Gauge ─────────────────────────────────────────────────────────
 .aat-gauge {
@@ -306,8 +309,8 @@
 // ─── Digit Distribution ───────────────────────────────────────────────────────
 .aat__dist-card {
     padding:       7px 8px 6px;
-    background:    #111520;
-    border:        1px solid rgba(255,255,255,0.07);
+    background:    var(--general-section-1);
+    border:        1px solid rgba(255,255,255,0.06);
     border-radius: 11px;
 }
 .aat__dist-hd {
@@ -316,8 +319,8 @@
     justify-content: space-between;
     margin-bottom:   6px;
 }
-.aat__dist-title { font-size: 10px; font-weight: 800; color: #e2e8f0; }
-.aat__dist-sub   { font-size: 8.5px; color: #64748b; font-weight: 600; margin-left: 3px; }
+.aat__dist-title { font-size: 10px; font-weight: 800; color: var(--text-prominent); }
+.aat__dist-sub   { font-size: 8.5px; color: var(--text-less-prominent); font-weight: 600; margin-left: 3px; }
 .aat__dist-view  { font-size: 8.5px; color: #6366f1; font-weight: 700; cursor: pointer; }
 
 .aat__dist-grid {
@@ -333,10 +336,10 @@
     padding:        5px 3px 4px;
     border-radius:  8px;
     border:         1px solid rgba(255,255,255,0.06);
-    background:     rgba(255,255,255,0.02);
+    background:     var(--general-section-3);
 
-    &--most  { border-color: rgba(0,230,118,0.35);  background: rgba(0,230,118,0.06);  }
-    &--least { border-color: rgba(255,61,87,0.35);   background: rgba(255,61,87,0.06);   }
+    &--most  { border-color: rgba(0,230,118,0.35);  background: rgba(0,230,118,0.07);  }
+    &--least { border-color: rgba(255,61,87,0.35);   background: rgba(255,61,87,0.07);   }
 }
 .aat__dist-digit {
     font-size:   13px;
@@ -344,7 +347,7 @@
     line-height: 1;
     .aat__dist-cell--most   & { color: #00e676; }
     .aat__dist-cell--least  & { color: #ff3d57; }
-    .aat__dist-cell--normal & { color: #94a3b8; }
+    .aat__dist-cell--normal & { color: var(--text-general); }
 }
 .aat__dist-pct {
     font-size:   8.5px;
@@ -357,7 +360,7 @@
 .aat__dist-bar-track {
     width:         100%;
     height:        2px;
-    background:    rgba(255,255,255,0.06);
+    background:    rgba(255,255,255,0.07);
     border-radius: 1px;
     overflow:      hidden;
 }
@@ -383,7 +386,7 @@
     align-items:    center;
     gap:            2px;
     padding:        6px 4px 5px;
-    background:     #111520;
+    background:     var(--general-section-1);
     border:         1px solid rgba(255,255,255,0.06);
     border-radius:  9px;
     text-align:     center;
@@ -392,7 +395,7 @@
     font-size:      7.5px;
     font-weight:    700;
     letter-spacing: 0.02em;
-    color:          #64748b;
+    color:          var(--text-less-prominent);
     text-transform: uppercase;
     line-height:    1.1;
 }
@@ -403,12 +406,56 @@
     &--green { color: #00e676; }
     &--red   { color: #ff3d57; }
 }
-.aat__stat-sub { font-size: 7.5px; color: #475569; }
+.aat__stat-sub { font-size: 7.5px; color: var(--text-less-prominent); }
+
+// ─── Bot Run Section ─────────────────────────────────────────────────────────
+.aat__bot-section {
+    background:    var(--general-section-1);
+    border:        1px solid rgba(255,255,255,0.06);
+    border-radius: 11px;
+    overflow:      hidden;
+}
+.aat__bot-header {
+    display:         flex;
+    align-items:     center;
+    justify-content: space-between;
+    padding:         8px 10px 6px;
+    border-bottom:   1px solid rgba(255,255,255,0.05);
+}
+.aat__bot-title {
+    display:     flex;
+    align-items: center;
+    gap:         6px;
+    font-size:   10px;
+    font-weight: 800;
+    color:       var(--text-prominent);
+}
+.aat__bot-icon { font-size: 12px; }
+.aat__bot-sub  { font-size: 8.5px; color: var(--text-less-prominent); }
+.aat__bot-body {
+    padding: 6px 8px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    // Override TradeAnimation styles so they fit inside card
+    .controls__animation {
+        width:  100%;
+        margin: 0;
+    }
+    .controls__section {
+        padding: 0;
+    }
+    .dc-circular-wrapper {
+        width:  52px !important;
+        height: 52px !important;
+    }
+}
 
 // ─── Disclaimer ───────────────────────────────────────────────────────────────
 .aat__disclaimer {
     font-size:     8.5px;
-    color:         #374151;
+    color:         var(--text-less-prominent);
     line-height:   1.4;
     padding:       6px 8px;
     background:    rgba(255,255,255,0.02);
