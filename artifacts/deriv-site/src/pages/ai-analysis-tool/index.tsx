@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import TradeAnimation from '@/components/trade-animation';
+import { DBOT_TABS } from '@/constants/bot-contents';
+import { useStore } from '@/hooks/useStore';
 import './ai-analysis-tool.scss';
 
 // ─── Markets ──────────────────────────────────────────────────────────────────
@@ -276,6 +277,9 @@ const ConfidenceGauge: React.FC<{ pct: number; strength: string }> = ({ pct, str
 
 // ─── Component ────────────────────────────────────────────────────────────────
 const AiAnalysisTool: React.FC = () => {
+    const { dashboard } = useStore();
+    const { setActiveTab } = dashboard;
+
     const [sym,          setSym]          = useState('1HZ25V');
     const [analysisType, setAnalysisType] = useState<AnalysisType>('even_odd');
     const [tickWindow,   setTickWindow]   = useState(1000);
@@ -563,7 +567,6 @@ const AiAnalysisTool: React.FC = () => {
             <div className='aat__dist-card'>
                 <div className='aat__dist-hd'>
                     <span className='aat__dist-title'>📊 Digit Distribution <span className='aat__dist-sub'>(Last {prices.length.toLocaleString()} Ticks)</span></span>
-                    <span className='aat__dist-view'>View Details ›</span>
                 </div>
                 <div className='aat__dist-grid'>
                     {digitFreq.map((pct, d) => {
@@ -574,9 +577,6 @@ const AiAnalysisTool: React.FC = () => {
                             <div key={d} className={`aat__dist-cell aat__dist-cell--${cls}`}>
                                 <span className='aat__dist-digit'>{d}</span>
                                 <span className='aat__dist-pct'>{pct}%</span>
-                                <div className='aat__dist-bar-track'>
-                                    <div className='aat__dist-bar-fill' style={{ width: `${Math.min(100, pct * 3)}%` }} />
-                                </div>
                             </div>
                         );
                     })}
@@ -607,22 +607,16 @@ const AiAnalysisTool: React.FC = () => {
                 </div>
             </div>
 
-            {/* ── Bot Run Section ──────────────────────────────────── */}
-            <div className='aat__bot-section'>
-                <div className='aat__bot-header'>
-                    <span className='aat__bot-title'>
-                        <span className='aat__bot-icon'>🤖</span>
-                        Run a Bot
-                    </span>
-                    <span className='aat__bot-sub'>Execute from here after analysing</span>
-                </div>
-                <div className='aat__bot-body'>
-                    <div className='controls__section'>
-                        <div className='controls__buttons'>
-                            <TradeAnimation className='controls__animation' should_show_overlay />
-                        </div>
-                    </div>
-                </div>
+            {/* ── Bot Actions ──────────────────────────────────── */}
+            <div className='aat__bot-actions'>
+                <button className='aat__bot-run-btn' onClick={() => setActiveTab(DBOT_TABS.BOT_BUILDER)}>
+                    <span className='aat__bot-run-btn__icon'>▶</span>
+                    <span className='aat__bot-run-btn__text'>Run Bot</span>
+                </button>
+                <button className='aat__bot-txn-btn' onClick={() => setActiveTab(DBOT_TABS.DASHBOARD)}>
+                    <span className='aat__bot-txn-btn__icon'>📋</span>
+                    <span className='aat__bot-txn-btn__text'>Transactions</span>
+                </button>
             </div>
 
             <div className='aat__disclaimer'>
