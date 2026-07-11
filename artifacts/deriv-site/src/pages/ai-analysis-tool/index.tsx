@@ -317,6 +317,12 @@ const AiAnalysisTool: React.FC = () => {
     const pricesRef = useRef<number[]>([]);
     const pipRef    = useRef(2);
 
+    // Refs so the WS closure always reads the LATEST values even without reconnecting
+    const analysisTypeRef = useRef<AnalysisType>(analysisType);
+    const overBarrierRef  = useRef<number>(overBarrier);
+    useEffect(() => { analysisTypeRef.current = analysisType; }, [analysisType]);
+    useEffect(() => { overBarrierRef.current  = overBarrier;  }, [overBarrier]);
+
     // ── Build pattern stream from prices ────────────────────────────────────
     const buildPattern = useCallback((prices: number[], pip: number, type: AnalysisType) => {
         if (prices.length < 2) return [];
@@ -395,7 +401,7 @@ const AiAnalysisTool: React.FC = () => {
                     const trimmed = raw.slice(-tickWindow);
                     pricesRef.current = trimmed;
                     setPrices([...trimmed]);
-                    setPatternStream(buildPattern(trimmed, pip, analysisType));
+                    setPatternStream(buildPattern(trimmed, pip, analysisTypeRef.current));
                     if (raw.length > 0) {
                         const lastP = raw[raw.length - 1];
                         setLivePrice(lastP);
@@ -421,7 +427,7 @@ const AiAnalysisTool: React.FC = () => {
                     const updated = [...pricesRef.current.slice(-(tickWindow - 1)), tick];
                     pricesRef.current = updated;
                     setPrices([...updated]);
-                    setPatternStream(buildPattern(updated, pipRef.current, analysisType));
+                    setPatternStream(buildPattern(updated, pipRef.current, analysisTypeRef.current));
                 }
 
                 if (msg.error) { console.warn('[AAT] Deriv WS error:', msg.error.message); }
