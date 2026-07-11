@@ -9,8 +9,8 @@ const TESTIMONIALS = [
         location: 'Ghana',
         avatar: 'KA',
         rating: 5,
-        text: 'The AI Signal Orb changed everything for me. I was struggling with entry points but now I get clear, confident signals every session.',
-        tag: 'AI Signal Orb',
+        text: 'The AI Signal Scanner changed everything for me. I was struggling with entry points but now I get clear, confident signals every session.',
+        tag: 'AI Signal Scanner',
     },
     {
         name: 'Fatima M.',
@@ -50,8 +50,8 @@ const TESTIMONIALS = [
 const FEATURES = [
     {
         icon: '🔮',
-        title: 'AI Signal Orb',
-        desc: 'Real-time AI signals scanning 15 markets simultaneously. Detects spikes, filters noise, and fires only high-confidence calls.',
+        title: 'AI Signal Scanner',
+        desc: 'Real-time AI signals scanning 10 markets simultaneously. Detects spikes, filters noise, and fires only high-confidence calls.',
         badge: 'LIVE',
         color: '#00e676',
     },
@@ -74,7 +74,6 @@ const FEATURES = [
 // ── Live ticker markets ───────────────────────────────────────────────────────
 const TICKER_MARKETS = [
     'V10', 'V25', 'V50', 'V75', 'V100',
-    'V10(1s)', 'V25(1s)', 'V50(1s)', 'V75(1s)', 'V100(1s)',
     'Jump 10', 'Jump 25', 'Jump 50', 'Jump 75', 'Jump 100',
 ];
 
@@ -115,8 +114,9 @@ const LandingPage: React.FC = () => {
     const [visible, setVisible] = useState(false);
 
     const tradesCount   = useCountUp(12480);
-    const winRateStat   = useCountUp(68);
-    const marketsCount  = useCountUp(15);
+    const winRateMin    = useCountUp(89);
+    const winRateMax    = useCountUp(95);
+    const marketsCount  = useCountUp(10);
 
     // Mount fade-in
     useEffect(() => {
@@ -139,7 +139,6 @@ const LandingPage: React.FC = () => {
     useEffect(() => {
         const seeds: Record<string, number> = {
             V10: 6482.12, V25: 98432.5, V50: 45213.88, V75: 12304.67, V100: 78234.21,
-            'V10(1s)': 5421.3, 'V25(1s)': 89031.4, 'V50(1s)': 43211.5, 'V75(1s)': 11034.2, 'V100(1s)': 74321.0,
             'Jump 10': 3241.55, 'Jump 25': 14322.3, 'Jump 50': 43210.4, 'Jump 75': 98211.1, 'Jump 100': 240534.8,
         };
         setTickerPrices(Object.fromEntries(Object.entries(seeds).map(([k, v]) => [k, { price: v, up: true }])));
@@ -174,6 +173,13 @@ const LandingPage: React.FC = () => {
         setLoginLoading(false);
     }, []);
 
+    const handleSignup = useCallback(async () => {
+        try {
+            const url = await generateOAuthURL('registration');
+            if (url) window.location.replace(url);
+        } catch { /* */ }
+    }, []);
+
     return (
         <div className={`lp${visible ? ' lp--visible' : ''}`}>
 
@@ -183,9 +189,14 @@ const LandingPage: React.FC = () => {
                     <img src='/logo.png' alt='Derex Master' className='lp-nav__logo' />
                     <span className='lp-nav__name'>Derex <span className='lp-nav__name-accent'>Master</span></span>
                 </div>
-                <button className='lp-nav__login-btn' onClick={handleLogin} disabled={loginLoading}>
-                    {loginLoading ? '...' : 'Log In'}
-                </button>
+                <div className='lp-nav__actions'>
+                    <button className='lp-nav__login-btn' onClick={handleLogin} disabled={loginLoading}>
+                        {loginLoading ? '...' : 'Log In'}
+                    </button>
+                    <button className='lp-nav__signup-btn' onClick={handleSignup}>
+                        Sign Up
+                    </button>
+                </div>
             </nav>
 
             {/* ── Live ticker strip ───────────────────────────────────────── */}
@@ -230,11 +241,11 @@ const LandingPage: React.FC = () => {
                 </p>
 
                 <div className='lp-hero__ctas'>
-                    <button className='lp-cta-primary' onClick={handleLogin} disabled={loginLoading}>
-                        {loginLoading ? 'Redirecting…' : '🚀 Start Trading Free'}
+                    <button className='lp-cta-primary' onClick={handleSignup}>
+                        🚀 Sign Up Free
                     </button>
-                    <button className='lp-cta-ghost' onClick={handleLogin}>
-                        Log in to your account →
+                    <button className='lp-cta-ghost' onClick={handleLogin} disabled={loginLoading}>
+                        {loginLoading ? 'Redirecting…' : 'Log in to your account →'}
                     </button>
                 </div>
 
@@ -258,8 +269,8 @@ const LandingPage: React.FC = () => {
                 </div>
                 <div className='lp-stats__divider' />
                 <div className='lp-stats__card'>
-                    <span className='lp-stats__val lp-stats__val--green'>{winRateStat}%</span>
-                    <span className='lp-stats__lbl'>Avg Win Rate</span>
+                    <span className='lp-stats__val lp-stats__val--green'>{winRateMin}-{winRateMax}%</span>
+                    <span className='lp-stats__lbl'>Win Probability</span>
                 </div>
                 <div className='lp-stats__divider' />
                 <div className='lp-stats__card'>
@@ -357,9 +368,14 @@ const LandingPage: React.FC = () => {
                 </div>
                 <h2 className='lp-final-cta__title'>Your next trade starts here.</h2>
                 <p className='lp-final-cta__sub'>Join thousands of traders using AI to win on Deriv every day.</p>
-                <button className='lp-cta-primary lp-cta-primary--large' onClick={handleLogin} disabled={loginLoading}>
-                    {loginLoading ? 'Redirecting…' : '🚀 Get Started — It\'s Free'}
-                </button>
+                <div className='lp-final-cta__btns'>
+                    <button className='lp-cta-primary lp-cta-primary--large' onClick={handleSignup}>
+                        🚀 Sign Up Free
+                    </button>
+                    <button className='lp-cta-ghost' onClick={handleLogin} disabled={loginLoading}>
+                        {loginLoading ? 'Redirecting…' : 'Already have an account →'}
+                    </button>
+                </div>
                 <p className='lp-final-cta__note'>No subscription. Connect your existing Deriv account.</p>
             </section>
 

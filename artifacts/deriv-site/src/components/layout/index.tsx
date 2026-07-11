@@ -7,6 +7,7 @@ import { api_base } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
 import { useDevice } from '@deriv-com/ui';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '../shared';
+import LandingPage from '../../pages/landing';
 import Footer from './footer';
 import AppHeader from './header';
 import Body from './main-body';
@@ -141,6 +142,13 @@ const Layout = observer(() => {
             return () => clearTimeout(timer);
         }
     }, [isAuthenticating, isInitialAuthCheckComplete]);
+
+    const is_logged_in = store?.client?.is_logged_in;
+
+    // Show landing page for unauthenticated visitors once auth state has settled
+    if (isInitialAuthCheckComplete && !is_logged_in && !isCallbackPage) {
+        return <LandingPage />;
+    }
 
     return (
         <div
