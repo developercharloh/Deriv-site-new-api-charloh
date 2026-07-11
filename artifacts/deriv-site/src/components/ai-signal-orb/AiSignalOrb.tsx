@@ -27,7 +27,12 @@ function getSymbolMinVotes(symCode: string): number {
         symCode.includes('_10') || symCode.includes('_25')) return 5;
     return 6;
 }
-const MIN_WIN_PROB_OU = 0.60;
+const MIN_WIN_PROB_OU  = 0.60;
+const TICK_COUNT_LONG  = 5000;    // fetch 5 k ticks; sliced into sub-windows below
+const DERIV_STATUS_URL = 'https://status.deriv.systems/api/v2/status.json';
+const STATUS_POLL_MS   = 60_000;  // re-check maintenance status every 60 s
+const GAP_THRESHOLD_S  = 120;     // timestamp gap > 2 min → possible maintenance window
+const REGIME_DIV_LIMIT = 0.08;    // Jensen-Shannon divergence limit (micro vs long)
 
 type TradeType = 'over_under' | 'even_odd' | 'matches_differs';
 type ScanState = 'idle' | 'scanning' | 'done' | 'no-signal';
@@ -56,6 +61,10 @@ interface MarketResult {
     entryDigits:          { digit: number; recommended: boolean; conditional: number }[];
     segmentAgrees:        boolean;
     signalStrength:       number;
+    regimeScore:          number;   // 0–100: cross-timeframe distribution consistency
+    regimeOk:             boolean;  // medium + long windows agree with signal direction
+    gapDetected:          boolean;  // recent timestamp gap > 2 min (maintenance indicator)
+    tfAgreement:          number;   // 0–4 timeframes pointing same direction
 }
 
 interface OrbHistoryEntry {
@@ -67,6 +76,60 @@ interface OrbHistoryEntry {
 }
 
 interface SpikeInfo { code: string; label: string; sigma: number; }
+
+// ─── Deriv system status ──────────────────────────────────────────────────────
+type StatusIndicator = 'none' | 'minor' | 'major' | 'critical';
+interface DerivStatusResult {
+    indicator:   StatusIndicator;
+    description: string;
+    fetchedAt:   number;
+}
+
+// ─── Jensen-Shannon divergence between two digit distributions ────────────────
+function jsDiv(pA: number[], pB: number[]): number {
+    const m = pA.map((p, i) => (p + pB[i]) / 2);
+    let jsd = 0;
+    for (let i = 0; i < 10; i++) {
+        if (pA[i] > 0 && m[i] > 0) jsd += pA[i] * Math.log2(pA[i] / m[i]);
+        if (pB[i] > 0 && m[i] > 0) jsd += pB[i] * Math.log2(pB[i] / m[i]);
+    }
+    return jsd / 2;
+}
+
+// ─── Detect maintenance gap in tick timestamps ────────────────────────────────
+function detectGap(times: number[]): { gapDetected: boolean; maxGapSecs: number } {
+    if (times.length < 2) return { gapDetected: false, maxGapSecs: 0 };
+    const recent = times.slice(-500);
+    let maxGap = 0;
+    for (let i = 1; i < recent.length; i++) {
+        const gap = recent[i] - recent[i - 1];
+        if (gap > maxGap) maxGap = gap;
+    }
+    return { gapDetected: maxGap >= GAP_THRESHOLD_S, maxGapSecs: maxGap };
+}
+
+// ─── Fetch Deriv system status from status.deriv.systems ─────────────────────
+async function fetchDerivStatus(): Promise<DerivStatusResult> {
+    try {
+        const res  = await fetch(DERIV_STATUS_URL, { cache: 'no-store' });
+        const json = await res.json();
+        return {
+            indicator:   (json?.status?.indicator  ?? 'none') as StatusIndicator,
+            description:  json?.status?.description ?? 'Unknown',
+            fetchedAt:   Date.now(),
+        };
+    } catch {
+        // Network error — don't block, surface as unknown
+        return { indicator: 'none', description: 'Status check failed', fetchedAt: Date.now() };
+    }
+}
+
+// ─── Digit frequency array from prices ───────────────────────────────────────
+function digitFreqArr(prices: number[], pip: number): number[] {
+    const f = new Array(10).fill(0);
+    for (const p of prices) f[lastDigitOf(p, pip)]++;
+    return f.map(v => v / prices.length);
+}
 
 // ─── Spike detection ──────────────────────────────────────────────────────────
 
@@ -298,7 +361,7 @@ async function scanAllMarkets(
 ): Promise<{ best: MarketResult | null; noVotesBest: MarketResult | null; allResults: MarketResult[]; spikedMarkets: SpikeInfo[] }> {
     return new Promise(resolve => {
         const ws = new WebSocket(DERIV_WS);
-        const priceMap = new Map<number, { prices: number[]; pip: number; sym: DerivVolatility }>();
+        const priceMap = new Map<number, { prices: number[]; times: number[]; pip: number; sym: DerivVolatility }>();
         let received = 0, closed = false;
 
         const finish = () => {
@@ -308,27 +371,67 @@ async function scanAllMarkets(
             try { ws.close(); } catch { /* */ }
             const results: MarketResult[] = [];
             const detectedSpikes: SpikeInfo[] = [];
-            priceMap.forEach(({ prices, pip, sym }) => {
+
+            priceMap.forEach(({ prices, times, pip, sym }) => {
                 if (prices.length < 100) return;
+
+                // ── Spike detection ───────────────────────────────────────────
                 const { spiked, sigma } = detectSpike(prices);
                 if (spiked) detectedSpikes.push({ code: sym.code, label: sym.short, sigma: Math.round(sigma * 10) / 10 });
-                const full = runModels(prices, pip, sym, tradeType);
-                if (prices.length >= 1600) {
-                    const seg = runModels(prices.slice(-1500), pip, sym, tradeType);
+
+                // ── Maintenance gap detection ─────────────────────────────────
+                const { gapDetected } = detectGap(times);
+
+                // ── Timeframe windows ─────────────────────────────────────────
+                const tfMicro  = prices.slice(-200);
+                const tfShort  = prices.slice(-1000);             // primary window
+                const tfMedium = prices.length >= 3000 ? prices.slice(-3000) : prices;
+                const tfLong   = prices;                          // full 5 k ticks
+
+                // ── Primary analysis (1 000-tick window) ──────────────────────
+                const full = runModels(tfShort, pip, sym, tradeType);
+
+                // ── Segment agreement (existing logic) ────────────────────────
+                if (tfShort.length >= 1600) {
+                    const seg = runModels(tfShort.slice(-1500), pip, sym, tradeType);
                     full.segmentAgrees = seg.direction === full.direction && seg.votes.yesCount >= 4;
                 }
-                results.push(full);
+
+                // ── Cross-timeframe regime analysis ───────────────────────────
+                const rMicro  = runModels(tfMicro,  pip, sym, tradeType);
+                const rMedium = runModels(tfMedium, pip, sym, tradeType);
+                const rLong   = runModels(tfLong,   pip, sym, tradeType);
+
+                const mainDir     = full.direction;
+                const tfAgreement = [rMicro, full, rMedium, rLong].filter(r => r.direction === mainDir).length;
+                const regimeOk    = rMedium.direction === mainDir && rLong.direction === mainDir;
+
+                // JS divergence between micro and long digit distributions
+                const divergence  = jsDiv(digitFreqArr(tfMicro, pip), digitFreqArr(tfLong, pip));
+                const regimeScore = Math.max(0, Math.round((1 - divergence / Math.max(divergence, REGIME_DIV_LIMIT)) * 100));
+
+                results.push({
+                    ...full,
+                    regimeScore,
+                    regimeOk,
+                    gapDetected,
+                    tfAgreement,
+                });
             });
+
             results.sort((a, b) => b.votes.yesCount - a.votes.yesCount || b.votes.totalScore - a.votes.totalScore || b.winProb - a.winProb);
             const spikedCodes = new Set(detectedSpikes.map(s => s.code));
+
             const best = results.find(r =>
                 !spikedCodes.has(r.sym.code) &&
                 r.votes.yesCount >= getSymbolMinVotes(r.sym.code) &&
                 r.segmentAgrees &&
                 r.votes.recentEdge.vote &&
+                r.regimeOk &&        // ← cross-timeframe consistency required
+                !r.gapDetected &&    // ← no maintenance gap allowed
                 (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU)
             ) ?? null;
-            // noVotesBest also skips spiked markets so a distorted market is never shown as "best fallback"
+
             const noVotesBest = best ? null : (results.find(r => !spikedCodes.has(r.sym.code)) ?? results[0] ?? null);
             resolve({ best, noVotesBest, allResults: results, spikedMarkets: detectedSpikes });
         };
@@ -336,20 +439,26 @@ async function scanAllMarkets(
         ws.onopen = () => {
             ALL_SYMS.forEach((sym, i) => setTimeout(() => {
                 if (ws.readyState !== WebSocket.OPEN) return;
-                ws.send(JSON.stringify({ ticks_history: sym.code, count: TICK_COUNT, end: 'latest', style: 'ticks', req_id: i + 1 }));
+                // Fetch 5 000 ticks — sliced into micro/short/medium/long windows in finish()
+                ws.send(JSON.stringify({ ticks_history: sym.code, count: TICK_COUNT_LONG, end: 'latest', style: 'ticks', req_id: i + 1 }));
             }, i * 80));
         };
         ws.onmessage = (ev: MessageEvent) => {
             let msg: any; try { msg = JSON.parse(ev.data as string); } catch { return; }
             if (msg.msg_type !== 'history') return;
             const reqId = msg.req_id as number; const sym = ALL_SYMS[reqId - 1]; if (!sym) return;
-            priceMap.set(reqId, { prices: msg.history?.prices ?? [], pip: msg.pip_size ?? 2, sym });
+            priceMap.set(reqId, {
+                prices: msg.history?.prices ?? [],
+                times:  msg.history?.times  ?? [],
+                pip:    msg.pip_size ?? 2,
+                sym,
+            });
             onProgress(++received);
             if (received >= ALL_SYMS.length) finish();
         };
         ws.onerror = () => finish();
         ws.onclose = () => { if (!closed) finish(); };
-        setTimeout(() => { if (!closed) finish(); }, 30_000);
+        setTimeout(() => { if (!closed) finish(); }, 40_000); // extra time for 5 k ticks
     });
 }
 
@@ -418,6 +527,11 @@ const AiSignalOrb: React.FC = () => {
         try { return JSON.parse(localStorage.getItem('orb-signal-history') ?? '[]'); } catch { return []; }
     });
 
+    // ── Deriv system status — polled every 60 s ───────────────────────────────
+    const [derivStatus,   setDerivStatus]   = useState<DerivStatusResult | null>(null);
+    const [statusChecked, setStatusChecked] = useState(false);
+    const maintenanceActive = derivStatus !== null && derivStatus.indicator !== 'none';
+
     // Sync editable state when result arrives
     useEffect(() => {
         if (!result) return;
@@ -442,6 +556,19 @@ const AiSignalOrb: React.FC = () => {
         setResult(null); setNoSigBest(null); setScanState('idle'); setHasSignal(false);
         setSpikedMarkets([]); setRunState('idle'); setRunErr('');
     }, [tradeType]);
+
+    // Poll Deriv system status every 60 s — keeps itself alive via setInterval
+    useEffect(() => {
+        let destroyed = false;
+        const poll = async () => {
+            if (destroyed) return;
+            const s = await fetchDerivStatus();
+            if (!destroyed) { setDerivStatus(s); setStatusChecked(true); }
+        };
+        poll();
+        const id = setInterval(poll, STATUS_POLL_MS);
+        return () => { destroyed = true; clearInterval(id); };
+    }, []);
 
     // ── Drag handlers ─────────────────────────────────────────────────────────
     const onPointerDown = useCallback((e: React.PointerEvent) => {
@@ -468,6 +595,9 @@ const AiSignalOrb: React.FC = () => {
 
     // ── Scan ──────────────────────────────────────────────────────────────────
     const handleScan = useCallback(async () => {
+        // Hard block during active maintenance — signals from a degraded system are unreliable
+        if (maintenanceActive) return;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         setScanState('scanning'); setProgress(0); setResult(null); setNoSigBest(null);
         setHasSignal(false); setSessionCount(0); setSpikedMarkets([]);
         try {
@@ -491,7 +621,8 @@ const AiSignalOrb: React.FC = () => {
                 } catch { /* ignore */ }
             } else { setNoSigBest(noVotesBest); setScanState('no-signal'); }
         } catch { setScanState('idle'); }
-    }, [tradeType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tradeType, maintenanceActive]);
 
     // ── Open the run-config banner — loads the last-used Stake / Take Profit /
     //    Stop Loss / Martingale values (or defaults) so the trader can review
@@ -658,6 +789,21 @@ const AiSignalOrb: React.FC = () => {
                         <button className='ai-panel__close' onClick={() => setOpen(false)}><X size={13} /></button>
                     </div>
 
+                    {/* ── Deriv System Status banner ── */}
+                    {statusChecked && (
+                        <div className={`ai-panel__status-bar ai-panel__status-bar--${derivStatus?.indicator ?? 'none'}`}>
+                            <span className='ai-panel__status-dot' />
+                            <span className='ai-panel__status-msg'>
+                                {maintenanceActive
+                                    ? `⛔ Deriv ${derivStatus!.indicator.toUpperCase()} — ${derivStatus!.description}. Scanning blocked until resolved.`
+                                    : `✅ Deriv Systems Operational`}
+                            </span>
+                            <span className='ai-panel__status-time'>
+                                {derivStatus ? new Date(derivStatus.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </span>
+                        </div>
+                    )}
+
                     {/* Trade type */}
                     <div className='ai-panel__type-row'>
                         {([
@@ -678,13 +824,16 @@ const AiSignalOrb: React.FC = () => {
                     {/* Scan button */}
                     <div className='ai-panel__scan-wrap'>
                         <button
-                            className={`ai-panel__scan-btn${scanState === 'scanning' ? ' ai-panel__scan-btn--loading' : ''}`}
+                            className={`ai-panel__scan-btn${scanState === 'scanning' ? ' ai-panel__scan-btn--loading' : ''}${maintenanceActive ? ' ai-panel__scan-btn--blocked' : ''}`}
                             onClick={handleScan}
-                            disabled={scanState === 'scanning'}
+                            disabled={scanState === 'scanning' || maintenanceActive}
+                            title={maintenanceActive ? 'Deriv is under maintenance — scanning blocked' : undefined}
                         >
-                            {scanState === 'scanning'
-                                ? <><Loader2 size={14} className='ai-panel__spin' /><span>Scanning {progress}/{ALL_SYMS.length} markets…</span></>
-                                : <><RefreshCw size={14} /><span>{scanState === 'idle' ? 'Scan All 10 Markets' : 'Re-Scan Markets'}</span></>
+                            {maintenanceActive
+                                ? <><span>⛔ Scanning Blocked — Maintenance Active</span></>
+                                : scanState === 'scanning'
+                                    ? <><Loader2 size={14} className='ai-panel__spin' /><span>Scanning {progress}/{ALL_SYMS.length} markets…</span></>
+                                    : <><RefreshCw size={14} /><span>{scanState === 'idle' ? 'Scan All 10 Markets (5k ticks · 4 timeframes)' : 'Re-Scan Markets'}</span></>
                             }
                         </button>
                     </div>
@@ -750,6 +899,10 @@ const AiSignalOrb: React.FC = () => {
                                     <div className='ai-panel__strength-badge' style={{ background: `${vc}18`, borderColor: `${vc}50`, color: vc }}>
                                         <span className='ai-panel__strength-votes'>{result.votes.yesCount}/10</span>
                                         <span className='ai-panel__strength-label'>{voteLabel(result.votes.yesCount)}</span>
+                                    </div>
+                                    <div className={`ai-panel__regime-badge ai-panel__regime-badge--${result.tfAgreement >= 3 ? 'ok' : 'warn'}`}>
+                                        <span>{result.tfAgreement}/4 TF</span>
+                                        <span className='ai-panel__regime-score'>{result.regimeScore}%</span>
                                     </div>
                                 </div>
                             </div>
