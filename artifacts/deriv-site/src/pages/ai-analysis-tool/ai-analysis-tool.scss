@@ -380,30 +380,5 @@
     text-align: center;
 }
 
-// ─── Run Bot — sticky bottom bar ─────────────────────────────────────────────
-// Sits at the bottom of the scroll container, same visual weight as other
-// DBot nav bars: dark background, subtle top border, single-row flex.
-.aat__run-bar {
-    position:   sticky;
-    bottom:     0;
-    left:       0; right: 0;
-    z-index:    20;
-    display:    flex;
-    align-items: center;
-    gap:         10px;
-    padding:     8px 10px;
-    margin:      0 -6px -6px;    // cancel parent padding so bar goes edge-to-edge
-    background:  var(--general-main-2, var(--general-main-1));
-    border-top:  1px solid rgba(255,255,255,0.1);
-    box-shadow:  0 -4px 16px rgba(0,0,0,0.35);
-
-    // Let TradeAnimation fill horizontally
-    .animation__wrapper {
-        display:     flex;
-        align-items: center;
-        gap:         10px;
-        flex:        1;
-    }
-    .animation__run-button,
-    .animation__stop-button { flex-shrink: 0; }
-}
+// The global RunPanel / MobileDrawerFooter already renders the Run bar
+// at the bottom of every mobile tab — no duplicate needed here.

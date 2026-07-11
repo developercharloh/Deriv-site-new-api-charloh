@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import TradeAnimation from '@/components/trade-animation';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import './ai-analysis-tool.scss';
@@ -688,14 +687,11 @@ const AiAnalysisTool: React.FC = () => {
                 </div>
             </div>
 
+            {/* BotRedirector: silent observer — switches to Bot Builder when bot starts */}
+            <BotRedirector setActiveTab={setActiveTab} />
+
             <div className='aat__disclaimer'>
                 ⚠️ Statistical analysis only. Deriv synthetic indices are random — past data does not guarantee future results. Trade responsibly.
-            </div>
-
-            {/* ── Run Bot — sticky bottom bar ───────────────────────────── */}
-            <div className='aat__run-bar'>
-                <BotRedirector setActiveTab={setActiveTab} />
-                <TradeAnimation should_show_overlay />
             </div>
         </div>
     );
