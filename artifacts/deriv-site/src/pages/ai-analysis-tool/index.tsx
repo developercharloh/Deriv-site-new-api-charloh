@@ -1,7 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { observer } from 'mobx-react-lite';
+import TradeAnimation from '@/components/trade-animation';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import './ai-analysis-tool.scss';
+
+// ─── Bot Redirector ───────────────────────────────────────────────────────────
+// Watches the run_panel store reactively; when the bot starts it jumps to the
+// Bot Builder tab so the user sees the live run progress + transactions.
+const BotRedirector: React.FC<{ setActiveTab: (t: number) => void }> = observer(({ setActiveTab }) => {
+    const { run_panel } = useStore();
+    const { is_stop_button_visible } = run_panel;
+    const prevRef = useRef(false);
+    useEffect(() => {
+        if (is_stop_button_visible && !prevRef.current) {
+            setActiveTab(DBOT_TABS.BOT_BUILDER);
+        }
+        prevRef.current = is_stop_button_visible;
+    }, [is_stop_button_visible, setActiveTab]);
+    return null;
+});
 
 // ─── Markets ──────────────────────────────────────────────────────────────────
 const MARKETS = [
@@ -570,16 +588,10 @@ const AiAnalysisTool: React.FC = () => {
                 </div>
             </div>
 
-            {/* ── Bot Actions ──────────────────────────────────────────── */}
-            <div className='aat__bot-actions'>
-                <button className='aat__bot-run-btn' onClick={() => setActiveTab(DBOT_TABS.BOT_BUILDER)}>
-                    <span className='aat__bot-run-btn__icon'>▶</span>
-                    <span className='aat__bot-run-btn__text'>Run Bot</span>
-                </button>
-                <button className='aat__bot-txn-btn' onClick={() => setActiveTab(DBOT_TABS.DASHBOARD)}>
-                    <span className='aat__bot-txn-btn__icon'>📋</span>
-                    <span className='aat__bot-txn-btn__text'>Transactions</span>
-                </button>
+            {/* ── Run Bot (real TradeAnimation button) ─────────────────── */}
+            <div className='aat__run-bar'>
+                <BotRedirector setActiveTab={setActiveTab} />
+                <TradeAnimation should_show_overlay />
             </div>
 
             {/* ── Digit Distribution ────────────────────────────────────── */}
