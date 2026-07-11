@@ -71,7 +71,7 @@ const patternLabel = (
     type: AnalysisType,
     barrier: number,
     matchTarget: number,
-): { label: string; win: boolean } => {
+): { label: string; win: boolean; neutral?: boolean } => {
     const p = prices[idx];
     const d = lastDigitOf(p, pip);
 
@@ -85,6 +85,7 @@ const patternLabel = (
                 ? { label: 'M', win: true }
                 : { label: 'D', win: false };
         case 'over_under':
+            if (d === barrier) return { label: 'N', win: false, neutral: true };
             return d > barrier
                 ? { label: 'Ov', win: true }
                 : { label: 'Un', win: false };
@@ -308,7 +309,7 @@ const AiAnalysisTool: React.FC = () => {
     const [prevPrice,    setPrevPrice]    = useState<number | null>(null);
     const [sparkPrices,  setSparkPrices]  = useState<number[]>([]);
     const [connected,    setConnected]    = useState<'connecting' | 'live' | 'error'>('connecting');
-    const [patternStream, setPatternStream] = useState<{ label: string; win: boolean }[]>([]);
+    const [patternStream, setPatternStream] = useState<{ label: string; win: boolean; neutral?: boolean }[]>([]);
     const [currentDigit, setCurrentDigit] = useState<number | null>(null);
     const [arrowKey,     setArrowKey]     = useState(0); // increments on each tick to retrigger animation
 
@@ -545,7 +546,7 @@ const AiAnalysisTool: React.FC = () => {
                 <div className='aat__barrier-row'>
                     <span className='aat__barrier-lbl'>Barrier</span>
                     <div className='aat__barrier-btns'>
-                        {[0,1,2,3,4,5,6,7,8].map(b => (
+                        {[0,1,2,3,4,5,6,7,8,9].map(b => (
                             <button key={b} className={`aat__barrier-btn${overBarrier === b ? ' aat__barrier-btn--sel' : ''}`} onClick={() => setOverBarrier(b)}>
                                 {b}
                             </button>
@@ -584,7 +585,7 @@ const AiAnalysisTool: React.FC = () => {
                 </div>
                 <div className='aat__pattern-stream'>
                     {patternStream.slice(0, 20).map((p, i) => (
-                        <span key={i} className={`aat__pattern-block aat__pattern-block--${p.win ? 'win' : 'lose'}`}>
+                        <span key={i} className={`aat__pattern-block aat__pattern-block--${p.neutral ? 'neutral' : p.win ? 'win' : 'lose'}`}>
                             {p.label}
                         </span>
                     ))}
