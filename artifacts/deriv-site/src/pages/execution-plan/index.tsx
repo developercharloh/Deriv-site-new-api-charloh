@@ -1,416 +1,422 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import './execution-plan.scss';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-interface RiskResult {
-    capital: number;
-    stake:   number;
-    target:  number;
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const f = (v: number, d = 2) =>
+    v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 interface DayRow {
     day:              number;
-    openBalance:      number;
-    dailyTarget:      number;
-    sessionTarget:    number;
-    sessionStake:     number;
-    closeBalance:     number;
-    cumulativeProfit: number;
+    open:             number;   // opening balance
+    dailyTarget:      number;   // open × pct%
+    perSession:       number;   // dailyTarget / sessions
+    sessionStake:     number;   // perSession / 3
+    close:            number;   // open + dailyTarget
+    totalProfit:      number;   // close − initial capital
+    growthPct:        number;   // (close / initialCapital − 1) × 100
 }
 
-interface SavedPlan {
-    id:          string;
-    name:        string;
-    capital:     number;
-    compoundPct: number;
-    days:        number;
-    sessions:    number;
-    rows:        DayRow[];
-    createdAt:   string;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-const fmt = (v: number, d = 2) =>
-    v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
-
-const buildPlan = (capital: number, pct: number, days: number, sessions: number): DayRow[] => {
+const buildRows = (capital: number, pct: number, days: number, sessions: number): DayRow[] => {
     const rows: DayRow[] = [];
     let bal = capital;
     for (let d = 1; d <= days; d++) {
-        const dailyTarget    = +(bal * (pct / 100)).toFixed(2);
-        const sessionTarget  = +(dailyTarget / sessions).toFixed(2);
-        const sessionStake   = +(sessionTarget / 3).toFixed(2);   // target = 3× stake
-        const closeBalance   = +(bal + dailyTarget).toFixed(2);
+        const dailyTarget  = +(bal * pct / 100).toFixed(2);
+        const perSession   = +(dailyTarget / sessions).toFixed(2);
+        const sessionStake = +(perSession / 3).toFixed(2);
+        const close        = +(bal + dailyTarget).toFixed(2);
         rows.push({
             day: d,
-            openBalance:      +bal.toFixed(2),
-            dailyTarget,
-            sessionTarget,
-            sessionStake,
-            closeBalance,
-            cumulativeProfit: +(closeBalance - capital).toFixed(2),
+            open:  +bal.toFixed(2),
+            dailyTarget, perSession, sessionStake, close,
+            totalProfit: +(close - capital).toFixed(2),
+            growthPct:   +((close / capital - 1) * 100).toFixed(2),
         });
-        bal = closeBalance;
+        bal = close;
     }
     return rows;
 };
 
-const STORAGE_KEY = 'tc_execution_plans';
+interface SavedPlan {
+    id: string; name: string; capital: number; pct: number;
+    days: number; sessions: number; rows: DayRow[]; date: string;
+}
+const STORE = 'tc_plans_v2';
+
+// ── Sparkline ─────────────────────────────────────────────────────────────────
+const Sparkline: React.FC<{ rows: DayRow[] }> = ({ rows }) => {
+    if (rows.length < 2) return null;
+    const vals  = rows.map(r => r.close);
+    const min   = Math.min(...vals);
+    const max   = Math.max(...vals);
+    const range = max - min || 1;
+    const W = 280, H = 52, pad = 4;
+    const pts = vals.map((v, i) => {
+        const x = pad + (i / (vals.length - 1)) * (W - pad * 2);
+        const y = H - pad - ((v - min) / range) * (H - pad * 2);
+        return `${x},${y}`;
+    }).join(' ');
+    return (
+        <svg viewBox={`0 0 ${W} ${H}`} className='ep__spark' preserveAspectRatio='none'>
+            <defs>
+                <linearGradient id='spk-fill' x1='0' y1='0' x2='0' y2='1'>
+                    <stop offset='0%'   stopColor='#f59e0b' stopOpacity='0.35' />
+                    <stop offset='100%' stopColor='#f59e0b' stopOpacity='0.02' />
+                </linearGradient>
+            </defs>
+            <polygon
+                points={`${pad},${H} ${pts} ${W - pad},${H}`}
+                fill='url(#spk-fill)'
+            />
+            <polyline points={pts} fill='none' stroke='#f59e0b' strokeWidth='2' strokeLinejoin='round' />
+        </svg>
+    );
+};
 
 // ── Component ─────────────────────────────────────────────────────────────────
 const ExecutionPlan: React.FC = () => {
 
-    // ── Risk calculator ─────────────────────────────────────────────────────
-    const [riskCapital, setRiskCapital] = useState('');
-    const [riskResult,  setRiskResult]  = useState<RiskResult | null>(null);
+    /* ── Risk Calc state ──────────────────────────────────────────────────── */
+    const [rCap,     setRCap]     = useState('');
+    const [rResult,  setRResult]  = useState<{stake:number;target:number} | null>(null);
 
-    // ── Challenge planner ───────────────────────────────────────────────────
-    const [planCapital,  setPlanCapital]  = useState('');
-    const [compoundPct,  setCompoundPct]  = useState('2');
-    const [planDays,     setPlanDays]     = useState('10');
-    const [planSessions, setPlanSessions] = useState('2');
-    const [planName,     setPlanName]     = useState('');
-    const [planRows,     setPlanRows]     = useState<DayRow[]>([]);
-    const [planVisible,  setPlanVisible]  = useState(false);
+    /* ── Planner state ────────────────────────────────────────────────────── */
+    const [pCap,      setPCap]      = useState('');
+    const [pPct,      setPPct]      = useState('2');
+    const [pDays,     setPDays]     = useState('10');
+    const [pSess,     setPSess]     = useState('2');
+    const [pName,     setPName]     = useState('');
+    const [rows,      setRows]      = useState<DayRow[]>([]);
+    const [generated, setGenerated] = useState(false);
 
-    // ── Saved plans ─────────────────────────────────────────────────────────
-    const [savedPlans,  setSavedPlans]  = useState<SavedPlan[]>([]);
-    const [viewingPlan, setViewingPlan] = useState<SavedPlan | null>(null);
-    const [saveMsg,     setSaveMsg]     = useState('');
+    /* ── Saved plans ──────────────────────────────────────────────────────── */
+    const [saved,       setSaved]       = useState<SavedPlan[]>([]);
+    const [viewPlan,    setViewPlan]    = useState<SavedPlan | null>(null);
+    const [saveFlash,   setSaveFlash]   = useState(false);
 
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (raw) setSavedPlans(JSON.parse(raw));
-        } catch { /**/ }
+        try { const r = localStorage.getItem(STORE); if (r) setSaved(JSON.parse(r)); } catch { /**/ }
     }, []);
 
-    const persistPlans = useCallback((plans: SavedPlan[]) => {
-        setSavedPlans(plans);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(plans)); } catch { /**/ }
+    const persist = useCallback((plans: SavedPlan[]) => {
+        setSaved(plans);
+        try { localStorage.setItem(STORE, JSON.stringify(plans)); } catch { /**/ }
     }, []);
 
-    // ── Handlers ─────────────────────────────────────────────────────────────
-    const handleCalcRisk = () => {
-        const capital = parseFloat(riskCapital);
-        if (!capital || capital <= 0) return;
-        setRiskResult({ capital, stake: +(capital * 0.05).toFixed(2), target: +(capital * 0.15).toFixed(2) });
+    /* ── Handlers ─────────────────────────────────────────────────────────── */
+    const calcRisk = () => {
+        const c = parseFloat(rCap);
+        if (!c || c <= 0) return;
+        setRResult({ stake: +(c * 0.05).toFixed(2), target: +(c * 0.15).toFixed(2) });
     };
 
-    const handleGenerate = () => {
-        const capital  = parseFloat(planCapital);
-        const pct      = parseFloat(compoundPct);
-        const days     = parseInt(planDays,     10);
-        const sessions = parseInt(planSessions, 10);
-        if (!capital || capital <= 0 || !pct || pct <= 0 || !days || !sessions) return;
-        setPlanRows(buildPlan(capital, pct, days, sessions));
-        setPlanVisible(true);
-        setViewingPlan(null);
+    const generate = () => {
+        const c = parseFloat(pCap), p = parseFloat(pPct),
+              d = parseInt(pDays), s = parseInt(pSess);
+        if (!c || !p || !d || !s || c <= 0 || p <= 0) return;
+        setRows(buildRows(c, p, d, s));
+        setGenerated(true);
+        setViewPlan(null);
     };
 
-    const handleSave = () => {
-        if (!planVisible || planRows.length === 0) return;
-        const capital  = parseFloat(planCapital);
-        const pct      = parseFloat(compoundPct);
-        const days     = parseInt(planDays,     10);
-        const sessions = parseInt(planSessions, 10);
-        const name = planName.trim() || `${days}-Day Challenge — $${fmt(capital, 0)}`;
-        const plan: SavedPlan = {
-            id:          Date.now().toString(),
-            name,
-            capital,
-            compoundPct: pct,
-            days,
-            sessions,
-            rows:        planRows,
-            createdAt:   new Date().toLocaleDateString(),
-        };
-        persistPlans([plan, ...savedPlans]);
-        setSaveMsg('Plan saved ✓');
-        setTimeout(() => setSaveMsg(''), 2500);
+    const savePlan = () => {
+        if (!generated || rows.length === 0) return;
+        const c = parseFloat(pCap), p = parseFloat(pPct),
+              d = parseInt(pDays), s = parseInt(pSess);
+        const name = pName.trim() || `${d}-Day Challenge · $${f(c, 0)}`;
+        const plan: SavedPlan = { id: Date.now().toString(), name, capital: c, pct: p, days: d, sessions: s, rows, date: new Date().toLocaleDateString() };
+        persist([plan, ...saved]);
+        setSaveFlash(true);
+        setTimeout(() => setSaveFlash(false), 2000);
     };
 
-    const handleDelete = (id: string) => {
-        persistPlans(savedPlans.filter(p => p.id !== id));
-        if (viewingPlan?.id === id) setViewingPlan(null);
+    const deletePlan = (id: string) => {
+        persist(saved.filter(p => p.id !== id));
+        if (viewPlan?.id === id) setViewPlan(null);
     };
 
-    const handlePrint = () => window.print();
+    /* ── Active display ───────────────────────────────────────────────────── */
+    const activeRows = viewPlan ? viewPlan.rows : rows;
+    const showTable  = (generated || !!viewPlan) && activeRows.length > 0;
+    const meta = viewPlan
+        ? { cap: viewPlan.capital, pct: viewPlan.pct, days: viewPlan.days, sess: viewPlan.sessions, name: viewPlan.name }
+        : { cap: parseFloat(pCap)||0, pct: parseFloat(pPct)||2, days: parseInt(pDays)||10, sess: parseInt(pSess)||2, name: pName||`${pDays}-Day Challenge` };
 
-    // ── Active display ────────────────────────────────────────────────────────
-    const activeRows = viewingPlan ? viewingPlan.rows : planRows;
-    const showTable  = (planVisible || !!viewingPlan) && activeRows.length > 0;
+    const last = activeRows[activeRows.length - 1];
 
-    const activeMeta = viewingPlan
-        ? { capital: viewingPlan.capital, pct: viewingPlan.compoundPct, days: viewingPlan.days, sessions: viewingPlan.sessions, name: viewingPlan.name }
-        : { capital: parseFloat(planCapital) || 0, pct: parseFloat(compoundPct) || 2, days: parseInt(planDays) || 10, sessions: parseInt(planSessions) || 2, name: planName || `${planDays}-Day Challenge` };
-
-    const lastRow     = activeRows[activeRows.length - 1];
-    const totalProfit = lastRow?.cumulativeProfit ?? 0;
-    const roiPct      = activeMeta.capital > 0 ? ((totalProfit / activeMeta.capital) * 100).toFixed(1) : '0.0';
+    const roiPct = useMemo(() =>
+        meta.cap > 0 && last ? ((last.totalProfit / meta.cap) * 100).toFixed(1) : '0.0',
+    [meta.cap, last]);
 
     return (
         <div className='ep'>
 
-            {/* ── Header ──────────────────────────────────────────────────── */}
-            <div className='ep__hd'>
-                <div className='ep__hd-left'>
-                    <span className='ep__hd-title'>EXECUTION <span className='ep__hd-accent'>PLAN</span></span>
-                    <span className='ep__hd-sub'>Risk Calculator · Challenge Planner · Trading Schedule</span>
+            {/* ── Page header ─────────────────────────────────────────── */}
+            <div className='ep__top'>
+                <div className='ep__top-inner'>
+                    <span className='ep__top-icon'>📋</span>
+                    <div>
+                        <h1 className='ep__top-title'>Execution Plan</h1>
+                        <p  className='ep__top-sub'>Risk Management · Compounding Challenge · Trade Schedule</p>
+                    </div>
                 </div>
             </div>
 
-            {/* ══════════════════════════════════════════════════════════════
-                SECTION 1 — Risk Calculator
-            ══════════════════════════════════════════════════════════════ */}
-            <section className='ep__section'>
-                <div className='ep__section-hd'>
-                    <span className='ep__s-icon'>⚖️</span>
+            {/* ════════════════════════════════════════════════════════
+                RISK CALCULATOR
+            ════════════════════════════════════════════════════════ */}
+            <div className='ep__card'>
+                <div className='ep__card-hd ep__card-hd--gold'>
+                    <span>⚖️</span>
                     <div>
-                        <h2 className='ep__s-title'>Risk Calculator</h2>
-                        <p  className='ep__s-sub'>Enter your capital to get a safe stake &amp; profit target</p>
+                        <h2>Risk Calculator</h2>
+                        <p>Get your safe stake &amp; session target from your capital</p>
                     </div>
                 </div>
-
-                <div className='ep__risk-row'>
-                    <div className='ep__field'>
-                        <label className='ep__label'>Trading Capital (USD)</label>
-                        <input
-                            className='ep__input'
-                            type='number'
-                            min='1'
-                            placeholder='e.g. 1,000'
-                            value={riskCapital}
-                            onChange={e => setRiskCapital(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleCalcRisk()}
-                        />
+                <div className='ep__rc-body'>
+                    <div className='ep__field-wrap'>
+                        <label>Trading Capital (USD)</label>
+                        <div className='ep__inp-row'>
+                            <span className='ep__inp-prefix'>$</span>
+                            <input
+                                type='number' min='1' placeholder='e.g. 1000'
+                                value={rCap}
+                                onChange={e => setRCap(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && calcRisk()}
+                            />
+                        </div>
                     </div>
-                    <button className='ep__btn ep__btn--primary' onClick={handleCalcRisk}>
+                    <button className='ep__btn ep__btn--gold' onClick={calcRisk}>
                         Calculate Risk
                     </button>
                 </div>
 
-                {riskResult && (
-                    <div className='ep__risk-cards'>
-                        <div className='ep__rcard ep__rcard--stake'>
-                            <span className='ep__rcard-lbl'>Recommended Stake</span>
-                            <span className='ep__rcard-val'>${fmt(riskResult.stake)}</span>
-                            <span className='ep__rcard-hint'>10% of capital ÷ 2</span>
+                {rResult && (
+                    <div className='ep__rc-results' key={rResult.stake}>
+                        <div className='ep__rc-card ep__rc-card--stake'>
+                            <div className='ep__rc-icon'>🎯</div>
+                            <div className='ep__rc-val'>${f(rResult.stake)}</div>
+                            <div className='ep__rc-lbl'>Recommended Stake</div>
+                            <div className='ep__rc-hint'>10% ÷ 2 of capital</div>
                         </div>
-                        <div className='ep__rcard ep__rcard--target'>
-                            <span className='ep__rcard-lbl'>Session Target</span>
-                            <span className='ep__rcard-val'>${fmt(riskResult.target)}</span>
-                            <span className='ep__rcard-hint'>3 × stake</span>
+                        <div className='ep__rc-card ep__rc-card--target'>
+                            <div className='ep__rc-icon'>💰</div>
+                            <div className='ep__rc-val'>${f(rResult.target)}</div>
+                            <div className='ep__rc-lbl'>Session Target</div>
+                            <div className='ep__rc-hint'>3× your stake</div>
                         </div>
-                        <div className='ep__rcard ep__rcard--exp'>
-                            <span className='ep__rcard-lbl'>Risk Exposure</span>
-                            <span className='ep__rcard-val'>5%</span>
-                            <span className='ep__rcard-hint'>of total capital</span>
+                        <div className='ep__rc-card ep__rc-card--risk'>
+                            <div className='ep__rc-icon'>🛡️</div>
+                            <div className='ep__rc-val'>5%</div>
+                            <div className='ep__rc-lbl'>Risk per Session</div>
+                            <div className='ep__rc-hint'>of total capital</div>
                         </div>
                     </div>
                 )}
+            </div>
 
-                {riskResult && (
-                    <div className='ep__risk-formula'>
-                        <span className='ep__formula-pill'>Capital</span>
-                        <span className='ep__formula-op'>×10%÷2</span>
-                        <span className='ep__formula-pill ep__formula-pill--out'>${fmt(riskResult.stake)} stake</span>
-                        <span className='ep__formula-op'>×3</span>
-                        <span className='ep__formula-pill ep__formula-pill--profit'>${fmt(riskResult.target)} target</span>
-                    </div>
-                )}
-            </section>
-
-            {/* ══════════════════════════════════════════════════════════════
-                SECTION 2 — Challenge Planner
-            ══════════════════════════════════════════════════════════════ */}
-            <section className='ep__section'>
-                <div className='ep__section-hd'>
-                    <span className='ep__s-icon'>📅</span>
+            {/* ════════════════════════════════════════════════════════
+                CHALLENGE PLANNER
+            ════════════════════════════════════════════════════════ */}
+            <div className='ep__card'>
+                <div className='ep__card-hd ep__card-hd--green'>
+                    <span>📅</span>
                     <div>
-                        <h2 className='ep__s-title'>Challenge Planner</h2>
-                        <p  className='ep__s-sub'>Build a compounding schedule with per-session stake &amp; targets</p>
+                        <h2>Challenge Planner</h2>
+                        <p>Set your capital, compound rate &amp; sessions — we build the plan</p>
                     </div>
                 </div>
 
-                <div className='ep__planner-grid'>
-                    <div className='ep__field'>
-                        <label className='ep__label'>Starting Capital (USD)</label>
-                        <input
-                            className='ep__input'
-                            type='number' min='1'
-                            placeholder='e.g. 500'
-                            value={planCapital}
-                            onChange={e => setPlanCapital(e.target.value)}
-                        />
+                <div className='ep__planner'>
+                    <div className='ep__field-wrap'>
+                        <label>Starting Capital (USD)</label>
+                        <div className='ep__inp-row'>
+                            <span className='ep__inp-prefix'>$</span>
+                            <input type='number' min='1' placeholder='e.g. 500' value={pCap} onChange={e => setPCap(e.target.value)} />
+                        </div>
                     </div>
-                    <div className='ep__field'>
-                        <label className='ep__label'>Daily Compound %</label>
-                        <input
-                            className='ep__input'
-                            type='number' min='0.1' max='100' step='0.1'
-                            placeholder='2'
-                            value={compoundPct}
-                            onChange={e => setCompoundPct(e.target.value)}
-                        />
+
+                    <div className='ep__field-wrap'>
+                        <label>Daily Compound %</label>
+                        <div className='ep__inp-row'>
+                            <input type='number' min='0.1' max='100' step='0.1' placeholder='2' value={pPct} onChange={e => setPPct(e.target.value)} />
+                            <span className='ep__inp-suffix'>%</span>
+                        </div>
                     </div>
-                    <div className='ep__field'>
-                        <label className='ep__label'>Challenge Duration</label>
-                        <select className='ep__input ep__select' value={planDays} onChange={e => setPlanDays(e.target.value)}>
-                            {[5,7,10,14,20,30,60,90].map(d =>
-                                <option key={d} value={d}>{d}-Day Challenge</option>
-                            )}
+
+                    <div className='ep__field-wrap'>
+                        <label>Challenge Duration</label>
+                        <select value={pDays} onChange={e => setPDays(e.target.value)}>
+                            {[5,7,10,14,20,30,60,90].map(d => <option key={d} value={d}>{d}-Day Challenge</option>)}
                         </select>
                     </div>
-                    <div className='ep__field'>
-                        <label className='ep__label'>Sessions Per Day</label>
-                        <select className='ep__input ep__select' value={planSessions} onChange={e => setPlanSessions(e.target.value)}>
-                            {[1,2,3,4,5,6].map(s =>
-                                <option key={s} value={s}>{s} session{s > 1 ? 's' : ''}</option>
-                            )}
+
+                    <div className='ep__field-wrap'>
+                        <label>Sessions Per Day</label>
+                        <select value={pSess} onChange={e => setPSess(e.target.value)}>
+                            {[1,2,3,4,5,6].map(s => <option key={s} value={s}>{s} session{s>1?'s':''}/day</option>)}
                         </select>
                     </div>
-                    <div className='ep__field ep__field--full'>
-                        <label className='ep__label'>Plan Name <span className='ep__label-opt'>(optional)</span></label>
-                        <input
-                            className='ep__input'
-                            type='text'
-                            placeholder={`e.g. My ${planDays}-Day Challenge`}
-                            value={planName}
-                            onChange={e => setPlanName(e.target.value)}
-                        />
+
+                    <div className='ep__field-wrap ep__field-wrap--full'>
+                        <label>Plan Name <span>(optional)</span></label>
+                        <input type='text' placeholder={`e.g. My ${pDays}-Day Challenge`} value={pName} onChange={e => setPName(e.target.value)} />
                     </div>
                 </div>
 
-                <div className='ep__planner-actions'>
-                    <button className='ep__btn ep__btn--primary' onClick={handleGenerate}>
+                <div className='ep__planner-btns'>
+                    <button className='ep__btn ep__btn--green' onClick={generate}>
                         ⚡ Generate Plan
                     </button>
-                    {planVisible && (
-                        <>
-                            <button className='ep__btn ep__btn--save' onClick={handleSave}>
-                                💾 Save Plan {saveMsg && <span className='ep__save-tick'>{saveMsg}</span>}
-                            </button>
-                            <button className='ep__btn ep__btn--pdf' onClick={handlePrint}>
-                                📄 Export PDF
-                            </button>
-                        </>
-                    )}
+                    {generated && <>
+                        <button
+                            className={`ep__btn ep__btn--save${saveFlash ? ' ep__btn--flash' : ''}`}
+                            onClick={savePlan}
+                        >
+                            {saveFlash ? '✓ Saved!' : '💾 Save Plan'}
+                        </button>
+                        <button className='ep__btn ep__btn--outline' onClick={() => window.print()}>
+                            📄 Export PDF
+                        </button>
+                    </>}
                 </div>
-            </section>
+            </div>
 
-            {/* ══════════════════════════════════════════════════════════════
-                SECTION 3 — Plan Table
-            ══════════════════════════════════════════════════════════════ */}
-            {showTable && (
-                <section className='ep__section ep__section--table' id='ep-print-area'>
+            {/* ════════════════════════════════════════════════════════
+                PLAN TABLE
+            ════════════════════════════════════════════════════════ */}
+            {showTable && last && (
+                <div className='ep__card ep__card--plan' id='ep-print-area'>
 
-                    {/* Summary header */}
-                    <div className='ep__plan-hd'>
-                        <div className='ep__plan-title-row'>
-                            <h3 className='ep__plan-name'>
-                                {activeMeta.name || `${activeMeta.days}-Day Challenge`}
-                            </h3>
-                            {viewingPlan && (
-                                <button className='ep__btn ep__btn--ghost' onClick={() => setViewingPlan(null)}>
-                                    ✕ Close
-                                </button>
-                            )}
+                    {/* Plan name + close button */}
+                    <div className='ep__plan-namebar'>
+                        <span className='ep__plan-namebar-txt'>{meta.name}</span>
+                        {viewPlan && (
+                            <button className='ep__icon-btn' onClick={() => setViewPlan(null)}>✕</button>
+                        )}
+                    </div>
+
+                    {/* 4 meta chips */}
+                    <div className='ep__chips'>
+                        <span className='ep__chip'>💰 ${f(meta.cap, 0)} capital</span>
+                        <span className='ep__chip'>📈 {meta.pct}% daily</span>
+                        <span className='ep__chip'>📅 {meta.days} days</span>
+                        <span className='ep__chip'>🔁 {meta.sess} sessions/day</span>
+                    </div>
+
+                    {/* Summary KPIs */}
+                    <div className='ep__kpis'>
+                        <div className='ep__kpi'>
+                            <span>Final Balance</span>
+                            <strong>${f(last.close)}</strong>
                         </div>
-                        <div className='ep__plan-meta'>
-                            <span>💰 Capital: <strong>${fmt(activeMeta.capital)}</strong></span>
-                            <span>📈 Daily: <strong>{activeMeta.pct}%</strong></span>
-                            <span>📅 <strong>{activeMeta.days} days</strong></span>
-                            <span>🔁 <strong>{activeMeta.sessions} session{activeMeta.sessions > 1 ? 's' : ''}/day</strong></span>
+                        <div className='ep__kpi ep__kpi--profit'>
+                            <span>Total Profit</span>
+                            <strong>+${f(last.totalProfit)}</strong>
                         </div>
-                        <div className='ep__summary-row'>
-                            <div className='ep__scard'>
-                                <span>Final Balance</span>
-                                <strong>${fmt(lastRow.closeBalance)}</strong>
-                            </div>
-                            <div className='ep__scard ep__scard--profit'>
-                                <span>Total Profit</span>
-                                <strong>+${fmt(totalProfit)}</strong>
-                            </div>
-                            <div className='ep__scard ep__scard--roi'>
-                                <span>Return on Capital</span>
-                                <strong>+{roiPct}%</strong>
-                            </div>
+                        <div className='ep__kpi ep__kpi--roi'>
+                            <span>ROI</span>
+                            <strong>+{roiPct}%</strong>
                         </div>
+                    </div>
+
+                    {/* Sparkline growth chart */}
+                    <div className='ep__spark-wrap'>
+                        <span className='ep__spark-lbl'>Balance Growth Over {meta.days} Days</span>
+                        <Sparkline rows={activeRows} />
+                        <div className='ep__spark-axis'>
+                            <span>${f(meta.cap, 0)}</span>
+                            <span>${f(last.close, 0)}</span>
+                        </div>
+                    </div>
+
+                    {/* Compounding note */}
+                    <div className='ep__compound-note'>
+                        <span className='ep__note-icon'>🔄</span>
+                        <span>Each day's <strong>Opening Balance</strong> = previous day's <strong>Closing Balance</strong> — this is how compounding grows your account.</span>
                     </div>
 
                     {/* Table */}
-                    <div className='ep__table-wrap'>
-                        <table className='ep__table'>
+                    <div className='ep__tbl-wrap'>
+                        <table className='ep__tbl'>
                             <thead>
                                 <tr>
-                                    <th>Day</th>
-                                    <th>Opening Balance</th>
-                                    <th>Daily Target ({activeMeta.pct}%)</th>
-                                    <th>Per Session Target</th>
-                                    <th>Session Stake</th>
-                                    <th>Closing Balance</th>
-                                    <th>Cumulative Profit</th>
+                                    <th className='ep__th--day'>Day</th>
+                                    <th>Opening<br/>Balance</th>
+                                    <th>Daily Target<br/>({meta.pct}%)</th>
+                                    <th>Per Session<br/>Target</th>
+                                    <th>Session<br/>Stake</th>
+                                    <th>Closing<br/>Balance ↗</th>
+                                    <th>Total<br/>Profit</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {activeRows.map(row => (
-                                    <tr key={row.day} className={row.day % 2 === 0 ? 'ep__tr--even' : ''}>
-                                        <td className='ep__td--day'>Day {row.day}</td>
-                                        <td>${fmt(row.openBalance)}</td>
-                                        <td className='ep__td--target'>+${fmt(row.dailyTarget)}</td>
-                                        <td>${fmt(row.sessionTarget)}</td>
-                                        <td className='ep__td--stake'>${fmt(row.sessionStake)}</td>
-                                        <td className='ep__td--close'>${fmt(row.closeBalance)}</td>
-                                        <td className='ep__td--profit'>+${fmt(row.cumulativeProfit)}</td>
+                                {activeRows.map((row, i) => (
+                                    <tr key={row.day} className={i % 2 === 1 ? 'ep__tr--alt' : ''}>
+                                        <td className='ep__td--day'>
+                                            <span className='ep__day-badge'>D{row.day}</span>
+                                        </td>
+                                        <td className='ep__td--open'>
+                                            ${f(row.open)}
+                                            {i > 0 && (
+                                                <span className='ep__carry'>↑ carried</span>
+                                            )}
+                                        </td>
+                                        <td className='ep__td--dtarget'>+${f(row.dailyTarget)}</td>
+                                        <td>${f(row.perSession)}</td>
+                                        <td className='ep__td--stake'>${f(row.sessionStake)}</td>
+                                        <td className='ep__td--close'>${f(row.close)}</td>
+                                        <td className='ep__td--profit'>+${f(row.totalProfit)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
-                </section>
+                </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════════
-                SECTION 4 — Saved Plans
-            ══════════════════════════════════════════════════════════════ */}
-            {savedPlans.length > 0 && (
-                <section className='ep__section'>
-                    <div className='ep__section-hd'>
-                        <span className='ep__s-icon'>📂</span>
+            {/* ════════════════════════════════════════════════════════
+                SAVED PLANS
+            ════════════════════════════════════════════════════════ */}
+            {saved.length > 0 && (
+                <div className='ep__card'>
+                    <div className='ep__card-hd ep__card-hd--purple'>
+                        <span>📂</span>
                         <div>
-                            <h2 className='ep__s-title'>Saved Plans</h2>
-                            <p  className='ep__s-sub'>{savedPlans.length} plan{savedPlans.length !== 1 ? 's' : ''} stored on this device</p>
+                            <h2>Saved Plans</h2>
+                            <p>{saved.length} plan{saved.length !== 1 ? 's' : ''} on this device</p>
                         </div>
                     </div>
-                    <div className='ep__saved-list'>
-                        {savedPlans.map(plan => (
+                    <div className='ep__saved'>
+                        {saved.map(plan => (
                             <div
                                 key={plan.id}
-                                className={`ep__saved-item${viewingPlan?.id === plan.id ? ' ep__saved-item--active' : ''}`}
+                                className={`ep__saved-row${viewPlan?.id === plan.id ? ' ep__saved-row--on' : ''}`}
                             >
                                 <div className='ep__saved-info'>
-                                    <span className='ep__saved-name'>{plan.name}</span>
-                                    <span className='ep__saved-meta'>
-                                        ${fmt(plan.capital, 0)} · {plan.days} days · {plan.compoundPct}%/day · {plan.sessions} sessions/day · saved {plan.createdAt}
-                                    </span>
-                                    <span className='ep__saved-roi'>
-                                        Final: ${fmt(plan.rows[plan.rows.length - 1]?.closeBalance ?? 0)} &nbsp;|&nbsp; +${fmt(plan.rows[plan.rows.length - 1]?.cumulativeProfit ?? 0)} profit
-                                    </span>
+                                    <div className='ep__saved-name'>{plan.name}</div>
+                                    <div className='ep__saved-meta'>
+                                        ${f(plan.capital,0)} · {plan.days}d · {plan.pct}%/day · {plan.sessions} sessions · {plan.date}
+                                    </div>
+                                    <div className='ep__saved-roi'>
+                                        Final ${f(plan.rows[plan.rows.length-1]?.close ?? 0)} &nbsp;·&nbsp; +${f(plan.rows[plan.rows.length-1]?.totalProfit ?? 0)} profit · +{plan.rows[plan.rows.length-1]?.growthPct ?? 0}% ROI
+                                    </div>
                                 </div>
-                                <div className='ep__saved-acts'>
+                                <div className='ep__saved-btns'>
                                     <button
-                                        className='ep__btn ep__btn--view'
-                                        onClick={() => setViewingPlan(viewingPlan?.id === plan.id ? null : plan)}
+                                        className='ep__btn ep__btn--sm ep__btn--outline'
+                                        onClick={() => setViewPlan(viewPlan?.id === plan.id ? null : plan)}
                                     >
-                                        {viewingPlan?.id === plan.id ? '▲ Hide' : '▼ View'}
+                                        {viewPlan?.id === plan.id ? '▲ Hide' : '▼ View'}
                                     </button>
-                                    <button className='ep__btn ep__btn--del' onClick={() => handleDelete(plan.id)}>🗑</button>
+                                    <button
+                                        className='ep__btn ep__btn--sm ep__btn--danger'
+                                        onClick={() => deletePlan(plan.id)}
+                                    >🗑</button>
                                 </div>
                             </div>
                         ))}
                     </div>
-                </section>
+                </div>
             )}
 
         </div>
