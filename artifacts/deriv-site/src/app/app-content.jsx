@@ -21,6 +21,7 @@ import Audio from '../components/audio';
 import BlocklyLoading from '../components/blockly-loading';
 import BotStopped from '../components/bot-stopped';
 import BotBuilder from '../pages/bot-builder';
+import LandingPage from '../pages/landing';
 import Main from '../pages/main';
 import './app.scss';
 import 'react-toastify/dist/ReactToastify.css';
@@ -190,6 +191,8 @@ const AppContent = observer(() => {
             )}
             {is_loading ? (
                 <ChunkLoader message={localize('Initializing Mr CharlohFX account...')} />
+            ) : !client.is_logged_in ? (
+                <LandingPage />
             ) : (
                 <AuthLoadingWrapper>
                     <ThemeProvider theme={is_dark_mode_on ? 'dark' : 'light'}>
