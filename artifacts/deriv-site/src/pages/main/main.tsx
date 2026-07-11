@@ -47,7 +47,7 @@ import './main.scss';
 
 const ChartWrapper      = lazy(() => import('../chart/chart-wrapper'));
 const AnalysisTool      = lazy(() => import('../ai-analysis-tool'));
-const DCircles          = lazy(() => import('../signal-engine'));
+const ExecutionPlan     = lazy(() => import('../execution-plan'));
 const FreeBots          = lazy(() => import('../free-bots'));
 const AdvancedDTrader   = lazy(() => import('../advanced-dtrader'));
 
@@ -477,13 +477,13 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
-                                        <Localize i18n_default_text='🔵 D-Circles' />
+                                        <Localize i18n_default_text='🗂 Execution Plan' />
                                     </>
                                 }
                                 id='id-d-circles'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading D-Circles...')} />}>
-                                    <DCircles />
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Execution Plan...')} />}>
+                                    <ExecutionPlan />
                                 </Suspense>
                             </div>
                             <div

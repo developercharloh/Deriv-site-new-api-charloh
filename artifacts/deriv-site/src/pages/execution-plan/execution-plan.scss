@@ -1,0 +1,111 @@
+@keyframes ep-pulse {
+    0%, 100% { opacity: 1; transform: scale(1);   }
+    50%       { opacity: 0.5; transform: scale(0.85); }
+}
+@keyframes ep-float {
+    0%, 100% { transform: translateY(0);    }
+    50%       { transform: translateY(-8px); }
+}
+@keyframes ep-dot {
+    0%, 80%, 100% { transform: scale(0);   opacity: 0.3; }
+    40%            { transform: scale(1.1); opacity: 1;   }
+}
+@keyframes ep-badge-glow {
+    0%, 100% { box-shadow: 0 0 10px rgba(99,102,241,0.5); }
+    50%       { box-shadow: 0 0 24px rgba(99,102,241,0.9), 0 0 40px rgba(99,102,241,0.3); }
+}
+
+.ep {
+    display:         flex;
+    flex-direction:  column;
+    align-items:     center;
+    justify-content: center;
+    min-height:      70vh;
+    padding:         32px 24px 80px;
+    text-align:      center;
+    position:        relative;
+    overflow:        hidden;
+    background:      var(--general-main-1);
+    font-family:     -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+// Radial background glow
+.ep__glow {
+    position:      absolute;
+    top:           50%;
+    left:          50%;
+    transform:     translate(-50%, -55%);
+    width:         320px;
+    height:        320px;
+    border-radius: 50%;
+    background:    radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.ep__icon {
+    font-size:  52px;
+    line-height: 1;
+    margin-bottom: 16px;
+    animation:  ep-float 3s ease-in-out infinite;
+    filter:     drop-shadow(0 4px 18px rgba(99,102,241,0.6));
+}
+
+.ep__title {
+    font-size:   32px;
+    font-weight: 900;
+    line-height: 1.15;
+    color:       var(--text-prominent);
+    letter-spacing: -0.02em;
+    margin:      0 0 10px;
+}
+.ep__accent {
+    color: #818cf8;
+    text-shadow: 0 0 20px rgba(129,140,248,0.6);
+}
+
+.ep__sub {
+    font-size:   13px;
+    font-weight: 500;
+    color:       #a0aec0;
+    margin:      0 0 20px;
+    max-width:   260px;
+}
+
+.ep__badge {
+    display:       inline-block;
+    padding:       7px 20px;
+    border-radius: 30px;
+    background:    linear-gradient(135deg, #4338ca, #6366f1);
+    color:         #fff;
+    font-size:     11px;
+    font-weight:   900;
+    letter-spacing: 0.14em;
+    margin-bottom: 20px;
+    animation:     ep-badge-glow 2.4s ease-in-out infinite;
+}
+
+.ep__desc {
+    font-size:   12px;
+    line-height: 1.6;
+    color:       #718096;
+    max-width:   280px;
+    margin:      0 0 28px;
+}
+
+.ep__dots {
+    display: flex;
+    gap:     8px;
+
+    span {
+        width:         8px;
+        height:        8px;
+        border-radius: 50%;
+        background:    #6366f1;
+        display:       inline-block;
+        animation:     ep-dot 1.4s ease-in-out infinite both;
+
+        &:nth-child(1) { animation-delay: 0s;    }
+        &:nth-child(2) { animation-delay: 0.16s; }
+        &:nth-child(3) { animation-delay: 0.32s; }
+    }
+}
