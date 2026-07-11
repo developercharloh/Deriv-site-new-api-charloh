@@ -47,6 +47,14 @@ export const tradeOptionToBuy = (contract_type, trade_option) => {
     const buy = {
         buy: '1',
         price: trade_option.amount,
+        // subscribe: 1 causes Deriv to automatically push proposal_open_contract
+        // updates for this contract after purchase. Without it the API sends no
+        // updates and observeOpenContract never receives the is_sold message,
+        // leaving watch('during') / waitForAfter hanging forever ("Contract bought"
+        // freeze). The proposal-subscription path (buy by proposal id) gets this
+        // for free because the proposal was already subscribed; the direct buy path
+        // must request it explicitly.
+        subscribe: 1,
         parameters: {
             amount: trade_option.amount,
             basis: trade_option.basis,

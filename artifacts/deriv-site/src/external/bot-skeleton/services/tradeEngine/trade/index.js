@@ -124,16 +124,17 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                     this.transaction_recovery_timeout = setTimeout(() => {
                         const { contract } = this.data;
                         const is_same_contract = contract.contract_id === data.transaction.contract_id;
-                        const is_open_contract = contract.status === 'open';
+                        // contract.status is 'open' for the proposal-subscription path.
+                        // For the direct-buy path the contract object may be empty {} if no
+                        // proposal_open_contract message was ever received (subscribe:1 was
+                        // missing), so status is undefined — treat that as "needs recovery" too.
+                        const is_open_contract = contract.status === 'open' || !contract.status;
                         if (is_same_contract && is_open_contract) {
                             doUntilDone(() => {
-                                api_base.api.send({ proposal_open_contract: 1, contract_id: contract.contract_id });
+                                api_base.api.send({ proposal_open_contract: 1, contract_id: data.transaction.contract_id });
                             }, ['PriceMoved']);
                         }
                     // Reduced from 1500 → 300 ms: digit contracts settle in ≈ 1 tick (≈ 1 s).
-                    // Waiting 1.5 s after the transaction event meant the afterPromise timeout
-                    // could expire before this recovery even fired. 300 ms ensures we poll
-                    // the contract status well within the 2 s watchdog window.
                     }, 300);
                 }
                 resolve();
