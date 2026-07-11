@@ -20,6 +20,17 @@
     70%  { transform: scale(1.08); }
     100% { opacity: 1; transform: scale(1); }
 }
+@keyframes aat-arrow-drop {
+    0%   { opacity: 0; transform: translateY(-14px) scale(0.7); }
+    55%  { opacity: 1; transform: translateY(3px)   scale(1.15); }
+    75%  { transform: translateY(-2px) scale(0.95); }
+    100% { opacity: 1; transform: translateY(0)     scale(1); }
+}
+@keyframes aat-cell-flash {
+    0%   { box-shadow: 0 0 0   rgba(255,255,255,0.6); }
+    40%  { box-shadow: 0 0 20px rgba(255,255,255,0.35); }
+    100% { box-shadow: 0 0 6px rgba(255,255,255,0.05); }
+}
 @keyframes aat-glow-pulse {
     0%, 100% { box-shadow: 0 0 8px rgba(0,230,118,0.3); }
     50%       { box-shadow: 0 0 18px rgba(0,230,118,0.6); }
@@ -417,9 +428,9 @@
     border:          2px solid;
     cursor:          default;
     animation:       aat-pop-in 0.3s ease;
-    transition:      transform 0.15s, box-shadow 0.15s;
+    transition:      transform 0.2s, box-shadow 0.2s, border-color 0.2s;
     position:        relative;
-    overflow:        hidden;
+    overflow:        visible; // allow the arrow to poke above the circle
 
     &:hover { transform: scale(1.08); }
 
@@ -440,6 +451,34 @@
     }
 }
 
+// Active cell — highlighted by the live price arrow
+.aat__dist-cell--active {
+    transform:   scale(1.12) !important;
+    z-index:     2;
+    animation:   aat-cell-flash 0.5s ease forwards !important;
+
+    &.aat__dist-cell--most   { border-color: #00ff99; box-shadow: 0 0 22px rgba(0,255,153,0.55), inset 0 0 10px rgba(0,255,153,0.15) !important; }
+    &.aat__dist-cell--least  { border-color: #ff6b7a; box-shadow: 0 0 22px rgba(255,107,122,0.55), inset 0 0 10px rgba(255,107,122,0.15) !important; }
+    &.aat__dist-cell--normal { border-color: #a5b4fc; box-shadow: 0 0 22px rgba(165,180,252,0.5),  inset 0 0 10px rgba(165,180,252,0.1)  !important; }
+}
+
+// The bouncing arrow indicator
+.aat__dist-arrow {
+    position:    absolute;
+    top:         -18px;
+    left:        50%;
+    transform:   translateX(-50%);
+    font-size:   12px;
+    line-height: 1;
+    animation:   aat-arrow-drop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    pointer-events: none;
+    filter:      drop-shadow(0 0 4px currentColor);
+
+    .aat__dist-cell--most   & { color: #00ff99; }
+    .aat__dist-cell--least  & { color: #ff6b7a; }
+    .aat__dist-cell--normal & { color: #a5b4fc; }
+}
+
 .aat__dist-digit {
     font-size:   14px;
     font-weight: 900;
@@ -448,6 +487,7 @@
     .aat__dist-cell--most   & { color: #00e676; text-shadow: 0 0 8px rgba(0,230,118,0.6); }
     .aat__dist-cell--least  & { color: #ff3d57; text-shadow: 0 0 8px rgba(255,61,87,0.6); }
     .aat__dist-cell--normal & { color: var(--text-prominent); }
+    .aat__dist-cell--active & { color: #fff; }
 }
 .aat__dist-pct {
     font-size:   7.5px;

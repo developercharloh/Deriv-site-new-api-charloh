@@ -292,6 +292,8 @@ const AiAnalysisTool: React.FC = () => {
     const [sparkPrices,  setSparkPrices]  = useState<number[]>([]);
     const [connected,    setConnected]    = useState<'connecting' | 'live' | 'error'>('connecting');
     const [patternStream, setPatternStream] = useState<{ label: string; win: boolean }[]>([]);
+    const [currentDigit, setCurrentDigit] = useState<number | null>(null);
+    const [arrowKey,     setArrowKey]     = useState(0); // increments on each tick to retrigger animation
 
     const wsRef   = useRef<WebSocket | null>(null);
     const subRef  = useRef<number | null>(null); // subscription id
@@ -354,8 +356,11 @@ const AiAnalysisTool: React.FC = () => {
                 setPrices([...trimmed]);
                 setPatternStream(buildPattern(trimmed, pip, analysisType));
                 if (raw.length > 0) {
-                    setLivePrice(raw[raw.length - 1]);
+                    const lastP = raw[raw.length - 1];
+                    setLivePrice(lastP);
                     setSparkPrices(raw.slice(-SPARKLINE_N));
+                    setCurrentDigit(lastDigitOf(lastP, pip));
+                    setArrowKey(k => k + 1);
                 }
                 historyLoaded = true;
                 setConnected('live');
@@ -369,6 +374,8 @@ const AiAnalysisTool: React.FC = () => {
 
                 setLivePrice(prev => { setPrevPrice(prev); return tick; });
                 setSparkPrices(prev => [...prev.slice(-(SPARKLINE_N - 1)), tick]);
+                setCurrentDigit(lastDigitOf(tick, pipRef.current));
+                setArrowKey(k => k + 1);
 
                 const updated = [...pricesRef.current.slice(-(tickWindow - 1)), tick];
                 pricesRef.current = updated;
@@ -582,11 +589,21 @@ const AiAnalysisTool: React.FC = () => {
                 </div>
                 <div className='aat__dist-grid'>
                     {digitFreq.map((pct, d) => {
-                        const isMost  = d === mostFreqDigit;
-                        const isLeast = d === leastFreqDigit;
+                        const isMost   = d === mostFreqDigit;
+                        const isLeast  = d === leastFreqDigit;
+                        const isActive = d === currentDigit;
                         const cls = isMost ? 'most' : isLeast ? 'least' : 'normal';
                         return (
-                            <div key={d} className={`aat__dist-cell aat__dist-cell--${cls}`}>
+                            <div
+                                key={d}
+                                className={`aat__dist-cell aat__dist-cell--${cls}${isActive ? ' aat__dist-cell--active' : ''}`}
+                            >
+                                {isActive && (
+                                    <span
+                                        key={arrowKey}
+                                        className='aat__dist-arrow'
+                                    >▼</span>
+                                )}
                                 <span className='aat__dist-digit'>{d}</span>
                                 <span className='aat__dist-pct'>{pct}%</span>
                             </div>
