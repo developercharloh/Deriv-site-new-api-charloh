@@ -130,7 +130,11 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                                 api_base.api.send({ proposal_open_contract: 1, contract_id: contract.contract_id });
                             }, ['PriceMoved']);
                         }
-                    }, 1500);
+                    // Reduced from 1500 → 300 ms: digit contracts settle in ≈ 1 tick (≈ 1 s).
+                    // Waiting 1.5 s after the transaction event meant the afterPromise timeout
+                    // could expire before this recovery even fired. 300 ms ensures we poll
+                    // the contract status well within the 2 s watchdog window.
+                    }, 300);
                 }
                 resolve();
             });
