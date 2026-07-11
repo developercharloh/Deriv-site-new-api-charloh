@@ -87,8 +87,8 @@ const patternLabel = (
                 : { label: 'D', win: false };
         case 'over_under':
             return d > barrier
-                ? { label: 'O', win: true }
-                : { label: 'U', win: false };
+                ? { label: 'Ov', win: true }
+                : { label: 'Un', win: false };
         case 'rise_fall':
         case 'higher_lower':
         case 'only_ups':
@@ -634,12 +634,6 @@ const AiAnalysisTool: React.FC = () => {
                 </div>
             </div>
 
-            {/* ── Run Bot (real TradeAnimation button) ─────────────────── */}
-            <div className='aat__run-bar'>
-                <BotRedirector setActiveTab={setActiveTab} />
-                <TradeAnimation should_show_overlay />
-            </div>
-
             {/* ── Digit Distribution ────────────────────────────────────── */}
             <div className='aat__dist-card'>
                 <div className='aat__dist-hd'>
@@ -696,6 +690,12 @@ const AiAnalysisTool: React.FC = () => {
 
             <div className='aat__disclaimer'>
                 ⚠️ Statistical analysis only. Deriv synthetic indices are random — past data does not guarantee future results. Trade responsibly.
+            </div>
+
+            {/* ── Run Bot — sticky bottom bar ───────────────────────────── */}
+            <div className='aat__run-bar'>
+                <BotRedirector setActiveTab={setActiveTab} />
+                <TradeAnimation should_show_overlay />
             </div>
         </div>
     );
