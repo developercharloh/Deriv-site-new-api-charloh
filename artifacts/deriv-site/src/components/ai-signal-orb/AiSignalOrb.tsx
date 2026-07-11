@@ -58,9 +58,10 @@ interface MarketResult {
     winProb:              number;
     sampleSize:           number;
     votes:                ModelVotes;
-    entryDigits:          { digit: number; recommended: boolean; conditional: number }[];
+    entryDigits:          { digit: number; recommended: boolean; conditional: number; freqPct: number; avgWaitTicks: number }[];
     segmentAgrees:        boolean;
     signalStrength:       number;
+    pip:                  number;   // decimal precision for lastDigitOf on live ticks
     regimeScore:          number;   // 0–100: cross-timeframe distribution consistency
     regimeOk:             boolean;  // medium + long windows agree with signal direction
     gapDetected:          boolean;  // recent timestamp gap > 2 min (maintenance indicator)
@@ -220,28 +221,58 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         winFn        = d => best.side === 'OVER' ? d > best.b : d < best.b;
     }
 
-    // Entry digits
+    // ── Entry digits — frequency-weighted scoring ─────────────────────────────
+    // Problem: picking purely by conditional win-rate can select rare digits
+    // (e.g. digit 2 at 8% frequency → ~12 tick wait) so the signal is already
+    // stale by the time the entry condition arrives.
+    // Fix: score = wilsonLower × sqrt(digitFreq / 0.10)
+    //   — digits appearing MORE than average get a boost (shorter wait)
+    //   — digits appearing LESS than average get penalised (longer wait)
+    // avgWaitTicks = round(1 / freqPct) tells the trader how long to expect.
     const cond = new Array(10).fill(null).map(() => ({ wins: 0, total: 0 }));
     for (let i = 0; i < digits.length - 1; i++) { cond[digits[i]].total++; if (winFn(digits[i + 1])) cond[digits[i]].wins++; }
     const minSmp = Math.max(50, Math.floor(N / 50));
-    let entryRaw = cond
-        .map((c, d) => ({ digit: d, conditional: c.total > 0 ? c.wins / c.total : 0, lowerBound: wilsonLower(c.wins, c.total), total: c.total }))
-        .filter(c => c.total >= minSmp && c.lowerBound >= winProb + 0.02)
-        .sort((a, b) => b.lowerBound - a.lowerBound || b.conditional - a.conditional).slice(0, 2);
-    if (entryRaw.length < 2) {
+
+    const scored = cond.map((c, d) => {
+        const conditional  = c.total > 0 ? c.wins / c.total : 0;
+        const lb           = wilsonLower(c.wins, c.total);
+        // Frequency weight: 1.0 at 10% (uniform), >1 for common digits, <1 for rare
+        const freqWeight   = Math.sqrt(Math.max(0.3, freqPct[d] / 0.10));
+        const freqScore    = lb * freqWeight;
+        return { digit: d, conditional, lowerBound: lb, total: c.total, freqScore, freqPct: freqPct[d] };
+    });
+
+    // Primary list: good statistical edge AND frequency-weighted score
+    let entryRaw = scored
+        .filter(c => c.total >= minSmp && c.lowerBound >= winProb + 0.01)
+        .sort((a, b) => b.freqScore - a.freqScore || b.lowerBound - a.lowerBound)
+        .slice(0, 3);
+
+    // Fallback: any digit with enough samples, still sorted by freqScore
+    if (entryRaw.length < 3) {
         const used = new Set(entryRaw.map(e => e.digit));
-        const fb = cond.map((c, d) => ({ digit: d, conditional: c.total > 0 ? c.wins / c.total : 0, lowerBound: wilsonLower(c.wins, c.total), total: c.total }))
-            .filter(c => !used.has(c.digit) && c.total >= minSmp).sort((a, b) => b.lowerBound - a.lowerBound || b.conditional - a.conditional);
-        while (entryRaw.length < 2 && fb.length > 0) entryRaw.push(fb.shift()!);
+        const fb   = scored
+            .filter(c => !used.has(c.digit) && c.total >= minSmp)
+            .sort((a, b) => b.freqScore - a.freqScore || b.lowerBound - a.lowerBound);
+        while (entryRaw.length < 3 && fb.length > 0) entryRaw.push(fb.shift()!);
     }
-    while (entryRaw.length < 2) {
+    // Last resort: pick by raw digit frequency (most common digits = shortest wait)
+    while (entryRaw.length < 3) {
         const used = new Set(entryRaw.map(e => e.digit));
-        const fb2 = freqPct.map((p, d) => ({ digit: d, conditional: p, lowerBound: 0, total: 0 }))
-            .filter(e => !used.has(e.digit)).sort((a, b) => b.conditional - a.conditional)[0];
+        const fb2  = scored
+            .filter(e => !used.has(e.digit))
+            .sort((a, b) => b.freqPct - a.freqPct)[0];
         if (!fb2) break;
         entryRaw.push(fb2);
     }
-    const entryDigits = entryRaw.map((e, i) => ({ digit: e.digit, recommended: i === 0, conditional: e.conditional }));
+
+    const entryDigits = entryRaw.map((e, i) => ({
+        digit:        e.digit,
+        recommended:  i === 0,
+        conditional:  e.conditional,
+        freqPct:      e.freqPct,
+        avgWaitTicks: Math.max(1, Math.round(1 / Math.max(0.01, e.freqPct))),
+    }));
 
     // Model 1 — Chi²/Z-test
     let m1: ModelResult;
@@ -347,9 +378,11 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     };
     return {
         sym, direction, contractType, barrier, recoveryBarrier, recoveryContractType,
-        recoveryDirection, winProb, sampleSize: N, votes, entryDigits,
+        recoveryDirection, winProb, sampleSize: N, votes, entryDigits, pip,
         segmentAgrees:  true,
         signalStrength: Math.round((totalScore / 10) * 100),
+        // Regime fields — overridden by scanAllMarkets spread; defaults for direct calls
+        regimeScore: 100, regimeOk: true, gapDetected: false, tfAgreement: 4,
     };
 }
 
@@ -509,6 +542,12 @@ const AiSignalOrb: React.FC = () => {
     // Selected entry point digit (defaults to AI-recommended digit on new result)
     const [editEntryPoint, setEditEntryPoint] = useState<number>(0);
 
+    // Live tick feed — tracks entry digit freshness after a scan result arrives
+    const entryWsRef      = useRef<WebSocket | null>(null);
+    const [ticksSinceScan, setTicksSinceScan] = useState(0);
+    // digitLastSeen[d] = ticks since digit d was last seen (-1 = not yet seen this session)
+    const [digitLastSeen,  setDigitLastSeen]  = useState<number[]>(new Array(10).fill(-1));
+
     // Save & Run — pushes the current signal straight into the Over/Under Destroyer bot
     const store = useStore();
     const [runState, setRunState] = useState<RunState>('idle');
@@ -556,6 +595,55 @@ const AiSignalOrb: React.FC = () => {
         setResult(null); setNoSigBest(null); setScanState('idle'); setHasSignal(false);
         setSpikedMarkets([]); setRunState('idle'); setRunErr('');
     }, [tradeType]);
+
+    // Live tick feed — tracks how many ticks ago each entry digit last appeared
+    // Opens a fresh subscription whenever the result or panel-open state changes.
+    // Closes automatically when the panel is shut or a new scan starts.
+    useEffect(() => {
+        if (!result || !open) {
+            if (entryWsRef.current) { try { entryWsRef.current.close(); } catch { /* */ } entryWsRef.current = null; }
+            setTicksSinceScan(0);
+            setDigitLastSeen(new Array(10).fill(-1));
+            return;
+        }
+        if (entryWsRef.current) { try { entryWsRef.current.close(); } catch { /* */ } }
+
+        let destroyed = false;
+        let localTicks = 0;
+        const lastSeen = new Array(10).fill(-1);
+
+        const ws = new WebSocket(DERIV_WS);
+        entryWsRef.current = ws;
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ ticks: result.sym.code, subscribe: 1, req_id: 998 }));
+        };
+        ws.onmessage = (ev: MessageEvent) => {
+            if (destroyed) return;
+            let msg: any; try { msg = JSON.parse(ev.data as string); } catch { return; }
+            if (msg.msg_type !== 'tick') return;
+            const price = parseFloat(msg.tick?.quote ?? '0');
+            if (!price) return;
+
+            localTicks++;
+            // Age every digit by 1 tick
+            for (let d = 0; d < 10; d++) { if (lastSeen[d] >= 0) lastSeen[d]++; }
+            // Mark the current digit as just-seen (0 ticks ago)
+            lastSeen[lastDigitOf(price, result.pip)] = 0;
+
+            setTicksSinceScan(localTicks);
+            setDigitLastSeen([...lastSeen]);
+        };
+        ws.onerror = () => { /* onclose fires after */ };
+        ws.onclose = () => { if (entryWsRef.current === ws) entryWsRef.current = null; };
+
+        return () => {
+            destroyed = true;
+            if (entryWsRef.current === ws) entryWsRef.current = null;
+            try { ws.close(); } catch { /* */ }
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [result, open]);
 
     // Poll Deriv system status every 60 s — keeps itself alive via setInterval
     useEffect(() => {
@@ -1037,32 +1125,70 @@ const AiSignalOrb: React.FC = () => {
                             {/* Entry points */}
                             {result.entryDigits.length > 0 && (
                                 <div className='ai-panel__entries'>
-                                    <span className='ai-panel__section-lbl'>
-                                        Entry Points (last digit before trade)
-                                        <em className='ai-panel__section-hint'> — tap to select</em>
-                                    </span>
-                                    <div className='ai-panel__entry-grid'>
-                                        {result.entryDigits.slice(0, 2).map((e, i) => {
-                                            const selected = editEntryPoint === e.digit;
+                                    <div className='ai-panel__entries-hd'>
+                                        <span className='ai-panel__section-lbl'>
+                                            Entry Points
+                                            <em className='ai-panel__section-hint'> — wait for this last digit, then trade</em>
+                                        </span>
+                                        {ticksSinceScan > 0 && (
+                                            <span className='ai-panel__entry-tick-ctr'>
+                                                {ticksSinceScan} tick{ticksSinceScan !== 1 ? 's' : ''} live
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className='ai-panel__entry-grid ai-panel__entry-grid--3'>
+                                        {result.entryDigits.map((e, i) => {
+                                            const selected  = editEntryPoint === e.digit;
+                                            const lastSeen  = digitLastSeen[e.digit]; // -1 = not seen yet
+                                            const stale     = ticksSinceScan > 0 && lastSeen > e.avgWaitTicks * 2;
+                                            const fresh     = lastSeen === 0; // appeared this tick
+                                            const tagLabel  = i === 0 ? '★ Best' : i === 1 ? '◎ Alt 1' : '◎ Alt 2';
+                                            const waitColor = e.avgWaitTicks <= 8 ? '#10b981' : e.avgWaitTicks <= 13 ? '#f59e0b' : '#ef4444';
                                             return (
                                                 <div
                                                     key={e.digit}
-                                                    className={`ai-panel__entry-card${i === 0 ? ' ai-panel__entry-card--rec' : ''}${selected ? ' ai-panel__entry-card--selected' : ''}`}
+                                                    className={[
+                                                        'ai-panel__entry-card',
+                                                        i === 0 ? 'ai-panel__entry-card--rec' : '',
+                                                        selected ? 'ai-panel__entry-card--selected' : '',
+                                                        fresh   ? 'ai-panel__entry-card--fresh'    : '',
+                                                        stale   ? 'ai-panel__entry-card--stale'    : '',
+                                                    ].join(' ').trim()}
                                                     role='button'
                                                     style={{ cursor: 'pointer', outline: selected ? `2px solid ${vc}` : 'none' }}
                                                     onClick={() => setEditEntryPoint(e.digit)}
                                                 >
+                                                    {fresh && <span className='ai-panel__entry-now'>NOW</span>}
+                                                    {stale && !fresh && <span className='ai-panel__entry-stale-badge'>STALE</span>}
                                                     <div className='ai-panel__entry-digit' style={{ color: i === 0 ? vc : '#e2e8f0' }}>{e.digit}</div>
                                                     <div className='ai-panel__entry-meta'>
-                                                        <span className='ai-panel__entry-tag'>{i === 0 ? '★ Recommended' : '◎ Alternate'}</span>
+                                                        <span className='ai-panel__entry-tag'>{tagLabel}</span>
                                                         <span className='ai-panel__entry-pct' style={{ color: i === 0 ? vc : '#94a3b8' }}>
                                                             {(e.conditional * 100).toFixed(1)}%
                                                         </span>
                                                     </div>
+                                                    <div className='ai-panel__entry-wait' style={{ color: waitColor }}>
+                                                        ~{e.avgWaitTicks}t wait
+                                                    </div>
+                                                    {lastSeen >= 0 && !fresh && (
+                                                        <div className={`ai-panel__entry-seen${stale ? ' ai-panel__entry-seen--stale' : ''}`}>
+                                                            {lastSeen}t ago
+                                                        </div>
+                                                    )}
+                                                    {lastSeen < 0 && ticksSinceScan > 0 && (
+                                                        <div className='ai-panel__entry-seen ai-panel__entry-seen--waiting'>
+                                                            waiting…
+                                                        </div>
+                                                    )}
                                                 </div>
                                             );
                                         })}
                                     </div>
+                                    {result.entryDigits.some(e => digitLastSeen[e.digit] > e.avgWaitTicks * 2 && ticksSinceScan > 0) && (
+                                        <div className='ai-panel__entry-stale-warn'>
+                                            ⚠️ Entry condition is stale — market may have shifted. Consider re-scanning.
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

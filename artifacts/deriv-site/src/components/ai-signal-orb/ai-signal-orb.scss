@@ -709,21 +709,42 @@
 
 // ─── Entry points ─────────────────────────────────────────────────────────────
 
-.ai-panel__entries { margin-bottom: 12px; }
+@keyframes entry-fresh-pop {
+    0%   { transform: scale(0.88); box-shadow: 0 0 0 0 rgba(16,185,129,0.8); }
+    40%  { transform: scale(1.06); box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+    100% { transform: scale(1);    box-shadow: 0 0 12px rgba(16,185,129,0.3); }
+}
+
+.ai-panel__entries    { margin-bottom: 12px; }
+.ai-panel__entries-hd {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;
+}
+.ai-panel__entry-tick-ctr {
+    font-size: 9px; font-weight: 700; color: #6366f1;
+    background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3);
+    padding: 2px 7px; border-radius: 20px;
+}
+
+// 3-column grid for entry cards
 .ai-panel__entry-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 7px;
+    gap: 6px;
+    &--3 { grid-template-columns: 1fr 1fr 1fr; }
 }
+
 .ai-panel__entry-card {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 11px 13px;
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.07);
-    background: rgba(255,255,255,0.025);
-    transition: all 0.15s;
+    display:        flex;
+    flex-direction: column;
+    align-items:    center;
+    gap:            3px;
+    padding:        9px 6px 7px;
+    border-radius:  11px;
+    border:         1px solid rgba(255,255,255,0.07);
+    background:     rgba(255,255,255,0.025);
+    transition:     all 0.15s;
+    position:       relative;
+    text-align:     center;
+
     &--rec {
         border-color: rgba(16,185,129,0.35);
         background: rgba(16,185,129,0.07);
@@ -734,18 +755,88 @@
         background: rgba(99,102,241,0.14);
         box-shadow: 0 0 16px rgba(99,102,241,0.2);
     }
+    // Digit just appeared this tick → green flash
+    &--fresh {
+        border-color: #10b981 !important;
+        background: rgba(16,185,129,0.18) !important;
+        animation: entry-fresh-pop 0.45s ease forwards;
+    }
+    // Entry digit overdue → muted red warning
+    &--stale {
+        border-color: rgba(239,68,68,0.35) !important;
+        background: rgba(239,68,68,0.06) !important;
+        opacity: 0.75;
+    }
 }
+
+// "NOW" badge — flashes when entry digit just appeared
+.ai-panel__entry-now {
+    position:      absolute;
+    top:           -7px;
+    left:          50%;
+    transform:     translateX(-50%);
+    background:    #10b981;
+    color:         #fff;
+    font-size:     7.5px;
+    font-weight:   900;
+    padding:       1px 5px;
+    border-radius: 6px;
+    letter-spacing: 0.06em;
+    white-space:   nowrap;
+}
+.ai-panel__entry-stale-badge {
+    position:      absolute;
+    top:           -7px;
+    left:          50%;
+    transform:     translateX(-50%);
+    background:    #ef4444;
+    color:         #fff;
+    font-size:     7px;
+    font-weight:   900;
+    padding:       1px 5px;
+    border-radius: 6px;
+    letter-spacing: 0.05em;
+    white-space:   nowrap;
+}
+
 .ai-panel__section-hint { font-size: 9px; font-weight: 600; color: #6366f1; text-transform: none; letter-spacing: 0; }
 .ai-panel__entry-digit {
-    font-size: 28px;
+    font-size:   24px;
     font-weight: 900;
     line-height: 1;
-    min-width: 24px;
     text-shadow: 0 0 20px currentColor;
 }
-.ai-panel__entry-meta { display: flex; flex-direction: column; gap: 2px; }
-.ai-panel__entry-tag  { font-size: 9px; font-weight: 700; color: #64748b; letter-spacing: 0.04em; }
-.ai-panel__entry-pct  { font-size: 14px; font-weight: 900; }
+.ai-panel__entry-meta { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.ai-panel__entry-tag  { font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.04em; }
+.ai-panel__entry-pct  { font-size: 13px; font-weight: 900; }
+
+// Average wait time label — green=fast, amber=medium, red=slow
+.ai-panel__entry-wait {
+    font-size:   8px;
+    font-weight: 800;
+    line-height: 1;
+}
+// Ticks-ago counter
+.ai-panel__entry-seen {
+    font-size:   8px;
+    font-weight: 700;
+    color:       #6366f1;
+    &--stale   { color: #ef4444; }
+    &--waiting { color: #475569; font-style: italic; }
+}
+
+// Full-width stale warning below the grid
+.ai-panel__entry-stale-warn {
+    margin-top:   5px;
+    padding:      6px 9px;
+    border-radius: 8px;
+    background:   rgba(239,68,68,0.08);
+    border:       1px solid rgba(239,68,68,0.3);
+    font-size:    10px;
+    font-weight:  700;
+    color:        #fca5a5;
+    line-height:  1.4;
+}
 
 // ─── Session discipline ───────────────────────────────────────────────────────
 
