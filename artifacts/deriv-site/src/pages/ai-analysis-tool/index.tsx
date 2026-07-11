@@ -563,6 +563,18 @@ const AiAnalysisTool: React.FC = () => {
                 </div>
             </div>
 
+            {/* ── Bot Actions ──────────────────────────────────────────── */}
+            <div className='aat__bot-actions'>
+                <button className='aat__bot-run-btn' onClick={() => setActiveTab(DBOT_TABS.BOT_BUILDER)}>
+                    <span className='aat__bot-run-btn__icon'>▶</span>
+                    <span className='aat__bot-run-btn__text'>Run Bot</span>
+                </button>
+                <button className='aat__bot-txn-btn' onClick={() => setActiveTab(DBOT_TABS.DASHBOARD)}>
+                    <span className='aat__bot-txn-btn__icon'>📋</span>
+                    <span className='aat__bot-txn-btn__text'>Transactions</span>
+                </button>
+            </div>
+
             {/* ── Digit Distribution ────────────────────────────────────── */}
             <div className='aat__dist-card'>
                 <div className='aat__dist-hd'>
@@ -605,18 +617,6 @@ const AiAnalysisTool: React.FC = () => {
                     <span className='aat__stat-val aat__stat-val--red'>{oddPct}%</span>
                     <span className='aat__stat-sub'>(1,3,5,7,9)</span>
                 </div>
-            </div>
-
-            {/* ── Bot Actions ──────────────────────────────────── */}
-            <div className='aat__bot-actions'>
-                <button className='aat__bot-run-btn' onClick={() => setActiveTab(DBOT_TABS.BOT_BUILDER)}>
-                    <span className='aat__bot-run-btn__icon'>▶</span>
-                    <span className='aat__bot-run-btn__text'>Run Bot</span>
-                </button>
-                <button className='aat__bot-txn-btn' onClick={() => setActiveTab(DBOT_TABS.DASHBOARD)}>
-                    <span className='aat__bot-txn-btn__icon'>📋</span>
-                    <span className='aat__bot-txn-btn__text'>Transactions</span>
-                </button>
             </div>
 
             <div className='aat__disclaimer'>

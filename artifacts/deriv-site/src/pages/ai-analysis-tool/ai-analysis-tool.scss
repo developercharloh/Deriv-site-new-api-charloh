@@ -496,12 +496,18 @@
 }
 .aat__stat-sub { font-size: 7.5px; color: var(--text-less-prominent); }
 
-// ─── Bot Actions ─────────────────────────────────────────────────────────────
+// ─── Bot Actions — sticky bottom bar ─────────────────────────────────────────
 .aat__bot-actions {
-    display: grid;
+    display:    grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    padding: 2px 0;
+    gap:        8px;
+    padding:    8px 0 4px;
+    position:   sticky;
+    bottom:     0;
+    z-index:    10;
+    background: linear-gradient(to bottom, transparent 0%, var(--general-main-1) 30%);
+    // keep content above the run-panel bar
+    margin-bottom: 2px;
 }
 
 .aat__bot-run-btn {
