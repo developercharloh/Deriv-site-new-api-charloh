@@ -598,17 +598,12 @@ const AiSignalsPage: React.FC = () => {
                                         const domLabel = r.recentDominance.label;
                                         return (
                                             <div key={r.sym.code} className='aisig-card'>
-                                                {/* Card top row: market + votes badge */}
+                                                {/* Card top row: market */}
                                                 <div className='aisig-card__top'>
                                                     <div className='aisig-card__market'>
                                                         <span className='aisig-card__live-dot' />
                                                         <span className='aisig-card__sym'>{r.sym.short}</span>
                                                         <span className='aisig-card__label'>{r.sym.label}</span>
-                                                    </div>
-                                                    <div className='aisig-card__badges'>
-                                                        <span className='aisig-card__votes' style={{ background: `${vc2}22`, border: `1px solid ${vc2}55`, color: vc2 }}>
-                                                            {r.votes.yesCount}/{maxVotes} · {voteLabel(r.votes.yesCount)}
-                                                        </span>
                                                     </div>
                                                 </div>
 
@@ -745,12 +740,6 @@ const AiSignalsPage: React.FC = () => {
                         {/* Win prob */}
                         <div className='ai-panel__prob-row'><span className='ai-panel__prob-lbl'>Win Probability</span><span className='ai-panel__prob-val' style={{ color: vc }}>{(result.winProb * 100).toFixed(1)}%</span></div>
                         <div className='ai-panel__prob-bar'><div className='ai-panel__prob-fill' style={{ width: `${result.winProb * 100}%`, background: `linear-gradient(90deg, ${vc}88, ${vc})` }} /><div className='ai-panel__prob-mid' /></div>
-
-                        {/* Model grid */}
-                        <div className='ai-panel__models'>
-                            <span className='ai-panel__section-lbl'>Model Consensus — {result.votes.yesCount}/{tradeType === 'even_odd' ? 4 : 10}&nbsp;·&nbsp;Strength: <strong style={{ color: vc }}>{result.signalStrength}%</strong>&nbsp;·&nbsp;Segment: <strong style={{ color: result.segmentAgrees ? '#22c55e' : '#ef4444' }}>✓</strong></span>
-                            <div className='ai-panel__model-grid'>{models.map(m => (<div key={m.name} className={`ai-panel__model-chip${m.vote ? ' ai-panel__model-chip--yes' : ' ai-panel__model-chip--no'}`}><span className='ai-panel__model-chip-icon'>{m.vote ? '✓' : '✗'}</span><span className='ai-panel__model-chip-name'>{m.name}</span></div>))}</div>
-                        </div>
 
                         {/* Prediction */}
                         <div className='ai-panel__pred'>
