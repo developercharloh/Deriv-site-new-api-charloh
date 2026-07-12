@@ -1201,16 +1201,16 @@ const AiSignalsPage: React.FC = () => {
                         </div>
                         <span className='ai-runcfg__mart-hint'>{cfgMartingaleOn ? 'Stake multiplies by this factor after a loss.' : 'Off — martingale is reset to 0, stake stays flat after a loss.'}</span>
                         {tradeType === 'even_odd' && (
-                            <div className='ai-runcfg__recovery'>
-                                <label className='ai-runcfg__recovery-toggle'>
-                                    <input type='checkbox' checked={cfgEoRecovery} onChange={e => setCfgEoRecovery(e.target.checked)} />
-                                    <span>EO Recovery</span>
-                                </label>
-                                <span className='ai-runcfg__recovery-hint'>
-                                    {cfgEoRecovery
-                                        ? 'On — after a loss the bot flips direction (EVEN→ODD or ODD→EVEN) and trades back until a win, then returns to the original side.'
-                                        : 'Off — bot stays on the same direction through losses (martingale only).'}
-                                </span>
+                            <div className='ai-runcfg__field'>
+                                <label className='ai-runcfg__field-label'>EO RECOVERY</label>
+                                <select
+                                    className='ai-runcfg__select'
+                                    value={cfgEoRecovery ? 'yes' : 'no'}
+                                    onChange={e => setCfgEoRecovery(e.target.value === 'yes')}
+                                >
+                                    <option value='no'>No</option>
+                                    <option value='yes'>Yes</option>
+                                </select>
                             </div>
                         )}
                         <button className='ai-runcfg__execute' disabled={runState === 'launching'} onClick={handleExecuteTrade}>
