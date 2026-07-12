@@ -40,7 +40,8 @@ function getThresholds(market: MarketType, prefix: string): { minAgree: number; 
         if (prefix === 'MATCHES') return { minAgree: 6, minConf: 70 };
         return { minAgree: 6, minConf: 65 };
     }
-    if (market === 'even_odd') return { minAgree: 6, minConf: 65 };
+    // Even/Odd uses reversal mode with only 4 models — require 3/4 (75 % consensus).
+    if (market === 'even_odd') return { minAgree: 3, minConf: 65 };
     return { minAgree: 6, minConf: 62 };     // over_under
 }
 const EDGE_PCT     = 0.06;       // 6 pp above expected = model detection threshold
@@ -969,6 +970,21 @@ function modelRegimeVotes(digits: number[]): Vote[] {
     return votes;
 }
 
+// ─── Even/Odd reversal entry ──────────────────────────────────────────────────
+// dominantDir = the side that has been appearing MORE (e.g. 'EVEN').
+// We wait for a digit from that dominant side to appear, then buy the OPPOSITE.
+// Entry digit = the most frequent dominant-side digit in the last 50 ticks.
+function buildEvenOddReversalEntry(dominantDir: string, digits: number[]): string {
+    const isEvenDom    = dominantDir === 'EVEN';
+    const domDigits    = isEvenDom ? [0, 2, 4, 6, 8] : [1, 3, 5, 7, 9];
+    const winDigits    = isEvenDom ? '1 3 5 7 9' : '0 2 4 6 8';
+    const d50          = digits.slice(-50);
+    const cnt          = Array(10).fill(0) as number[];
+    d50.forEach(d => cnt[d]++);
+    const entryDig     = domDigits.reduce((best, d) => cnt[d] > cnt[best] ? d : best, domDigits[0]);
+    return `Wait digit ${entryDig} → wins on: ${winDigits}`;
+}
+
 // ─── Multi-window Even/Odd convergence gate ───────────────────────────────────
 // For Even/Odd we require the SAME direction to dominate across every available
 // window in [20, 50, 100, 500, 1000] ticks.  A single window dissenting means
@@ -1017,8 +1033,15 @@ export function analyzeSignals(
         ...modelNGram(digits),
     ];
 
+    // Even/Odd reversal uses only 4 core models — strip Even/Odd votes from
+    // the other 7 to keep the consensus clean and avoid false agreement.
+    const EO_ALLOWED = new Set(['Statistical', 'Bayesian', 'Momentum', 'RegimeDetect']);
+    const filteredVotes = allVotes.filter(v =>
+        v.market !== 'even_odd' || EO_ALLOWED.has(v.model)
+    );
+
     const { status: volStatus } = modelVolatility(digits, tickTimes);
-    const agreed                = buildConsensus(allVotes, volStatus);
+    const agreed                = buildConsensus(filteredVotes, volStatus);
 
     // Split TTL: 60 s for 1-second indices (1HZ*), 120 s for standard (R_*)
     const ttl = symbol.startsWith('1HZ') ? 60_000 : 120_000;
@@ -1030,11 +1053,40 @@ export function analyzeSignals(
     return agreed
         .filter(r => !activeMarkets.has(r.market))
         .map(r => {
-            // Even/Odd: all windows [20→50→100→500→1000] must agree on direction.
-            if (r.market === 'even_odd' && eoGate !== r.direction) return null;
+            if (r.market === 'even_odd') {
+                // r.direction = DOMINANT side (what the 4 models detected as over-represented).
+                // Multi-window gate: all windows must confirm this dominance.
+                if (eoGate !== r.direction) return null;
+
+                // Recency: confirm the dominant bias is still active in last 20 ticks
+                // (we need it to still be happening so there's something to fade).
+                const rec = checkRecency(digits, r.direction, 'even_odd');
+                if (!rec.passing) return null;
+
+                // Reversal: bet the OPPOSITE of what's been dominant.
+                const signalDir = r.direction === 'EVEN' ? 'ODD' : 'EVEN';
+
+                return {
+                    id:               `sig_${now}_${symbol}_${r.market}`,
+                    symbol,
+                    symbolLabel,
+                    market:           r.market,
+                    direction:        signalDir,
+                    modelsAgreeing:   r.models,
+                    confidence:       r.confidence,
+                    entryPoint:       buildEvenOddReversalEntry(r.direction, digits),
+                    createdAt:        now,
+                    expiresAt:        now + ttl,
+                    sampleSize:       Math.min(digits.length, 1000),
+                    recentScore:      rec.score,
+                    recentTotal:      rec.total,
+                    recommendedTicks: 1,
+                    recommendedEngine: recommendEngine(r.market, r.confidence, symbol),
+                };
+            }
 
             const rec = checkRecency(digits, r.direction, r.market);
-            if (!rec.passing) return null; // pattern fading — suppress signal
+            if (!rec.passing) return null;
             return {
                 id:             `sig_${now}_${symbol}_${r.market}`,
                 symbol,
@@ -1046,9 +1098,7 @@ export function analyzeSignals(
                 entryPoint:     buildEntry(r.market, r.direction, digits),
                 createdAt:      now,
                 expiresAt:      now + ttl,
-                sampleSize:     r.market === 'even_odd'
-                                    ? Math.min(digits.length, 1000)
-                                    : Math.min(digits.length, 100),
+                sampleSize:     Math.min(digits.length, 100),
                 recentScore:    rec.score,
                 recentTotal:    rec.total,
                 recommendedTicks:  recommendTicks(r.market, r.direction),
