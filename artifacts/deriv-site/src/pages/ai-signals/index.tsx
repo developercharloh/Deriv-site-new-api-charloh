@@ -250,10 +250,11 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const r60  = digits.slice(-safe(60) ).filter(winFn).length / safe(60);
     const r100 = digits.slice(-safe(100)).filter(winFn).length / safe(100);
     const isEO = tradeType === 'even_odd';
-    const rawT30 = theorExp + (isEO ? 0.07 : 0.06);
-    const rawT60 = theorExp + (isEO ? 0.05 : 0.04);
-    const rawT100= theorExp + (isEO ? 0.04 : 0.03);
-    const rawWinRatePass = r30 >= rawT30 && r60 >= rawT60 && r100 >= rawT100;
+    // Thresholds: modest margin above theoretical; 2-of-3 windows must pass (handles short-window noise)
+    const rawT30 = theorExp + 0.04;
+    const rawT60 = theorExp + 0.03;
+    const rawT100= theorExp + 0.02;
+    const rawWinRatePass = [r30 >= rawT30, r60 >= rawT60, r100 >= rawT100].filter(Boolean).length >= 2;
 
     // CHECK 2 — Cross-window consistency (500 / 1k / 3k ticks all above floor)
     const sl500  = digits.slice(-safe(500));  const r500 = sl500.filter(winFn).length / sl500.length;
@@ -353,17 +354,39 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const sideMomPass = momTrend !== 'falling' && bandRates[3] >= recentBandFloor && longTermOk;
     const sideMomentum: StatsChecks['sideMomentum'] = { pass: sideMomPass, bandRates, trend: momTrend, longTermOk };
 
-    // ── Aggregate & gate (8 checks for all types) ───────────────────────────
+    // ── Recovery market viability (OU only) ─────────────────────────────────
+    // Recovery is the opposite-side trade taken after a loss.
+    // Require its long-run win rate to be at or within 2pp of its theoretical floor.
+    let recoveryMarketOk = true;
+    if (tradeType === 'over_under' && recoveryBarrier !== null && recoveryContractType !== null) {
+        const rb = recoveryBarrier as number;
+        const recWinFn: (d: number) => boolean = recoveryContractType === 'DIGITOVER'
+            ? d => d > rb : d => d < rb;
+        const recTheoExp = recoveryContractType === 'DIGITOVER' ? (9 - rb) / 10 : rb / 10;
+        const recWinRate = digits.filter(recWinFn).length / N;
+        recoveryMarketOk = recWinRate >= recTheoExp - 0.02;
+    }
+
+    // ── Aggregate & gate ─────────────────────────────────────────────────────
     const checkArr = [rawWinRatePass, crossWindowPass, streakPass, autocorrPass,
                       stabilityPass, entryOverduePass, leadDigitPass, sideMomPass];
     const passCount  = checkArr.filter(Boolean).length;
     const totalChecks = 8;
 
-    // Mandatory for all types: rawWinRate + crossWindow + leadDigit + sideMomentum + ≥ 5/8 total
-    // OU also requires winProb >= floor
-    const mandatoryPass = rawWinRatePass && crossWindowPass && leadDigitPass && sideMomPass;
-    const isSignal = mandatoryPass && passCount >= 5
-        && (tradeType !== 'over_under' || winProb >= MIN_WIN_PROB_OU);
+    let isSignal: boolean;
+    if (tradeType === 'even_odd') {
+        // EO: all four core checks mandatory + leadDigit + sideMomentum mandatory + ≥ 5/8 total
+        isSignal = rawWinRatePass && crossWindowPass && leadDigitPass && sideMomPass
+            && passCount >= 5;
+    } else if (tradeType === 'over_under') {
+        // OU: core mandatory + stability + recovery market must exist + ≥ 5/8 total
+        isSignal = rawWinRatePass && crossWindowPass && stabilityPass
+            && recoveryMarketOk && winProb >= MIN_WIN_PROB_OU
+            && passCount >= 5;
+    } else {
+        // MD: core mandatory + ≥ 5/8 total
+        isSignal = rawWinRatePass && crossWindowPass && passCount >= 5;
+    }
 
     const statsChecks: StatsChecks = {
         rawWinRate:   { pass: rawWinRatePass,   rate30: r30, rate60: r60, rate100: r100 },
