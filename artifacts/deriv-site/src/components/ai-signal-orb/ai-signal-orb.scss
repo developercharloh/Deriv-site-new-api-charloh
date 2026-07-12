@@ -1265,3 +1265,177 @@
 .ai-panel__history-votes  { color: #818cf8; font-weight: 600; }
 .ai-panel__history-str    { color: #34d399; font-weight: 600; min-width: 32px; text-align: right; }
 .ai-panel__history-time   { color: #374151; font-size: 9px; white-space: nowrap; }
+
+// ─── Live Market Watch ────────────────────────────────────────────────────────
+.ai-watch {
+    margin: 0 0 6px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.ai-watch__hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.ai-watch__title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #c7d2fe;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ai-watch__scanning {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #818cf8;
+    animation: ai-pulse 1.2s ease-in-out infinite;
+}
+
+.ai-watch__hd-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ai-watch__cd {
+    font-size: 10px;
+    color: #475569;
+    font-variant-numeric: tabular-nums;
+    min-width: 40px;
+    text-align: right;
+}
+
+.ai-watch__toggle {
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(99,102,241,0.4);
+    background: transparent;
+    color: #818cf8;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    &:hover:not(:disabled) { background: rgba(99,102,241,0.15); }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+    &--on {
+        background: rgba(99,102,241,0.15);
+        border-color: rgba(99,102,241,0.6);
+        color: #c7d2fe;
+    }
+}
+
+.ai-watch__hint {
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 10px;
+    color: #475569;
+    line-height: 1.5;
+    strong { color: #818cf8; }
+}
+
+.ai-watch__loading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    font-size: 10px;
+    color: #64748b;
+}
+
+.ai-watch__rows {
+    display: flex;
+    flex-direction: column;
+}
+
+.ai-watch__row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.15s;
+    &:last-child { border-bottom: none; }
+
+    &--signal {
+        background: rgba(16, 185, 129, 0.07);
+        border-bottom-color: rgba(16,185,129,0.1);
+    }
+    &--spike {
+        background: rgba(245, 158, 11, 0.05);
+    }
+}
+
+.ai-watch__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: rgba(100,116,139,0.4);
+    &--on {
+        background: #10b981;
+        box-shadow: 0 0 6px rgba(16,185,129,0.7);
+        animation: ai-pulse 2s ease-in-out infinite;
+    }
+    &--spike { background: #f59e0b; }
+}
+
+.ai-watch__sym {
+    font-size: 10px;
+    font-weight: 700;
+    color: #94a3b8;
+    min-width: 34px;
+}
+
+.ai-watch__dir {
+    flex: 1;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    .ai-watch__row--signal & { color: #34d399; }
+    .ai-watch__row--spike  & { color: #f59e0b; }
+}
+
+.ai-watch__votes {
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 28px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.ai-watch__need {
+    font-size: 9px;
+    color: #374151;
+    min-width: 44px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.ai-watch__load {
+    padding: 4px 9px;
+    border-radius: 20px;
+    border: none;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #f0fdf4;
+    font-size: 9.5px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(16,185,129,0.35);
+    transition: all 0.15s;
+    &:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    &:active { transform: scale(0.97); }
+}

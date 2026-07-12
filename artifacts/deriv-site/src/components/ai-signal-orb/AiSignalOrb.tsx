@@ -20,6 +20,7 @@ const DERIV_WS        = 'wss://ws.derivws.com/websockets/v3?app_id=1';
 const TICK_COUNT      = 1000;
 const ALL_SYMS        = DERIV_VOLATILITIES;
 const MIN_VOTES       = 6;
+const WATCH_INTERVAL_S = 90; // seconds between Live Market Watch auto-scans
 
 function getSymbolMinVotes(symCode: string): number {
     if (symCode.includes('75') || symCode.includes('100')) return 7;
@@ -611,6 +612,14 @@ const AiSignalOrb: React.FC = () => {
     const [cfgMartingale,   setCfgMartingale]   = useState(DEFAULT_RUN_CFG.martingale);
     const [cfgMartingaleOn, setCfgMartingaleOn] = useState(DEFAULT_RUN_CFG.martingaleOn);
 
+    // ── Live Market Watch ─────────────────────────────────────────────────────
+    const [watchActive,    setWatchActive]    = useState(false);
+    const [watchResults,   setWatchResults]   = useState<MarketResult[]>([]);
+    const [watchSpikes,    setWatchSpikes]    = useState<Set<string>>(new Set());
+    const [watchCountdown, setWatchCountdown] = useState(WATCH_INTERVAL_S);
+    const [watchScanning,  setWatchScanning]  = useState(false);
+    const watchCdRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
     // Signal history log
     const [orbHistory, setOrbHistory] = useState<OrbHistoryEntry[]>(() => {
         try { return JSON.parse(localStorage.getItem('orb-signal-history') ?? '[]'); } catch { return []; }
@@ -645,6 +654,54 @@ const AiSignalOrb: React.FC = () => {
         setResult(null); setNoSigBest(null); setScanState('idle'); setHasSignal(false);
         setSpikedMarkets([]); setRunState('idle'); setRunErr('');
     }, [tradeType]);
+
+    // ── Live Market Watch loop ────────────────────────────────────────────────
+    useEffect(() => {
+        if (!watchActive || maintenanceActive) {
+            if (watchCdRef.current) { clearInterval(watchCdRef.current); watchCdRef.current = null; }
+            return;
+        }
+        let mounted = true;
+        let busy    = false;
+
+        const startCountdown = (from: number) => {
+            if (watchCdRef.current) clearInterval(watchCdRef.current);
+            let cd = from;
+            setWatchCountdown(cd);
+            watchCdRef.current = setInterval(() => {
+                if (!mounted) return;
+                cd--;
+                setWatchCountdown(cd);
+                if (cd <= 0) {
+                    clearInterval(watchCdRef.current!);
+                    watchCdRef.current = null;
+                    doScan();
+                }
+            }, 1000);
+        };
+
+        const doScan = async () => {
+            if (busy || !mounted) return;
+            busy = true;
+            setWatchScanning(true);
+            try {
+                const { allResults, spikedMarkets: spikes } = await scanAllMarkets(tradeType, () => {});
+                if (!mounted) return;
+                setWatchResults(allResults);
+                setWatchSpikes(new Set(spikes.map(s => s.code)));
+            } catch { /* ignore network errors */ } finally {
+                busy = false;
+                if (mounted) { setWatchScanning(false); startCountdown(WATCH_INTERVAL_S); }
+            }
+        };
+
+        doScan();
+        return () => {
+            mounted = false;
+            if (watchCdRef.current) { clearInterval(watchCdRef.current); watchCdRef.current = null; }
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [watchActive, tradeType, maintenanceActive]);
 
     // Live tick feed — tracks how many ticks ago each entry digit last appeared
     // Opens a fresh subscription whenever the result or panel-open state changes.
@@ -761,6 +818,43 @@ const AiSignalOrb: React.FC = () => {
         } catch { setScanState('idle'); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tradeType, maintenanceActive]);
+
+    // ── Whether a watch result qualifies as a tradeable signal ───────────────
+    const isWatchSignal = useCallback((r: MarketResult): boolean => {
+        if (watchSpikes.has(r.sym.code) || r.gapDetected) return false;
+        const eoMode = tradeType === 'even_odd';
+        return (
+            r.votes.yesCount >= (eoMode ? 3 : getSymbolMinVotes(r.sym.code)) &&
+            r.segmentAgrees &&
+            (eoMode ? r.recentDominance.isHot : r.votes.recentEdge.vote) &&
+            r.regimeOk &&
+            !r.recentDominance.isCold &&
+            (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU)
+        );
+    }, [watchSpikes, tradeType]);
+
+    // ── Open run-config without needing result in state yet ──────────────────
+    const openRunConfigDirect = useCallback(() => {
+        let cfg: OrbRunConfig = DEFAULT_RUN_CFG;
+        try {
+            const raw = localStorage.getItem(ORB_RUN_CFG_KEY);
+            if (raw) cfg = { ...DEFAULT_RUN_CFG, ...JSON.parse(raw) };
+        } catch { /* ignore */ }
+        setCfgStake(cfg.stake); setCfgTakeProfit(cfg.takeProfit);
+        setCfgStopLoss(cfg.stopLoss); setCfgMartingale(cfg.martingale);
+        setCfgMartingaleOn(cfg.martingaleOn);
+        setRunState('idle'); setRunErr('');
+        setShowRunConfig(true);
+    }, []);
+
+    // ── Load a watch row signal and open the run-config panel ────────────────
+    const loadWatchSignal = useCallback((r: MarketResult) => {
+        setResult(r);
+        setScanState('done');
+        setHasSignal(true);
+        setSpikedMarkets([]);
+        openRunConfigDirect();
+    }, [openRunConfigDirect]);
 
     // ── Open the run-config banner — loads the last-used Stake / Take Profit /
     //    Stop Loss / Martingale values (or defaults) so the trader can review
@@ -978,6 +1072,76 @@ const AiSignalOrb: React.FC = () => {
                                     : <><RefreshCw size={14} /><span>{scanState === 'idle' ? 'Scan All 10 Markets (5k ticks · 4 timeframes)' : 'Re-Scan Markets'}</span></>
                             }
                         </button>
+                    </div>
+
+                    {/* ── Live Market Watch ────────────────────────────────── */}
+                    <div className='ai-watch'>
+                        <div className='ai-watch__hd'>
+                            <span className='ai-watch__title'>
+                                📡 Live Market Watch
+                                {watchScanning && <span className='ai-watch__scanning'>Scanning…</span>}
+                            </span>
+                            <div className='ai-watch__hd-right'>
+                                {watchActive && !watchScanning && watchResults.length > 0 && (
+                                    <span className='ai-watch__cd'>↺ {watchCountdown}s</span>
+                                )}
+                                <button
+                                    className={`ai-watch__toggle${watchActive ? ' ai-watch__toggle--on' : ''}`}
+                                    disabled={maintenanceActive}
+                                    onClick={() => {
+                                        setWatchActive(p => !p);
+                                        if (watchActive) { setWatchResults([]); setWatchSpikes(new Set()); }
+                                    }}
+                                >
+                                    {watchActive ? 'Stop' : 'Start'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {!watchActive && (
+                            <p className='ai-watch__hint'>
+                                Auto-scans all 10 markets every 90 s. Rows light up green when a signal is ready — tap <strong>Load &amp; Run</strong> to trade it instantly.
+                            </p>
+                        )}
+
+                        {watchActive && watchScanning && watchResults.length === 0 && (
+                            <div className='ai-watch__loading'>
+                                <Loader2 size={12} className='ai-panel__spin' /> Scanning all 10 markets…
+                            </div>
+                        )}
+
+                        {watchActive && watchResults.length > 0 && (
+                            <div className='ai-watch__rows'>
+                                {watchResults.map(r => {
+                                    const qualified = isWatchSignal(r);
+                                    const spiked    = watchSpikes.has(r.sym.code);
+                                    const eoMode    = tradeType === 'even_odd';
+                                    const maxVotes  = eoMode ? 4 : 10;
+                                    const needVotes = eoMode ? 3 : getSymbolMinVotes(r.sym.code);
+                                    return (
+                                        <div key={r.sym.code}
+                                            className={`ai-watch__row${qualified ? ' ai-watch__row--signal' : spiked ? ' ai-watch__row--spike' : ''}`}
+                                        >
+                                            <span className={`ai-watch__dot${qualified ? ' ai-watch__dot--on' : spiked ? ' ai-watch__dot--spike' : ''}`} />
+                                            <span className='ai-watch__sym'>{r.sym.short}</span>
+                                            <span className='ai-watch__dir'>
+                                                {qualified ? r.direction : spiked ? '⚡ Spike' : '—'}
+                                            </span>
+                                            <span className='ai-watch__votes' style={{ color: voteColor(r.votes.yesCount) }}>
+                                                {r.votes.yesCount}/{maxVotes}
+                                            </span>
+                                            {qualified ? (
+                                                <button className='ai-watch__load' onClick={() => loadWatchSignal(r)}>
+                                                    Load &amp; Run
+                                                </button>
+                                            ) : (
+                                                <span className='ai-watch__need'>need {needVotes}</span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     {/* Spike warning banner */}
