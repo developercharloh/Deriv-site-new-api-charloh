@@ -193,8 +193,15 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     if (tradeType === 'even_odd') {
         const evenCt = digits.filter(d => d % 2 === 0).length;
         const oddCt  = N - evenCt;
-        if (evenCt >= oddCt) { direction = 'EVEN'; contractType = 'DIGITEVEN'; winProb = evenCt / N; winFn = d => d % 2 === 0; }
-        else                 { direction = 'ODD';  contractType = 'DIGITODD';  winProb = oddCt  / N; winFn = d => d % 2 !== 0; }
+        // REVERSAL MODE: models evaluate the DOMINANT side; signal fires on the OPPOSITE.
+        // winFn/winProb stay on the dominant side so all 4 models can confirm the edge.
+        if (evenCt >= oddCt) {
+            direction = 'ODD';  contractType = 'DIGITODD';  // bet ODD — fading EVEN dominance
+            winProb = evenCt / N; winFn = d => d % 2 === 0; // models check EVEN edge
+        } else {
+            direction = 'EVEN'; contractType = 'DIGITEVEN'; // bet EVEN — fading ODD dominance
+            winProb = oddCt / N; winFn = d => d % 2 !== 0;  // models check ODD edge
+        }
     } else if (tradeType === 'matches_differs') {
         const exp2        = N / 10;
         const chiContribs = freq.map(f => (f - exp2) ** 2 / exp2);
@@ -405,7 +412,9 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const m10Vote = qRates.every(r => r >= qThr);
     const m10: ModelResult = { name: 'Quartile Persistence', vote: m10Vote, score: qRates.filter(r => r >= qThr).length / 4 };
 
-    const yesCount   = [m1, m2, m3, m4, m5, m6, m7, m8, m9, m10].filter(m => m.vote).length;
+    // Even/Odd reversal: only the 4 core models vote — strip the other 6.
+    const eoModels   = tradeType === 'even_odd' ? [m1, m2, m3, m4] : [m1, m2, m3, m4, m5, m6, m7, m8, m9, m10];
+    const yesCount   = eoModels.filter(m => m.vote).length;
     const totalScore = m1.score + m2.score + m3.score + m4.score + m5.score + m6.score + m7.score + m8.score + m9.score + m10.score;
     const votes: ModelVotes = {
         chiSquared: m1, bayesian: m2, momentum: m3, stability: m4, recentEdge: m5,
@@ -492,14 +501,17 @@ async function scanAllMarkets(
             results.sort((a, b) => b.votes.yesCount - a.votes.yesCount || b.votes.totalScore - a.votes.totalScore || b.winProb - a.winProb);
             const spikedCodes = new Set(detectedSpikes.map(s => s.code));
 
+            // Even/Odd reversal: needs 3/4 core models + dominant side must be HOT (≥65% in last 20).
+            // Other markets: standard 6/10 threshold + recentEdge + regime checks.
+            const eoMode = tradeType === 'even_odd';
             const best = results.find(r =>
                 !spikedCodes.has(r.sym.code) &&
-                r.votes.yesCount >= getSymbolMinVotes(r.sym.code) &&
+                r.votes.yesCount >= (eoMode ? 3 : getSymbolMinVotes(r.sym.code)) &&
                 r.segmentAgrees &&
-                r.votes.recentEdge.vote &&
+                (eoMode ? r.recentDominance.isHot : r.votes.recentEdge.vote) &&
                 r.regimeOk &&                      // ← cross-timeframe consistency required
                 !r.gapDetected &&                  // ← no maintenance gap allowed
-                !r.recentDominance.isCold &&       // ← DOMINANCE GUARD: recent 20 ticks not reversed
+                (eoMode ? !r.recentDominance.isCold : !r.recentDominance.isCold) &&
                 (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU)
             ) ?? null;
 
@@ -858,8 +870,10 @@ const AiSignalOrb: React.FC = () => {
             ? (editMatchesSide === 'DIFFERS' ? 'Differ V2' : 'Matches')
             : 'Even Odd Scanner';
     const models   = result
-        ? [result.votes.chiSquared, result.votes.bayesian, result.votes.momentum, result.votes.stability, result.votes.recentEdge,
-           result.votes.markov, result.votes.linearTrend, result.votes.entropy, result.votes.ngram, result.votes.quartile]
+        ? tradeType === 'even_odd'
+            ? [result.votes.chiSquared, result.votes.bayesian, result.votes.momentum, result.votes.stability]
+            : [result.votes.chiSquared, result.votes.bayesian, result.votes.momentum, result.votes.stability, result.votes.recentEdge,
+               result.votes.markov, result.votes.linearTrend, result.votes.entropy, result.votes.ngram, result.votes.quartile]
         : [];
 
     return (
@@ -1003,9 +1017,9 @@ const AiSignalOrb: React.FC = () => {
                                 <div className='ai-panel__nosig-best'>
                                     <span>Best: <strong>{noSigBest.sym.short}</strong></span>
                                     <span className='ai-panel__nosig-votes' style={{ color: voteColor(noSigBest.votes.yesCount) }}>
-                                        {noSigBest.votes.yesCount}/10 votes
+                                        {noSigBest.votes.yesCount}/{tradeType === 'even_odd' ? 4 : 10} votes
                                     </span>
-                                    <span className='ai-panel__nosig-need'>(need {MIN_VOTES}/10)</span>
+                                    <span className='ai-panel__nosig-need'>(need {tradeType === 'even_odd' ? '3/4' : `${MIN_VOTES}/10`})</span>
                                 </div>
                             )}
                             {noSigBest && noSigBest.recentDominance?.isCold && (
@@ -1031,7 +1045,7 @@ const AiSignalOrb: React.FC = () => {
                                 </div>
                                 <div className='ai-panel__mkt-right'>
                                     <div className='ai-panel__strength-badge' style={{ background: `${vc}18`, borderColor: `${vc}50`, color: vc }}>
-                                        <span className='ai-panel__strength-votes'>{result.votes.yesCount}/10</span>
+                                        <span className='ai-panel__strength-votes'>{result.votes.yesCount}/{tradeType === 'even_odd' ? 4 : 10}</span>
                                         <span className='ai-panel__strength-label'>{voteLabel(result.votes.yesCount)}</span>
                                     </div>
                                     <div className={`ai-panel__regime-badge ai-panel__regime-badge--${result.tfAgreement >= 3 ? 'ok' : 'warn'}`}>
@@ -1118,7 +1132,7 @@ const AiSignalOrb: React.FC = () => {
                             {/* Model vote grid */}
                             <div className='ai-panel__models'>
                                 <span className='ai-panel__section-lbl'>
-                                    Model Consensus — {result.votes.yesCount}/10
+                                    Model Consensus — {result.votes.yesCount}/{tradeType === 'even_odd' ? 4 : 10}
                                     &nbsp;·&nbsp;Strength: <strong style={{ color: vc }}>{result.signalStrength}%</strong>
                                     &nbsp;·&nbsp;Segment: <strong style={{ color: result.segmentAgrees ? '#22c55e' : '#ef4444' }}>✓</strong>
                                 </span>
