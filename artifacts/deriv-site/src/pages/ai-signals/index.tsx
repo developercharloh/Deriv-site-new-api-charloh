@@ -56,8 +56,8 @@ interface StatsChecks {
     autocorr:     { pass: boolean; acf1: number; }
     stability:    { pass: boolean; windowsAbove: number; trend: TrendDir; }
     entryOverdue: { pass: boolean; overdueRatio: number; }
-    eoLeadDigits: { pass: boolean; topWinDigit: number; margin: number; top2BothCorrect: boolean; leadingStableBands: number; } | null;
-    eoMomentum:   { pass: boolean; bandRates: number[]; trend: TrendDir; longTermOk: boolean; } | null;
+    leadDigit:    { pass: boolean; topWinDigit: number; margin: number; stableBands: number; } | null;
+    sideMomentum: { pass: boolean; bandRates: number[]; trend: TrendDir; longTermOk: boolean; } | null;
     passCount: number; totalChecks: number; isSignal: boolean;
 }
 
@@ -286,84 +286,84 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const overdueRatio = avgWait > 0 ? lastGap / avgWait : 0;
     const entryOverduePass = overdueRatio >= 1.3;
 
-    // CHECKS 7 & 8 — Even/Odd specific ───────────────────────────────────────
-    let eoLeadDigits: StatsChecks['eoLeadDigits'] = null;
-    let eoMomentum:   StatsChecks['eoMomentum']   = null;
+    // ── CHECKS 7 & 8 — Lead digit + Side momentum (all trade types) ─────────
+    // Build win-side digit array for this trade type and barrier
+    const allDigits = [0,1,2,3,4,5,6,7,8,9];
+    const winSideArr  = allDigits.filter(d => winFn(d));
+    const lossSideArr = allDigits.filter(d => !winFn(d));
 
-    if (tradeType === 'even_odd') {
-        const winSideArr  = direction === 'EVEN' ? [0,2,4,6,8] : [1,3,5,7,9];
-        const lossSideArr = direction === 'EVEN' ? [1,3,5,7,9]  : [0,2,4,6,8];
+    const recent1k = digits.slice(-safe(1000));
+    const cntArr   = new Array(10).fill(0) as number[];
+    recent1k.forEach(d => cntArr[d]++);
 
-        // Use last 1000 ticks (or all) for lead-digit analysis
-        const recent = digits.slice(-safe(1000));
-        const cntArr = new Array(10).fill(0) as number[];
-        recent.forEach(d => cntArr[d]++);
+    const winSidePct  = winSideArr .reduce((s, d) => s + cntArr[d], 0) / recent1k.length;
+    const lossSidePct = lossSideArr.reduce((s, d) => s + cntArr[d], 0) / recent1k.length;
 
-        const winSidePct  = winSideArr .reduce((s, d) => s + cntArr[d], 0) / recent.length;
-        const lossSidePct = lossSideArr.reduce((s, d) => s + cntArr[d], 0) / recent.length;
-        const margin      = winSidePct - lossSidePct;
+    // CHECK 7 — Lead digit: the most-appearing digit from the win side must
+    // hold its top-win-side position across 3+ of the 4 equal time bands.
+    // For MATCHES X / DIFFERS X the "lead digit" is the target digit itself.
+    const bandSz = Math.floor(N / 4);
 
-        // Top 2 most-appearing digits overall
-        const top2 = cntArr.map((c, i) => ({ d: i, c })).sort((a, b) => b.c - a.c).slice(0, 2).map(x => x.d);
-        const top2BothCorrect = top2.every(d => winSideArr.includes(d));
-
-        // Leading digit: most-appearing digit from the win side
-        const topWinDigit = winSideArr.reduce((best, d) => cntArr[d] > cntArr[best] ? d : best, winSideArr[0]);
-
-        // Leading digit stability across 4 equal time bands (the "leading time" filter)
-        // Confirms the leading digit maintains its position consistently — not just a recent spike
-        const bandSz = Math.floor(N / 4);
-        let leadingStableBands = 0;
-        for (let b = 0; b < 4; b++) {
-            const band = digits.slice(b * bandSz, (b + 1) * bandSz);
-            const bc = new Array(10).fill(0) as number[];
-            band.forEach(d => bc[d]++);
-            const topInBand = winSideArr.reduce((best, d) => bc[d] > bc[best] ? d : best, winSideArr[0]);
-            if (topInBand === topWinDigit) leadingStableBands++;
-        }
-
-        // EO Lead check: top digit is from win side + win side leads by ≥ 2pp + leading digit stable ≥ 3/4 bands
-        const eoLeadPass = winSideArr.includes(top2[0]) && margin >= 0.02 && leadingStableBands >= 3;
-        eoLeadDigits = { pass: eoLeadPass, topWinDigit, margin, top2BothCorrect, leadingStableBands };
-
-        // EO Momentum: win-side rate in 4 equal time bands — must be flat or rising (not falling)
-        const bandRatesEO = Array.from({ length: 4 }, (_, b) => {
-            const band = digits.slice(b * bandSz, (b + 1) * bandSz);
-            return band.filter(winFn).length / band.length;
-        });
-        const momTrend = computeTrendDir(bandRatesEO);
-        // Long-term confirmation: recent half win rate not worse than old half (filters temporary spikes)
-        const halfN       = Math.floor(N / 2);
-        const oldHalfRate = digits.slice(0, halfN).filter(winFn).length / halfN;
-        const newHalfRate = digits.slice(halfN).filter(winFn).length / (N - halfN);
-        const longTermOk  = newHalfRate >= oldHalfRate - 0.01;
-        // Recent band must still be above threshold
-        const eoMomPass = momTrend !== 'falling' && bandRatesEO[3] >= 0.52 && longTermOk;
-        eoMomentum = { pass: eoMomPass, bandRates: bandRatesEO, trend: momTrend, longTermOk };
-    }
-
-    // ── Aggregate & gate ────────────────────────────────────────────────────
-    let totalChecks: number, isSignal: boolean;
-    const checkArr = [rawWinRatePass, crossWindowPass, streakPass, autocorrPass, stabilityPass, entryOverduePass,
-        eoLeadDigits?.pass ?? false, eoMomentum?.pass ?? false];
-
-    if (tradeType === 'even_odd') {
-        totalChecks = 8;
-        // Mandatory: rawWinRate + crossWindow + eoLeadDigits + eoMomentum; plus ≥ 5/8 total
-        isSignal = rawWinRatePass && crossWindowPass && (eoLeadDigits?.pass ?? false) && (eoMomentum?.pass ?? false)
-            && checkArr.filter(Boolean).length >= 5;
-    } else if (tradeType === 'over_under') {
-        totalChecks = 6;
-        // Mandatory: rawWinRate + crossWindow + stability; plus ≥ 4/6 total
-        isSignal = rawWinRatePass && crossWindowPass && stabilityPass
-            && checkArr.slice(0, 6).filter(Boolean).length >= 4
-            && winProb >= MIN_WIN_PROB_OU;
+    let topWinDigit: number;
+    if (tradeType === 'matches_differs') {
+        // For M/D the signal digit IS the barrier
+        topWinDigit = barrier ?? 0;
     } else {
-        totalChecks = 6;
-        isSignal = rawWinRatePass && crossWindowPass && checkArr.slice(0, 6).filter(Boolean).length >= 4;
+        // EO and OU: most-appearing digit from the winning side (recent 1k)
+        topWinDigit = winSideArr.reduce((best, d) => cntArr[d] > cntArr[best] ? d : best, winSideArr[0]);
     }
 
-    const passCount = checkArr.filter(Boolean).length;
+    let stableBands = 0;
+    for (let b = 0; b < 4; b++) {
+        const band = digits.slice(b * bandSz, (b + 1) * bandSz);
+        const bc   = new Array(10).fill(0) as number[];
+        band.forEach(d => bc[d]++);
+        if (tradeType === 'matches_differs') {
+            // MATCHES: target digit consistently above expected; DIFFERS: below expected
+            const bandPct = bc[topWinDigit] / band.length;
+            if (contractType === 'DIGITMATCH' ? bandPct > 0.12 : bandPct < 0.09) stableBands++;
+        } else {
+            // EO / OU: lead digit stays the top win-side digit in this band
+            const topInBand = winSideArr.reduce((best, d) => bc[d] > bc[best] ? d : best, winSideArr[0]);
+            if (topInBand === topWinDigit) stableBands++;
+        }
+    }
+
+    // Margin: win-side lead over loss side (EO/OU) or digit freq deviation (M/D)
+    const margin = tradeType === 'matches_differs'
+        ? Math.abs(cntArr[topWinDigit] / recent1k.length - theorExp)
+        : winSidePct - lossSidePct;
+
+    const leadDigitPass = stableBands >= 3 && margin >= 0.02;
+    const leadDigit: StatsChecks['leadDigit'] = { pass: leadDigitPass, topWinDigit, margin, stableBands };
+
+    // CHECK 8 — Side momentum: win rate across 4 equal time bands must be
+    // flat or rising (not falling), and recent half must not be worse than old half.
+    const bandRates = Array.from({ length: 4 }, (_, b) => {
+        const band = digits.slice(b * bandSz, (b + 1) * bandSz);
+        return band.filter(winFn).length / band.length;
+    });
+    const momTrend  = computeTrendDir(bandRates);
+    const halfN       = Math.floor(N / 2);
+    const oldHalfRate = digits.slice(0, halfN).filter(winFn).length / halfN;
+    const newHalfRate = digits.slice(halfN).filter(winFn).length / (N - halfN);
+    const longTermOk  = newHalfRate >= oldHalfRate - 0.01;
+    // Recent band must still be above type-specific floor
+    const recentBandFloor = theorExp + (isEO ? 0.02 : 0.01);
+    const sideMomPass = momTrend !== 'falling' && bandRates[3] >= recentBandFloor && longTermOk;
+    const sideMomentum: StatsChecks['sideMomentum'] = { pass: sideMomPass, bandRates, trend: momTrend, longTermOk };
+
+    // ── Aggregate & gate (8 checks for all types) ───────────────────────────
+    const checkArr = [rawWinRatePass, crossWindowPass, streakPass, autocorrPass,
+                      stabilityPass, entryOverduePass, leadDigitPass, sideMomPass];
+    const passCount  = checkArr.filter(Boolean).length;
+    const totalChecks = 8;
+
+    // Mandatory for all types: rawWinRate + crossWindow + leadDigit + sideMomentum + ≥ 5/8 total
+    // OU also requires winProb >= floor
+    const mandatoryPass = rawWinRatePass && crossWindowPass && leadDigitPass && sideMomPass;
+    const isSignal = mandatoryPass && passCount >= 5
+        && (tradeType !== 'over_under' || winProb >= MIN_WIN_PROB_OU);
 
     const statsChecks: StatsChecks = {
         rawWinRate:   { pass: rawWinRatePass,   rate30: r30, rate60: r60, rate100: r100 },
@@ -372,11 +372,11 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         autocorr:     { pass: autocorrPass,     acf1: a1 },
         stability:    { pass: stabilityPass,    windowsAbove: stabAbove, trend: stabTrend },
         entryOverdue: { pass: entryOverduePass, overdueRatio },
-        eoLeadDigits, eoMomentum,
+        leadDigit, sideMomentum,
         passCount, totalChecks, isSignal,
     };
 
-    // ── Backwards-compat ModelVotes shell (UI still uses yesCount for colour) ──
+    // ── Backwards-compat ModelVotes shell (UI uses yesCount for colour) ──────
     const fakeVote = (pass: boolean, score: number): ModelResult => ({ name: '', vote: pass, score });
     const votes: ModelVotes = {
         chiSquared:  fakeVote(rawWinRatePass,  r100),
@@ -387,8 +387,8 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         markov:      fakeVote(autocorrPass,    Math.abs(a1)),
         linearTrend: fakeVote(stabilityPass,   stabAbove / 5),
         entropy:     fakeVote(entryOverduePass,overdueRatio / 2),
-        ngram:       fakeVote(eoLeadDigits?.pass ?? false, eoLeadDigits?.margin ?? 0),
-        quartile:    fakeVote(eoMomentum?.pass ?? false, 0),
+        ngram:       fakeVote(leadDigitPass,   margin),
+        quartile:    fakeVote(sideMomPass,     0),
         yesCount: passCount, totalScore: (passCount / totalChecks) * 10,
     };
 
