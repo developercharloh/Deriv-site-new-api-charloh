@@ -66,7 +66,7 @@ interface MarketResult {
     barrier: number | null; recoveryBarrier: number | null;
     recoveryContractType: string | null; recoveryDirection: string | null;
     winProb: number; sampleSize: number; votes: ModelVotes;
-    entryDigits: { digit: number; recommended: boolean; conditional: number; freqPct: number; avgWaitTicks: number }[];
+    entryDigits: { digit: number; recommended: boolean; conditional: number; freqPct: number; avgWaitTicks: number; skipAdjustedWait: number }[];
     segmentAgrees: boolean; signalStrength: number; pip: number;
     regimeScore: number; regimeOk: boolean; gapDetected: boolean; tfAgreement: number;
     statsChecks: StatsChecks;
@@ -152,6 +152,12 @@ function ticksSinceDigit(digits: number[], target: number): number {
     for (let i = digits.length - 1; i >= 0; i--) if (digits[i] === target) return digits.length - 1 - i;
     return digits.length;
 }
+
+// DBot takes 1–3 ticks between contract settlement and the next before_purchase.
+// All entry-point timing calculations add this midpoint offset so the signal
+// reflects when the bot can ACTUALLY place the trade, not the current tick.
+const BOT_SKIP_TICKS = 2;   // midpoint of 1-3 tick bot delay
+const BOT_SKIP_MAX   = 3;   // maximum skip; used to blend lags in conditional
 
 // ─── EO Recovery recommendation ───────────────────────────────────────────────
 // Based purely on market structure — not a guess:
@@ -275,8 +281,15 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     };
 
     // ── Entry digits (conditional probability + frequency weight) ────────────
+    // Bot takes 1–3 ticks between contracts — blend lags 1, 2, 3 so entry digits
+    // score well at the actual tick the bot places the next contract, not just lag-1.
     const cond = new Array(10).fill(null).map(() => ({ wins: 0, total: 0 }));
-    for (let i = 0; i < digits.length - 1; i++) { cond[digits[i]].total++; if (winFn(digits[i + 1])) cond[digits[i]].wins++; }
+    for (let lag = 1; lag <= BOT_SKIP_MAX; lag++) {
+        for (let i = 0; i < digits.length - lag; i++) {
+            cond[digits[i]].total++;
+            if (winFn(digits[i + lag])) cond[digits[i]].wins++;
+        }
+    }
     const minSmp  = Math.max(50, Math.floor(N / 50));
     const scored  = cond.map((c, d) => {
         const conditional = c.total > 0 ? c.wins / c.total : 0;
@@ -287,7 +300,13 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     let entryRaw = scored.filter(c => c.total >= minSmp && c.lowerBound >= winProb + 0.01).sort((a, b) => b.freqScore - a.freqScore || b.lowerBound - a.lowerBound).slice(0, 3);
     if (entryRaw.length < 3) { const used = new Set(entryRaw.map(e => e.digit)); const fb = scored.filter(c => !used.has(c.digit) && c.total >= minSmp).sort((a, b) => b.freqScore - a.freqScore || b.lowerBound - a.lowerBound); while (entryRaw.length < 3 && fb.length > 0) entryRaw.push(fb.shift()!); }
     while (entryRaw.length < 3) { const used = new Set(entryRaw.map(e => e.digit)); const fb2 = scored.filter(e => !used.has(e.digit)).sort((a, b) => b.freqPct - a.freqPct)[0]; if (!fb2) break; entryRaw.push(fb2); }
-    const entryDigits = entryRaw.map((e, i) => ({ digit: e.digit, recommended: i === 0, conditional: e.conditional, freqPct: e.freqPct, avgWaitTicks: Math.max(1, Math.round(1 / Math.max(0.01, e.freqPct))) }));
+    const entryDigits = entryRaw.map((e, i) => {
+        const avgWaitT = Math.max(1, Math.round(1 / Math.max(0.01, e.freqPct)));
+        const gapNow = ticksSinceDigit(digits, e.digit);
+        // After the bot's skip, estimate remaining ticks until this digit appears
+        const skipAdjustedWait = Math.max(0, avgWaitT - (gapNow + BOT_SKIP_TICKS));
+        return { digit: e.digit, recommended: i === 0, conditional: e.conditional, freqPct: e.freqPct, avgWaitTicks: avgWaitT, skipAdjustedWait };
+    });
 
     // ══ STATS CHECKS (replace model voting) ══════════════════════════════════
 
@@ -331,7 +350,10 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const bestEntry    = entryDigits[0];
     const avgWait      = bestEntry?.avgWaitTicks ?? 10;
     const lastGap      = bestEntry ? ticksSinceDigit(digits, bestEntry.digit) : 0;
-    const overdueRatio = avgWait > 0 ? lastGap / avgWait : 0;
+    // Credit the bot's skip: by the time it resumes scanning, BOT_SKIP_TICKS more
+    // ticks will have passed — so the entry digit is effectively more overdue.
+    const effectiveGap = lastGap + BOT_SKIP_TICKS;
+    const overdueRatio = avgWait > 0 ? effectiveGap / avgWait : 0;
     const entryOverduePass = overdueRatio >= 1.3;
 
     // ── CHECKS 7 & 8 — Lead digit + Side momentum (all trade types) ─────────
@@ -1175,7 +1197,7 @@ const AiSignalsPage: React.FC = () => {
                         {result.entryDigits.length > 0 && (
                             <div className='ai-panel__entries'>
                                 <div className='ai-panel__entries-hd'>
-                                    <span className='ai-panel__section-lbl'>Entry Points<em className='ai-panel__section-hint'> — wait for this last digit, then trade</em></span>
+                                    <span className='ai-panel__section-lbl'>Entry Points<em className='ai-panel__section-hint'> — wait for this digit; timing accounts for bot delay</em></span>
                                     {ticksSinceScan > 0 && (<span className='ai-panel__entry-tick-ctr'>{ticksSinceScan} tick{ticksSinceScan !== 1 ? 's' : ''} live</span>)}
                                 </div>
                                 <div className='ai-panel__entry-grid ai-panel__entry-grid--3'>
@@ -1183,14 +1205,14 @@ const AiSignalsPage: React.FC = () => {
                                         const selected = editEntryPoint === e.digit; const lastSeen = digitLastSeen[e.digit];
                                         const stale = ticksSinceScan > 0 && lastSeen > e.avgWaitTicks * 2; const fresh = lastSeen === 0;
                                         const tagLabel = i === 0 ? '★ Best' : i === 1 ? '◎ Alt 1' : '◎ Alt 2';
-                                        const waitColor = e.avgWaitTicks <= 8 ? '#10b981' : e.avgWaitTicks <= 13 ? '#f59e0b' : '#ef4444';
+                                        const waitColor = e.skipAdjustedWait === 0 ? '#10b981' : e.skipAdjustedWait <= 5 ? '#f59e0b' : '#ef4444';
                                         return (
                                             <div key={e.digit} className={['ai-panel__entry-card', i === 0 ? 'ai-panel__entry-card--rec' : '', selected ? 'ai-panel__entry-card--selected' : '', fresh ? 'ai-panel__entry-card--fresh' : '', stale ? 'ai-panel__entry-card--stale' : ''].join(' ').trim()} role='button' style={{ cursor: 'pointer', outline: selected ? `2px solid ${vc}` : 'none' }} onClick={() => setEditEntryPoint(e.digit)}>
                                                 {fresh && <span className='ai-panel__entry-now'>NOW</span>}
                                                 {stale && !fresh && <span className='ai-panel__entry-stale-badge'>STALE</span>}
                                                 <div className='ai-panel__entry-digit' style={{ color: i === 0 ? vc : '#e2e8f0' }}>{e.digit}</div>
                                                 <div className='ai-panel__entry-meta'><span className='ai-panel__entry-tag'>{tagLabel}</span><span className='ai-panel__entry-pct' style={{ color: i === 0 ? vc : '#94a3b8' }}>{(e.conditional * 100).toFixed(1)}%</span></div>
-                                                <div className='ai-panel__entry-wait' style={{ color: waitColor }}>~{e.avgWaitTicks}t wait</div>
+                                                <div className='ai-panel__entry-wait' style={{ color: waitColor }}>{e.skipAdjustedWait === 0 ? '⚡ due after skip' : `~${e.skipAdjustedWait}t after skip`}</div>
                                                 {lastSeen >= 0 && !fresh && (<div className={`ai-panel__entry-seen${stale ? ' ai-panel__entry-seen--stale' : ''}`}>{lastSeen}t ago</div>)}
                                                 {lastSeen < 0 && ticksSinceScan > 0 && (<div className='ai-panel__entry-seen ai-panel__entry-seen--waiting'>waiting…</div>)}
                                             </div>
