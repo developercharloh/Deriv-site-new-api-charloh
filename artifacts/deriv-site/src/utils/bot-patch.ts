@@ -27,6 +27,7 @@ export const BOT_XML_PATHS: Record<string, string> = {
     'matches-signal':           '/bots/Matches_Signal_Bot.xml',
     'differ-v2':                '/bots/BINARYTOOL@_DIFFER_V2.0_(1)_(1)_1765711647662.xml',
     'even-odd-scanner':         '/bots/BINARYTOOL@EVEN_ODD_THUNDER_AI_PRO_BOT_1765711647662.xml',
+    'even-odd-recovery':        '/bots/EVEN_ODD_RECOVERY_BOT.xml',
     'over-under-signal':        '/bots/OverUnder_Signal_Bot.xml',
     'elite-entry-scanner':      '/bots/Elite_Entry_Scanner_Bot.xml',
     'over-under-ai-signals':    '/bots/Over_Under_AI_Signals_Bot.xml',
@@ -336,6 +337,7 @@ export function getBotPatches(
                 { blockId: 'h~GA!H78SVi}._e5N:ur',   numValue: stopLoss },  // stop loss
             ];
 
+        case 'even-odd-recovery':
         case 'even-odd-scanner': {
             // The bot uses: Stake += ABS(Stake) * B at each loss level.
             // So multiplier M corresponds to B = M - 1.

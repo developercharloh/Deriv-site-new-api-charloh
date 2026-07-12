@@ -9,8 +9,8 @@ import '@/components/ai-signal-orb/ai-signal-orb.scss';
 import './ai-signals-page.scss';
 
 const ORB_RUN_CFG_KEY = 'orb_destroyer_cfg';
-interface OrbRunConfig { stake: string; takeProfit: string; stopLoss: string; martingale: string; martingaleOn: boolean; }
-const DEFAULT_RUN_CFG: OrbRunConfig = { stake: '0.5', takeProfit: '10', stopLoss: '30', martingale: '1.5', martingaleOn: true };
+interface OrbRunConfig { stake: string; takeProfit: string; stopLoss: string; martingale: string; martingaleOn: boolean; eoRecovery: boolean; }
+const DEFAULT_RUN_CFG: OrbRunConfig = { stake: '0.5', takeProfit: '10', stopLoss: '30', martingale: '1.5', martingaleOn: true, eoRecovery: false };
 type RunState = 'idle' | 'launching' | 'no-ws' | 'error';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -375,9 +375,8 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
 
     let isSignal: boolean;
     if (tradeType === 'even_odd') {
-        // EO: all four core checks mandatory + leadDigit + sideMomentum mandatory + ≥ 5/8 total
-        isSignal = rawWinRatePass && crossWindowPass && leadDigitPass && sideMomPass
-            && passCount >= 5;
+        // EO: rawWinRate + crossWindow mandatory; leadDigit + sideMomentum contribute to score
+        isSignal = rawWinRatePass && crossWindowPass && passCount >= 5;
     } else if (tradeType === 'over_under') {
         // OU: core mandatory + stability + recovery market must exist + ≥ 5/8 total
         isSignal = rawWinRatePass && crossWindowPass && stabilityPass
@@ -534,6 +533,7 @@ const AiSignalsPage: React.FC = () => {
     const [cfgStopLoss,     setCfgStopLoss]     = useState(DEFAULT_RUN_CFG.stopLoss);
     const [cfgMartingale,   setCfgMartingale]   = useState(DEFAULT_RUN_CFG.martingale);
     const [cfgMartingaleOn, setCfgMartingaleOn] = useState(DEFAULT_RUN_CFG.martingaleOn);
+    const [cfgEoRecovery,   setCfgEoRecovery]   = useState(DEFAULT_RUN_CFG.eoRecovery);
 
     // Live Market Watch — starts automatically on mount
     const [watchActive,    setWatchActive]    = useState(true);
@@ -726,7 +726,7 @@ const AiSignalsPage: React.FC = () => {
     const openRunConfigDirect = useCallback(() => {
         let cfg: OrbRunConfig = DEFAULT_RUN_CFG;
         try { const raw = localStorage.getItem(ORB_RUN_CFG_KEY); if (raw) cfg = { ...DEFAULT_RUN_CFG, ...JSON.parse(raw) }; } catch { /* */ }
-        setCfgStake(cfg.stake); setCfgTakeProfit(cfg.takeProfit); setCfgStopLoss(cfg.stopLoss); setCfgMartingale(cfg.martingale); setCfgMartingaleOn(cfg.martingaleOn);
+        setCfgStake(cfg.stake); setCfgTakeProfit(cfg.takeProfit); setCfgStopLoss(cfg.stopLoss); setCfgMartingale(cfg.martingale); setCfgMartingaleOn(cfg.martingaleOn); setCfgEoRecovery(cfg.eoRecovery ?? false);
         setRunState('idle'); setRunErr(''); setShowRunConfig(true);
     }, []);
 
@@ -742,7 +742,7 @@ const AiSignalsPage: React.FC = () => {
         if (!result) return;
         let cfg: OrbRunConfig = DEFAULT_RUN_CFG;
         try { const raw = localStorage.getItem(ORB_RUN_CFG_KEY); if (raw) cfg = { ...DEFAULT_RUN_CFG, ...JSON.parse(raw) }; } catch { /* */ }
-        setCfgStake(cfg.stake); setCfgTakeProfit(cfg.takeProfit); setCfgStopLoss(cfg.stopLoss); setCfgMartingale(cfg.martingale); setCfgMartingaleOn(cfg.martingaleOn);
+        setCfgStake(cfg.stake); setCfgTakeProfit(cfg.takeProfit); setCfgStopLoss(cfg.stopLoss); setCfgMartingale(cfg.martingale); setCfgMartingaleOn(cfg.martingaleOn); setCfgEoRecovery(cfg.eoRecovery ?? false);
         setRunState('idle'); setRunErr(''); setShowRunConfig(true);
     }, [result]);
 
@@ -750,12 +750,12 @@ const AiSignalsPage: React.FC = () => {
         if (!result) return;
         setRunState('launching'); setRunErr('');
         try {
-            const cfg: OrbRunConfig = { stake: cfgStake, takeProfit: cfgTakeProfit, stopLoss: cfgStopLoss, martingale: cfgMartingale, martingaleOn: cfgMartingaleOn };
+            const cfg: OrbRunConfig = { stake: cfgStake, takeProfit: cfgTakeProfit, stopLoss: cfgStopLoss, martingale: cfgMartingale, martingaleOn: cfgMartingaleOn, eoRecovery: cfgEoRecovery };
             try { localStorage.setItem(ORB_RUN_CFG_KEY, JSON.stringify(cfg)); } catch { /* */ }
             let direction: string, botId: string;
             if (tradeType === 'over_under') { direction = `${editDir} ${editBarrier}`; botId = destroyerBotIdFromDirection(direction); }
             else if (tradeType === 'matches_differs') { direction = `${editMatchesSide} ${editTargetDigit}`; botId = editMatchesSide === 'DIFFERS' ? 'differ-v2' : 'matches-signal'; }
-            else { direction = editDir; botId = 'even-odd-scanner'; }
+            else { direction = editDir; botId = cfgEoRecovery ? 'even-odd-recovery' : 'even-odd-scanner'; }
             const signal: BotSignal = { symbol: result.sym.code, symbolLabel: result.sym.label, direction, entryPoint: `Digit ${editEntryPoint}`, confidence: result.signalStrength, market: tradeType, recoveryBarrier: tradeType === 'over_under' ? (editRecoveryBarrier ?? result.recoveryBarrier ?? editBarrier) : undefined };
             const stake = parseFloat(cfgStake) || 0.5, takeProfit = parseFloat(cfgTakeProfit) || 10, stopLoss = parseFloat(cfgStopLoss) || 30, martingale = cfgMartingaleOn ? (parseFloat(cfgMartingale) || 1.5) : 0;
             const doc = await fetchAndPatchBot(botId, signal, stake, takeProfit, stopLoss, martingale);
@@ -768,7 +768,7 @@ const AiSignalsPage: React.FC = () => {
             store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
             setTimeout(() => { if (!store.run_panel.is_running) store.run_panel.onRunButtonClick(); setRunState('idle'); setShowRunConfig(false); }, 500);
         } catch (e: any) { setRunState('error'); setRunErr(e?.message || 'Failed to launch bot.'); }
-    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, store]);
+    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, cfgEoRecovery, store]);
 
     // ── Derived display values ────────────────────────────────────────────────
     const vc = result ? voteColor(result.statsChecks.passCount) : '#6366f1';
@@ -1200,6 +1200,19 @@ const AiSignalsPage: React.FC = () => {
                             <input type='number' min='0' step='0.1' value={cfgMartingale} disabled={!cfgMartingaleOn} onChange={e => setCfgMartingale(e.target.value)} className='ai-runcfg__mart-input' />
                         </div>
                         <span className='ai-runcfg__mart-hint'>{cfgMartingaleOn ? 'Stake multiplies by this factor after a loss.' : 'Off — martingale is reset to 0, stake stays flat after a loss.'}</span>
+                        {tradeType === 'even_odd' && (
+                            <div className='ai-runcfg__recovery'>
+                                <label className='ai-runcfg__recovery-toggle'>
+                                    <input type='checkbox' checked={cfgEoRecovery} onChange={e => setCfgEoRecovery(e.target.checked)} />
+                                    <span>EO Recovery</span>
+                                </label>
+                                <span className='ai-runcfg__recovery-hint'>
+                                    {cfgEoRecovery
+                                        ? 'On — after a loss the bot flips direction (EVEN→ODD or ODD→EVEN) and trades back until a win, then returns to the original side.'
+                                        : 'Off — bot stays on the same direction through losses (martingale only).'}
+                                </span>
+                            </div>
+                        )}
                         <button className='ai-runcfg__execute' disabled={runState === 'launching'} onClick={handleExecuteTrade}>
                             {runState === 'launching' ? <><Loader2 size={16} className='ai-panel__spin' /> Launching…</> : <><PlayCircle size={16} /> Execute Trades</>}
                         </button>
