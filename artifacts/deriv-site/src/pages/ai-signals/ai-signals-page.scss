@@ -1,0 +1,97 @@
+// ─── AI Signals full-page wrapper ─────────────────────────────────────────────
+.aisig-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    background: #080d1a;
+
+    // Inherit the panel colour tokens so all ai-panel__* classes render correctly
+    --panel-bg: rgba(10, 15, 30, 0.98);
+}
+
+.aisig-page__inner {
+    max-width: 560px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 16px 16px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+// ── Page header ───────────────────────────────────────────────────────────────
+.aisig-page__hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 4px;
+}
+
+.aisig-page__hd-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.aisig-page__title {
+    display: block;
+    font-size: 15px;
+    font-weight: 800;
+    color: #e2e8f0;
+    letter-spacing: -0.3px;
+}
+
+.aisig-page__subtitle {
+    display: block;
+    font-size: 10px;
+    color: #475569;
+    font-weight: 500;
+    margin-top: 1px;
+}
+
+// ── Override ai-watch card sizing for full-page context ───────────────────────
+.aisig-page .ai-watch {
+    border-radius: 14px;
+}
+
+.aisig-page .ai-watch__row {
+    padding: 9px 14px;
+}
+
+.aisig-page .ai-watch__sym {
+    min-width: 44px;
+    font-size: 11px;
+}
+
+.aisig-page .ai-watch__dir {
+    font-size: 11px;
+}
+
+.aisig-page .ai-watch__votes {
+    font-size: 11px;
+}
+
+// ── Panel content — give the result card proper page spacing ──────────────────
+.aisig-page .ai-panel__result {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.aisig-page .ai-panel__type-row {
+    gap: 6px;
+}
+
+.aisig-page .ai-panel__type-btn {
+    flex: 1;
+    padding: 9px 6px;
+    font-size: 11px;
+}
+
+// ── Run-config overlay — ensure it covers the whole viewport ─────────────────
+.aisig-page .ai-runcfg__overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+}

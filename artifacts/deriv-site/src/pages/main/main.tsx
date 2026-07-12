@@ -50,14 +50,7 @@ const AnalysisTool      = lazy(() => import('../ai-analysis-tool'));
 const ExecutionPlan     = lazy(() => import('../execution-plan'));
 const FreeBots          = lazy(() => import('../free-bots'));
 const AdvancedDTrader   = lazy(() => import('../advanced-dtrader'));
-
-const AiSignalOrb       = lazy(() => import('../../components/ai-signal-orb/AiSignalOrb'));
-
-class OrbErrorBoundary extends React.Component<{ children: React.ReactNode }, { dead: boolean }> {
-    state = { dead: false };
-    static getDerivedStateFromError() { return { dead: true }; }
-    render() { return this.state.dead ? null : (this.props as any).children; }
-}
+const AiSignalsPage     = lazy(() => import('../ai-signals'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -443,6 +436,18 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
+                                        <Localize i18n_default_text='⚡ AI Signals' />
+                                    </>
+                                }
+                                id='id-ai-signals'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading AI Signals...')} />}>
+                                    <AiSignalsPage />
+                                </Suspense>
+                            </div>
+                            <div
+                                label={
+                                    <>
                                         <LabelPairedPuzzlePieceTwoCaptionBoldIcon
                                             height='24px'
                                             width='24px'
@@ -506,12 +511,12 @@ const AppWrapper = observer(() => {
             <DesktopWrapper>
                 <div className='main__run-strategy-wrapper'>
                     <RunStrategy />
-                    {![5, 6].includes(active_tab) && <RunPanel />}
+                    {![3, 6, 7].includes(active_tab) && <RunPanel />}
                 </div>
                 <ChartModal />
                 <TradingViewModal />
             </DesktopWrapper>
-            <MobileWrapper>{!is_open && ![5, 6].includes(active_tab) && <RunPanel />}</MobileWrapper>
+            <MobileWrapper>{!is_open && ![3, 6, 7].includes(active_tab) && <RunPanel />}</MobileWrapper>
             <Dialog
                 cancel_button_text={cancel_button_text || localize('Cancel')}
                 className='dc-dialog__wrapper--fixed'
@@ -546,12 +551,6 @@ const AppWrapper = observer(() => {
                 );
             })()}
 
-            {/* AI Scanner — floats over all tabs; isolated so crashes are silent */}
-            <OrbErrorBoundary>
-                <Suspense fallback={null}>
-                    <AiSignalOrb />
-                </Suspense>
-            </OrbErrorBoundary>
         </React.Fragment>
     );
 });
