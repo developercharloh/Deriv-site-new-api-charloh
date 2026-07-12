@@ -153,6 +153,53 @@ function ticksSinceDigit(digits: number[], target: number): number {
     return digits.length;
 }
 
+// ─── EO Recovery recommendation ───────────────────────────────────────────────
+// Based purely on market structure — not a guess:
+//   acf1 < 0  → digits ALTERNATE (EVEN→ODD→EVEN…) → recovery benefits from the flip
+//   acf1 > 0  → digits STREAK (EVEN→EVEN→EVEN…) → recovery fights the cluster and loses more
+//   streak    → current run of consecutive wins on the signal side
+//   momentum  → whether the win rate is accelerating or decelerating
+function eoRecoveryRec(s: StatsChecks): { recommended: boolean; neutral: boolean; label: string; reason: string } {
+    const acf1   = s.autocorr.acf1;
+    const streak = s.streak.length;
+    const trend  = s.sideMomentum?.trend ?? 'flat';
+
+    // Positive score → recovery helps. Negative → recovery hurts.
+    let score = 0;
+    if (acf1 < -0.06) score += 3;       // strong alternation
+    else if (acf1 < -0.03) score += 2;  // moderate alternation
+    if (acf1 > 0.06) score -= 3;        // strong streaking
+    else if (acf1 > 0.03) score -= 2;   // moderate streaking
+    if (streak >= 4) score -= 2;        // momentum clearly on same side
+    else if (streak >= 3) score -= 1;
+    else if (streak <= 1) score += 1;   // no current momentum
+    if (trend === 'rising') score -= 1; // current side accelerating
+
+    if (score >= 2) {
+        const acfStr = (acf1 * 100).toFixed(1);
+        return {
+            recommended: true, neutral: false,
+            label: 'Recommended',
+            reason: `Market alternates (acf=${acfStr}%)${streak <= 1 ? ', no streak' : ''}. After a loss the opposite side is statistically more likely.`,
+        };
+    }
+    if (score <= -1) {
+        const acfStr = (acf1 * 100).toFixed(1);
+        const streakNote = streak >= 3 ? `, ${streak}-tick streak on this side` : '';
+        const acfNote = acf1 > 0.03 ? `Market clusters (acf=${acfStr}%)` : 'Momentum on current side';
+        return {
+            recommended: false, neutral: false,
+            label: 'Not Recommended',
+            reason: `${acfNote}${streakNote}. Flipping after a loss risks compounding losses against the streak.`,
+        };
+    }
+    return {
+        recommended: false, neutral: true,
+        label: 'Neutral',
+        reason: 'No clear alternating or streaking pattern. Recovery adds risk without a statistical edge.',
+    };
+}
+
 // ─── Stats-driven signal analysis (replaces 10-model voting) ─────────────────
 function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeType: TradeType): MarketResult {
     const N = prices.length;
@@ -1085,7 +1132,24 @@ const AiSignalsPage: React.FC = () => {
                         <div className='ai-panel__pred'>
                             <span className='ai-panel__section-lbl'>Prediction</span>
                             {tradeType === 'even_odd' ? (
+                                <>
                                 <div className='ai-panel__seg'>{(['EVEN', 'ODD'] as const).map(d => (<button key={d} className={`ai-panel__seg-btn${editDir === d ? ' ai-panel__seg-btn--active' : ''}`} onClick={() => setEditDir(d)}>{d}</button>))}</div>
+                                {(() => {
+                                    const rec = eoRecoveryRec(result.statsChecks);
+                                    const cls = rec.recommended ? 'yes' : rec.neutral ? 'neutral' : 'no';
+                                    const icon = rec.recommended ? '✅' : rec.neutral ? '⚠️' : '🚫';
+                                    return (
+                                        <div className={`ai-panel__eo-rec ai-panel__eo-rec--${cls}`}>
+                                            <div className='ai-panel__eo-rec-hd'>
+                                                <span className='ai-panel__eo-rec-icon'>{icon}</span>
+                                                <span className='ai-panel__eo-rec-title'>Recovery after loss</span>
+                                                <span className={`ai-panel__eo-rec-pill ai-panel__eo-rec-pill--${cls}`}>{rec.label}</span>
+                                            </div>
+                                            <p className='ai-panel__eo-rec-reason'>{rec.reason}</p>
+                                        </div>
+                                    );
+                                })()}
+                                </>
                             ) : tradeType === 'matches_differs' ? (
                                 <div className='ai-panel__pred-md'>
                                     <div className='ai-panel__seg' style={{ marginBottom: 8 }}>{(['MATCHES', 'DIFFERS'] as const).map(s => (<button key={s} className={`ai-panel__seg-btn${editMatchesSide === s ? ' ai-panel__seg-btn--active' : ''}`} onClick={() => setEditMatchesSide(s)}>{s}</button>))}</div>
