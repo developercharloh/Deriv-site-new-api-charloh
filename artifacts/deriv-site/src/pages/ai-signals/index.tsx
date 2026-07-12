@@ -821,6 +821,12 @@ const AiSignalsPage: React.FC = () => {
                         {/* Market header */}
                         <div className='ai-panel__mkt' style={{ '--vc': vc } as React.CSSProperties}>
                             <div className='ai-panel__mkt-left'>
+                                <button
+                                    className='aisig-back-btn'
+                                    onClick={() => { setResult(null); setScanState('idle'); setHasSignal(false); }}
+                                >
+                                    ← Back
+                                </button>
                                 <span className='ai-panel__mkt-short'>{result.sym.short}</span>
                                 <span className='ai-panel__mkt-label'>{result.sym.label}</span>
                                 <span className='ai-panel__mkt-samples'>{(result.sampleSize / 1000).toFixed(1)}k ticks analysed</span>
@@ -976,20 +982,23 @@ const AiSignalsPage: React.FC = () => {
                             </div>
                         )}
 
-                        {/* Execute */}
-                        <div className='ai-panel__run-cta'>
-                            <button className='ai-panel__run-btn' disabled={runState === 'launching'} onClick={openRunConfig}>
-                                <PlayCircle size={16} /> Save &amp; Run
-                            </button>
-                            <span className='ai-panel__run-hint'>
-                                Tap to set your stake, take profit, stop loss and martingale — then execute.
-                            </span>
-                        </div>
+                        {/* bottom spacer so sticky bar doesn't cover last card */}
+                        <div style={{ height: 80 }} />
 
                     </div>
                 )}
 
             </div>
+
+            {/* ── Sticky Save & Run bar ──────────────────────────────────────── */}
+            {scanState === 'done' && result && !showRunConfig && (
+                <div className='aisig-sticky-bar'>
+                    <button className='aisig-sticky-bar__btn' disabled={runState === 'launching'} onClick={openRunConfig}>
+                        <PlayCircle size={17} />
+                        Save &amp; Run
+                    </button>
+                </div>
+            )}
 
             {/* ── Run-config overlay ─────────────────────────────────────────── */}
             {showRunConfig && (

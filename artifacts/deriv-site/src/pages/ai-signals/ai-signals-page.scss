@@ -107,6 +107,65 @@
     font-size: 11px;
 }
 
+// ── Back button at top of detail panel ───────────────────────────────────────
+.aisig-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.05);
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: all 0.15s;
+    &:hover { background: rgba(255,255,255,0.10); color: #94a3b8; border-color: rgba(255,255,255,0.18); }
+}
+
+// ── Sticky Save & Run bar ─────────────────────────────────────────────────────
+.aisig-sticky-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(8,13,26,0.98) 60%, rgba(8,13,26,0));
+    backdrop-filter: blur(6px);
+    z-index: 900;
+    display: flex;
+    justify-content: center;
+}
+
+.aisig-sticky-bar__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    width: 100%;
+    max-width: 520px;
+    padding: 14px 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(16,185,129,0.5);
+    background: linear-gradient(135deg, rgba(16,185,129,0.22), rgba(5,150,105,0.16));
+    color: #34d399;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    box-shadow: 0 4px 24px rgba(16,185,129,0.20);
+    transition: all 0.15s;
+    &:hover:not(:disabled) {
+        background: linear-gradient(135deg, rgba(16,185,129,0.35), rgba(5,150,105,0.28));
+        border-color: rgba(16,185,129,0.75);
+        box-shadow: 0 6px 32px rgba(16,185,129,0.35);
+        color: #6ee7b7;
+    }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
 // ── Run-config overlay — ensure it covers the whole viewport ─────────────────
 .aisig-page .ai-runcfg__overlay {
     position: fixed;
