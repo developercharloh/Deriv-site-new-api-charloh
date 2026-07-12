@@ -372,11 +372,30 @@ const AiSignalsPage: React.FC = () => {
         };
         const doScan = async () => {
             if (busy || !mounted) return; busy = true; setWatchScanning(true);
+            let foundSignal = false;
             try {
                 const { allResults, spikedMarkets: spikes } = await scanAllMarkets(tradeType, () => {});
                 if (!mounted) return;
-                setWatchResults(allResults); setWatchSpikes(new Set(spikes.map(s => s.code)));
-            } catch { /* ignore */ } finally { busy = false; if (mounted) { setWatchScanning(false); startCountdown(WATCH_INTERVAL_S); } }
+                const spikeSet = new Set(spikes.map(s => s.code));
+                setWatchResults(allResults); setWatchSpikes(spikeSet);
+                const eoMode = tradeType === 'even_odd';
+                foundSignal = allResults.some(r =>
+                    !spikeSet.has(r.sym.code) && !r.gapDetected &&
+                    r.votes.yesCount >= (eoMode ? 3 : getSymbolMinVotes(r.sym.code)) &&
+                    r.segmentAgrees &&
+                    (eoMode ? r.recentDominance.isHot : r.votes.recentEdge.vote) &&
+                    r.regimeOk && !r.recentDominance.isCold &&
+                    (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU)
+                );
+            } catch { /* ignore */ } finally {
+                busy = false;
+                if (mounted) {
+                    setWatchScanning(false);
+                    // Signal found → re-validate after 90 s
+                    // No signal → rescan immediately after a 3 s breath
+                    startCountdown(foundSignal ? WATCH_INTERVAL_S : 3);
+                }
+            }
         };
         doScan();
         return () => { mounted = false; if (watchCdRef.current) { clearInterval(watchCdRef.current); watchCdRef.current = null; } };
@@ -550,9 +569,10 @@ const AiSignalsPage: React.FC = () => {
                                 <div className='aisig-feed__hd-left'>
                                     <span className={`aisig-feed__pulse${watchScanning ? ' aisig-feed__pulse--scan' : validSigs.length > 0 ? ' aisig-feed__pulse--live' : ''}`} />
                                     <span className='aisig-feed__hd-title'>
-                                        {watchScanning ? 'Scanning markets…' : validSigs.length > 0 ? `${validSigs.length} Active Signal${validSigs.length !== 1 ? 's' : ''}` : 'Watching all markets'}
+                                        {watchScanning ? 'Scanning markets…' : validSigs.length > 0 ? `${validSigs.length} Active Signal${validSigs.length !== 1 ? 's' : ''}` : 'Scanning continuously…'}
                                     </span>
-                                    {!watchScanning && hasResults && (
+                                    {/* Only show countdown when a signal exists (re-validation timer) */}
+                                    {!watchScanning && validSigs.length > 0 && (
                                         <span className='aisig-feed__cd'>↺ {watchCountdown}s</span>
                                     )}
                                 </div>
@@ -583,8 +603,8 @@ const AiSignalsPage: React.FC = () => {
                                 <div className='aisig-feed__nosig'>
                                     <span className='aisig-feed__nosig-icon'>🔍</span>
                                     <div>
-                                        <div className='aisig-feed__nosig-title'>No qualifying signals</div>
-                                        <div className='aisig-feed__nosig-sub'>Markets scanned — none met the consensus threshold. Rescanning in {watchCountdown}s.</div>
+                                        <div className='aisig-feed__nosig-title'>No qualifying signals yet</div>
+                                        <div className='aisig-feed__nosig-sub'>Scanning all markets continuously until a signal is found…</div>
                                     </div>
                                 </div>
                             )}
