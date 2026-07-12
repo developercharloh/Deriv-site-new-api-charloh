@@ -49,7 +49,13 @@ export default class TransactionsStore {
     }
     TRANSACTION_CACHE = 'transaction_cache';
 
-    elements: TElement = getStoredItemsByUser(this.TRANSACTION_CACHE, this.core?.client?.loginid, []);
+    // Load the full per-account dict from sessionStorage.
+    // getStoredItemsByUser returns only one user's array (wrong shape for TElement);
+    // we must load the whole dict so all loginid keys are preserved.
+    elements: TElement = (() => {
+        const stored = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
+        return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+    })();
     active_transaction_id: null | number = null;
     recovered_completed_transactions: number[] = [];
     recovered_transactions: number[] = [];
@@ -115,6 +121,10 @@ export default class TransactionsStore {
         const { run_id } = this.root_store.run_panel;
         const current_account = this.core?.client?.loginid as string;
 
+        // Guard: never store under an empty key — the transactions getter
+        // returns [] for falsy loginid, so the data would be permanently invisible.
+        if (!current_account) return;
+
         const contract: TContractInfo = {
             ...data,
             is_completed,
@@ -127,14 +137,15 @@ export default class TransactionsStore {
             profit: is_completed ? data.profit : 0,
         };
 
-        if (!this.elements[current_account]) {
-            this.elements = {
-                ...this.elements,
-                [current_account]: [],
-            };
-        }
+        // Always work from a copy so we never mutate the array in-place.
+        // MobX computed uses === equality on the return value; mutating the
+        // existing array reference and then spreading the outer object produces
+        // the SAME inner reference, so MobX considers the computed unchanged
+        // and the component never re-renders.  Creating a new array every time
+        // guarantees a fresh reference that MobX propagates correctly.
+        const existing: TTransaction[] = [...(this.elements[current_account] ?? [])];
 
-        const same_contract_index = this.elements[current_account]?.findIndex(c => {
+        const same_contract_index = existing.findIndex(c => {
             if (typeof c.data === 'string') return false;
             return (
                 c.type === transaction_elements.CONTRACT &&
@@ -143,45 +154,41 @@ export default class TransactionsStore {
             );
         });
 
-        if (same_contract_index === -1) {
-            // Render a divider if the "run_id" for this contract is different.
-            if (this.elements[current_account]?.length > 0) {
-                const temp_contract = this.elements[current_account]?.[0];
-                const is_contract = temp_contract.type === transaction_elements.CONTRACT;
-                const is_new_run =
-                    is_contract &&
-                    typeof temp_contract.data === 'object' &&
-                    contract.run_id !== temp_contract?.data?.run_id;
+        let updated: TTransaction[];
 
+        if (same_contract_index === -1) {
+            // Prepend a divider when the run_id changes.
+            let base = existing;
+            if (existing.length > 0) {
+                const first = existing[0];
+                const is_new_run =
+                    first.type === transaction_elements.CONTRACT &&
+                    typeof first.data === 'object' &&
+                    contract.run_id !== (first.data as TContractInfo)?.run_id;
                 if (is_new_run) {
-                    this.elements[current_account]?.unshift({
-                        type: transaction_elements.DIVIDER,
-                        data: contract.run_id,
-                    });
+                    base = [{ type: transaction_elements.DIVIDER, data: contract.run_id }, ...existing];
                 }
             }
-
-            this.elements[current_account]?.unshift({
-                type: transaction_elements.CONTRACT,
-                data: contract,
-            });
+            updated = [{ type: transaction_elements.CONTRACT, data: contract }, ...base];
         } else {
-            // If data belongs to existing contract in memory, update it.
-            this.elements[current_account]?.splice(same_contract_index, 1, {
-                type: transaction_elements.CONTRACT,
-                data: contract,
-            });
+            // Replace the existing entry with a fresh object (new reference).
+            updated = [...existing];
+            updated[same_contract_index] = { type: transaction_elements.CONTRACT, data: contract };
         }
 
-        this.elements = { ...this.elements }; // force update
+        // Single assignment — always produces a new elements object AND a new
+        // inner array, so both the outer and inner MobX equality checks pass.
+        this.elements = { ...this.elements, [current_account]: updated };
     }
 
     clear() {
-        if (this.elements && this.elements[this.core?.client?.loginid as string]?.length > 0) {
-            this.elements[this.core?.client?.loginid as string] = [];
+        const loginid = this.core?.client?.loginid as string;
+        if (loginid && this.elements[loginid]?.length > 0) {
+            // New object + new array → MobX sees both the outer and inner reference change.
+            this.elements = { ...this.elements, [loginid]: [] };
         }
-        this.recovered_completed_transactions = this.recovered_completed_transactions?.slice(0, 0);
-        this.recovered_transactions = this.recovered_transactions?.slice(0, 0);
+        this.recovered_completed_transactions = [];
+        this.recovered_transactions = [];
         this.is_transaction_details_modal_open = false;
     }
 
