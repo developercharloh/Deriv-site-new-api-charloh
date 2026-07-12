@@ -349,7 +349,11 @@ export function getBotPatches(
                 { blockId: 'Z:R@MLC*=N3%meT)IuPt',   numValue: stopLoss },  // Max Loss
                 { blockId: ':Vn+w]Y.(QKzgKKENIfo',   numValue: takeProfit }, // Target Profit
                 { blockId: 'eo_ep_init_fixed',         numValue: entry },     // Entry point
-                // Martingale multiplier — patched into shadow B values at each loss level
+                // Martingale multiplier — patched into shadow B values at each loss level.
+                // Formula at every level: Stake += ABS(Stake) * B  →  B = M - 1
+                // eo_s1_b is the FIRST loss level; it must be included or level-1
+                // always fires with the hardcoded default B=1 (i.e. always ×2).
+                { blockId: 'eo_s1_b',  numValue: eoB },
                 { blockId: 'eo_s2_b',  numValue: eoB },
                 { blockId: 'eo_s3_b',  numValue: eoB },
                 { blockId: 'eo_s4_b',  numValue: eoB },
