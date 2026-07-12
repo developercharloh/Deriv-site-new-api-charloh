@@ -421,9 +421,13 @@ export function getBotPatches(
         case 'over-destroyer': {
             // Over Destroyer Bot — PREDICTION 1 = "OVER" (primary barrier),
             // "UNDER PREDICTION" = recovery barrier used after the first loss.
+            // Loss branch formula: STAKE = STAKE × MATINGALE  (multiplicative).
+            // When Martingale is OFF the caller passes 0; but 0 would zero-out the
+            // stake after a loss.  Clamp to 1 (×1 = no change) in that case.
             const primaryBarrier  = parseDigitFrom(signal.direction);
             const recoveryBarrier = signal.recoveryBarrier ?? primaryBarrier;
             const entryPt         = parseDigitFrom(signal.entryPoint);
+            const destM           = martingale > 0 ? martingale : 1;
             return [
                 { blockId: 'Gg%p@Y?OHMC(yjmQxovG', numValue: primaryBarrier  }, // OVER (primary)
                 { blockId: 'b+#U5h8+OZ)rLx{!tpHW', numValue: recoveryBarrier }, // UNDER PREDICTION (recovery)
@@ -432,7 +436,7 @@ export function getBotPatches(
                 { blockId: 'p84`5MQ~#2$;K~tmMi/Z',  numValue: stake           }, // Initial Stake
                 { blockId: 'm|-pU=u@u#bdSa{:i4`M',  numValue: takeProfit      }, // Take Profit
                 { blockId: 'HhFFo1CV-bJ!l|0*]9xP',  numValue: stopLoss        }, // Stop Loss
-                { blockId: 'mFGMZRBBZt[SYAEOxi|F',  numValue: martingale      }, // Matingale
+                { blockId: 'mFGMZRBBZt[SYAEOxi|F',  numValue: destM           }, // MATINGALE
                 { blockId: 'dest_symlabel_init',    textValue: signal.symbolLabel }, // Journal: symbol label
             ];
         }
@@ -440,9 +444,11 @@ export function getBotPatches(
         case 'under-destroyer': {
             // Under Destroyer Bot — "UNDER PREDICTION" = primary barrier,
             // "OVER PREDICTION 2" = recovery barrier used after the first loss.
+            // Same multiplicative loss formula as Over Destroyer — clamp 0→1.
             const primaryBarrier  = parseDigitFrom(signal.direction);
             const recoveryBarrier = signal.recoveryBarrier ?? primaryBarrier;
             const entryPt         = parseDigitFrom(signal.entryPoint);
+            const destM           = martingale > 0 ? martingale : 1;
             return [
                 { blockId: 'Gg%p@Y?OHMC(yjmQxovG', numValue: primaryBarrier  }, // UNDER PREDICTION (primary)
                 { blockId: 'b+#U5h8+OZ)rLx{!tpHW', numValue: recoveryBarrier }, // OVER PREDICTION 2 (recovery)
@@ -451,7 +457,7 @@ export function getBotPatches(
                 { blockId: 'p84`5MQ~#2$;K~tmMi/Z',  numValue: stake           }, // Initial Stake
                 { blockId: 'm|-pU=u@u#bdSa{:i4`M',  numValue: takeProfit      }, // Take Profit
                 { blockId: 'HhFFo1CV-bJ!l|0*]9xP',  numValue: stopLoss        }, // Stop Loss
-                { blockId: 'mFGMZRBBZt[SYAEOxi|F',  numValue: martingale      }, // Matingale
+                { blockId: 'mFGMZRBBZt[SYAEOxi|F',  numValue: destM           }, // MATINGALE
                 { blockId: 'dest_symlabel_init',    textValue: signal.symbolLabel }, // Journal: symbol label
             ];
         }
