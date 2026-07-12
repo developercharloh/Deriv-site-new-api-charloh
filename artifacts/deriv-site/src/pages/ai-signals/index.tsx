@@ -37,6 +37,7 @@ const SPIKE_LOOKBACK   = 200;
 type TradeType = 'over_under' | 'even_odd' | 'matches_differs';
 type ScanState = 'idle' | 'scanning' | 'done' | 'no-signal';
 type StatusIndicator = 'none' | 'minor' | 'major' | 'critical';
+type TrendDir = 'rising' | 'flat' | 'falling';
 
 interface ModelResult { name: string; vote: boolean; score: number; }
 interface ModelVotes {
@@ -46,6 +47,20 @@ interface ModelVotes {
     ngram: ModelResult; quartile: ModelResult;
     yesCount: number; totalScore: number;
 }
+
+// ─── New stats-driven checks (replace model voting) ──────────────────────────
+interface StatsChecks {
+    rawWinRate:   { pass: boolean; rate30: number; rate60: number; rate100: number; }
+    crossWindow:  { pass: boolean; rate500: number; rate1k: number; rate3k: number; }
+    streak:       { pass: boolean; length: number; }
+    autocorr:     { pass: boolean; acf1: number; }
+    stability:    { pass: boolean; windowsAbove: number; trend: TrendDir; }
+    entryOverdue: { pass: boolean; overdueRatio: number; }
+    eoLeadDigits: { pass: boolean; topWinDigit: number; margin: number; top2BothCorrect: boolean; leadingStableBands: number; } | null;
+    eoMomentum:   { pass: boolean; bandRates: number[]; trend: TrendDir; longTermOk: boolean; } | null;
+    passCount: number; totalChecks: number; isSignal: boolean;
+}
+
 interface MarketResult {
     sym: DerivVolatility; direction: string; contractType: string;
     barrier: number | null; recoveryBarrier: number | null;
@@ -54,6 +69,7 @@ interface MarketResult {
     entryDigits: { digit: number; recommended: boolean; conditional: number; freqPct: number; avgWaitTicks: number }[];
     segmentAgrees: boolean; signalStrength: number; pip: number;
     regimeScore: number; regimeOk: boolean; gapDetected: boolean; tfAgreement: number;
+    statsChecks: StatsChecks;
     recentDominance: {
         last20WinPct: number; last50WinPct: number;
         winsLast20: number; winsLast50: number; last20Results: boolean[];
@@ -113,8 +129,31 @@ const wilsonLower = (wins: number, total: number, z = 1.96): number => {
     const mrg = z * Math.sqrt((p * (1 - p) + z2 / (4 * total)) / total);
     return (ctr - mrg) / den;
 };
+/** Autocorrelation at lag 1 — positive = digits cluster, negative = alternating */
+function acf1Fn(arr: number[]): number {
+    const n = arr.length; if (n < 20) return 0;
+    const mean = arr.reduce((s, x) => s + x, 0) / n;
+    let num = 0, den = 0;
+    for (let i = 0; i < n - 1; i++) num += (arr[i] - mean) * (arr[i + 1] - mean);
+    for (let i = 0; i < n; i++) den += (arr[i] - mean) ** 2;
+    return den === 0 ? 0 : num / den;
+}
+/** Fit a line to an array of rates; return whether slope is rising / flat / falling */
+function computeTrendDir(rates: number[]): TrendDir {
+    if (rates.length < 2) return 'flat';
+    const n = rates.length, mx = (n - 1) / 2, my = rates.reduce((s, r) => s + r, 0) / n;
+    let num = 0, den = 0;
+    rates.forEach((r, i) => { num += (i - mx) * (r - my); den += (i - mx) ** 2; });
+    const slope = den === 0 ? 0 : num / den;
+    return slope > 0.005 ? 'rising' : slope < -0.005 ? 'falling' : 'flat';
+}
+/** How many ticks ago did `target` digit last appear? Returns array.length if never. */
+function ticksSinceDigit(digits: number[], target: number): number {
+    for (let i = digits.length - 1; i >= 0; i--) if (digits[i] === target) return digits.length - 1 - i;
+    return digits.length;
+}
 
-// ─── 10-model analysis ────────────────────────────────────────────────────────
+// ─── Stats-driven signal analysis (replaces 10-model voting) ─────────────────
 function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeType: TradeType): MarketResult {
     const N = prices.length;
     const digits = prices.map(p => lastDigitOf(p, pip));
@@ -122,6 +161,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     for (const d of digits) freq[d]++;
     const freqPct = freq.map(f => f / N);
 
+    // ── Direction determination ──────────────────────────────────────────────
     let direction = '', contractType = '', barrier: number | null = null,
         recoveryBarrier: number | null = null, recoveryContractType: string | null = null,
         recoveryDirection: string | null = null, winProb = 0;
@@ -129,9 +169,15 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
 
     if (tradeType === 'even_odd') {
         const evenCt = digits.filter(d => d % 2 === 0).length;
-        const oddCt = N - evenCt;
-        if (evenCt >= oddCt) { direction = 'ODD'; contractType = 'DIGITODD'; winProb = evenCt / N; winFn = d => d % 2 === 0; }
-        else { direction = 'EVEN'; contractType = 'DIGITEVEN'; winProb = oddCt / N; winFn = d => d % 2 !== 0; }
+        const oddCt  = N - evenCt;
+        // Trade WITH the dominant side — direction follows actual dominance
+        if (evenCt >= oddCt) {
+            direction = 'EVEN'; contractType = 'DIGITEVEN';
+            winProb = evenCt / N; winFn = d => d % 2 === 0;
+        } else {
+            direction = 'ODD'; contractType = 'DIGITODD';
+            winProb = oddCt / N; winFn = d => d % 2 !== 0;
+        }
     } else if (tradeType === 'matches_differs') {
         const exp2 = N / 10;
         const chiContribs = freq.map(f => (f - exp2) ** 2 / exp2);
@@ -149,90 +195,215 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         for (let b = 1; b <= 8; b++) {
             const ovP = digits.filter(d => d > b).length / N;
             const unP = digits.filter(d => d < b).length / N;
-            allOptions.push({ side: 'OVER', b, prob: ovP, edge: ovP - (9 - b) / 10 });
+            allOptions.push({ side: 'OVER',  b, prob: ovP, edge: ovP - (9 - b) / 10 });
             allOptions.push({ side: 'UNDER', b, prob: unP, edge: unP - b / 10 });
         }
         allOptions.sort((a, b2) => b2.edge - a.edge || b2.prob - a.prob);
         const best = allOptions[0];
-        const oppositeOptions = allOptions.filter(o => o.side !== best.side);
-        const recovery = oppositeOptions[0] ?? allOptions[1] ?? best;
+        const recovery = allOptions.filter(o => o.side !== best.side)[0] ?? allOptions[1] ?? best;
         barrier = best.b; recoveryBarrier = recovery.b;
         recoveryContractType = recovery.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER';
-        recoveryDirection = `${recovery.side} ${recovery.b}`;
+        recoveryDirection    = `${recovery.side} ${recovery.b}`;
         direction = `${best.side} ${best.b}`; contractType = best.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER';
         winProb = best.prob; winFn = d => best.side === 'OVER' ? d > best.b : d < best.b;
     }
 
-    const last20digits = digits.slice(-20); const last50digits = digits.slice(-50);
-    const last20Results = last20digits.map(d => winFn(d));
-    const wins20 = last20Results.filter(Boolean).length; const wins50 = last50digits.filter(d => winFn(d)).length;
-    const dom20 = wins20 / Math.max(1, last20digits.length); const dom50 = wins50 / Math.max(1, last50digits.length);
+    // Theoretical expected win rate at this barrier (50 % for EO, barrier-dependent for OU)
+    const theorExp = tradeType === 'even_odd' ? 0.50
+        : tradeType === 'over_under' && barrier !== null
+            ? (contractType === 'DIGITOVER' ? (9 - barrier) / 10 : barrier / 10)
+            : 0.10;
+
+    // ── Recent dominance (for UI + watchdog) ────────────────────────────────
+    const last20d = digits.slice(-20); const last50d = digits.slice(-50);
+    const last20R = last20d.map(d => winFn(d));
+    const wins20  = last20R.filter(Boolean).length;
+    const wins50  = last50d.filter(d => winFn(d)).length;
+    const dom20   = wins20 / Math.max(1, last20d.length);
+    const dom50   = wins50 / Math.max(1, last50d.length);
     const recentDominance = {
-        last20WinPct: dom20, last50WinPct: dom50, winsLast20: wins20, winsLast50: wins50, last20Results,
+        last20WinPct: dom20, last50WinPct: dom50, winsLast20: wins20, winsLast50: wins50, last20Results: last20R,
         isHot: dom20 >= 0.65, isCold: dom20 <= 0.35,
         label: (dom20 >= 0.70 ? 'DOMINANT' : dom20 >= 0.55 ? 'ACTIVE' : dom20 >= 0.45 ? 'NEUTRAL' : dom20 >= 0.30 ? 'COOLING' : 'REVERSED') as 'DOMINANT' | 'ACTIVE' | 'NEUTRAL' | 'COOLING' | 'REVERSED',
     };
 
+    // ── Entry digits (conditional probability + frequency weight) ────────────
     const cond = new Array(10).fill(null).map(() => ({ wins: 0, total: 0 }));
     for (let i = 0; i < digits.length - 1; i++) { cond[digits[i]].total++; if (winFn(digits[i + 1])) cond[digits[i]].wins++; }
-    const minSmp = Math.max(50, Math.floor(N / 50));
-    const scored = cond.map((c, d) => {
+    const minSmp  = Math.max(50, Math.floor(N / 50));
+    const scored  = cond.map((c, d) => {
         const conditional = c.total > 0 ? c.wins / c.total : 0;
         const lb = wilsonLower(c.wins, c.total);
-        const freqWeight = Math.sqrt(Math.max(0.3, freqPct[d] / 0.10));
-        return { digit: d, conditional, lowerBound: lb, total: c.total, freqScore: lb * freqWeight, freqPct: freqPct[d] };
+        return { digit: d, conditional, lowerBound: lb, total: c.total,
+            freqScore: lb * Math.sqrt(Math.max(0.3, freqPct[d] / 0.10)), freqPct: freqPct[d] };
     });
     let entryRaw = scored.filter(c => c.total >= minSmp && c.lowerBound >= winProb + 0.01).sort((a, b) => b.freqScore - a.freqScore || b.lowerBound - a.lowerBound).slice(0, 3);
     if (entryRaw.length < 3) { const used = new Set(entryRaw.map(e => e.digit)); const fb = scored.filter(c => !used.has(c.digit) && c.total >= minSmp).sort((a, b) => b.freqScore - a.freqScore || b.lowerBound - a.lowerBound); while (entryRaw.length < 3 && fb.length > 0) entryRaw.push(fb.shift()!); }
     while (entryRaw.length < 3) { const used = new Set(entryRaw.map(e => e.digit)); const fb2 = scored.filter(e => !used.has(e.digit)).sort((a, b) => b.freqPct - a.freqPct)[0]; if (!fb2) break; entryRaw.push(fb2); }
     const entryDigits = entryRaw.map((e, i) => ({ digit: e.digit, recommended: i === 0, conditional: e.conditional, freqPct: e.freqPct, avgWaitTicks: Math.max(1, Math.round(1 / Math.max(0.01, e.freqPct))) }));
 
-    // Model 1 — Stat Significance
-    let m1: ModelResult;
-    if (tradeType === 'even_odd') { const zStat = (winProb - 0.5) / Math.sqrt(0.25 / N); const vote = Math.abs(zStat) >= 1.65 && winProb >= 0.51; m1 = { name: 'Stat. Significance', vote, score: Math.min(1, Math.abs(zStat) / 4) }; }
-    else { const exp = N / 10; const chiSq = freq.reduce((acc, f) => acc + (f - exp) ** 2 / exp, 0); m1 = { name: 'Stat. Significance', vote: chiSq >= 16.92 && winProb >= 0.62, score: Math.min(1, chiSq / 30) }; }
-    // Model 2 — Bayesian
-    const best2 = entryDigits[0]; const m2Vote = best2 ? best2.conditional >= winProb + 0.05 : false;
-    const m2: ModelResult = { name: 'Bayesian', vote: m2Vote, score: best2 ? Math.min(1, Math.max(0, (best2.conditional - winProb) / 0.20)) : 0 };
-    // Model 3 — 3-Window Trend
-    const w3A = Math.floor(N * 0.10), w3B = Math.floor(N * 0.30), w3C = Math.floor(N * 0.60);
-    const winR = digits.slice(-w3A).filter(winFn).length / w3A, winM = digits.slice(-(w3A + w3B), -w3A).filter(winFn).length / w3B, winO = digits.slice(-(w3A + w3B + w3C), -(w3A + w3B)).filter(winFn).length / w3C;
-    const m3: ModelResult = { name: '3-Window Trend', vote: winR >= winProb - 0.01 && winM >= winProb - 0.02 && winO >= winProb - 0.03 && winR >= winM - 0.03, score: Math.min(1, Math.max(0, ((winR - winProb) + (winM - winProb) + (winO - winProb) + 0.06) / 0.18)) };
-    // Model 4 — Stability
-    const wSz = Math.floor(N / 5), wThr = tradeType === 'even_odd' ? 0.50 : 0.60; let wAbove = 0;
-    for (let w = 0; w < 5; w++) { const wr = digits.slice(w * wSz, (w + 1) * wSz).filter(winFn).length / wSz; if (wr >= wThr) wAbove++; }
-    const m4: ModelResult = { name: 'Stability', vote: wAbove >= (tradeType === 'even_odd' ? 3 : 4), score: wAbove / 5 };
-    // Model 5 — Recent Edge
-    const rSlice100 = digits.slice(-100), rSlice500 = digits.slice(-500);
-    const rWin100 = rSlice100.filter(winFn).length / rSlice100.length, rWin500 = rSlice500.filter(winFn).length / rSlice500.length;
-    const eThr100 = tradeType === 'even_odd' ? 0.52 : 0.61, eThr500 = tradeType === 'even_odd' ? 0.51 : 0.60;
-    const m5: ModelResult = { name: 'Recent Edge', vote: rWin100 >= eThr100 && rWin500 >= eThr500 && rWin100 >= rWin500 - 0.05, score: Math.min(1, Math.max(0, (Math.min(rWin100, rWin500) - (eThr500 - 0.05)) / 0.15)) };
-    // Model 6 — Markov-2
-    const markovMap = new Map<string, { wins: number; total: number }>();
-    for (let i = 0; i < digits.length - 2; i++) { const key = `${digits[i]},${digits[i + 1]}`; if (!markovMap.has(key)) markovMap.set(key, { wins: 0, total: 0 }); const e = markovMap.get(key)!; e.total++; if (winFn(digits[i + 2])) e.wins++; }
-    const lastTwo = `${digits[digits.length - 2]},${digits[digits.length - 1]}`; const markovEntry = markovMap.get(lastTwo) ?? { wins: 0, total: 0 }; const markovProb = markovEntry.total >= 20 ? markovEntry.wins / markovEntry.total : winProb;
-    const m6: ModelResult = { name: 'Markov-2 Chain', vote: markovEntry.total >= 20 && markovProb >= winProb + 0.03, score: Math.min(1, Math.max(0, (markovProb - winProb + 0.05) / 0.15)) };
-    // Model 7 — Linear Trend
-    const linWindows = 10, linSz = Math.floor(N / linWindows); const linRates = Array.from({ length: linWindows }, (_, wi) => { const sl = digits.slice(wi * linSz, (wi + 1) * linSz); return sl.length > 0 ? sl.filter(winFn).length / sl.length : winProb; });
-    const linN = linRates.length, linMeanX = (linN - 1) / 2, linMeanY = linRates.reduce((s, r) => s + r, 0) / linN; let linNum = 0, linDen = 0; linRates.forEach((r, i) => { linNum += (i - linMeanX) * (r - linMeanY); linDen += (i - linMeanX) ** 2; }); const linSlope = linDen > 0 ? linNum / linDen : 0;
-    const m7: ModelResult = { name: 'Linear Trend', vote: linSlope >= -0.001 && linRates[linN - 1] >= winProb - 0.02, score: Math.min(1, Math.max(0, (linSlope + 0.005) / 0.015)) };
-    // Model 8 — Entropy Guard
-    const entSum = freqPct.reduce((s, p) => s + (p > 0 ? -p * Math.log2(p) : 0), 0); const normEnt = entSum / Math.log2(10);
-    const m8: ModelResult = { name: 'Entropy Guard', vote: normEnt >= 0.80 && normEnt <= 0.99 && winProb >= (tradeType === 'even_odd' ? 0.51 : 0.60), score: Math.min(1, Math.max(0, 1 - Math.abs(normEnt - 0.88) / 0.12)) };
-    // Model 9 — N-Gram
-    const ngramMap = new Map<string, { wins: number; total: number }>();
-    for (let i = 0; i < digits.length - 4; i++) { const key = digits.slice(i, i + 4).join(','); if (!ngramMap.has(key)) ngramMap.set(key, { wins: 0, total: 0 }); const e2 = ngramMap.get(key)!; e2.total++; if (winFn(digits[i + 4])) e2.wins++; }
-    const recentNgram = digits.slice(-4).join(','); const ngramEntry = ngramMap.get(recentNgram) ?? { wins: 0, total: 0 }; const ngramProb = ngramEntry.total >= 10 ? ngramEntry.wins / ngramEntry.total : winProb;
-    const m9: ModelResult = { name: 'N-Gram Memory', vote: ngramEntry.total >= 10 && ngramProb >= winProb + 0.02, score: Math.min(1, Math.max(0, (ngramProb - winProb + 0.04) / 0.12)) };
-    // Model 10 — Quartile Persistence
-    const qSz = Math.floor(N / 4); const qThr = tradeType === 'even_odd' ? 0.50 : 0.58; const qRates = Array.from({ length: 4 }, (_, qi) => digits.slice(qi * qSz, (qi + 1) * qSz).filter(winFn).length / qSz);
-    const m10: ModelResult = { name: 'Quartile Persistence', vote: qRates.every(r => r >= qThr), score: qRates.filter(r => r >= qThr).length / 4 };
+    // ══ STATS CHECKS (replace model voting) ══════════════════════════════════
 
-    const eoModels = tradeType === 'even_odd' ? [m1, m2, m3, m4] : [m1, m2, m3, m4, m5, m6, m7, m8, m9, m10];
-    const yesCount = eoModels.filter(m => m.vote).length;
-    const totalScore = m1.score + m2.score + m3.score + m4.score + m5.score + m6.score + m7.score + m8.score + m9.score + m10.score;
-    const votes: ModelVotes = { chiSquared: m1, bayesian: m2, momentum: m3, stability: m4, recentEdge: m5, markov: m6, linearTrend: m7, entropy: m8, ngram: m9, quartile: m10, yesCount, totalScore };
-    return { sym, direction, contractType, barrier, recoveryBarrier, recoveryContractType, recoveryDirection, winProb, sampleSize: N, votes, entryDigits, pip, segmentAgrees: true, signalStrength: Math.round((totalScore / 10) * 100), recentDominance, regimeScore: 100, regimeOk: true, gapDetected: false, tfAgreement: 4 };
+    // CHECK 1 — Raw win rate across 30 / 60 / 100 recent ticks
+    const safe = (n: number) => Math.min(n, N);
+    const r30  = digits.slice(-safe(30) ).filter(winFn).length / safe(30);
+    const r60  = digits.slice(-safe(60) ).filter(winFn).length / safe(60);
+    const r100 = digits.slice(-safe(100)).filter(winFn).length / safe(100);
+    const isEO = tradeType === 'even_odd';
+    const rawT30 = theorExp + (isEO ? 0.07 : 0.06);
+    const rawT60 = theorExp + (isEO ? 0.05 : 0.04);
+    const rawT100= theorExp + (isEO ? 0.04 : 0.03);
+    const rawWinRatePass = r30 >= rawT30 && r60 >= rawT60 && r100 >= rawT100;
+
+    // CHECK 2 — Cross-window consistency (500 / 1k / 3k ticks all above floor)
+    const sl500  = digits.slice(-safe(500));  const r500 = sl500.filter(winFn).length / sl500.length;
+    const sl1k   = digits.slice(-safe(1000)); const r1k  = sl1k .filter(winFn).length / sl1k.length;
+    const sl3k   = digits.slice(-safe(3000)); const r3k  = sl3k .filter(winFn).length / sl3k.length;
+    const cwFloor = theorExp + (isEO ? 0.02 : 0.02);
+    const crossWindowPass = r500 >= cwFloor && r1k >= cwFloor && r3k >= cwFloor;
+
+    // CHECK 3 — Current streak on winning side
+    let streakLen = 0;
+    for (let i = digits.length - 1; i >= 0; i--) { if (winFn(digits[i])) streakLen++; else break; }
+    const streakPass = streakLen >= (isEO ? 2 : 3);
+
+    // CHECK 4 — Autocorrelation at lag 1 (sticky market)
+    const a1 = acf1Fn(digits.slice(-safe(500)));
+    const autocorrPass = Math.abs(a1) > 0.03;
+
+    // CHECK 5 — Stability: win rate in 5 equal bands, trend not falling
+    const wSz       = Math.floor(N / 5);
+    const stabFloor  = theorExp + (isEO ? 0.01 : 0.02);
+    const stabRates  = Array.from({ length: 5 }, (_, w) => digits.slice(w * wSz, (w + 1) * wSz).filter(winFn).length / wSz);
+    const stabAbove  = stabRates.filter(r => r >= stabFloor).length;
+    const stabTrend  = computeTrendDir(stabRates);
+    const stabilityPass = stabAbove >= 3 && stabTrend !== 'falling';
+
+    // CHECK 6 — Best entry digit is overdue (≥ 1.3× its average gap)
+    const bestEntry    = entryDigits[0];
+    const avgWait      = bestEntry?.avgWaitTicks ?? 10;
+    const lastGap      = bestEntry ? ticksSinceDigit(digits, bestEntry.digit) : 0;
+    const overdueRatio = avgWait > 0 ? lastGap / avgWait : 0;
+    const entryOverduePass = overdueRatio >= 1.3;
+
+    // CHECKS 7 & 8 — Even/Odd specific ───────────────────────────────────────
+    let eoLeadDigits: StatsChecks['eoLeadDigits'] = null;
+    let eoMomentum:   StatsChecks['eoMomentum']   = null;
+
+    if (tradeType === 'even_odd') {
+        const winSideArr  = direction === 'EVEN' ? [0,2,4,6,8] : [1,3,5,7,9];
+        const lossSideArr = direction === 'EVEN' ? [1,3,5,7,9]  : [0,2,4,6,8];
+
+        // Use last 1000 ticks (or all) for lead-digit analysis
+        const recent = digits.slice(-safe(1000));
+        const cntArr = new Array(10).fill(0) as number[];
+        recent.forEach(d => cntArr[d]++);
+
+        const winSidePct  = winSideArr .reduce((s, d) => s + cntArr[d], 0) / recent.length;
+        const lossSidePct = lossSideArr.reduce((s, d) => s + cntArr[d], 0) / recent.length;
+        const margin      = winSidePct - lossSidePct;
+
+        // Top 2 most-appearing digits overall
+        const top2 = cntArr.map((c, i) => ({ d: i, c })).sort((a, b) => b.c - a.c).slice(0, 2).map(x => x.d);
+        const top2BothCorrect = top2.every(d => winSideArr.includes(d));
+
+        // Leading digit: most-appearing digit from the win side
+        const topWinDigit = winSideArr.reduce((best, d) => cntArr[d] > cntArr[best] ? d : best, winSideArr[0]);
+
+        // Leading digit stability across 4 equal time bands (the "leading time" filter)
+        // Confirms the leading digit maintains its position consistently — not just a recent spike
+        const bandSz = Math.floor(N / 4);
+        let leadingStableBands = 0;
+        for (let b = 0; b < 4; b++) {
+            const band = digits.slice(b * bandSz, (b + 1) * bandSz);
+            const bc = new Array(10).fill(0) as number[];
+            band.forEach(d => bc[d]++);
+            const topInBand = winSideArr.reduce((best, d) => bc[d] > bc[best] ? d : best, winSideArr[0]);
+            if (topInBand === topWinDigit) leadingStableBands++;
+        }
+
+        // EO Lead check: top digit is from win side + win side leads by ≥ 2pp + leading digit stable ≥ 3/4 bands
+        const eoLeadPass = winSideArr.includes(top2[0]) && margin >= 0.02 && leadingStableBands >= 3;
+        eoLeadDigits = { pass: eoLeadPass, topWinDigit, margin, top2BothCorrect, leadingStableBands };
+
+        // EO Momentum: win-side rate in 4 equal time bands — must be flat or rising (not falling)
+        const bandRatesEO = Array.from({ length: 4 }, (_, b) => {
+            const band = digits.slice(b * bandSz, (b + 1) * bandSz);
+            return band.filter(winFn).length / band.length;
+        });
+        const momTrend = computeTrendDir(bandRatesEO);
+        // Long-term confirmation: recent half win rate not worse than old half (filters temporary spikes)
+        const halfN       = Math.floor(N / 2);
+        const oldHalfRate = digits.slice(0, halfN).filter(winFn).length / halfN;
+        const newHalfRate = digits.slice(halfN).filter(winFn).length / (N - halfN);
+        const longTermOk  = newHalfRate >= oldHalfRate - 0.01;
+        // Recent band must still be above threshold
+        const eoMomPass = momTrend !== 'falling' && bandRatesEO[3] >= 0.52 && longTermOk;
+        eoMomentum = { pass: eoMomPass, bandRates: bandRatesEO, trend: momTrend, longTermOk };
+    }
+
+    // ── Aggregate & gate ────────────────────────────────────────────────────
+    let totalChecks: number, isSignal: boolean;
+    const checkArr = [rawWinRatePass, crossWindowPass, streakPass, autocorrPass, stabilityPass, entryOverduePass,
+        eoLeadDigits?.pass ?? false, eoMomentum?.pass ?? false];
+
+    if (tradeType === 'even_odd') {
+        totalChecks = 8;
+        // Mandatory: rawWinRate + crossWindow + eoLeadDigits + eoMomentum; plus ≥ 5/8 total
+        isSignal = rawWinRatePass && crossWindowPass && (eoLeadDigits?.pass ?? false) && (eoMomentum?.pass ?? false)
+            && checkArr.filter(Boolean).length >= 5;
+    } else if (tradeType === 'over_under') {
+        totalChecks = 6;
+        // Mandatory: rawWinRate + crossWindow + stability; plus ≥ 4/6 total
+        isSignal = rawWinRatePass && crossWindowPass && stabilityPass
+            && checkArr.slice(0, 6).filter(Boolean).length >= 4
+            && winProb >= MIN_WIN_PROB_OU;
+    } else {
+        totalChecks = 6;
+        isSignal = rawWinRatePass && crossWindowPass && checkArr.slice(0, 6).filter(Boolean).length >= 4;
+    }
+
+    const passCount = checkArr.filter(Boolean).length;
+
+    const statsChecks: StatsChecks = {
+        rawWinRate:   { pass: rawWinRatePass,   rate30: r30, rate60: r60, rate100: r100 },
+        crossWindow:  { pass: crossWindowPass,  rate500: r500, rate1k: r1k, rate3k: r3k },
+        streak:       { pass: streakPass,       length: streakLen },
+        autocorr:     { pass: autocorrPass,     acf1: a1 },
+        stability:    { pass: stabilityPass,    windowsAbove: stabAbove, trend: stabTrend },
+        entryOverdue: { pass: entryOverduePass, overdueRatio },
+        eoLeadDigits, eoMomentum,
+        passCount, totalChecks, isSignal,
+    };
+
+    // ── Backwards-compat ModelVotes shell (UI still uses yesCount for colour) ──
+    const fakeVote = (pass: boolean, score: number): ModelResult => ({ name: '', vote: pass, score });
+    const votes: ModelVotes = {
+        chiSquared:  fakeVote(rawWinRatePass,  r100),
+        bayesian:    fakeVote(crossWindowPass, r1k),
+        momentum:    fakeVote(streakPass,      streakLen / 10),
+        stability:   fakeVote(stabilityPass,   stabAbove / 5),
+        recentEdge:  fakeVote(rawWinRatePass && crossWindowPass, r100),
+        markov:      fakeVote(autocorrPass,    Math.abs(a1)),
+        linearTrend: fakeVote(stabilityPass,   stabAbove / 5),
+        entropy:     fakeVote(entryOverduePass,overdueRatio / 2),
+        ngram:       fakeVote(eoLeadDigits?.pass ?? false, eoLeadDigits?.margin ?? 0),
+        quartile:    fakeVote(eoMomentum?.pass ?? false, 0),
+        yesCount: passCount, totalScore: (passCount / totalChecks) * 10,
+    };
+
+    const signalStrength = Math.round((passCount / totalChecks) * 100);
+    const regimeScore    = Math.round(Math.min(100, Math.max(0, (r1k - theorExp) / 0.15 * 100)));
+
+    return {
+        sym, direction, contractType, barrier, recoveryBarrier, recoveryContractType, recoveryDirection,
+        winProb, sampleSize: N, votes, entryDigits, pip,
+        segmentAgrees: stabilityPass || crossWindowPass,
+        signalStrength, recentDominance,
+        regimeScore, regimeOk: crossWindowPass && stabilityPass,
+        gapDetected: false, tfAgreement: Math.min(4, Math.round(passCount / 2)),
+        statsChecks,
+    };
 }
 
 // ─── Scan all markets ─────────────────────────────────────────────────────────
@@ -253,7 +424,7 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
                 const { gapDetected } = detectGap(times);
                 const tfMicro = prices.slice(-200); const tfShort = prices.slice(-1000); const tfMedium = prices.length >= 3000 ? prices.slice(-3000) : prices; const tfLong = prices;
                 const full = runModels(tfShort, pip, sym, tradeType);
-                if (tfShort.length >= 1600) { const seg = runModels(tfShort.slice(-1500), pip, sym, tradeType); full.segmentAgrees = seg.direction === full.direction && seg.votes.yesCount >= 4; }
+                if (tfShort.length >= 1600) { const seg = runModels(tfShort.slice(-1500), pip, sym, tradeType); full.segmentAgrees = seg.direction === full.direction && seg.statsChecks.passCount >= 3; }
                 const rMicro = runModels(tfMicro, pip, sym, tradeType); const rMedium = runModels(tfMedium, pip, sym, tradeType); const rLong = runModels(tfLong, pip, sym, tradeType);
                 const mainDir = full.direction; const tfAgreement = [rMicro, full, rMedium, rLong].filter(r => r.direction === mainDir).length;
                 const regimeOk = rMedium.direction === mainDir && rLong.direction === mainDir;
@@ -261,10 +432,9 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
                 const regimeScore = Math.max(0, Math.round((1 - divergence / Math.max(divergence, REGIME_DIV_LIMIT)) * 100));
                 results.push({ ...full, regimeScore, regimeOk, gapDetected, tfAgreement });
             });
-            results.sort((a, b) => b.votes.yesCount - a.votes.yesCount || b.votes.totalScore - a.votes.totalScore || b.winProb - a.winProb);
+            results.sort((a, b) => b.statsChecks.passCount - a.statsChecks.passCount || b.winProb - a.winProb);
             const spikedCodes = new Set(detectedSpikes.map(s => s.code));
-            const eoMode = tradeType === 'even_odd';
-            const best = results.find(r => !spikedCodes.has(r.sym.code) && r.votes.yesCount >= (eoMode ? 3 : getSymbolMinVotes(r.sym.code)) && r.segmentAgrees && (eoMode ? r.recentDominance.isHot : r.votes.recentEdge.vote) && r.regimeOk && !r.gapDetected && !r.recentDominance.isCold && (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU)) ?? null;
+            const best = results.find(r => !spikedCodes.has(r.sym.code) && !r.gapDetected && r.statsChecks.isSignal && !r.recentDominance.isCold) ?? null;
             const noVotesBest = best ? null : (results.find(r => !spikedCodes.has(r.sym.code)) ?? results[0] ?? null);
             resolve({ best, noVotesBest, allResults: results, spikedMarkets: detectedSpikes });
         };
@@ -397,14 +567,9 @@ const AiSignalsPage: React.FC = () => {
                 if (!mounted) return;
                 const spikeSet = new Set(spikes.map(s => s.code));
                 setWatchResults(allResults); setWatchSpikes(spikeSet);
-                const eoMode = tradeType === 'even_odd';
                 foundSignal = allResults.some(r =>
                     !spikeSet.has(r.sym.code) && !r.gapDetected &&
-                    r.votes.yesCount >= (eoMode ? 3 : getSymbolMinVotes(r.sym.code)) &&
-                    r.segmentAgrees &&
-                    (eoMode ? r.recentDominance.isHot : r.votes.recentEdge.vote) &&
-                    r.regimeOk && !r.recentDominance.isCold &&
-                    (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU)
+                    r.statsChecks.isSignal && !r.recentDominance.isCold
                 );
             } catch { /* ignore */ } finally {
                 busy = false;
@@ -444,14 +609,10 @@ const AiSignalsPage: React.FC = () => {
 
     // ── Watchdog — live tick monitor per valid signal ─────────────────────────
     useEffect(() => {
-        const eoMode = tradeType === 'even_odd';
-        const validSigs = watchResults.filter(r => {
-            if (watchSpikes.has(r.sym.code) || r.gapDetected) return false;
-            return r.votes.yesCount >= (eoMode ? 3 : getSymbolMinVotes(r.sym.code)) && r.segmentAgrees &&
-                (eoMode ? r.recentDominance.isHot : r.votes.recentEdge.vote) &&
-                r.regimeOk && !r.recentDominance.isCold &&
-                (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU);
-        });
+        const validSigs = watchResults.filter(r =>
+            !watchSpikes.has(r.sym.code) && !r.gapDetected &&
+            r.statsChecks.isSignal && !r.recentDominance.isCold
+        );
         const validCodes = new Set(validSigs.map(r => r.sym.code));
 
         // Close watchdogs for markets that are no longer valid
@@ -523,7 +684,7 @@ const AiSignalsPage: React.FC = () => {
             if (best) {
                 setResult(best); setScanState('done');
                 try {
-                    const entry: OrbHistoryEntry = { market: best.sym.short, direction: best.direction, votes: best.votes.yesCount, strength: best.signalStrength, time: Date.now() };
+                    const entry: OrbHistoryEntry = { market: best.sym.short, direction: best.direction, votes: best.statsChecks.passCount, strength: best.signalStrength, time: Date.now() };
                     const prev: OrbHistoryEntry[] = JSON.parse(localStorage.getItem('orb-signal-history') ?? '[]');
                     const next = [entry, ...prev].slice(0, 5);
                     localStorage.setItem('orb-signal-history', JSON.stringify(next)); setOrbHistory(next);
@@ -536,9 +697,8 @@ const AiSignalsPage: React.FC = () => {
     // ── Watch signal helpers ──────────────────────────────────────────────────
     const isWatchSignal = useCallback((r: MarketResult): boolean => {
         if (watchSpikes.has(r.sym.code) || r.gapDetected) return false;
-        const eoMode = tradeType === 'even_odd';
-        return r.votes.yesCount >= (eoMode ? 3 : getSymbolMinVotes(r.sym.code)) && r.segmentAgrees && (eoMode ? r.recentDominance.isHot : r.votes.recentEdge.vote) && r.regimeOk && !r.recentDominance.isCold && (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU);
-    }, [watchSpikes, tradeType]);
+        return r.statsChecks.isSignal && !r.recentDominance.isCold;
+    }, [watchSpikes]);
 
     const openRunConfigDirect = useCallback(() => {
         let cfg: OrbRunConfig = DEFAULT_RUN_CFG;
@@ -588,11 +748,11 @@ const AiSignalsPage: React.FC = () => {
     }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, store]);
 
     // ── Derived display values ────────────────────────────────────────────────
-    const vc = result ? voteColor(result.votes.yesCount) : '#6366f1';
-    const recRuns = result ? calcRecRuns(result.votes.yesCount, result.winProb) : 5;
+    const vc = result ? voteColor(result.statsChecks.passCount) : '#6366f1';
+    const recRuns = result ? calcRecRuns(result.statsChecks.passCount, result.winProb) : 5;
     const sessionOver = sessionCount >= recRuns;
     const runTargetLabel = tradeType === 'over_under' ? (editDir === 'UNDER' ? 'Under Destroyer' : 'Over Destroyer') : tradeType === 'matches_differs' ? (editMatchesSide === 'DIFFERS' ? 'Differ V2' : 'Matches') : 'Even Odd Scanner';
-    const models = result ? tradeType === 'even_odd' ? [result.votes.chiSquared, result.votes.bayesian, result.votes.momentum, result.votes.stability] : [result.votes.chiSquared, result.votes.bayesian, result.votes.momentum, result.votes.stability, result.votes.recentEdge, result.votes.markov, result.votes.linearTrend, result.votes.entropy, result.votes.ngram, result.votes.quartile] : [];
+    const models: ModelResult[] = [];
 
     return (
         <div className='aisig-page'>
@@ -697,7 +857,7 @@ const AiSignalsPage: React.FC = () => {
                             {validSigs.length > 0 && (
                                 <div className='aisig-feed__cards'>
                                     {validSigs.map(r => {
-                                        const vc2 = voteColor(r.votes.yesCount);
+                                        const vc2 = voteColor(r.statsChecks.passCount);
                                         const bestEntry = r.entryDigits[0];
                                         const domLabel = r.recentDominance.label;
                                         return (
@@ -808,7 +968,7 @@ const AiSignalsPage: React.FC = () => {
                 {scanState === 'no-signal' && (
                     <div className='ai-panel__nosig'>
                         <div className='ai-panel__nosig-hd'><span className='ai-panel__nosig-icon'>⚠️</span><span className='ai-panel__nosig-txt'>No strong signal found</span></div>
-                        {noSigBest && (<div className='ai-panel__nosig-best'><span>Best: <strong>{noSigBest.sym.short}</strong></span><span className='ai-panel__nosig-votes' style={{ color: voteColor(noSigBest.votes.yesCount) }}>{noSigBest.votes.yesCount}/{tradeType === 'even_odd' ? 4 : 10} votes</span><span className='ai-panel__nosig-need'>(need {tradeType === 'even_odd' ? '3/4' : `${MIN_VOTES}/10`})</span></div>)}
+                        {noSigBest && (<div className='ai-panel__nosig-best'><span>Best: <strong>{noSigBest.sym.short}</strong></span><span className='ai-panel__nosig-votes' style={{ color: voteColor(noSigBest.statsChecks.passCount) }}>{noSigBest.statsChecks.passCount}/{noSigBest.statsChecks.totalChecks} checks</span></div>)}
                         {noSigBest && noSigBest.recentDominance?.isCold && (<div className='ai-panel__nosig-dom-warn'>⛔ Best candidate blocked — last 20 ticks only {noSigBest.recentDominance.winsLast20}/20 on win side. Market recently reversed. Wait for momentum to recover.</div>)}
                         <span className='ai-panel__nosig-hint'>Try again in a few minutes or switch trade type.</span>
                     </div>
