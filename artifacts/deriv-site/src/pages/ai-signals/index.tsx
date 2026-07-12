@@ -309,6 +309,7 @@ const AiSignalsPage: React.FC = () => {
     const [sessionCount, setSessionCount] = useState<number>(0);
     const [editEntryPoint, setEditEntryPoint] = useState<number>(0);
 
+    const resultPanelRef = useRef<HTMLDivElement | null>(null);
     const entryWsRef = useRef<WebSocket | null>(null);
     const [ticksSinceScan, setTicksSinceScan] = useState(0);
     const [digitLastSeen, setDigitLastSeen]   = useState<number[]>(new Array(10).fill(-1));
@@ -468,8 +469,11 @@ const AiSignalsPage: React.FC = () => {
 
     const loadWatchSignal = useCallback((r: MarketResult) => {
         setResult(r); setScanState('done'); setHasSignal(true); setSpikedMarkets([]);
-        openRunConfigDirect();
-    }, [openRunConfigDirect]);
+        // Show the detail panel (don't skip straight to overlay) — scroll it into view
+        setTimeout(() => {
+            resultPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+    }, []);
 
     const openRunConfig = useCallback(() => {
         if (!result) return;
@@ -710,7 +714,7 @@ const AiSignalsPage: React.FC = () => {
 
                 {/* Signal result */}
                 {scanState === 'done' && result && (
-                    <div className='ai-panel__result'>
+                    <div className='ai-panel__result' ref={resultPanelRef}>
 
                         {/* Market header */}
                         <div className='ai-panel__mkt' style={{ '--vc': vc } as React.CSSProperties}>
@@ -721,8 +725,8 @@ const AiSignalsPage: React.FC = () => {
                             </div>
                             <div className='ai-panel__mkt-right'>
                                 <div className='ai-panel__strength-badge' style={{ background: `${vc}18`, borderColor: `${vc}50`, color: vc }}>
-                                    <span className='ai-panel__strength-votes'>{result.votes.yesCount}/{tradeType === 'even_odd' ? 4 : 10}</span>
-                                    <span className='ai-panel__strength-label'>{voteLabel(result.votes.yesCount)}</span>
+                                    <span className='ai-panel__strength-votes'>{result.signalStrength}%</span>
+                                    <span className='ai-panel__strength-label'>Confidence</span>
                                 </div>
                                 <div className={`ai-panel__regime-badge ai-panel__regime-badge--${result.tfAgreement >= 3 ? 'ok' : 'warn'}`}>
                                     <span>{result.tfAgreement}/4 TF</span>
@@ -838,7 +842,6 @@ const AiSignalsPage: React.FC = () => {
                                     <div key={i} className='ai-panel__history-row'>
                                         <span className='ai-panel__history-market'>{h.market}</span>
                                         <span className='ai-panel__history-dir'>{h.direction}</span>
-                                        <span className='ai-panel__history-votes'>{h.votes}/10</span>
                                         <span className='ai-panel__history-str'>{h.strength}%</span>
                                         <span className='ai-panel__history-time'>{new Date(h.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                     </div>
@@ -849,10 +852,10 @@ const AiSignalsPage: React.FC = () => {
                         {/* Execute */}
                         <div className='ai-panel__run-cta'>
                             <button className='ai-panel__run-btn' disabled={runState === 'launching'} onClick={openRunConfig}>
-                                <PlayCircle size={16} /> Save &amp; Run on {runTargetLabel}
+                                <PlayCircle size={16} /> Save &amp; Run
                             </button>
                             <span className='ai-panel__run-hint'>
-                                {tradeType === 'over_under' ? `Saves market, barrier ${editBarrier}, recovery ${editRecoveryBarrier ?? editBarrier}, entry digit ${editEntryPoint} and volatility into the bot, then lets you set stake/profit/loss/martingale before running it.` : tradeType === 'matches_differs' ? `Saves market, ${editMatchesSide.toLowerCase()} digit ${editTargetDigit}, entry digit ${editEntryPoint} and volatility into the bot, then lets you set stake/profit/loss/martingale before running it.` : `Saves market, ${editDir.toLowerCase()} prediction, entry digit ${editEntryPoint} and volatility into the bot, then lets you set stake/profit/loss/martingale before running it.`}
+                                Tap to set your stake, take profit, stop loss and martingale — then execute.
                             </span>
                         </div>
 
