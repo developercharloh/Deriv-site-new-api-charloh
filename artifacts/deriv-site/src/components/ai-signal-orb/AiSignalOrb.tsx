@@ -909,7 +909,9 @@ const AiSignalOrb: React.FC = () => {
                             </div>
                             <div>
                                 <span className='ai-panel__title'>AI Signals</span>
-                                <span className='ai-panel__subtitle'>10-Model Consensus Scanner</span>
+                                <span className='ai-panel__subtitle'>
+                                    {tradeType === 'even_odd' ? '4-Model Reversal Scanner' : '10-Model Consensus Scanner'}
+                                </span>
                             </div>
                         </div>
                         <button className='ai-panel__close' onClick={() => setOpen(false)}><X size={13} /></button>
