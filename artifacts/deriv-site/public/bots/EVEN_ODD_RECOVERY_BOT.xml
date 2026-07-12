@@ -245,44 +245,61 @@
           </block>
         </statement>
 
-        <!-- LOSS branch: flip direction, set Recovery Active, then martingale -->
+        <!-- LOSS branch: flip direction ONLY on first loss (Recovery Active = 0) -->
         <statement name="ELSE">
           <block type="controls_if" id="eor_flip_dir">
-            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="0"></mutation>
             <value name="IF0">
-              <block type="logic_compare" id="eor_flip_cmp">
+              <!-- Only flip direction if we are NOT already in recovery -->
+              <block type="logic_compare" id="eor_ra_zero_cmp">
                 <field name="OP">EQ</field>
-                <value name="A"><block type="variables_get" id="eor_flip_dir_get"><field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field></block></value>
-                <value name="B"><block type="text" id="eor_flip_even_txt"><field name="TEXT">EVEN</field></block></value>
+                <value name="A"><block type="variables_get" id="eor_ra_zero_get"><field name="VAR" id="eor_recovery_active_id">Recovery Active</field></block></value>
+                <value name="B"><block type="math_number" id="eor_ra_zero_num"><field name="NUM">0</field></block></value>
               </block>
             </value>
             <statement name="DO0">
-              <block type="variables_set" id="eor_to_odd">
-                <field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field>
-                <value name="VALUE"><block type="text" id="eor_to_odd_txt"><field name="TEXT">ODD</field></block></value>
-              </block>
-            </statement>
-            <statement name="ELSE">
-              <block type="variables_set" id="eor_to_even">
-                <field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field>
-                <value name="VALUE"><block type="text" id="eor_to_even_txt"><field name="TEXT">EVEN</field></block></value>
+              <!-- First loss: flip direction then mark recovery active -->
+              <block type="controls_if" id="eor_inner_flip">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="eor_flip_cmp">
+                    <field name="OP">EQ</field>
+                    <value name="A"><block type="variables_get" id="eor_flip_dir_get"><field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field></block></value>
+                    <value name="B"><block type="text" id="eor_flip_even_txt"><field name="TEXT">EVEN</field></block></value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="eor_to_odd">
+                    <field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field>
+                    <value name="VALUE"><block type="text" id="eor_to_odd_txt"><field name="TEXT">ODD</field></block></value>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="variables_set" id="eor_to_even">
+                    <field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field>
+                    <value name="VALUE"><block type="text" id="eor_to_even_txt"><field name="TEXT">EVEN</field></block></value>
+                  </block>
+                </statement>
+                <next>
+                  <block type="variables_set" id="eor_ra_set_on">
+                    <field name="VAR" id="eor_recovery_active_id">Recovery Active</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="eor_ra_on_num"><field name="NUM">1</field></block>
+                    </value>
+                  </block>
+                </next>
               </block>
             </statement>
             <next>
-              <block type="variables_set" id="eor_ra_set_on">
-                <field name="VAR" id="eor_recovery_active_id">Recovery Active</field>
-                <value name="VALUE">
-                  <block type="math_number" id="eor_ra_on_num"><field name="NUM">1</field></block>
+              <!-- Subsequent losses in recovery: direction stays, martingale continues -->
+              <block type="notify" id="eo_recovery_notify">
+                <field name="NOTIFICATION_TYPE">error</field>
+                <field name="NOTIFICATION_SOUND">silent</field>
+                <value name="MESSAGE">
+                  <shadow type="text" id="eo_recovery_txt">
+                    <field name="TEXT">recovery</field>
+                  </shadow>
                 </value>
-                <next>
-                  <block type="notify" id="eo_recovery_notify">
-                    <field name="NOTIFICATION_TYPE">error</field>
-                    <field name="NOTIFICATION_SOUND">silent</field>
-                    <value name="MESSAGE">
-                      <shadow type="text" id="eo_recovery_txt">
-                        <field name="TEXT">recovery</field>
-                      </shadow>
-                    </value>
                     <next>
                       <block type="math_change" id="eo_lc_inc">
                         <field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field>
@@ -554,8 +571,6 @@
                   </block>
                 </next>
               </block>
-            </next>
-          </block>
         </statement>
 
         <next>
