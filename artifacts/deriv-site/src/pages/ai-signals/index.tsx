@@ -536,79 +536,131 @@ const AiSignalsPage: React.FC = () => {
                     ))}
                 </div>
 
-                {/* ── Live Market Watch — always-on auto-scanner ─────────────── */}
-                <div className='ai-watch'>
-                    <div className='ai-watch__hd'>
-                        <span className='ai-watch__title'>
-                            📡 Live Market Watch
-                            {watchScanning && <span className='ai-watch__scanning'>Scanning…</span>}
-                        </span>
-                        <div className='ai-watch__hd-right'>
-                            {watchActive && !watchScanning && watchResults.length > 0 && (
-                                <span className='ai-watch__cd'>↺ {watchCountdown}s</span>
+                {/* ── Live Signal Feed — valid signals only ─────────────────── */}
+                {(() => {
+                    const eoMode      = tradeType === 'even_odd';
+                    const maxVotes    = eoMode ? 4 : 10;
+                    const validSigs   = watchResults.filter(r => isWatchSignal(r));
+                    const hasResults  = watchResults.length > 0;
+
+                    return (
+                        <div className='aisig-feed'>
+                            {/* Feed header */}
+                            <div className='aisig-feed__hd'>
+                                <div className='aisig-feed__hd-left'>
+                                    <span className={`aisig-feed__pulse${watchScanning ? ' aisig-feed__pulse--scan' : validSigs.length > 0 ? ' aisig-feed__pulse--live' : ''}`} />
+                                    <span className='aisig-feed__hd-title'>
+                                        {watchScanning ? 'Scanning markets…' : validSigs.length > 0 ? `${validSigs.length} Active Signal${validSigs.length !== 1 ? 's' : ''}` : 'Watching all markets'}
+                                    </span>
+                                    {!watchScanning && hasResults && (
+                                        <span className='aisig-feed__cd'>↺ {watchCountdown}s</span>
+                                    )}
+                                </div>
+                                <button
+                                    className={`aisig-feed__toggle${watchActive ? ' aisig-feed__toggle--on' : ''}`}
+                                    disabled={maintenanceActive}
+                                    onClick={() => { setWatchActive(p => !p); if (watchActive) { setWatchResults([]); setWatchSpikes(new Set()); } }}
+                                >
+                                    {watchActive ? 'Pause' : 'Resume'}
+                                </button>
+                            </div>
+
+                            {/* Scanning skeleton */}
+                            {watchScanning && watchResults.length === 0 && (
+                                <div className='aisig-feed__scanning'>
+                                    <Loader2 size={16} className='ai-panel__spin' />
+                                    <span>Analysing {ALL_SYMS.length} markets across 4 timeframes…</span>
+                                </div>
                             )}
-                            <button
-                                className={`ai-watch__toggle${watchActive ? ' ai-watch__toggle--on' : ''}`}
-                                disabled={maintenanceActive}
-                                onClick={() => { setWatchActive(p => !p); if (watchActive) { setWatchResults([]); setWatchSpikes(new Set()); } }}
-                            >
-                                {watchActive ? 'Pause' : 'Resume'}
-                            </button>
-                        </div>
-                    </div>
 
-                    {watchScanning && watchResults.length === 0 && (
-                        <div className='ai-watch__loading'>
-                            <Loader2 size={13} className='ai-panel__spin' /> Scanning all {ALL_SYMS.length} markets…
-                        </div>
-                    )}
+                            {/* Paused empty */}
+                            {!watchActive && !watchScanning && watchResults.length === 0 && (
+                                <div className='aisig-feed__paused'>Scanner paused — tap Resume to start.</div>
+                            )}
 
-                    {!watchScanning && watchResults.length === 0 && !watchActive && (
-                        <p className='ai-watch__hint'>Paused — tap Resume to restart auto-scan.</p>
-                    )}
-
-                    {watchResults.length > 0 && (
-                        <div className='ai-watch__rows'>
-                            {watchResults.map(r => {
-                                const qualified = isWatchSignal(r);
-                                const spiked    = watchSpikes.has(r.sym.code);
-                                const eoMode    = tradeType === 'even_odd';
-                                const maxVotes  = eoMode ? 4 : 10;
-                                const needVotes = eoMode ? 3 : getSymbolMinVotes(r.sym.code);
-                                return (
-                                    <div key={r.sym.code} className={`ai-watch__row${qualified ? ' ai-watch__row--signal' : spiked ? ' ai-watch__row--spike' : ''}`}>
-                                        <span className={`ai-watch__dot${qualified ? ' ai-watch__dot--on' : spiked ? ' ai-watch__dot--spike' : ''}`} />
-                                        <span className='ai-watch__sym'>{r.sym.short}</span>
-                                        <span className='ai-watch__dir'>{qualified ? r.direction : spiked ? '⚡ Spike' : '—'}</span>
-                                        <span className='ai-watch__votes' style={{ color: voteColor(r.votes.yesCount) }}>{r.votes.yesCount}/{maxVotes}</span>
-                                        {qualified ? (
-                                            <button className='ai-watch__load' onClick={() => loadWatchSignal(r)}>Load &amp; Run</button>
-                                        ) : (
-                                            <span className='ai-watch__need'>need {needVotes}</span>
-                                        )}
+                            {/* No valid signals found */}
+                            {!watchScanning && hasResults && validSigs.length === 0 && (
+                                <div className='aisig-feed__nosig'>
+                                    <span className='aisig-feed__nosig-icon'>🔍</span>
+                                    <div>
+                                        <div className='aisig-feed__nosig-title'>No qualifying signals</div>
+                                        <div className='aisig-feed__nosig-sub'>Markets scanned — none met the consensus threshold. Rescanning in {watchCountdown}s.</div>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
+                                </div>
+                            )}
 
-                {/* Manual re-scan */}
-                <div className='ai-panel__scan-wrap'>
-                    <button
-                        className={`ai-panel__scan-btn${scanState === 'scanning' ? ' ai-panel__scan-btn--loading' : ''}${maintenanceActive ? ' ai-panel__scan-btn--blocked' : ''}`}
-                        onClick={handleScan}
-                        disabled={scanState === 'scanning' || maintenanceActive}
-                        title={maintenanceActive ? 'Deriv is under maintenance — scanning blocked' : undefined}
-                    >
-                        {maintenanceActive
-                            ? <><span>⛔ Scanning Blocked — Maintenance Active</span></>
-                            : scanState === 'scanning'
-                                ? <><Loader2 size={14} className='ai-panel__spin' /><span>Scanning {progress}/{ALL_SYMS.length} markets…</span></>
-                                : <><RefreshCw size={14} /><span>{scanState === 'idle' ? 'Manual Scan (5k ticks · 4 timeframes)' : 'Re-Scan Markets'}</span></>
-                        }
-                    </button>
-                </div>
+                            {/* Valid signal cards */}
+                            {validSigs.length > 0 && (
+                                <div className='aisig-feed__cards'>
+                                    {validSigs.map(r => {
+                                        const vc2 = voteColor(r.votes.yesCount);
+                                        const bestEntry = r.entryDigits[0];
+                                        const domLabel = r.recentDominance.label;
+                                        return (
+                                            <div key={r.sym.code} className='aisig-card'>
+                                                {/* Card top row: market + votes badge */}
+                                                <div className='aisig-card__top'>
+                                                    <div className='aisig-card__market'>
+                                                        <span className='aisig-card__live-dot' />
+                                                        <span className='aisig-card__sym'>{r.sym.short}</span>
+                                                        <span className='aisig-card__label'>{r.sym.label}</span>
+                                                    </div>
+                                                    <div className='aisig-card__badges'>
+                                                        <span className='aisig-card__votes' style={{ background: `${vc2}22`, border: `1px solid ${vc2}55`, color: vc2 }}>
+                                                            {r.votes.yesCount}/{maxVotes} · {voteLabel(r.votes.yesCount)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Direction */}
+                                                <div className='aisig-card__dir' style={{ color: vc2 }}>
+                                                    {r.direction}
+                                                </div>
+
+                                                {/* Stats grid */}
+                                                <div className='aisig-card__stats'>
+                                                    <div className='aisig-card__stat'>
+                                                        <span className='aisig-card__stat-lbl'>Confidence</span>
+                                                        <span className='aisig-card__stat-val' style={{ color: vc2 }}>{r.signalStrength}%</span>
+                                                    </div>
+                                                    <div className='aisig-card__stat'>
+                                                        <span className='aisig-card__stat-lbl'>Win Prob</span>
+                                                        <span className='aisig-card__stat-val'>{(r.winProb * 100).toFixed(1)}%</span>
+                                                    </div>
+                                                    <div className='aisig-card__stat'>
+                                                        <span className='aisig-card__stat-lbl'>Entry Digit</span>
+                                                        <span className='aisig-card__stat-val aisig-card__entry'>
+                                                            {bestEntry != null ? bestEntry.digit : '—'}
+                                                            {bestEntry != null && <span className='aisig-card__entry-wait'>~{bestEntry.avgWaitTicks}t</span>}
+                                                        </span>
+                                                    </div>
+                                                    <div className='aisig-card__stat'>
+                                                        <span className='aisig-card__stat-lbl'>Momentum</span>
+                                                        <span className={`aisig-card__dom aisig-card__dom--${domLabel.toLowerCase()}`}>{domLabel}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* TF agreement bar */}
+                                                <div className='aisig-card__tf'>
+                                                    {[0,1,2,3].map(i => (
+                                                        <span key={i} className={`aisig-card__tf-seg${i < r.tfAgreement ? ' aisig-card__tf-seg--on' : ''}`} />
+                                                    ))}
+                                                    <span className='aisig-card__tf-lbl'>{r.tfAgreement}/4 timeframes agree</span>
+                                                </div>
+
+                                                {/* Load & Run */}
+                                                <button className='aisig-card__run' onClick={() => loadWatchSignal(r)}>
+                                                    <PlayCircle size={14} />
+                                                    Load &amp; Run
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {/* Spike warning */}
                 {spikedMarkets.length > 0 && scanState !== 'scanning' && (

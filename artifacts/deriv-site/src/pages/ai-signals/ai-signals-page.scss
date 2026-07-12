@@ -1,3 +1,21 @@
+// ─── Keyframes ────────────────────────────────────────────────────────────────
+@keyframes sig-pulse-live {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.7); }
+    60%       { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+}
+@keyframes sig-pulse-scan {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.7); }
+    60%       { box-shadow: 0 0 0 6px rgba(99,102,241,0); }
+}
+@keyframes card-in {
+    0%   { opacity: 0; transform: translateY(8px); }
+    100% { opacity: 1; transform: none; }
+}
+@keyframes tf-glow {
+    0%, 100% { opacity: 0.7; }
+    50%       { opacity: 1; }
+}
+
 // ─── AI Signals full-page wrapper ─────────────────────────────────────────────
 .aisig-page {
     display: flex;
@@ -94,4 +112,319 @@
     position: fixed;
     inset: 0;
     z-index: 9999;
+}
+
+// ─── Live Signal Feed ─────────────────────────────────────────────────────────
+.aisig-feed {
+    background: linear-gradient(160deg, #111827 0%, #0d1117 60%, #0a0d14 100%);
+    border: 1px solid rgba(99,102,241,0.2);
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.aisig-feed__hd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    background: rgba(255,255,255,0.02);
+}
+
+.aisig-feed__hd-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.aisig-feed__hd-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #94a3b8;
+    letter-spacing: 0.02em;
+}
+
+.aisig-feed__cd {
+    font-size: 10px;
+    font-weight: 600;
+    color: #334155;
+    margin-left: 2px;
+}
+
+.aisig-feed__pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: #334155;
+    &--live {
+        background: #10b981;
+        animation: sig-pulse-live 1.8s ease-in-out infinite;
+    }
+    &--scan {
+        background: #6366f1;
+        animation: sig-pulse-scan 1s ease-in-out infinite;
+    }
+}
+
+.aisig-feed__toggle {
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: #475569;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.02em;
+    &--on {
+        border-color: rgba(99,102,241,0.35);
+        color: #818cf8;
+        background: rgba(99,102,241,0.08);
+    }
+    &:hover:not(:disabled) { opacity: 0.85; }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+
+.aisig-feed__scanning {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 20px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6366f1;
+    justify-content: center;
+}
+
+.aisig-feed__paused {
+    padding: 18px 16px;
+    font-size: 11px;
+    color: #334155;
+    text-align: center;
+    font-weight: 500;
+}
+
+.aisig-feed__nosig {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 16px;
+}
+
+.aisig-feed__nosig-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.aisig-feed__nosig-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+}
+
+.aisig-feed__nosig-sub {
+    font-size: 10.5px;
+    color: #334155;
+    margin-top: 3px;
+    line-height: 1.5;
+}
+
+.aisig-feed__cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+// ─── Individual Signal Card ───────────────────────────────────────────────────
+.aisig-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    animation: card-in 0.3s cubic-bezier(0.16,1,0.3,1);
+    transition: background 0.15s;
+
+    &:last-child { border-bottom: none; }
+    &:hover { background: rgba(255,255,255,0.015); }
+}
+
+.aisig-card__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.aisig-card__market {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.aisig-card__live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10b981;
+    flex-shrink: 0;
+    animation: sig-pulse-live 1.8s ease-in-out infinite;
+}
+
+.aisig-card__sym {
+    font-size: 13px;
+    font-weight: 800;
+    color: #e2e8f0;
+    letter-spacing: -0.2px;
+}
+
+.aisig-card__label {
+    font-size: 10px;
+    font-weight: 500;
+    color: #475569;
+}
+
+.aisig-card__badges {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.aisig-card__votes {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.aisig-card__dir {
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+    line-height: 1;
+}
+
+.aisig-card__stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 6px;
+}
+
+.aisig-card__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgba(255,255,255,0.025);
+    border-radius: 8px;
+    padding: 6px 8px;
+}
+
+.aisig-card__stat-lbl {
+    font-size: 8.5px;
+    font-weight: 600;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.aisig-card__stat-val {
+    font-size: 13px;
+    font-weight: 800;
+    color: #cbd5e1;
+    line-height: 1;
+}
+
+.aisig-card__entry {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+}
+
+.aisig-card__entry-wait {
+    font-size: 9px;
+    font-weight: 500;
+    color: #475569;
+}
+
+// Dominance pill inside stat
+.aisig-card__dom {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 8.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1.6;
+
+    &--dominant  { background: rgba(16,185,129,0.18); color: #34d399; }
+    &--active    { background: rgba(99,102,241,0.18);  color: #a5b4fc; }
+    &--neutral   { background: rgba(100,116,139,0.18); color: #94a3b8; }
+    &--cooling   { background: rgba(245,158,11,0.18);  color: #fcd34d; }
+    &--reversed  { background: rgba(239,68,68,0.18);   color: #fca5a5; }
+}
+
+// Timeframe agreement bar
+.aisig-card__tf {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.aisig-card__tf-seg {
+    width: 24px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.07);
+    transition: background 0.2s;
+
+    &--on {
+        background: #6366f1;
+        animation: tf-glow 2s ease-in-out infinite;
+    }
+}
+
+.aisig-card__tf-lbl {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #334155;
+    margin-left: 4px;
+}
+
+// Load & Run button
+.aisig-card__run {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(16,185,129,0.4);
+    background: linear-gradient(135deg, rgba(16,185,129,0.14), rgba(5,150,105,0.10));
+    color: #34d399;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.15s;
+
+    &:hover {
+        background: linear-gradient(135deg, rgba(16,185,129,0.28), rgba(5,150,105,0.22));
+        border-color: rgba(16,185,129,0.65);
+        box-shadow: 0 0 20px rgba(16,185,129,0.2);
+        color: #6ee7b7;
+        transform: translateY(-1px);
+    }
+    &:active { transform: translateY(0); }
 }
