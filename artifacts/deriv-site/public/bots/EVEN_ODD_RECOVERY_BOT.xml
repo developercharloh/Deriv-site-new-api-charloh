@@ -194,59 +194,48 @@
           </block>
         </value>
 
-        <!-- WIN branch: reset recovery state, then existing win logic -->
+        <!-- WIN branch: always reset to Primary Direction, clear recovery flag, restore stake -->
         <statement name="DO0">
-          <block type="controls_if" id="eor_win_recovery_check">
-            <value name="IF0">
-              <block type="logic_compare" id="eor_win_ra_cmp">
-                <field name="OP">EQ</field>
-                <value name="A"><block type="variables_get" id="eor_win_ra_get"><field name="VAR" id="eor_recovery_active_id">Recovery Active</field></block></value>
-                <value name="B"><block type="math_number" id="eor_win_ra_1"><field name="NUM">1</field></block></value>
+          <block type="variables_set" id="eor_dir_always_reset">
+            <field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field>
+            <value name="VALUE">
+              <block type="variables_get" id="eor_primary_dir_always_get">
+                <field name="VAR" id="eor_primary_dir_id">Primary Direction</field>
               </block>
             </value>
-            <statement name="DO0">
-              <block type="variables_set" id="eor_dir_reset">
-                <field name="VAR" id="FM1`~n6DvK#8Yi`~!oSD">Direction</field>
-                <value name="VALUE">
-                  <block type="variables_get" id="eor_dir_reset_get">
-                    <field name="VAR" id="eor_primary_dir_id">Primary Direction</field>
-                  </block>
-                </value>
-                <next>
-                  <block type="variables_set" id="eor_ra_clear">
-                    <field name="VAR" id="eor_recovery_active_id">Recovery Active</field>
-                    <value name="VALUE">
-                      <block type="math_number" id="eor_ra_clear_num"><field name="NUM">0</field></block>
-                    </value>
-                  </block>
-                </next>
-              </block>
-            </statement>
             <next>
-              <block type="variables_set" id="eo_lc_reset">
-                <field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field>
+              <block type="variables_set" id="eor_ra_always_clear">
+                <field name="VAR" id="eor_recovery_active_id">Recovery Active</field>
                 <value name="VALUE">
-                  <block type="math_number" id="eo_lc_reset_num">
-                    <field name="NUM">0</field>
-                  </block>
+                  <block type="math_number" id="eor_ra_always_zero"><field name="NUM">0</field></block>
                 </value>
                 <next>
-                  <block type="variables_set" id="eo_stake_restore">
-                    <field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                  <block type="variables_set" id="eo_lc_reset">
+                    <field name="VAR" id="{_gQ*oKSNI260$_%IiFy">Loss Count</field>
                     <value name="VALUE">
-                      <block type="variables_get" id="eo_ws_restore_get">
-                        <field name="VAR" id="ZC9jlKp0p+PVYAU:n7?-">Win Stake</field>
+                      <block type="math_number" id="eo_lc_reset_num">
+                        <field name="NUM">0</field>
                       </block>
                     </value>
                     <next>
-                      <block type="notify" id="eo_victory_notify">
-                        <field name="NOTIFICATION_TYPE">success</field>
-                        <field name="NOTIFICATION_SOUND">silent</field>
-                        <value name="MESSAGE">
-                          <shadow type="text" id="eo_victory_txt">
-                            <field name="TEXT">victory</field>
-                          </shadow>
+                      <block type="variables_set" id="eo_stake_restore">
+                        <field name="VAR" id="L4f5`_Bb29Z7N%A:0@yS">Stake</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="eo_ws_restore_get">
+                            <field name="VAR" id="ZC9jlKp0p+PVYAU:n7?-">Win Stake</field>
+                          </block>
                         </value>
+                        <next>
+                          <block type="notify" id="eo_victory_notify">
+                            <field name="NOTIFICATION_TYPE">success</field>
+                            <field name="NOTIFICATION_SOUND">silent</field>
+                            <value name="MESSAGE">
+                              <shadow type="text" id="eo_victory_txt">
+                                <field name="TEXT">victory</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </next>
                       </block>
                     </next>
                   </block>

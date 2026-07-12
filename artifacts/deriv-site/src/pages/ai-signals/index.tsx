@@ -1202,14 +1202,14 @@ const AiSignalsPage: React.FC = () => {
                         <span className='ai-runcfg__mart-hint'>{cfgMartingaleOn ? 'Stake multiplies by this factor after a loss.' : 'Off — martingale is reset to 0, stake stays flat after a loss.'}</span>
                         {tradeType === 'even_odd' && (
                             <div className='ai-runcfg__field'>
-                                <label className='ai-runcfg__field-label'>EO RECOVERY</label>
+                                <span>EO Recovery Mode</span>
                                 <select
                                     className='ai-runcfg__select'
                                     value={cfgEoRecovery ? 'yes' : 'no'}
                                     onChange={e => setCfgEoRecovery(e.target.value === 'yes')}
                                 >
-                                    <option value='no'>No</option>
-                                    <option value='yes'>Yes</option>
+                                    <option value='no'>No — stay on same side</option>
+                                    <option value='yes'>Yes — flip on loss, return on win</option>
                                 </select>
                             </div>
                         )}

@@ -1222,17 +1222,18 @@
 .ai-runcfg__mart-hint { font-size: 9.5px; color: #64748b; line-height: 1.4; margin-top: -6px; }
 .ai-runcfg__select {
     width: 100%;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: #0f172a;
-    border: 1px solid rgba(255,255,255,0.08);
-    color: #e2e8f0;
+    padding: 9px 11px;
+    border-radius: 9px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(148,163,184,0.25);
+    color: #f1f5f9;
     font-size: 13px;
     font-weight: 600;
     outline: none;
     cursor: pointer;
     appearance: auto;
-    &:focus { border-color: rgba(99,102,241,0.5); }
+    option { background: #1e293b; color: #f1f5f9; }
+    &:focus { border-color: rgba(99,102,241,0.6); }
 }
 .ai-runcfg__execute {
     display: flex;
