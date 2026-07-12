@@ -282,6 +282,22 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
     });
 }
 
+// ─── Watchdog ─────────────────────────────────────────────────────────────────
+interface WatchdogEntry { status: 'warming' | 'holding' | 'weakening' | 'reversed'; winPct: number; ticks: number; }
+
+/** Derive a win-test function directly from a MarketResult */
+function makeWinFn(r: MarketResult): (digit: number) => boolean {
+    switch (r.contractType) {
+        case 'DIGITOVER':  return d => d > (r.barrier ?? 5);
+        case 'DIGITUNDER': return d => d < (r.barrier ?? 5);
+        case 'DIGITODD':   return d => d % 2 !== 0;
+        case 'DIGITEVEN':  return d => d % 2 === 0;
+        case 'DIGITMATCH': return d => d === (r.barrier ?? 0);
+        case 'DIGITDIFF':  return d => d !== (r.barrier ?? 0);
+        default:           return () => false;
+    }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function calcRecRuns(yesCount: number, winProb: number): number {
     const edge = Math.max(0.02, winProb - 0.50); const raw = Math.round(1.5 / edge);
@@ -310,7 +326,9 @@ const AiSignalsPage: React.FC = () => {
     const [editEntryPoint, setEditEntryPoint] = useState<number>(0);
 
     const resultPanelRef = useRef<HTMLDivElement | null>(null);
-    const entryWsRef = useRef<WebSocket | null>(null);
+    const entryWsRef    = useRef<WebSocket | null>(null);
+    const watchdogWsRef = useRef<Map<string, WebSocket>>(new Map());
+    const [watchdogMap, setWatchdogMap] = useState<Map<string, WatchdogEntry>>(new Map());
     const [ticksSinceScan, setTicksSinceScan] = useState(0);
     const [digitLastSeen, setDigitLastSeen]   = useState<number[]>(new Array(10).fill(-1));
 
@@ -423,6 +441,68 @@ const AiSignalsPage: React.FC = () => {
         return () => { destroyed = true; if (entryWsRef.current === ws) entryWsRef.current = null; try { ws.close(); } catch { /* */ } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [result]);
+
+    // ── Watchdog — live tick monitor per valid signal ─────────────────────────
+    useEffect(() => {
+        const eoMode = tradeType === 'even_odd';
+        const validSigs = watchResults.filter(r => {
+            if (watchSpikes.has(r.sym.code) || r.gapDetected) return false;
+            return r.votes.yesCount >= (eoMode ? 3 : getSymbolMinVotes(r.sym.code)) && r.segmentAgrees &&
+                (eoMode ? r.recentDominance.isHot : r.votes.recentEdge.vote) &&
+                r.regimeOk && !r.recentDominance.isCold &&
+                (tradeType !== 'over_under' || r.winProb >= MIN_WIN_PROB_OU);
+        });
+        const validCodes = new Set(validSigs.map(r => r.sym.code));
+
+        // Close watchdogs for markets that are no longer valid
+        watchdogWsRef.current.forEach((ws, code) => {
+            if (!validCodes.has(code)) {
+                try { ws.close(); } catch { /* */ }
+                watchdogWsRef.current.delete(code);
+            }
+        });
+
+        // Open watchdog for each newly-valid market
+        validSigs.forEach(r => {
+            if (watchdogWsRef.current.has(r.sym.code)) return;
+            const winFn = makeWinFn(r);
+            const buf: number[] = [];
+            const code = r.sym.code;
+            const ws = new WebSocket(DERIV_WS);
+            ws.onopen = () => ws.send(JSON.stringify({ ticks: code, subscribe: 1, req_id: 997 }));
+            ws.onmessage = (ev: MessageEvent) => {
+                let msg: any; try { msg = JSON.parse(ev.data as string); } catch { return; }
+                if (msg.msg_type !== 'tick') return;
+                const price = parseFloat(msg.tick?.quote ?? '0'); if (!price) return;
+                const digit = lastDigitOf(price, r.pip);
+                buf.push(digit); if (buf.length > 40) buf.shift();
+                if (buf.length < 5) return; // warm up — need a few ticks first
+                const win = buf.slice(-Math.min(20, buf.length));
+                const winPct = win.filter(winFn).length / win.length;
+                const status: WatchdogEntry['status'] =
+                    buf.length < 10 ? 'warming' :
+                    winPct >= 0.60  ? 'holding' :
+                    winPct >= 0.40  ? 'weakening' : 'reversed';
+                setWatchdogMap(prev => { const m = new Map(prev); m.set(code, { status, winPct, ticks: buf.length }); return m; });
+            };
+            ws.onerror = ws.onclose = () => { watchdogWsRef.current.delete(code); };
+            watchdogWsRef.current.set(code, ws);
+        });
+
+        // Remove stale watchdog state for markets no longer valid
+        setWatchdogMap(prev => {
+            const m = new Map(prev);
+            m.forEach((_, code) => { if (!validCodes.has(code)) m.delete(code); });
+            return m;
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [watchResults, watchSpikes, tradeType]);
+
+    // Cleanup all watchdog WebSockets on unmount
+    useEffect(() => () => {
+        watchdogWsRef.current.forEach(ws => { try { ws.close(); } catch { /* */ } });
+        watchdogWsRef.current.clear();
+    }, []);
 
     // Poll Deriv system status every 60 s
     useEffect(() => {
@@ -667,6 +747,28 @@ const AiSignalsPage: React.FC = () => {
                                                     <span className='aisig-card__tf-lbl'>{r.tfAgreement}/4 timeframes agree</span>
                                                 </div>
 
+                                                {/* Watchdog status */}
+                                                {(() => {
+                                                    const wd = watchdogMap.get(r.sym.code);
+                                                    if (!wd || wd.status === 'warming') return (
+                                                        <div className='aisig-card__watchdog aisig-card__watchdog--warming'>
+                                                            <span className='aisig-card__watchdog-dot' />
+                                                            <span>Watchdog warming up…</span>
+                                                        </div>
+                                                    );
+                                                    return (
+                                                        <div className={`aisig-card__watchdog aisig-card__watchdog--${wd.status}`}>
+                                                            <span className='aisig-card__watchdog-dot' />
+                                                            <span className='aisig-card__watchdog-label'>
+                                                                {wd.status === 'holding'   ? '● HOLDING'            : ''}
+                                                                {wd.status === 'weakening' ? '◐ WEAKENING — caution': ''}
+                                                                {wd.status === 'reversed'  ? '● REVERSED — STOP'    : ''}
+                                                            </span>
+                                                            <span className='aisig-card__watchdog-pct'>{(wd.winPct * 100).toFixed(0)}% live</span>
+                                                        </div>
+                                                    );
+                                                })()}
+
                                                 {/* Load & Run */}
                                                 <button className='aisig-card__run' onClick={() => loadWatchSignal(r)}>
                                                     <PlayCircle size={14} />
@@ -734,6 +836,31 @@ const AiSignalsPage: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Watchdog alert on detail panel */}
+                        {(() => {
+                            const wd = watchdogMap.get(result.sym.code);
+                            if (!wd || wd.status === 'warming') return null;
+                            return (
+                                <div className={`ai-watchdog-alert ai-watchdog-alert--${wd.status}`}>
+                                    <div className='ai-watchdog-alert__top'>
+                                        <span className='ai-watchdog-alert__dot' />
+                                        <span className='ai-watchdog-alert__title'>
+                                            {wd.status === 'holding'   && '🟢 Dominance Holding'}
+                                            {wd.status === 'weakening' && '🟡 Dominance Weakening'}
+                                            {wd.status === 'reversed'  && '🔴 Dominance Reversed'}
+                                        </span>
+                                        <span className='ai-watchdog-alert__pct'>{(wd.winPct * 100).toFixed(0)}% win rate (live)</span>
+                                    </div>
+                                    {wd.status === 'weakening' && (
+                                        <p className='ai-watchdog-alert__msg'>Winning pattern is fading on live ticks. Reduce stake or pause until dominance recovers.</p>
+                                    )}
+                                    {wd.status === 'reversed' && (
+                                        <p className='ai-watchdog-alert__msg'>⛔ The winning side has flipped on live ticks. Stop trading this signal — wait for a fresh scan.</p>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         {/* Direction call */}
                         <div className='ai-panel__call' style={{ borderColor: `${vc}40` }}>
