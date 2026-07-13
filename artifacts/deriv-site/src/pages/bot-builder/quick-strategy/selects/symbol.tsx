@@ -55,20 +55,28 @@ const SymbolSelect: React.FC = () => {
     );
 
     useEffect(() => {
-        const { active_symbols } =
-            (ApiHelpers?.instance as unknown as {
-                active_symbols: {
-                    getSymbolsForBot: () => TSymbol[];
-                };
-            }) ?? {};
-        const symbols = active_symbols?.getSymbolsForBot?.();
-        setActiveSymbols(symbols);
-
-        const has_symbol = !!symbols?.find(symbol => symbol?.value === values?.symbol);
-        if (!has_symbol) {
-            setFieldValue('symbol', symbols?.[0]?.value);
-            setValue('symbol', symbols?.[0]?.value);
-        }
+        let cancelled = false;
+        const tryLoad = (attempt = 0) => {
+            const { active_symbols } =
+                (ApiHelpers?.instance as unknown as {
+                    active_symbols: { getSymbolsForBot: () => TSymbol[] };
+                }) ?? {};
+            const symbols = active_symbols?.getSymbolsForBot?.();
+            if ((!symbols || symbols.length === 0) && attempt < 20) {
+                // API not ready yet — retry up to 20 times with 500 ms gap
+                setTimeout(() => { if (!cancelled) tryLoad(attempt + 1); }, 500);
+                return;
+            }
+            if (cancelled) return;
+            setActiveSymbols(symbols ?? []);
+            const has_symbol = !!symbols?.find(symbol => symbol?.value === values?.symbol);
+            if (!has_symbol) {
+                setFieldValue('symbol', symbols?.[0]?.value);
+                setValue('symbol', symbols?.[0]?.value);
+            }
+        };
+        tryLoad();
+        return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
