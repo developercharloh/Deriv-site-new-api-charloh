@@ -1361,7 +1361,7 @@ const AiSignalsPage: React.FC = () => {
                                 <div className='ai-panel__pred-ou'>
                                     <div className='ai-panel__seg' style={{ marginBottom: 8 }}>{(['OVER', 'UNDER'] as const).map(d => (<button key={d} className={`ai-panel__seg-btn${editDir === d ? ' ai-panel__seg-btn--active' : ''}`} onClick={() => setEditDir(d)}>{d}</button>))}</div>
                                     <div className='ai-panel__barrier'><span className='ai-panel__barrier-lbl'>Barrier <span className='ai-panel__barrier-rec'>(AI: {result.barrier ?? '?'}★)</span></span><div className='ai-panel__barrier-grid'>{[1,2,3,4,5,6,7,8].map(b => (<button key={b} className={`ai-panel__barrier-btn${editBarrier === b ? ' ai-panel__barrier-btn--sel' : ''}${result.barrier === b ? ' ai-panel__barrier-btn--rec' : ''}`} onClick={() => setEditBarrier(b)}>{b}</button>))}</div></div>
-                                    {tradeType === 'over_under' && (
+                                    {false && (
                                         <div className='ai-rec-panel'>
                                             <div className='ai-rec-panel__hd'>
                                                 <span className='ai-rec-panel__title'>🔄 Recovery after loss</span>
@@ -1541,6 +1541,86 @@ const AiSignalsPage: React.FC = () => {
                             <input type='number' min='0' step='0.1' value={cfgMartingale} disabled={!cfgMartingaleOn} onChange={e => setCfgMartingale(e.target.value)} className='ai-runcfg__mart-input' />
                         </div>
                         <span className='ai-runcfg__mart-hint'>{cfgMartingaleOn ? 'Stake multiplies by this factor after a loss.' : 'Off — martingale is reset to 0, stake stays flat after a loss.'}</span>
+
+                        {/* ── Recovery picker (Over/Under only) ──────────────── */}
+                        {tradeType === 'over_under' && result && (() => {
+                            const aiRec = result.noRecoveryRecommended
+                                ? '🚫 No Recovery'
+                                : result.recoveryContractType === 'DIGITOVER'
+                                    ? `OVER ${result.recoveryBarrier}`
+                                    : `UNDER ${result.recoveryBarrier}`;
+                            const selOpt = editRecoveryMode !== 'none'
+                                ? result.recoveryOptions.find(o => o.side === editRecoveryMode.toUpperCase() as 'OVER'|'UNDER' && o.barrier === editRecoveryBarrier)
+                                : null;
+                            return (
+                                <div className='ai-runcfg__rec'>
+                                    <div className='ai-runcfg__rec-hd'>
+                                        <span className='ai-runcfg__rec-title'>Recovery after loss</span>
+                                        <span className='ai-runcfg__rec-ai'>AI: {aiRec} ★</span>
+                                    </div>
+
+                                    {/* No Recovery toggle */}
+                                    <button
+                                        className={`ai-runcfg__rec-none${editRecoveryMode === 'none' ? ' ai-runcfg__rec-none--on' : ''}`}
+                                        onClick={() => setEditRecoveryMode('none')}
+                                    >
+                                        <span>🚫 No Recovery</span>
+                                        <span className='ai-runcfg__rec-none__sub'>Bot retrades same direction after a loss</span>
+                                        {editRecoveryMode === 'none' && <span className='ai-runcfg__rec-pill ai-runcfg__rec-pill--on'>ON</span>}
+                                    </button>
+
+                                    {/* OVER / UNDER direction */}
+                                    <div className='ai-runcfg__rec-dirs'>
+                                        {(['over', 'under'] as const).map(dir => (
+                                            <button
+                                                key={dir}
+                                                className={`ai-runcfg__rec-dir${editRecoveryMode === dir ? ' ai-runcfg__rec-dir--on' : ''}`}
+                                                onClick={() => setEditRecoveryMode(dir)}
+                                            >
+                                                {dir.toUpperCase()}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Barrier grid — shown when direction chosen */}
+                                    {editRecoveryMode !== 'none' && (
+                                        <div className='ai-runcfg__rec-grid'>
+                                            {[1,2,3,4,5,6,7,8].map(b => {
+                                                const opt = result.recoveryOptions.find(o => o.side === editRecoveryMode.toUpperCase() as 'OVER'|'UNDER' && o.barrier === b);
+                                                const sel = editRecoveryBarrier === b;
+                                                const s = opt?.safety ?? 'marginal';
+                                                return (
+                                                    <button
+                                                        key={b}
+                                                        className={`ai-runcfg__rec-cell ai-runcfg__rec-cell--${s}${sel ? ' ai-runcfg__rec-cell--sel' : ''}`}
+                                                        onClick={() => setEditRecoveryBarrier(b)}
+                                                    >
+                                                        <span className='ai-runcfg__rec-cell__num'>{b}</span>
+                                                        <span className='ai-runcfg__rec-cell__icon'>
+                                                            {s === 'safe' ? '✅' : s === 'marginal' ? '⚠️' : '⛔'}
+                                                        </span>
+                                                        <span className='ai-runcfg__rec-cell__wins'>{opt?.windowsPass ?? 0}/4</span>
+                                                        {opt?.isAiPick && <span className='ai-runcfg__rec-cell__star'>★</span>}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* Summary line */}
+                                    {selOpt && (
+                                        <div className={`ai-runcfg__rec-summary ai-runcfg__rec-summary--${selOpt.safety}`}>
+                                            {selOpt.safety === 'safe'
+                                                ? `✅ ${editRecoveryMode.toUpperCase()} ${editRecoveryBarrier} — safe (${selOpt.windowsPass}/4 windows)`
+                                                : selOpt.safety === 'marginal'
+                                                    ? `⚠️ ${editRecoveryMode.toUpperCase()} ${editRecoveryBarrier} — marginal (${selOpt.windowsPass}/4 windows)`
+                                                    : `⛔ ${editRecoveryMode.toUpperCase()} ${editRecoveryBarrier} — unsafe (${selOpt.windowsPass}/4 windows) — consider another barrier`}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
                         {tradeType === 'even_odd' && (
                             <div className='ai-runcfg__field'>
                                 <span>EO Recovery Mode</span>
