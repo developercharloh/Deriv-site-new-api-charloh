@@ -66,8 +66,11 @@ interface StatsChecks {
 interface RecoveryOption {
     side: 'OVER' | 'UNDER';
     barrier: number;
+    /** Win rate across the 1 000-tick window (most representative for display) */
     winPct: number;
     theoExp: number;
+    /** Number of the four windows (50/100/500/1 000) that beat theoretical expectation */
+    windowsPass: number;
     safety: 'safe' | 'marginal' | 'unsafe';
     isAiPick: boolean;
 }
@@ -457,22 +460,31 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const microConfirm = { pass: microConfirmPass, last2Wins: last2Results.filter(Boolean).length, last2: last2Results };
 
     // ── Recovery options — all barriers on both sides with safety ratings ───
-    // Compute win rate for every possible OVER/UNDER recovery option (barriers 1–8).
-    // Used by the UI to show safety badges and let the user pick freely.
+    // Each option is rated using the SAME 4-window alignment check as Check 9:
+    //   windows: 50 / 100 / 500 / 1 000 ticks — all must beat theoretical expectation.
+    //   safe    = all 4 windows pass  (> theoExp)
+    //   marginal= 3 of 4 windows pass
+    //   unsafe  = ≤ 2 windows pass
+    // winPct displayed is from the 1 000-tick window (most representative).
+    const recWinSizes = [50, 100, 500, 1000];
     const recoveryOptions: RecoveryOption[] = [];
     for (let rb = 1; rb <= 8; rb++) {
-        const ovCt = digits.filter(d => d > rb).length;
-        const ovPct = ovCt / N;
         const ovTheo = (9 - rb) / 10;
-        const ovSafety: RecoveryOption['safety'] =
-            ovPct >= ovTheo + 0.02 ? 'safe' : ovPct >= ovTheo - 0.01 ? 'marginal' : 'unsafe';
-        const unCt = digits.filter(d => d < rb).length;
-        const unPct = unCt / N;
         const unTheo = rb / 10;
-        const unSafety: RecoveryOption['safety'] =
-            unPct >= unTheo + 0.02 ? 'safe' : unPct >= unTheo - 0.01 ? 'marginal' : 'unsafe';
-        recoveryOptions.push({ side: 'OVER',  barrier: rb, winPct: ovPct, theoExp: ovTheo, safety: ovSafety, isAiPick: false });
-        recoveryOptions.push({ side: 'UNDER', barrier: rb, winPct: unPct, theoExp: unTheo, safety: unSafety, isAiPick: false });
+        let ovPassCount = 0, unPassCount = 0;
+        let ovPct1k = 0, unPct1k = 0;
+        for (const sz of recWinSizes) {
+            const sl = digits.slice(-Math.min(sz, N));
+            const ovPct = sl.filter(d => d > rb).length / sl.length;
+            const unPct = sl.filter(d => d < rb).length / sl.length;
+            if (ovPct > ovTheo) ovPassCount++;
+            if (unPct > unTheo) unPassCount++;
+            if (sz === 1000) { ovPct1k = ovPct; unPct1k = unPct; }
+        }
+        const ovSafety: RecoveryOption['safety'] = ovPassCount === 4 ? 'safe' : ovPassCount === 3 ? 'marginal' : 'unsafe';
+        const unSafety: RecoveryOption['safety'] = unPassCount === 4 ? 'safe' : unPassCount === 3 ? 'marginal' : 'unsafe';
+        recoveryOptions.push({ side: 'OVER',  barrier: rb, winPct: ovPct1k, theoExp: ovTheo, windowsPass: ovPassCount, safety: ovSafety, isAiPick: false });
+        recoveryOptions.push({ side: 'UNDER', barrier: rb, winPct: unPct1k, theoExp: unTheo, windowsPass: unPassCount, safety: unSafety, isAiPick: false });
     }
     // Mark the AI-picked recovery (already determined above)
     if (recoveryBarrier !== null && recoveryContractType !== null) {
@@ -1384,7 +1396,7 @@ const AiSignalsPage: React.FC = () => {
                                                             onClick={() => { setEditRecoveryMode('over'); setEditRecoveryBarrier(b); }}
                                                         >
                                                             <span className='ai-rec-opt__dir'>OVER {b}</span>
-                                                            <span className='ai-rec-opt__pct'>{opt ? (opt.winPct * 100).toFixed(0) : '—'}%</span>
+                                                            <span className='ai-rec-opt__wins'>{opt?.windowsPass ?? 0}/4</span>
                                                             <span className='ai-rec-opt__safety'>
                                                                 {opt?.safety === 'safe' ? '✅' : opt?.safety === 'marginal' ? '⚠️' : '⛔'}
                                                             </span>
@@ -1407,7 +1419,7 @@ const AiSignalsPage: React.FC = () => {
                                                             onClick={() => { setEditRecoveryMode('under'); setEditRecoveryBarrier(b); }}
                                                         >
                                                             <span className='ai-rec-opt__dir'>UNDER {b}</span>
-                                                            <span className='ai-rec-opt__pct'>{opt ? (opt.winPct * 100).toFixed(0) : '—'}%</span>
+                                                            <span className='ai-rec-opt__wins'>{opt?.windowsPass ?? 0}/4</span>
                                                             <span className='ai-rec-opt__safety'>
                                                                 {opt?.safety === 'safe' ? '✅' : opt?.safety === 'marginal' ? '⚠️' : '⛔'}
                                                             </span>
