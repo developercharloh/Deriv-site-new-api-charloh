@@ -7,7 +7,7 @@
     <variable id="_r$*.IY9`sKS#np_(6oD">TAKE PROFIT</variable>
     <variable id="K7c]r:AAB_j@8Q7%`R=0">LOSS COUNT</variable>
     <variable id="-`ZG+)*KJJcG3iI-]kTZ">STOP LOSS</variable>
-    <variable id=";rsi|J`fI/a^?7ug_nGd">UNDER PREDICTION</variable>
+    <variable id=";rsi|J`fI/a^?7ug_nGd">RECOVERY BARRIER</variable>
     <variable id="dest_rec_dir">RECOVERY DIRECTION</variable>
     <variable id="Uog,2,dtW%4+n0cpd!_U">MATINGALE</variable>
     <variable id="dest_var_ep">Entry Point</variable>
@@ -99,7 +99,7 @@
                             </value>
                             <next>
                               <block type="variables_set" id="b+#U5h8+OZ)rLx{!tpHW">
-                                <field name="VAR" id=";rsi|J`fI/a^?7ug_nGd">UNDER PREDICTION</field>
+                                <field name="VAR" id=";rsi|J`fI/a^?7ug_nGd">RECOVERY BARRIER</field>
                                 <value name="VALUE">
                                   <block type="math_number" id="qU?qk2rTI1n6!{V`{@}p">
                                     <field name="NUM">6</field>
@@ -215,7 +215,7 @@
                 <field name="VAR" id="Ka^J7/{JO4)WR%a)$yY.">PREDICTION</field>
                 <value name="VALUE">
                   <block type="variables_get" id="*!f?ayzM^8v{8vo4]/C7">
-                    <field name="VAR" id=";rsi|J`fI/a^?7ug_nGd">UNDER PREDICTION</field>
+                    <field name="VAR" id=";rsi|J`fI/a^?7ug_nGd">RECOVERY BARRIER</field>
                   </block>
                 </value>
               </block>
@@ -573,7 +573,7 @@
                                 <value name="TEXT"><shadow type="text"><field name="TEXT"> </field></shadow></value>
                                 <next>
                                   <block type="text_statement" id="dest_buy_rec_s2">
-                                    <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_under_vg"><field name="VAR" id=";rsi|J`fI/a^?7ug_nGd">UNDER PREDICTION</field></block></value>
+                                    <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_under_vg"><field name="VAR" id=";rsi|J`fI/a^?7ug_nGd">RECOVERY BARRIER</field></block></value>
                                     <next>
                                       <block type="text_statement" id="dest_buy_rec_s3">
                                         <value name="TEXT"><shadow type="text"><field name="TEXT"> on </field></shadow></value>
