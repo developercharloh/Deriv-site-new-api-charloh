@@ -561,6 +561,156 @@
     .ai-watchdog-alert--reversed &  { color: #fca5a5; opacity: 0.9; font-weight: 600; }
 }
 
+// ─── Frequency Alignment Monitor ──────────────────────────────────────────────
+.ai-freq-monitor {
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    animation: card-in 0.3s ease both;
+
+    &--ok   { background: rgba(16,185,129,0.07); border: 1px solid rgba(16,185,129,0.25); }
+    &--warn { background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.30); }
+}
+
+.ai-freq-monitor__hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ai-freq-monitor__title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #e2e8f0;
+    letter-spacing: 0.02em;
+}
+
+.ai-freq-monitor__badge {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.04em;
+
+    &--ok   { background: rgba(16,185,129,0.18); color: #34d399; border: 1px solid rgba(16,185,129,0.35); }
+    &--warn { background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.40); }
+}
+
+.ai-freq-monitor__hint {
+    font-size: 10px;
+    color: #64748b;
+    line-height: 1.4;
+}
+
+.ai-freq-monitor__table {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.ai-freq-monitor__row {
+    display: grid;
+    grid-template-columns: 40px 1fr 40px 16px;
+    align-items: center;
+    gap: 8px;
+}
+
+.ai-freq-monitor__window {
+    font-size: 10px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-align: right;
+}
+
+.ai-freq-monitor__bar-wrap {
+    position: relative;
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ai-freq-monitor__bar-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+
+.ai-freq-monitor__bar-mid {
+    position: absolute;
+    left: 50%;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: rgba(255,255,255,0.25);
+}
+
+.ai-freq-monitor__pct {
+    font-size: 10px;
+    font-weight: 700;
+    text-align: right;
+}
+
+.ai-freq-monitor__status {
+    font-size: 11px;
+    font-weight: 800;
+    text-align: center;
+}
+
+.ai-freq-monitor__block-warn {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #fca5a5;
+    background: rgba(239,68,68,0.10);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 8px;
+    padding: 8px 10px;
+    line-height: 1.5;
+}
+
+.ai-freq-monitor__micro {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    flex-wrap: wrap;
+
+    &--ok      { background: rgba(16,185,129,0.10); border: 1px solid rgba(16,185,129,0.25); }
+    &--pending { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25); }
+}
+
+.ai-freq-monitor__micro-lbl {
+    font-size: 10px;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.ai-freq-monitor__micro-ticks {
+    display: flex;
+    gap: 4px;
+}
+
+.ai-freq-monitor__micro-tick {
+    font-size: 14px;
+    line-height: 1;
+
+    &--win  { color: #34d399; }
+    &--loss { color: #f87171; }
+}
+
+.ai-freq-monitor__micro-status {
+    font-size: 10px;
+    font-weight: 800;
+    margin-left: auto;
+
+    &--ok      { color: #34d399; }
+    &--pending { color: #818cf8; }
+}
+
 // Load & Run button
 .aisig-card__run {
     display: flex;

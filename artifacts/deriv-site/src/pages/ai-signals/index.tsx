@@ -58,6 +58,8 @@ interface StatsChecks {
     entryOverdue: { pass: boolean; overdueRatio: number; }
     leadDigit:    { pass: boolean; topWinDigit: number; margin: number; stableBands: number; } | null;
     sideMomentum: { pass: boolean; bandRates: number[]; trend: TrendDir; longTermOk: boolean; } | null;
+    freqAlignment: { pass: boolean; windows: { size: number; winPct: number; dominant: boolean }[]; allAgree: boolean; alignScore: number } | null;
+    microConfirm:  { pass: boolean; last2Wins: number; last2: boolean[] } | null;
     passCount: number; totalChecks: number; isSignal: boolean;
 }
 
@@ -423,6 +425,27 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const sideMomPass = momTrend !== 'falling' && bandRates[3] >= recentBandFloor && longTermOk;
     const sideMomentum: StatsChecks['sideMomentum'] = { pass: sideMomPass, bandRates, trend: momTrend, longTermOk };
 
+    // CHECK 9 — Multi-window frequency alignment
+    // All tick windows must agree that the winning side dominates (winPct > 50%).
+    // This blocks entries during neutral/opposing regimes — the #1 cause of bad-day losses.
+    const freqWinSizes = [50, 100, 500, 1000];
+    const freqWinWindows = freqWinSizes.map(sz => {
+        const sl = digits.slice(-Math.min(sz, N));
+        const winPct = sl.filter(winFn).length / sl.length;
+        return { size: sz, winPct, dominant: winPct > 0.50 };
+    });
+    const freqAlignPass = freqWinWindows.every(w => w.dominant);
+    const freqAlignScore = Math.round((freqWinWindows.filter(w => w.dominant).length / freqWinWindows.length) * 100);
+    const freqAlignment = { pass: freqAlignPass, windows: freqWinWindows, allAgree: freqAlignPass, alignScore: freqAlignScore };
+
+    // CHECK 10 — Micro-confirmation entry gate
+    // Last 2 ticks must be on the winning side — confirms the market is actively moving
+    // in the signal direction right now, not just historically.
+    const last2digits = digits.slice(-2);
+    const last2Results = last2digits.map(winFn);
+    const microConfirmPass = last2Results.length >= 2 && last2Results.every(Boolean);
+    const microConfirm = { pass: microConfirmPass, last2Wins: last2Results.filter(Boolean).length, last2: last2Results };
+
     // ── Recovery market viability (OU only) ─────────────────────────────────
     // Recovery is the opposite-side trade taken after a loss.
     // Require its long-run win rate to be at or within 2pp of its theoretical floor.
@@ -438,22 +461,24 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
 
     // ── Aggregate & gate ─────────────────────────────────────────────────────
     const checkArr = [rawWinRatePass, crossWindowPass, streakPass, autocorrPass,
-                      stabilityPass, entryOverduePass, leadDigitPass, sideMomPass];
+                      stabilityPass, entryOverduePass, leadDigitPass, sideMomPass,
+                      freqAlignPass, microConfirmPass];
     const passCount  = checkArr.filter(Boolean).length;
-    const totalChecks = 8;
+    const totalChecks = 10;
 
     let isSignal: boolean;
     if (tradeType === 'even_odd') {
-        // EO: rawWinRate + crossWindow mandatory; leadDigit + sideMomentum contribute to score
-        isSignal = rawWinRatePass && crossWindowPass && passCount >= 5;
+        // EO: rawWinRate + crossWindow + freqAlignment mandatory (all windows must agree on dominant side)
+        // freqAlignment is the primary new gate — blocks entries during neutral/opposing regimes
+        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && passCount >= 6;
     } else if (tradeType === 'over_under') {
-        // OU: core mandatory + stability + recovery market must exist + ≥ 5/8 total
-        isSignal = rawWinRatePass && crossWindowPass && stabilityPass
+        // OU: core mandatory + stability + freq alignment + recovery market must exist + ≥ 6/10 total
+        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && stabilityPass
             && recoveryMarketOk && winProb >= MIN_WIN_PROB_OU
-            && passCount >= 5;
+            && passCount >= 6;
     } else {
-        // MD: core mandatory + ≥ 5/8 total
-        isSignal = rawWinRatePass && crossWindowPass && passCount >= 5;
+        // MD: core mandatory + freq alignment + ≥ 6/10 total
+        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && passCount >= 6;
     }
 
     const statsChecks: StatsChecks = {
@@ -463,7 +488,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         autocorr:     { pass: autocorrPass,     acf1: a1 },
         stability:    { pass: stabilityPass,    windowsAbove: stabAbove, trend: stabTrend },
         entryOverdue: { pass: entryOverduePass, overdueRatio },
-        leadDigit, sideMomentum,
+        leadDigit, sideMomentum, freqAlignment, microConfirm,
         passCount, totalChecks, isSignal,
     };
 
@@ -1125,6 +1150,65 @@ const AiSignalsPage: React.FC = () => {
                             <span className='ai-panel__call-lbl'>Signal Direction</span>
                             <span className='ai-panel__call-val' style={{ color: vc }}>{result.direction}</span>
                         </div>
+
+                        {/* ── Frequency Alignment Monitor ─────────────────────────────── */}
+                        {result.statsChecks.freqAlignment && (() => {
+                            const fa = result.statsChecks.freqAlignment!;
+                            const mc = result.statsChecks.microConfirm;
+                            const allGreen = fa.allAgree;
+                            return (
+                                <div className={`ai-freq-monitor ai-freq-monitor--${allGreen ? 'ok' : 'warn'}`}>
+                                    <div className='ai-freq-monitor__hd'>
+                                        <span className='ai-freq-monitor__title'>📊 Frequency Alignment</span>
+                                        <span className={`ai-freq-monitor__badge ai-freq-monitor__badge--${allGreen ? 'ok' : 'warn'}`}>
+                                            {allGreen ? '✓ All aligned' : `${fa.alignScore}% aligned`}
+                                        </span>
+                                    </div>
+                                    <div className='ai-freq-monitor__hint'>
+                                        Win-side % must be &gt;50% across ALL windows before a signal fires.
+                                    </div>
+                                    <div className='ai-freq-monitor__table'>
+                                        {fa.windows.map(w => {
+                                            const pct = (w.winPct * 100).toFixed(1);
+                                            const ok = w.dominant;
+                                            return (
+                                                <div key={w.size} className='ai-freq-monitor__row'>
+                                                    <span className='ai-freq-monitor__window'>{w.size}t</span>
+                                                    <div className='ai-freq-monitor__bar-wrap'>
+                                                        <div className='ai-freq-monitor__bar-fill'
+                                                            style={{ width: `${Math.min(100, w.winPct * 100)}%`, background: ok ? '#10b981' : '#ef4444' }} />
+                                                        <div className='ai-freq-monitor__bar-mid' />
+                                                    </div>
+                                                    <span className='ai-freq-monitor__pct' style={{ color: ok ? '#34d399' : '#fca5a5' }}>{pct}%</span>
+                                                    <span className='ai-freq-monitor__status'>{ok ? '✓' : '✗'}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    {!allGreen && (
+                                        <div className='ai-freq-monitor__block-warn'>
+                                            ⛔ Regime not fully aligned — signal blocked. Wait for all windows to agree.
+                                        </div>
+                                    )}
+                                    {/* Micro-confirmation entry status */}
+                                    {mc && (
+                                        <div className={`ai-freq-monitor__micro ai-freq-monitor__micro--${mc.pass ? 'ok' : 'pending'}`}>
+                                            <span className='ai-freq-monitor__micro-lbl'>Entry micro-confirm (last 2 ticks):</span>
+                                            <span className='ai-freq-monitor__micro-ticks'>
+                                                {mc.last2.map((win, i) => (
+                                                    <span key={i} className={`ai-freq-monitor__micro-tick ai-freq-monitor__micro-tick--${win ? 'win' : 'loss'}`}>
+                                                        {win ? '●' : '○'}
+                                                    </span>
+                                                ))}
+                                            </span>
+                                            <span className={`ai-freq-monitor__micro-status ai-freq-monitor__micro-status--${mc.pass ? 'ok' : 'pending'}`}>
+                                                {mc.pass ? '⚡ Enter now' : 'Wait…'}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         {/* Recent Dominance */}
                         <div className={`ai-panel__dom ai-panel__dom--${result.recentDominance.label.toLowerCase()}`}>
