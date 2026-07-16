@@ -1361,89 +1361,87 @@ const AiSignalsPage: React.FC = () => {
                                 <div className='ai-panel__pred-ou'>
                                     <div className='ai-panel__seg' style={{ marginBottom: 8 }}>{(['OVER', 'UNDER'] as const).map(d => (<button key={d} className={`ai-panel__seg-btn${editDir === d ? ' ai-panel__seg-btn--active' : ''}`} onClick={() => setEditDir(d)}>{d}</button>))}</div>
                                     <div className='ai-panel__barrier'><span className='ai-panel__barrier-lbl'>Barrier <span className='ai-panel__barrier-rec'>(AI: {result.barrier ?? '?'}★)</span></span><div className='ai-panel__barrier-grid'>{[1,2,3,4,5,6,7,8].map(b => (<button key={b} className={`ai-panel__barrier-btn${editBarrier === b ? ' ai-panel__barrier-btn--sel' : ''}${result.barrier === b ? ' ai-panel__barrier-btn--rec' : ''}`} onClick={() => setEditBarrier(b)}>{b}</button>))}</div></div>
-                                    {false && (
-                                        <div className='ai-rec-panel'>
-                                            <div className='ai-rec-panel__hd'>
-                                                <span className='ai-rec-panel__title'>🔄 Recovery after loss</span>
-                                                <span className='ai-rec-panel__hint'>Choose your recovery direction &amp; barrier</span>
-                                            </div>
-
-                                            {/* No Recovery */}
-                                            <button
-                                                className={`ai-rec-none${editRecoveryMode === 'none' ? ' ai-rec-none--active' : ''}`}
-                                                onClick={() => setEditRecoveryMode('none')}
-                                            >
-                                                <span className='ai-rec-none__icon'>🚫</span>
-                                                <span className='ai-rec-none__lbl'>No Recovery — trade straight only</span>
-                                                {result.noRecoveryRecommended && (
-                                                    <span className='ai-rec-badge ai-rec-badge--ai'>★ AI Recommended</span>
-                                                )}
-                                                {editRecoveryMode === 'none' && (
-                                                    <span className='ai-rec-badge ai-rec-badge--sel'>Selected</span>
-                                                )}
-                                            </button>
-
-                                            {/* Recovery grid — OVER options */}
-                                            <div className='ai-rec-section-lbl'>Recover with OVER</div>
-                                            <div className='ai-rec-grid'>
-                                                {[1,2,3,4,5,6,7,8].map(b => {
-                                                    const opt = result.recoveryOptions.find(o => o.side === 'OVER' && o.barrier === b)!;
-                                                    const sel = editRecoveryMode === 'over' && editRecoveryBarrier === b;
-                                                    return (
-                                                        <button
-                                                            key={`ov-${b}`}
-                                                            className={`ai-rec-opt ai-rec-opt--${opt?.safety ?? 'marginal'}${sel ? ' ai-rec-opt--sel' : ''}`}
-                                                            onClick={() => { setEditRecoveryMode('over'); setEditRecoveryBarrier(b); }}
-                                                        >
-                                                            <span className='ai-rec-opt__dir'>OVER {b}</span>
-                                                            <span className='ai-rec-opt__wins'>{opt?.windowsPass ?? 0}/4</span>
-                                                            <span className='ai-rec-opt__safety'>
-                                                                {opt?.safety === 'safe' ? '✅' : opt?.safety === 'marginal' ? '⚠️' : '⛔'}
-                                                            </span>
-                                                            {opt?.isAiPick && <span className='ai-rec-opt__ai'>★</span>}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-
-                                            {/* Recovery grid — UNDER options */}
-                                            <div className='ai-rec-section-lbl'>Recover with UNDER</div>
-                                            <div className='ai-rec-grid'>
-                                                {[1,2,3,4,5,6,7,8].map(b => {
-                                                    const opt = result.recoveryOptions.find(o => o.side === 'UNDER' && o.barrier === b)!;
-                                                    const sel = editRecoveryMode === 'under' && editRecoveryBarrier === b;
-                                                    return (
-                                                        <button
-                                                            key={`un-${b}`}
-                                                            className={`ai-rec-opt ai-rec-opt--${opt?.safety ?? 'marginal'}${sel ? ' ai-rec-opt--sel' : ''}`}
-                                                            onClick={() => { setEditRecoveryMode('under'); setEditRecoveryBarrier(b); }}
-                                                        >
-                                                            <span className='ai-rec-opt__dir'>UNDER {b}</span>
-                                                            <span className='ai-rec-opt__wins'>{opt?.windowsPass ?? 0}/4</span>
-                                                            <span className='ai-rec-opt__safety'>
-                                                                {opt?.safety === 'safe' ? '✅' : opt?.safety === 'marginal' ? '⚠️' : '⛔'}
-                                                            </span>
-                                                            {opt?.isAiPick && <span className='ai-rec-opt__ai'>★</span>}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-
-                                            {/* Current selection summary */}
-                                            <div className={`ai-rec-summary ai-rec-summary--${editRecoveryMode === 'none' ? 'none' : (result.recoveryOptions.find(o => o.side === editRecoveryMode.toUpperCase() && o.barrier === editRecoveryBarrier)?.safety ?? 'marginal')}`}>
-                                                {editRecoveryMode === 'none'
-                                                    ? '🚫 No recovery — bot retrades same direction after a loss'
-                                                    : (() => {
-                                                        const opt = result.recoveryOptions.find(o => o.side === editRecoveryMode.toUpperCase() as 'OVER'|'UNDER' && o.barrier === editRecoveryBarrier);
-                                                        const safety = opt?.safety ?? 'marginal';
-                                                        const icon = safety === 'safe' ? '✅' : safety === 'marginal' ? '⚠️' : '⛔';
-                                                        const msg = safety === 'safe' ? 'Safe recovery market' : safety === 'marginal' ? 'Marginal — acceptable risk' : 'Unsafe — consider a different option';
-                                                        return `${icon} ${editRecoveryMode.toUpperCase()} ${editRecoveryBarrier} — ${msg}`;
-                                                    })()
-                                                }
-                                            </div>
+                                    <div className='ai-rec-panel'>
+                                        <div className='ai-rec-panel__hd'>
+                                            <span className='ai-rec-panel__title'>🔄 Recovery after loss</span>
+                                            <span className='ai-rec-panel__hint'>Choose your recovery direction &amp; barrier</span>
                                         </div>
-                                    )}
+
+                                        {/* No Recovery */}
+                                        <button
+                                            className={`ai-rec-none${editRecoveryMode === 'none' ? ' ai-rec-none--active' : ''}`}
+                                            onClick={() => setEditRecoveryMode('none')}
+                                        >
+                                            <span className='ai-rec-none__icon'>🚫</span>
+                                            <span className='ai-rec-none__lbl'>No Recovery — trade straight only</span>
+                                            {result.noRecoveryRecommended && (
+                                                <span className='ai-rec-badge ai-rec-badge--ai'>★ AI Recommended</span>
+                                            )}
+                                            {editRecoveryMode === 'none' && (
+                                                <span className='ai-rec-badge ai-rec-badge--sel'>Selected</span>
+                                            )}
+                                        </button>
+
+                                        {/* Recovery grid — OVER options */}
+                                        <div className='ai-rec-section-lbl'>Recover with OVER</div>
+                                        <div className='ai-rec-grid'>
+                                            {[1,2,3,4,5,6,7,8].map(b => {
+                                                const opt = result.recoveryOptions.find(o => o.side === 'OVER' && o.barrier === b)!;
+                                                const sel = editRecoveryMode === 'over' && editRecoveryBarrier === b;
+                                                return (
+                                                    <button
+                                                        key={`ov-${b}`}
+                                                        className={`ai-rec-opt ai-rec-opt--${opt?.safety ?? 'marginal'}${sel ? ' ai-rec-opt--sel' : ''}`}
+                                                        onClick={() => { setEditRecoveryMode('over'); setEditRecoveryBarrier(b); }}
+                                                    >
+                                                        <span className='ai-rec-opt__dir'>OVER {b}</span>
+                                                        <span className='ai-rec-opt__wins'>{opt?.windowsPass ?? 0}/4</span>
+                                                        <span className='ai-rec-opt__safety'>
+                                                            {opt?.safety === 'safe' ? '✅' : opt?.safety === 'marginal' ? '⚠️' : '⛔'}
+                                                        </span>
+                                                        {opt?.isAiPick && <span className='ai-rec-opt__ai'>★</span>}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Recovery grid — UNDER options */}
+                                        <div className='ai-rec-section-lbl'>Recover with UNDER</div>
+                                        <div className='ai-rec-grid'>
+                                            {[1,2,3,4,5,6,7,8].map(b => {
+                                                const opt = result.recoveryOptions.find(o => o.side === 'UNDER' && o.barrier === b)!;
+                                                const sel = editRecoveryMode === 'under' && editRecoveryBarrier === b;
+                                                return (
+                                                    <button
+                                                        key={`un-${b}`}
+                                                        className={`ai-rec-opt ai-rec-opt--${opt?.safety ?? 'marginal'}${sel ? ' ai-rec-opt--sel' : ''}`}
+                                                        onClick={() => { setEditRecoveryMode('under'); setEditRecoveryBarrier(b); }}
+                                                    >
+                                                        <span className='ai-rec-opt__dir'>UNDER {b}</span>
+                                                        <span className='ai-rec-opt__wins'>{opt?.windowsPass ?? 0}/4</span>
+                                                        <span className='ai-rec-opt__safety'>
+                                                            {opt?.safety === 'safe' ? '✅' : opt?.safety === 'marginal' ? '⚠️' : '⛔'}
+                                                        </span>
+                                                        {opt?.isAiPick && <span className='ai-rec-opt__ai'>★</span>}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Current selection summary */}
+                                        <div className={`ai-rec-summary ai-rec-summary--${editRecoveryMode === 'none' ? 'none' : (result.recoveryOptions.find(o => o.side === editRecoveryMode.toUpperCase() && o.barrier === editRecoveryBarrier)?.safety ?? 'marginal')}`}>
+                                            {editRecoveryMode === 'none'
+                                                ? '🚫 No recovery — bot retrades same direction after a loss'
+                                                : (() => {
+                                                    const opt = result.recoveryOptions.find(o => o.side === editRecoveryMode.toUpperCase() as 'OVER'|'UNDER' && o.barrier === editRecoveryBarrier);
+                                                    const safety = opt?.safety ?? 'marginal';
+                                                    const icon = safety === 'safe' ? '✅' : safety === 'marginal' ? '⚠️' : '⛔';
+                                                    const msg = safety === 'safe' ? 'Safe recovery market' : safety === 'marginal' ? 'Marginal — acceptable risk' : 'Unsafe — consider a different option';
+                                                    return `${icon} ${editRecoveryMode.toUpperCase()} ${editRecoveryBarrier} — ${msg}`;
+                                                })()
+                                            }
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
