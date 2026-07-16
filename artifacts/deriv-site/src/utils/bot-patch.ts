@@ -430,9 +430,13 @@ export function getBotPatches(
             const recoveryBarrier = signal.recoveryBarrier ?? primaryBarrier;
             const entryPt         = parseDigitFrom(signal.entryPoint);
             const destM           = martingale > 0 ? martingale : 1;
+            // RECOVERY DIRECTION drives the if/else purchase block built into the bot XML.
+            // Defaults to 'UNDER' (original Over Destroyer behaviour) when no choice is made.
+            const recDir = signal.recoveryContractType === 'DIGITOVER' ? 'OVER' : 'UNDER';
             return [
-                { blockId: 'Gg%p@Y?OHMC(yjmQxovG', numValue: primaryBarrier  }, // OVER (primary)
-                { blockId: 'b+#U5h8+OZ)rLx{!tpHW', numValue: recoveryBarrier }, // UNDER PREDICTION (recovery)
+                { blockId: 'Gg%p@Y?OHMC(yjmQxovG', numValue: primaryBarrier  }, // OVER (primary barrier)
+                { blockId: 'b+#U5h8+OZ)rLx{!tpHW', numValue: recoveryBarrier }, // UNDER PREDICTION (recovery barrier)
+                { blockId: 'dest_rec_dir_init_ov',  textValue: recDir         }, // RECOVERY DIRECTION: 'OVER'|'UNDER'
                 { blockId: 'dest_ep_init',          numValue: entryPt         }, // Entry Point
                 { blockId: ']~SrY@L1iu:F3H)e`G@.',  numValue: stake           }, // Stake
                 { blockId: 'p84`5MQ~#2$;K~tmMi/Z',  numValue: stake           }, // Initial Stake
@@ -451,9 +455,13 @@ export function getBotPatches(
             const recoveryBarrier = signal.recoveryBarrier ?? primaryBarrier;
             const entryPt         = parseDigitFrom(signal.entryPoint);
             const destM           = martingale > 0 ? martingale : 1;
+            // RECOVERY DIRECTION drives the if/else purchase block built into the bot XML.
+            // Defaults to 'OVER' (original Under Destroyer behaviour) when no choice is made.
+            const recUnDir = signal.recoveryContractType === 'DIGITUNDER' ? 'UNDER' : 'OVER';
             return [
-                { blockId: 'Gg%p@Y?OHMC(yjmQxovG', numValue: primaryBarrier  }, // UNDER PREDICTION (primary)
-                { blockId: 'b+#U5h8+OZ)rLx{!tpHW', numValue: recoveryBarrier }, // OVER PREDICTION 2 (recovery)
+                { blockId: 'Gg%p@Y?OHMC(yjmQxovG', numValue: primaryBarrier  }, // UNDER PREDICTION (primary barrier)
+                { blockId: 'b+#U5h8+OZ)rLx{!tpHW', numValue: recoveryBarrier }, // OVER PREDICTION 2 (recovery barrier)
+                { blockId: 'dest_rec_dir_init_un',  textValue: recUnDir       }, // RECOVERY DIRECTION: 'OVER'|'UNDER'
                 { blockId: 'dest_ep_init',          numValue: entryPt         }, // Entry Point
                 { blockId: ']~SrY@L1iu:F3H)e`G@.',  numValue: stake           }, // Stake
                 { blockId: 'p84`5MQ~#2$;K~tmMi/Z',  numValue: stake           }, // Initial Stake
