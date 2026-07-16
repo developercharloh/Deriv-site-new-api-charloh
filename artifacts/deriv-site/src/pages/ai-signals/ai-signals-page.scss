@@ -23,9 +23,26 @@
     height: 100%;
     overflow-y: auto;
     background: #080d1a;
+    -webkit-overflow-scrolling: touch;   // smooth momentum scroll on iOS
+    overscroll-behavior-y: contain;
 
     // Inherit the panel colour tokens so all ai-panel__* classes render correctly
     --panel-bg: rgba(10, 15, 30, 0.98);
+
+    // ── Mobile: the parent tab-panel chain doesn't propagate a defined height
+    //    down to this element, so height:100% collapses and overflow-y:auto
+    //    never fires.  Give an explicit height calculated from the viewport so
+    //    this element is always the real scroll container.
+    //    6rem  = mobile header bar
+    //    4.4rem = tabs list row
+    @media (max-width: 768px) {
+        height: 100vh;             // fallback
+        height: 100dvh;            // dynamic viewport (hides browser chrome)
+        // subtract header (6rem) + tab list (4.4rem)
+        max-height: calc(100dvh - 10.4rem);
+        min-height: 0;
+        flex-shrink: 0;
+    }
 }
 
 .aisig-page__inner {
@@ -36,6 +53,12 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+
+    // Extra bottom padding so the fixed "Save & Run" bar never covers content.
+    // The bar is ~70 px tall; 110 px gives comfortable breathing room.
+    @media (max-width: 768px) {
+        padding-bottom: 110px;
+    }
 }
 
 // ── Page header ───────────────────────────────────────────────────────────────
