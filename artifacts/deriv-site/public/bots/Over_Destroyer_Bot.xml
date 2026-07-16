@@ -559,28 +559,43 @@
                     <field name="VARIABLE" id="dest_buy_rec_var">dest_buy_rec_text</field>
                     <statement name="STACK">
                       <block type="text_statement" id="dest_buy_rec_s1">
-                        <value name="TEXT"><shadow type="text"><field name="TEXT">🔁 RECOVERY UNDER </field></shadow></value>
+                        <value name="TEXT"><shadow type="text"><field name="TEXT">🔁 RECOVERY </field></shadow></value>
                         <next>
-                          <block type="text_statement" id="dest_buy_rec_s2">
-                            <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_under_vg"><field name="VAR" id=";rsi|J`fI/a^?7ug_nGd">UNDER PREDICTION</field></block></value>
+                          <block type="text_statement" id="dest_buy_rec_s1b">
+                            <value name="TEXT">
+                              <shadow type="text"><field name="TEXT"></field></shadow>
+                              <block type="variables_get" id="dest_buy_rec_dir_vg">
+                                <field name="VAR" id="dest_rec_dir">RECOVERY DIRECTION</field>
+                              </block>
+                            </value>
                             <next>
-                              <block type="text_statement" id="dest_buy_rec_s3">
-                                <value name="TEXT"><shadow type="text"><field name="TEXT"> on </field></shadow></value>
+                              <block type="text_statement" id="dest_buy_rec_s1c">
+                                <value name="TEXT"><shadow type="text"><field name="TEXT"> </field></shadow></value>
                                 <next>
-                                  <block type="text_statement" id="dest_buy_rec_s4">
-                                    <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_sym_vg"><field name="VAR" id="dest_var_symlabel">Symbol Label</field></block></value>
+                                  <block type="text_statement" id="dest_buy_rec_s2">
+                                    <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_under_vg"><field name="VAR" id=";rsi|J`fI/a^?7ug_nGd">UNDER PREDICTION</field></block></value>
                                     <next>
-                                      <block type="text_statement" id="dest_buy_rec_s5">
-                                        <value name="TEXT"><shadow type="text"><field name="TEXT"> | Entry: </field></shadow></value>
+                                      <block type="text_statement" id="dest_buy_rec_s3">
+                                        <value name="TEXT"><shadow type="text"><field name="TEXT"> on </field></shadow></value>
                                         <next>
-                                          <block type="text_statement" id="dest_buy_rec_s6">
-                                            <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_ep_vg"><field name="VAR" id="dest_var_ep">Entry Point</field></block></value>
+                                          <block type="text_statement" id="dest_buy_rec_s4">
+                                            <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_sym_vg"><field name="VAR" id="dest_var_symlabel">Symbol Label</field></block></value>
                                             <next>
-                                              <block type="text_statement" id="dest_buy_rec_s7">
-                                                <value name="TEXT"><shadow type="text"><field name="TEXT"> | Last Digit: </field></shadow></value>
+                                              <block type="text_statement" id="dest_buy_rec_s5">
+                                                <value name="TEXT"><shadow type="text"><field name="TEXT"> | Entry: </field></shadow></value>
                                                 <next>
-                                                  <block type="text_statement" id="dest_buy_rec_s8">
-                                                    <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_tick_vg"><field name="VAR" id="dest_var_tick1">Tick 1</field></block></value>
+                                                  <block type="text_statement" id="dest_buy_rec_s6">
+                                                    <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_ep_vg"><field name="VAR" id="dest_var_ep">Entry Point</field></block></value>
+                                                    <next>
+                                                      <block type="text_statement" id="dest_buy_rec_s7">
+                                                        <value name="TEXT"><shadow type="text"><field name="TEXT"> | Last Digit: </field></shadow></value>
+                                                        <next>
+                                                          <block type="text_statement" id="dest_buy_rec_s8">
+                                                            <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_tick_vg"><field name="VAR" id="dest_var_tick1">Tick 1</field></block></value>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
                                                   </block>
                                                 </next>
                                               </block>
