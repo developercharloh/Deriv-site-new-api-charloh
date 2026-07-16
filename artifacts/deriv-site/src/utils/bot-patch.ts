@@ -85,13 +85,15 @@ export function patchBotXml(
         }
     }
 
-    // 0b. Patch PURCHASE_LIST blocks for cross-direction recovery (Elite Entry Scanner).
-    //     Primary purchase path   (Analysis == "analysis") → contractType
-    //     Recovery purchase paths (Analysis == "gk" + else "Mkorean SV7") → recoveryContractType
-    //     Block IDs sourced directly from Elite_Entry_Scanner_Bot.xml.
+    // 0b. Patch PURCHASE_LIST blocks for cross-direction recovery.
+    //     Primary purchase path   → contractType
+    //     Recovery purchase paths → recoveryContractType
+    //     Block IDs sourced from: Elite_Entry_Scanner_Bot.xml, Over/Under AI Signals Bot,
+    //     and both Destroyer bots (Over_Destroyer_Bot.xml / Under_Destroyer_Bot.xml).
+    //     Destroyer bots share the same primary/recovery purchase block IDs.
     if (contractType || recoveryContractType) {
-        const primaryIds  = new Set([':Nx^]Pu__xj[_w$h8*VZ', 'ouai_primary_buy']);
-        const recoveryIds = new Set(['zOCam5W}Z-j~)}t9XOPF', 'BvzdHe]!O+GD=E;c7NS6', 'ouai_recovery_buy']);
+        const primaryIds  = new Set([':Nx^]Pu__xj[_w$h8*VZ', 'ouai_primary_buy',  '4y{oJ}JR+rPE+*k/d7zV']);
+        const recoveryIds = new Set(['zOCam5W}Z-j~)}t9XOPF', 'BvzdHe]!O+GD=E;c7NS6', 'ouai_recovery_buy', 'JTxBKT[gw:s;+QK9bw,!']);
         const allPurchaseBlocks = doc.getElementsByTagName('block');
         for (let i = 0; i < allPurchaseBlocks.length; i++) {
             const bid = allPurchaseBlocks[i].getAttribute('id') ?? '';

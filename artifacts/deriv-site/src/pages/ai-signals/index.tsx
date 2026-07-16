@@ -63,11 +63,21 @@ interface StatsChecks {
     passCount: number; totalChecks: number; isSignal: boolean;
 }
 
+interface RecoveryOption {
+    side: 'OVER' | 'UNDER';
+    barrier: number;
+    winPct: number;
+    theoExp: number;
+    safety: 'safe' | 'marginal' | 'unsafe';
+    isAiPick: boolean;
+}
+
 interface MarketResult {
     sym: DerivVolatility; direction: string; contractType: string;
     barrier: number | null; recoveryBarrier: number | null;
     recoveryContractType: string | null; recoveryDirection: string | null;
     winProb: number; sampleSize: number; votes: ModelVotes;
+    recoveryOptions: RecoveryOption[]; noRecoveryRecommended: boolean;
     entryDigits: { digit: number; recommended: boolean; conditional: number; freqPct: number; avgWaitTicks: number; skipAdjustedWait: number }[];
     segmentAgrees: boolean; signalStrength: number; pip: number;
     regimeScore: number; regimeOk: boolean; gapDetected: boolean; tfAgreement: number;
@@ -446,6 +456,34 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const microConfirmPass = last2Results.length >= 2 && last2Results.every(Boolean);
     const microConfirm = { pass: microConfirmPass, last2Wins: last2Results.filter(Boolean).length, last2: last2Results };
 
+    // ── Recovery options — all barriers on both sides with safety ratings ───
+    // Compute win rate for every possible OVER/UNDER recovery option (barriers 1–8).
+    // Used by the UI to show safety badges and let the user pick freely.
+    const recoveryOptions: RecoveryOption[] = [];
+    for (let rb = 1; rb <= 8; rb++) {
+        const ovCt = digits.filter(d => d > rb).length;
+        const ovPct = ovCt / N;
+        const ovTheo = (9 - rb) / 10;
+        const ovSafety: RecoveryOption['safety'] =
+            ovPct >= ovTheo + 0.02 ? 'safe' : ovPct >= ovTheo - 0.01 ? 'marginal' : 'unsafe';
+        const unCt = digits.filter(d => d < rb).length;
+        const unPct = unCt / N;
+        const unTheo = rb / 10;
+        const unSafety: RecoveryOption['safety'] =
+            unPct >= unTheo + 0.02 ? 'safe' : unPct >= unTheo - 0.01 ? 'marginal' : 'unsafe';
+        recoveryOptions.push({ side: 'OVER',  barrier: rb, winPct: ovPct, theoExp: ovTheo, safety: ovSafety, isAiPick: false });
+        recoveryOptions.push({ side: 'UNDER', barrier: rb, winPct: unPct, theoExp: unTheo, safety: unSafety, isAiPick: false });
+    }
+    // Mark the AI-picked recovery (already determined above)
+    if (recoveryBarrier !== null && recoveryContractType !== null) {
+        const aiSide = recoveryContractType === 'DIGITOVER' ? 'OVER' : 'UNDER';
+        const aiOpt = recoveryOptions.find(o => o.side === aiSide && o.barrier === recoveryBarrier);
+        if (aiOpt) aiOpt.isAiPick = true;
+    }
+    // Recommend "No Recovery" when primary market is very strong AND all recovery options are weak
+    const safeRecoveries = recoveryOptions.filter(o => o.safety === 'safe').length;
+    const noRecoveryRecommended = tradeType === 'over_under' && r1k >= theorExp + 0.06 && safeRecoveries <= 2;
+
     // ── Recovery market viability (OU only) ─────────────────────────────────
     // Recovery is the opposite-side trade taken after a loss.
     // Require its long-run win rate to be at or within 2pp of its theoretical floor.
@@ -518,7 +556,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         signalStrength, recentDominance,
         regimeScore, regimeOk: crossWindowPass && stabilityPass,
         gapDetected: false, tfAgreement: Math.min(4, Math.round(passCount / 2)),
-        statsChecks,
+        statsChecks, recoveryOptions, noRecoveryRecommended,
     };
 }
 
@@ -606,6 +644,7 @@ const AiSignalsPage: React.FC = () => {
     const [editDir,    setEditDir]    = useState<'OVER' | 'UNDER' | 'EVEN' | 'ODD'>('OVER');
     const [editBarrier,setEditBarrier]= useState<number>(5);
     const [editRecoveryBarrier, setEditRecoveryBarrier] = useState<number | null>(null);
+    const [editRecoveryMode,    setEditRecoveryMode]    = useState<'none' | 'over' | 'under'>('under');
     const [editMatchesSide, setEditMatchesSide] = useState<'MATCHES' | 'DIFFERS'>('MATCHES');
     const [editTargetDigit, setEditTargetDigit] = useState<number>(0);
     const [sessionCount, setSessionCount] = useState<number>(0);
@@ -648,9 +687,28 @@ const AiSignalsPage: React.FC = () => {
     // Sync editable state when result arrives
     useEffect(() => {
         if (!result) return;
-        if (tradeType === 'over_under') { const parts = result.direction.split(' '); setEditDir((parts[0] as 'OVER' | 'UNDER') ?? 'OVER'); setEditBarrier(result.barrier ?? 5); setEditRecoveryBarrier(result.recoveryBarrier); }
-        else if (tradeType === 'matches_differs') { const parts = result.direction.split(' '); setEditMatchesSide((parts[0] as 'MATCHES' | 'DIFFERS') ?? 'MATCHES'); setEditTargetDigit(Number(parts[1]) || 0); }
-        else { setEditDir((result.direction as 'EVEN' | 'ODD') ?? 'EVEN'); }
+        if (tradeType === 'over_under') {
+            const parts = result.direction.split(' ');
+            setEditDir((parts[0] as 'OVER' | 'UNDER') ?? 'OVER');
+            setEditBarrier(result.barrier ?? 5);
+            // Set recovery mode from AI recommendation
+            if (result.noRecoveryRecommended) {
+                setEditRecoveryMode('none');
+                setEditRecoveryBarrier(null);
+            } else if (result.recoveryContractType === 'DIGITOVER') {
+                setEditRecoveryMode('over');
+                setEditRecoveryBarrier(result.recoveryBarrier);
+            } else {
+                setEditRecoveryMode('under');
+                setEditRecoveryBarrier(result.recoveryBarrier);
+            }
+        } else if (tradeType === 'matches_differs') {
+            const parts = result.direction.split(' ');
+            setEditMatchesSide((parts[0] as 'MATCHES' | 'DIFFERS') ?? 'MATCHES');
+            setEditTargetDigit(Number(parts[1]) || 0);
+        } else {
+            setEditDir((result.direction as 'EVEN' | 'ODD') ?? 'EVEN');
+        }
         setEditEntryPoint(result.entryDigits[0]?.digit ?? 0);
         setHasSignal(true);
     }, [result, tradeType]);
@@ -850,7 +908,33 @@ const AiSignalsPage: React.FC = () => {
             if (tradeType === 'over_under') { direction = `${editDir} ${editBarrier}`; botId = destroyerBotIdFromDirection(direction); }
             else if (tradeType === 'matches_differs') { direction = `${editMatchesSide} ${editTargetDigit}`; botId = editMatchesSide === 'DIFFERS' ? 'differ-v2' : 'matches-signal'; }
             else { direction = editDir; botId = cfgEoRecovery ? 'even-odd-recovery' : 'even-odd-scanner'; }
-            const signal: BotSignal = { symbol: result.sym.code, symbolLabel: result.sym.label, direction, entryPoint: `Digit ${editEntryPoint}`, confidence: result.signalStrength, market: tradeType, recoveryBarrier: tradeType === 'over_under' ? (editRecoveryBarrier ?? result.recoveryBarrier ?? editBarrier) : undefined };
+
+            // ── Resolve recovery direction & contract type ───────────────────
+            // 'none'  → retrade same direction (no flip); primary contractType reused
+            // 'over'  → recover with DIGITOVER at chosen barrier
+            // 'under' → recover with DIGITUNDER at chosen barrier
+            const primaryCt = tradeType === 'over_under'
+                ? (editDir === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER') : undefined;
+            let recoveryBarrierFinal: number | undefined;
+            let recoveryCt: string | undefined;
+            if (tradeType === 'over_under') {
+                if (editRecoveryMode === 'none') {
+                    // Same direction = no flip — bot retrades primary side
+                    recoveryBarrierFinal = editBarrier;
+                    recoveryCt = primaryCt;
+                } else {
+                    recoveryBarrierFinal = editRecoveryBarrier ?? result.recoveryBarrier ?? editBarrier;
+                    recoveryCt = editRecoveryMode === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
+                }
+            }
+
+            const signal: BotSignal = {
+                symbol: result.sym.code, symbolLabel: result.sym.label, direction,
+                entryPoint: `Digit ${editEntryPoint}`, confidence: result.signalStrength, market: tradeType,
+                recoveryBarrier: recoveryBarrierFinal,
+                contractType: primaryCt,
+                recoveryContractType: recoveryCt,
+            };
             const stake = parseFloat(cfgStake) || 0.5, takeProfit = parseFloat(cfgTakeProfit) || 10, stopLoss = parseFloat(cfgStopLoss) || 30, martingale = cfgMartingaleOn ? (parseFloat(cfgMartingale) || 1.5) : 0;
             const doc = await fetchAndPatchBot(botId, signal, stake, takeProfit, stopLoss, martingale);
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
@@ -862,7 +946,7 @@ const AiSignalsPage: React.FC = () => {
             store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
             setTimeout(() => { if (!store.run_panel.is_running) store.run_panel.onRunButtonClick(); setRunState('idle'); setShowRunConfig(false); }, 500);
         } catch (e: any) { setRunState('error'); setRunErr(e?.message || 'Failed to launch bot.'); }
-    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, cfgEoRecovery, store]);
+    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editRecoveryMode, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, cfgEoRecovery, store]);
 
     // ── Derived display values ────────────────────────────────────────────────
     const vc = result ? voteColor(result.statsChecks.passCount) : '#6366f1';
@@ -1266,11 +1350,86 @@ const AiSignalsPage: React.FC = () => {
                                     <div className='ai-panel__seg' style={{ marginBottom: 8 }}>{(['OVER', 'UNDER'] as const).map(d => (<button key={d} className={`ai-panel__seg-btn${editDir === d ? ' ai-panel__seg-btn--active' : ''}`} onClick={() => setEditDir(d)}>{d}</button>))}</div>
                                     <div className='ai-panel__barrier'><span className='ai-panel__barrier-lbl'>Barrier <span className='ai-panel__barrier-rec'>(AI: {result.barrier ?? '?'}★)</span></span><div className='ai-panel__barrier-grid'>{[1,2,3,4,5,6,7,8].map(b => (<button key={b} className={`ai-panel__barrier-btn${editBarrier === b ? ' ai-panel__barrier-btn--sel' : ''}${result.barrier === b ? ' ai-panel__barrier-btn--rec' : ''}`} onClick={() => setEditBarrier(b)}>{b}</button>))}</div></div>
                                     {tradeType === 'over_under' && (
-                                        <div className='ai-panel__recovery'>
-                                            <div className='ai-panel__recovery-hd'><span className='ai-panel__recovery-icon'>🔄</span><span className='ai-panel__recovery-lbl'>Recovery barrier (after loss)</span>{result.recoveryBarrier !== null && (<span className='ai-panel__recovery-rec'>AI: {result.recoveryDirection ?? (editDir === 'OVER' ? `UNDER ${result.recoveryBarrier}` : `OVER ${result.recoveryBarrier}`)} ★</span>)}</div>
-                                            <select className='ai-panel__recovery-select' value={editRecoveryBarrier ?? result.recoveryBarrier ?? ''} onChange={e => setEditRecoveryBarrier(Number(e.target.value))}>
-                                                {editDir === 'OVER' ? [8,7,6,5,4,3,2,1].map(v => (<option key={v} value={v}>UNDER {v}{result.recoveryBarrier === v ? ' ★ Recommended' : ''}</option>)) : [0,1,2,3,4,5,6,7,8].map(v => (<option key={v} value={v}>OVER {v}{result.recoveryBarrier === v ? ' ★ Recommended' : ''}</option>))}
-                                            </select>
+                                        <div className='ai-rec-panel'>
+                                            <div className='ai-rec-panel__hd'>
+                                                <span className='ai-rec-panel__title'>🔄 Recovery after loss</span>
+                                                <span className='ai-rec-panel__hint'>Choose your recovery direction &amp; barrier</span>
+                                            </div>
+
+                                            {/* No Recovery */}
+                                            <button
+                                                className={`ai-rec-none${editRecoveryMode === 'none' ? ' ai-rec-none--active' : ''}`}
+                                                onClick={() => setEditRecoveryMode('none')}
+                                            >
+                                                <span className='ai-rec-none__icon'>🚫</span>
+                                                <span className='ai-rec-none__lbl'>No Recovery — trade straight only</span>
+                                                {result.noRecoveryRecommended && (
+                                                    <span className='ai-rec-badge ai-rec-badge--ai'>★ AI Recommended</span>
+                                                )}
+                                                {editRecoveryMode === 'none' && (
+                                                    <span className='ai-rec-badge ai-rec-badge--sel'>Selected</span>
+                                                )}
+                                            </button>
+
+                                            {/* Recovery grid — OVER options */}
+                                            <div className='ai-rec-section-lbl'>Recover with OVER</div>
+                                            <div className='ai-rec-grid'>
+                                                {[1,2,3,4,5,6,7,8].map(b => {
+                                                    const opt = result.recoveryOptions.find(o => o.side === 'OVER' && o.barrier === b)!;
+                                                    const sel = editRecoveryMode === 'over' && editRecoveryBarrier === b;
+                                                    return (
+                                                        <button
+                                                            key={`ov-${b}`}
+                                                            className={`ai-rec-opt ai-rec-opt--${opt?.safety ?? 'marginal'}${sel ? ' ai-rec-opt--sel' : ''}`}
+                                                            onClick={() => { setEditRecoveryMode('over'); setEditRecoveryBarrier(b); }}
+                                                        >
+                                                            <span className='ai-rec-opt__dir'>OVER {b}</span>
+                                                            <span className='ai-rec-opt__pct'>{opt ? (opt.winPct * 100).toFixed(0) : '—'}%</span>
+                                                            <span className='ai-rec-opt__safety'>
+                                                                {opt?.safety === 'safe' ? '✅' : opt?.safety === 'marginal' ? '⚠️' : '⛔'}
+                                                            </span>
+                                                            {opt?.isAiPick && <span className='ai-rec-opt__ai'>★</span>}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Recovery grid — UNDER options */}
+                                            <div className='ai-rec-section-lbl'>Recover with UNDER</div>
+                                            <div className='ai-rec-grid'>
+                                                {[1,2,3,4,5,6,7,8].map(b => {
+                                                    const opt = result.recoveryOptions.find(o => o.side === 'UNDER' && o.barrier === b)!;
+                                                    const sel = editRecoveryMode === 'under' && editRecoveryBarrier === b;
+                                                    return (
+                                                        <button
+                                                            key={`un-${b}`}
+                                                            className={`ai-rec-opt ai-rec-opt--${opt?.safety ?? 'marginal'}${sel ? ' ai-rec-opt--sel' : ''}`}
+                                                            onClick={() => { setEditRecoveryMode('under'); setEditRecoveryBarrier(b); }}
+                                                        >
+                                                            <span className='ai-rec-opt__dir'>UNDER {b}</span>
+                                                            <span className='ai-rec-opt__pct'>{opt ? (opt.winPct * 100).toFixed(0) : '—'}%</span>
+                                                            <span className='ai-rec-opt__safety'>
+                                                                {opt?.safety === 'safe' ? '✅' : opt?.safety === 'marginal' ? '⚠️' : '⛔'}
+                                                            </span>
+                                                            {opt?.isAiPick && <span className='ai-rec-opt__ai'>★</span>}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Current selection summary */}
+                                            <div className={`ai-rec-summary ai-rec-summary--${editRecoveryMode === 'none' ? 'none' : (result.recoveryOptions.find(o => o.side === editRecoveryMode.toUpperCase() && o.barrier === editRecoveryBarrier)?.safety ?? 'marginal')}`}>
+                                                {editRecoveryMode === 'none'
+                                                    ? '🚫 No recovery — bot retrades same direction after a loss'
+                                                    : (() => {
+                                                        const opt = result.recoveryOptions.find(o => o.side === editRecoveryMode.toUpperCase() as 'OVER'|'UNDER' && o.barrier === editRecoveryBarrier);
+                                                        const safety = opt?.safety ?? 'marginal';
+                                                        const icon = safety === 'safe' ? '✅' : safety === 'marginal' ? '⚠️' : '⛔';
+                                                        const msg = safety === 'safe' ? 'Safe recovery market' : safety === 'marginal' ? 'Marginal — acceptable risk' : 'Unsafe — consider a different option';
+                                                        return `${icon} ${editRecoveryMode.toUpperCase()} ${editRecoveryBarrier} — ${msg}`;
+                                                    })()
+                                                }
+                                            </div>
                                         </div>
                                     )}
                                 </div>

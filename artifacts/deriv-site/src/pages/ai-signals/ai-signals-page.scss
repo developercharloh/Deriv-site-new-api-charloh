@@ -561,6 +561,155 @@
     .ai-watchdog-alert--reversed &  { color: #fca5a5; opacity: 0.9; font-weight: 600; }
 }
 
+// ─── Recovery Panel (Over/Under) ──────────────────────────────────────────────
+.ai-rec-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: rgba(10,15,30,0.6);
+    border: 1px solid rgba(99,102,241,0.2);
+    border-radius: 12px;
+    animation: card-in 0.25s ease both;
+}
+
+.ai-rec-panel__hd {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.ai-rec-panel__title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #e2e8f0;
+}
+
+.ai-rec-panel__hint {
+    font-size: 10px;
+    color: #475569;
+}
+
+.ai-rec-section-lbl {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+// No Recovery button
+.ai-rec-none {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(100,116,139,0.25);
+    background: rgba(30,41,59,0.5);
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s;
+
+    &:hover { background: rgba(30,41,59,0.85); border-color: rgba(100,116,139,0.5); }
+
+    &--active {
+        background: rgba(239,68,68,0.10);
+        border-color: rgba(239,68,68,0.40);
+    }
+}
+
+.ai-rec-none__icon { font-size: 14px; flex-shrink: 0; }
+.ai-rec-none__lbl  { font-size: 11px; font-weight: 600; color: #cbd5e1; flex: 1; }
+
+// Recovery options grid
+.ai-rec-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+}
+
+.ai-rec-opt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 7px 4px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.13s;
+    background: rgba(15,23,42,0.6);
+
+    &--safe    { border-color: rgba(16,185,129,0.20); &:hover { border-color: rgba(16,185,129,0.50); background: rgba(16,185,129,0.08); } }
+    &--marginal{ border-color: rgba(245,158,11,0.20); &:hover { border-color: rgba(245,158,11,0.50); background: rgba(245,158,11,0.08); } }
+    &--unsafe  { border-color: rgba(239,68,68,0.15);  opacity: 0.6; &:hover { opacity: 0.85; border-color: rgba(239,68,68,0.40); } }
+
+    &--sel {
+        border-color: #6366f1 !important;
+        background: rgba(99,102,241,0.14) !important;
+        opacity: 1 !important;
+        box-shadow: 0 0 0 2px rgba(99,102,241,0.25);
+    }
+}
+
+.ai-rec-opt__dir {
+    font-size: 9px;
+    font-weight: 700;
+    color: #cbd5e1;
+    line-height: 1;
+}
+
+.ai-rec-opt__pct {
+    font-size: 10px;
+    font-weight: 800;
+    color: #94a3b8;
+}
+
+.ai-rec-opt__safety { font-size: 10px; line-height: 1; }
+
+.ai-rec-opt__ai {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    font-size: 8px;
+    color: #fbbf24;
+    font-weight: 900;
+}
+
+// Badge variants
+.ai-rec-badge {
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+
+    &--ai  { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+    &--sel { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
+    &--safe    { background: rgba(16,185,129,0.15); color: #34d399; }
+    &--marginal{ background: rgba(245,158,11,0.15); color: #fcd34d; }
+    &--unsafe  { background: rgba(239,68,68,0.15);  color: #fca5a5; }
+}
+
+// Selection summary bar
+.ai-rec-summary {
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1.4;
+
+    &--none    { background: rgba(100,116,139,0.10); color: #94a3b8; border: 1px solid rgba(100,116,139,0.2); }
+    &--safe    { background: rgba(16,185,129,0.09);  color: #34d399; border: 1px solid rgba(16,185,129,0.25); }
+    &--marginal{ background: rgba(245,158,11,0.09);  color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
+    &--unsafe  { background: rgba(239,68,68,0.09);   color: #fca5a5; border: 1px solid rgba(239,68,68,0.25); }
+}
+
 // ─── Frequency Alignment Monitor ──────────────────────────────────────────────
 .ai-freq-monitor {
     border-radius: 12px;
