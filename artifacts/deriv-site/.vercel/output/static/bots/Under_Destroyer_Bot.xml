@@ -1,6 +1,6 @@
 <xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
   <variables>
-    <variable id="5O9q~mgU7oI}P5FV]~pV">OVER PREDICTION 2</variable>
+    <variable id="5O9q~mgU7oI}P5FV]~pV">RECOVERY BARRIER</variable>
     <variable id="Ir!fCb`:.((7M2tYG|MA">INITIAL STAKE </variable>
     <variable id="+Y}X(rY0|AWJfaHEEbG{">STAKE</variable>
     <variable id="Ka^J7/{JO4)WR%a)$yY.">PREDICTION</variable>
@@ -99,7 +99,7 @@
                             </value>
                             <next>
                               <block type="variables_set" id="b+#U5h8+OZ)rLx{!tpHW">
-                                <field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">OVER PREDICTION 2</field>
+                                <field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">RECOVERY BARRIER</field>
                                 <value name="VALUE">
                                   <block type="math_number" id="qU?qk2rTI1n6!{V`{@}p">
                                     <field name="NUM">4</field>
@@ -215,7 +215,7 @@
                 <field name="VAR" id="Ka^J7/{JO4)WR%a)$yY.">PREDICTION</field>
                 <value name="VALUE">
                   <block type="variables_get" id="*!f?ayzM^8v{8vo4]/C7">
-                    <field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">OVER PREDICTION 2</field>
+                    <field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">RECOVERY BARRIER</field>
                   </block>
                 </value>
               </block>
@@ -573,7 +573,7 @@
                                 <value name="TEXT"><shadow type="text"><field name="TEXT"> </field></shadow></value>
                                 <next>
                                   <block type="text_statement" id="dest_buy_rec_s2">
-                                    <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_over_vg"><field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">OVER PREDICTION 2</field></block></value>
+                                    <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="variables_get" id="dest_buy_rec_over_vg"><field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">RECOVERY BARRIER</field></block></value>
                                     <next>
                                       <block type="text_statement" id="dest_buy_rec_s3">
                                         <value name="TEXT"><shadow type="text"><field name="TEXT"> on </field></shadow></value>
@@ -725,10 +725,10 @@
     </statement>
   </block>
   <block type="variables_get" id=":5b7x[=-E[Wob%wM!gBf" disabled="true" x="0" y="1188">
-    <field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">OVER PREDICTION 2</field>
+    <field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">RECOVERY BARRIER</field>
   </block>
   <block type="variables_get" id="7wO-FEcw(^%XrM1o`YI*" disabled="true" x="0" y="1276">
-    <field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">OVER PREDICTION 2</field>
+    <field name="VAR" id="5O9q~mgU7oI}P5FV]~pV">RECOVERY BARRIER</field>
   </block>
   <block type="math_number" id="p,v$h6en(Z)cB`bx14B7" disabled="true" x="0" y="1364">
     <field name="NUM">0.35</field>
