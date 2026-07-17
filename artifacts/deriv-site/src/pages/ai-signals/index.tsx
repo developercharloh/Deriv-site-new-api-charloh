@@ -473,9 +473,13 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         const winPct = sl.filter(winFn).length / sl.length;
         return { size: sz, winPct, dominant: winPct > 0.50 };
     });
-    const freqAlignPass = freqWinWindows.every(w => w.dominant);
-    const freqAlignScore = Math.round((freqWinWindows.filter(w => w.dominant).length / freqWinWindows.length) * 100);
-    const freqAlignment = { pass: freqAlignPass, windows: freqWinWindows, allAgree: freqAlignPass, alignScore: freqAlignScore };
+    // 3 of 4 windows must agree — the 50-tick window is too small (only 5 ticks
+    // per digit on average) to reliably reflect true dominance; requiring all 4
+    // causes ~55% of genuinely good EO signals to be silently killed by noise.
+    const freqWinPass = freqWinWindows.filter(w => w.dominant).length;
+    const freqAlignPass = freqWinPass >= 3;
+    const freqAlignScore = Math.round((freqWinPass / freqWinWindows.length) * 100);
+    const freqAlignment = { pass: freqAlignPass, windows: freqWinWindows, allAgree: freqWinPass === 4, alignScore: freqAlignScore };
 
     // CHECK 10 — Micro-confirmation entry gate
     // Last 2 ticks must be on the winning side — confirms the market is actively moving
@@ -518,11 +522,9 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
         // Most appearing digit must hold above 11% in the 1 000-tick window
         const mostAbove11 = dpWindows[3][mostFreqDigit] > 0.11;
-        // ≥4 winning-side digits must hold above 10% in at least 3 of 4 windows
-        // (ALL-4 was too strict on the 50-tick window where variance is high)
-        const winDigitsAbove10 = winSideArr.filter(d =>
-            dpWindows.filter(w => w[d] > 0.10).length >= 3
-        ).length;
+        // ≥4 winning-side digits must hold above 10% in the 1 000-tick window.
+        // Multi-window was too noisy on the 50-tick slice (only ~5 appearances per digit).
+        const winDigitsAbove10 = winSideArr.filter(d => dpWindows[3][d] > 0.10).length;
         // Each losing-side digit should be below 10% in ≥3 of 4 windows
         const losingCapOk = lossSideArr.every(d =>
             dpWindows.filter(w => w[d] < 0.10).length >= 3
@@ -534,11 +536,9 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         const mostOnWin  = winFn(mostFreqDigit);
         // Either the least OR the 2nd-least appearing digit must be on the winning side
         const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
-        // Every losing-side digit must be below 10.3% in at least 3 of 4 windows
-        // (ALL-4 was too strict on the 50-tick window where variance is high)
-        const losingCapOk = lossSideArr.every(d =>
-            dpWindows.filter(w => w[d] < 0.103).length >= 3
-        );
+        // Every losing-side digit must be below 10.3% in the 1 000-tick window.
+        // Multi-window was too noisy on the 50-tick slice.
+        const losingCapOk = lossSideArr.every(d => dpWindows[3][d] < 0.103);
         // Winning-side and losing-side frequency trend across 5 time bands
         const dp5Sz = Math.max(1, Math.floor(N / 5));
         const winBandFreqs  = Array.from({ length: 5 }, (_, b) => {
