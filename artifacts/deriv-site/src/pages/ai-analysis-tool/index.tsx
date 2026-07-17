@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { observer } from 'mobx-react-lite';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
+import {
+    DERIV_CONTINUOUS_VOLATILITIES,
+    DERIV_STANDARD_VOLATILITIES,
+} from '@/utils/deriv-volatilities';
 import './ai-analysis-tool.scss';
 
 // ─── Bot Redirector ───────────────────────────────────────────────────────────
@@ -21,22 +25,27 @@ const BotRedirector: React.FC<{ setActiveTab: (t: number) => void }> = observer(
 });
 
 // ─── Markets ──────────────────────────────────────────────────────────────────
-const MARKETS = [
-    { code: 'R_10',    label: 'Volatility 10',       short: 'V10'      },
-    { code: 'R_25',    label: 'Volatility 25',       short: 'V25'      },
-    { code: 'R_50',    label: 'Volatility 50',       short: 'V50'      },
-    { code: 'R_75',    label: 'Volatility 75',       short: 'V75'      },
-    { code: 'R_100',   label: 'Volatility 100',      short: 'V100'     },
-    { code: '1HZ10V',  label: 'Volatility 10 (1s)',  short: 'V10(1s)'  },
-    { code: '1HZ25V',  label: 'Volatility 25 (1s)',  short: 'V25(1s)'  },
-    { code: '1HZ50V',  label: 'Volatility 50 (1s)',  short: 'V50(1s)'  },
-    { code: '1HZ75V',  label: 'Volatility 75 (1s)',  short: 'V75(1s)'  },
-    { code: '1HZ100V', label: 'Volatility 100 (1s)', short: 'V100(1s)' },
-    { code: 'JD10',    label: 'Jump 10',             short: 'J10'      },
-    { code: 'JD25',    label: 'Jump 25',             short: 'J25'      },
-    { code: 'JD50',    label: 'Jump 50',             short: 'J50'      },
-    { code: 'JD75',    label: 'Jump 75',             short: 'J75'      },
-    { code: 'JD100',   label: 'Jump 100',            short: 'J100'     },
+// Sourced from the same canonical list used by the Charts section (advanced-dtrader).
+// Order: continuous (1s) → standard (2s) → jump → crash → boom
+const MARKETS: { code: string; label: string; short: string }[] = [
+    // Continuous (1-second tick) volatility indices
+    ...DERIV_CONTINUOUS_VOLATILITIES.map(v => ({ code: v.code, label: v.label.replace(' Index', ''), short: v.short })),
+    // Standard (2-second tick) volatility indices
+    ...DERIV_STANDARD_VOLATILITIES.map(v => ({ code: v.code, label: v.label.replace(' Index', ''), short: v.short })),
+    // Jump indices
+    { code: 'JD10',     label: 'Jump 10',    short: 'J10'   },
+    { code: 'JD25',     label: 'Jump 25',    short: 'J25'   },
+    { code: 'JD50',     label: 'Jump 50',    short: 'J50'   },
+    { code: 'JD75',     label: 'Jump 75',    short: 'J75'   },
+    { code: 'JD100',    label: 'Jump 100',   short: 'J100'  },
+    // Crash indices
+    { code: 'CRASH300N', label: 'Crash 300',  short: 'C300'  },
+    { code: 'CRASH500',  label: 'Crash 500',  short: 'C500'  },
+    { code: 'CRASH1000', label: 'Crash 1000', short: 'C1000' },
+    // Boom indices
+    { code: 'BOOM300N',  label: 'Boom 300',   short: 'B300'  },
+    { code: 'BOOM500',   label: 'Boom 500',   short: 'B500'  },
+    { code: 'BOOM1000',  label: 'Boom 1000',  short: 'B1000' },
 ];
 
 const ANALYSIS_TYPES = [
