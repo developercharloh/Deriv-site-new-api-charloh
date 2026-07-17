@@ -1007,10 +1007,10 @@ const AiSignalOrb: React.FC = () => {
                     market:          tradeType,
                     recoveryBarrier: tradeType === 'over_under' ? (editRecoveryBarrier ?? sess.barrier ?? undefined) : undefined,
                 };
-                // Single-contract mode: SL just above stake (stops after 1 loss),
-                // TP just below a single win (stops after 1 win).
-                const singleSL = sess.curStake * 1.05;
-                const singleTP = sess.curStake * 0.80;
+                // Single-contract mode: Max Loss < stake so bot stops BEFORE firing
+                // any recovery trade; TP < 1 win so bot stops after the first win.
+                const singleSL = sess.curStake * 0.95;
+                const singleTP = sess.curStake * 0.50;
 
                 if (store.run_panel.is_running) {
                     store.run_panel.onStopButtonClick();
@@ -1204,13 +1204,18 @@ const AiSignalOrb: React.FC = () => {
             const martingale = cfgMartingaleOn ? (parseFloat(cfgMartingale) || 1.5) : 0;
 
             // ── Smart Martingale mode (EO + OU only) ──────────────────────────
-            // When ON the bot XML is set to single-contract mode (SL/TP just big
-            // enough to stop after exactly 1 trade).  The orb owns the full loop:
-            // after a loss it waits for conditions, then re-fires at the doubled
-            // stake.  The bot's internal martingale is disabled (martingale = 0).
+            // When ON the bot XML is set to single-contract mode so it stops after
+            // exactly one trade.  The orb owns the full recovery loop.
+            //
+            // Key: Max Loss MUST be LESS than the stake so after 1 loss the bot's
+            // running total (= stake) already exceeds Max Loss and it skips the
+            // recovery trade entirely.  stake * 0.95 → 1 loss of $20 > Max Loss
+            // $19 → bot halts before firing a second trade. ✓
+            // Target Profit at stake * 0.50 → any EO win (~$19 on $20) exceeds
+            // the $10 TP threshold → bot halts after exactly 1 win. ✓
             const isSml = cfgSmartMart && (tradeType === 'even_odd' || tradeType === 'over_under');
-            const patchSL   = isSml ? stake * 1.05 : stopLoss;    // 1 loss  → stop
-            const patchTP   = isSml ? stake * 0.80 : takeProfit;  // 1 win   → stop
+            const patchSL   = isSml ? stake * 0.95 : stopLoss;    // < 1 stake → stops after 1 loss
+            const patchTP   = isSml ? stake * 0.50 : takeProfit;  // < 1 win   → stops after 1 win
             const patchMart = isSml ? 0             : martingale; // no auto-double
 
             const doc    = await fetchAndPatchBot(botId, signal, stake, patchTP, patchSL, patchMart);
