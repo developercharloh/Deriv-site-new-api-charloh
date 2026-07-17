@@ -518,9 +518,10 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
         // Most appearing digit must hold above 11% in the 1 000-tick window
         const mostAbove11 = dpWindows[3][mostFreqDigit] > 0.11;
-        // ≥4 winning-side digits must hold above 10% in ALL 4 windows
+        // ≥4 winning-side digits must hold above 10% in at least 3 of 4 windows
+        // (ALL-4 was too strict on the 50-tick window where variance is high)
         const winDigitsAbove10 = winSideArr.filter(d =>
-            dpWindows.every(w => w[d] > 0.10)
+            dpWindows.filter(w => w[d] > 0.10).length >= 3
         ).length;
         // Each losing-side digit should be below 10% in ≥3 of 4 windows
         const losingCapOk = lossSideArr.every(d =>
@@ -533,9 +534,10 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         const mostOnWin  = winFn(mostFreqDigit);
         // Either the least OR the 2nd-least appearing digit must be on the winning side
         const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
-        // Every losing-side digit must be below 10.3% in ALL 4 windows
+        // Every losing-side digit must be below 10.3% in at least 3 of 4 windows
+        // (ALL-4 was too strict on the 50-tick window where variance is high)
         const losingCapOk = lossSideArr.every(d =>
-            dpWindows.every(w => w[d] < 0.103)
+            dpWindows.filter(w => w[d] < 0.103).length >= 3
         );
         // Winning-side and losing-side frequency trend across 5 time bands
         const dp5Sz = Math.max(1, Math.floor(N / 5));
@@ -619,19 +621,18 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     let isSignal: boolean;
     if (tradeType === 'even_odd') {
         // EO: rawWinRate + crossWindow + freqAlignment + digitDominance all mandatory.
-        // digitDominance ensures most/least/2nd-most digits are on winning side and
-        // ≥3 winning-side digits hold >10% across all windows.
-        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && digitDomPass && passCount >= 7;
+        // 6/11 overall — adding Check 11 as mandatory already tightened the gate;
+        // keeping threshold at 6 avoids double-tightening that blocks valid signals.
+        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && digitDomPass && passCount >= 6;
     } else if (tradeType === 'over_under') {
         // OU: all core checks + digit dominance mandatory.
-        // digitDominance ensures: most/least freq digit on win side, every losing-side
-        // digit < 10.3% in all windows, winning freq flat/rising, losing freq flat/falling.
+        // 6/11 overall — same rationale as EO.
         isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && stabilityPass
             && recoveryMarketOk && winProb >= MIN_WIN_PROB_OU && digitDomPass
-            && passCount >= 7;
+            && passCount >= 6;
     } else {
-        // MD: core mandatory + freq alignment + ≥ 7/11 total
-        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && passCount >= 7;
+        // MD: core mandatory + freq alignment + ≥ 6/11 total
+        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && passCount >= 6;
     }
 
     const statsChecks: StatsChecks = {
