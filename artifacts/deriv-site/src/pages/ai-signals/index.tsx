@@ -522,7 +522,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         // Either the least OR the 2nd-least appearing digit must be on the winning side
         const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
         // Most appearing digit must hold above 11% in the 1 000-tick window
-        const mostAbove11 = dpWindows[3][mostFreqDigit] > 0.11;
+        const mostAbove11 = dpWindows[3][mostFreqDigit] > 0.105;
         // ≥3 winning-side digits must hold above 10% in the 1 000-tick window
         const winDigitsAbove10 = winSideArr.filter(d => dpWindows[3][d] > 0.10).length;
         // Each losing-side digit should be below 10% in ≥3 of 4 windows
