@@ -4,6 +4,7 @@ import { DERIV_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatili
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { destroyerBotIdFromDirection, fetchAndPatchBot, type BotSignal } from '@/utils/bot-patch';
+import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
 import './ai-signal-orb.scss';
 
 const ORB_RUN_CFG_KEY = 'orb_destroyer_cfg';
@@ -161,6 +162,107 @@ function detectSpike(prices: number[]): { spiked: boolean; sigma: number } {
     // Centered z-score: (move - baseline_mean) / std
     const maxSigma = Math.max(...returns.slice(-5).map(r => (r - mean) / std));
     return { spiked: maxSigma >= SPIKE_SIGMA, sigma: maxSigma };
+}
+
+// ─── Smart Martingale — live condition re-check ───────────────────────────────
+// Fetches 1 000 fresh ticks for the symbol and runs the same EO / OU condition
+// checks used by the main signal engine.  Returns true only if all gates pass.
+async function checkSmartMartConditions(
+    symbol:    string,
+    pip:       number,
+    tradeType: TradeType,
+    direction: string,
+    barrier:   number | null,
+): Promise<boolean> {
+    return new Promise(resolve => {
+        const ws  = new WebSocket(DERIV_WS);
+        let done  = false;
+        const fin = (pass: boolean) => {
+            if (done) return; done = true;
+            try { ws.close(); } catch { /**/ }
+            resolve(pass);
+        };
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ ticks_history: symbol, count: 1000, end: 'latest', style: 'ticks', req_id: 1 }));
+        };
+        ws.onmessage = (ev: MessageEvent) => {
+            let msg: any; try { msg = JSON.parse(ev.data as string); } catch { return; }
+            if (msg.msg_type !== 'history') return;
+            const prices: number[] = msg.history?.prices ?? [];
+            if (prices.length < 50) return fin(false);
+            const digits  = prices.map(p => lastDigitOf(p, pip));
+            const wSizes  = [50, 100, 500, 1000];
+
+            if (tradeType === 'even_odd') {
+                // ── EO parity check (mirrors Check 11 in ai-signals) ──────────
+                const isWin = (d: number) => direction === 'EVEN' ? d % 2 === 0 : d % 2 !== 0;
+                const freqs = wSizes.map(sz => {
+                    const sl = digits.slice(-Math.min(sz, digits.length));
+                    return sl.filter(d => isWin(d)).length / sl.length;
+                });
+                // Gate 1: 50-tick (most-recent) window must agree with direction
+                // Gate 2: ≥ 3 of 4 windows must agree
+                // Gate 3: 1 000-tick edge must exceed 51 % (real bias, not noise)
+                fin(freqs[0] > 0.50 && freqs.filter(f => f > 0.50).length >= 3 && freqs[3] > 0.51);
+
+            } else if (tradeType === 'over_under') {
+                // ── OU digit-dominance check (mirrors Check 11 in ai-signals) ─
+                const b       = barrier ?? 5;
+                const isWin   = (d: number) => direction.startsWith('OVER') ? d > b : d < b;
+                const sl      = digits.slice(-Math.min(1000, digits.length));
+                const cnt     = new Array(10).fill(0);
+                sl.forEach(d => cnt[d]++);
+                const freq    = cnt.map(c => c / sl.length);
+                const ranked  = [0,1,2,3,4,5,6,7,8,9].sort((a, bx) => freq[bx] - freq[a]);
+                const lossSide = [0,1,2,3,4,5,6,7,8,9].filter(d => !isWin(d));
+                const mostOnWin   = isWin(ranked[0]);
+                const leastOnWin  = isWin(ranked[9]) || isWin(ranked[8]);
+                const losingCapOk = lossSide.every(d => freq[d] < 0.103);
+                // Per-digit band trend across 4 windows (oldest → newest)
+                const wins4 = wSizes.map(sz => {
+                    const s = digits.slice(-Math.min(sz, digits.length));
+                    const c = new Array(10).fill(0); s.forEach(d => c[d]++);
+                    return c.map(v => v / s.length);
+                });
+                const tDir = (rates: number[]) => {
+                    let up = 0, dn = 0;
+                    for (let i = 1; i < rates.length; i++) {
+                        if (rates[i] > rates[i - 1] + 0.001) up++;
+                        else if (rates[i] < rates[i - 1] - 0.001) dn++;
+                    }
+                    return up > dn ? 'rising' : dn > up ? 'falling' : 'flat';
+                };
+                const losingNotRising = lossSide.every(d => tDir(wins4.map(w => w[d])) !== 'rising');
+                const dp5  = Math.max(1, Math.floor(digits.length / 5));
+                const winB = Array.from({ length: 5 }, (_, i) => { const bnd = digits.slice(i * dp5, (i + 1) * dp5); return bnd.filter(d => isWin(d)).length / Math.max(1, bnd.length); });
+                const lsB  = Array.from({ length: 5 }, (_, i) => { const bnd = digits.slice(i * dp5, (i + 1) * dp5); return bnd.filter(d => !isWin(d)).length / Math.max(1, bnd.length); });
+                fin(mostOnWin && leastOnWin && losingCapOk && losingNotRising && tDir(winB) !== 'falling' && tDir(lsB) !== 'rising');
+            } else {
+                fin(true); // MD passes unconditionally
+            }
+        };
+        ws.onerror = () => fin(false);
+        ws.onclose = () => { if (!done) fin(false); };
+        setTimeout(() => fin(false), 15_000);
+    });
+}
+
+// ─── Smart Martingale session state ──────────────────────────────────────────
+interface SmlSession {
+    phase:      'watching' | 'waiting' | 'refiring';
+    baseStake:  number;
+    curStake:   number;
+    multiplier: number;
+    lossCount:  number;
+    totalLost:  number;
+    totalWon:   number;
+    sessionSL:  number;
+    sessionTP:  number;
+    symbol:     string;
+    pip:        number;
+    direction:  string;
+    barrier:    number | null;
+    waitSecs:   number;
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -612,6 +714,16 @@ const AiSignalOrb: React.FC = () => {
     const [cfgMartingale,   setCfgMartingale]   = useState(DEFAULT_RUN_CFG.martingale);
     const [cfgMartingaleOn, setCfgMartingaleOn] = useState(DEFAULT_RUN_CFG.martingaleOn);
 
+    // ── Smart Martingale Loop (EO + OU only) ──────────────────────────────────
+    // When ON the orb owns the martingale cycle: after a loss it waits for the
+    // same EO / OU entry conditions to return before doubling the stake and
+    // re-firing — instead of the bot doubling blindly into a shifted market.
+    const [cfgSmartMart, setCfgSmartMart] = useState(false);
+    const [sml,          setSml]          = useState<SmlSession | null>(null);
+    const smlRef        = useRef<SmlSession | null>(null);
+    const smlAbortRef   = useRef(false);
+    const smlTxCountRef = useRef(0); // # of completed txs when current phase started
+
     // ── Live Market Watch ─────────────────────────────────────────────────────
     const [watchActive,    setWatchActive]    = useState(false);
     const [watchResults,   setWatchResults]   = useState<MarketResult[]>([]);
@@ -764,6 +876,177 @@ const AiSignalOrb: React.FC = () => {
         const id = setInterval(poll, STATUS_POLL_MS);
         return () => { destroyed = true; clearInterval(id); };
     }, []);
+
+    // ── Smart Martingale: stop session ───────────────────────────────────────
+    const stopSml = useCallback(() => {
+        smlAbortRef.current = true;
+        smlRef.current      = null;
+        setSml(null);
+        // Stop the running bot if it is still active
+        if (store.run_panel.is_running) store.run_panel.onStopButtonClick();
+    }, [store]);
+
+    // ── Smart Martingale: WATCHING phase ─────────────────────────────────────
+    // Polls the transaction list every 1.5 s.  When a new completed contract
+    // appears it reads the profit, logs to the journal, then either:
+    //   WIN  → resets stake to base and enters WAITING (re-check before next)
+    //   LOSS → multiplies stake and enters WAITING (conditions must return)
+    //   SL / TP hit → ends the session
+    useEffect(() => {
+        if (!sml || sml.phase !== 'watching') return;
+        let destroyed = false;
+
+        const id = setInterval(() => {
+            if (destroyed || smlAbortRef.current) return;
+            const sess = smlRef.current;
+            if (!sess || sess.phase !== 'watching') return;
+
+            const txs  = store.transactions.transactions as any[];
+            const done = txs.filter(t => t.type === 'contract' && typeof t.data === 'object' && t.data?.is_completed);
+            if (done.length <= smlTxCountRef.current) return;
+
+            clearInterval(id);
+            smlTxCountRef.current = done.length;
+            const newest   = done[0];
+            const profit   = Number(newest.data?.profit   ?? 0);
+            const buyPx    = Number(newest.data?.buy_price ?? sess.curStake);
+            const currency = newest.data?.currency ?? 'USD';
+            const isWin    = profit > 0;
+
+            // Standard journal win/loss log (appears in the journal tab)
+            store.journal.onLogSuccess({ log_type: isWin ? LogTypes.PROFIT : LogTypes.LOST, extra: { currency, profit: isWin ? profit : -buyPx } });
+
+            if (isWin) {
+                const totalWon = sess.totalWon + profit;
+                store.journal.pushMessage(
+                    `✅ Smart Martingale WIN  +${profit.toFixed(2)} | Session total: +${totalWon.toFixed(2)} | Resetting stake → ${sess.baseStake.toFixed(2)}`,
+                    MessageTypes.SUCCESS, 'journal__text'
+                );
+                if (totalWon >= sess.sessionTP) {
+                    store.journal.pushMessage(`🎯 Take profit reached — session closed. Profit: +${totalWon.toFixed(2)}`, MessageTypes.SUCCESS, 'journal__text');
+                    if (!destroyed) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
+                    return;
+                }
+                // TP not yet reached — reset stake and wait for fresh conditions
+                const next: SmlSession = { ...sess, totalWon, curStake: sess.baseStake, lossCount: 0, phase: 'waiting', waitSecs: 0 };
+                smlRef.current = next; if (!destroyed) setSml(next);
+            } else {
+                const totalLost = sess.totalLost + buyPx;
+                const lossCount = sess.lossCount + 1;
+                const nextStake = sess.curStake * sess.multiplier;
+                store.journal.pushMessage(
+                    `❌ Smart Martingale LOSS  -${buyPx.toFixed(2)}  (loss #${lossCount}) | Session: -${totalLost.toFixed(2)} | ⏳ Waiting for ${sess.direction} conditions… | Next stake: ${nextStake.toFixed(2)}`,
+                    MessageTypes.NOTIFY, 'journal__item--content'
+                );
+                if (totalLost >= sess.sessionSL) {
+                    store.journal.pushMessage(`🛑 Stop loss reached — session closed. Total loss: -${totalLost.toFixed(2)}`, MessageTypes.ERROR, '');
+                    if (!destroyed) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
+                    return;
+                }
+                const next: SmlSession = { ...sess, totalLost, lossCount, curStake: nextStake, phase: 'waiting', waitSecs: 0 };
+                smlRef.current = next; if (!destroyed) setSml(next);
+            }
+        }, 1500);
+
+        return () => { destroyed = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sml?.phase === 'watching', store]);
+
+    // ── Smart Martingale: WAITING phase ──────────────────────────────────────
+    // Polls fresh ticks every 5 s and re-runs the EO / OU condition checks.
+    // When conditions return, stops waiting and re-fires the bot at the
+    // current (multiplied) stake, then transitions back to WATCHING.
+    useEffect(() => {
+        if (!sml || sml.phase !== 'waiting') return;
+        let destroyed = false;
+        let waitSecs  = 0;
+        let checking  = false;
+
+        const id = setInterval(async () => {
+            if (destroyed || smlAbortRef.current || checking) return;
+            const sess = smlRef.current;
+            if (!sess || sess.phase !== 'waiting') return;
+
+            waitSecs += 5;
+            const tick: SmlSession = { ...sess, waitSecs };
+            smlRef.current = tick; if (!destroyed) setSml(tick);
+
+            // Journal status every 30 s so the trader can see it's alive
+            if (waitSecs % 30 === 5) {
+                store.journal.pushMessage(
+                    `⏳ Smart Mart waiting ${waitSecs}s — checking ${sess.direction} conditions on ${sess.symbol}… | Loss #${sess.lossCount} | Next stake: ${sess.curStake.toFixed(2)}`,
+                    MessageTypes.NOTIFY, 'journal__item--content'
+                );
+            }
+
+            checking = true;
+            const pass = await checkSmartMartConditions(sess.symbol, sess.pip, tradeType, sess.direction, sess.barrier);
+            checking  = false;
+            if (destroyed || smlAbortRef.current) return;
+            if (!smlRef.current || smlRef.current.phase !== 'waiting') return;
+
+            if (!pass) return; // keep waiting
+
+            // ── Conditions met — re-fire ──────────────────────────────────────
+            clearInterval(id);
+            store.journal.pushMessage(
+                `✅ ${sess.direction} conditions confirmed — launching recovery #${sess.lossCount} at ${sess.curStake.toFixed(2)}`,
+                MessageTypes.SUCCESS, 'journal__text'
+            );
+            const refiring: SmlSession = { ...sess, phase: 'refiring' };
+            smlRef.current = refiring; if (!destroyed) setSml(refiring);
+
+            try {
+                const botId  = tradeType === 'over_under' ? destroyerBotIdFromDirection(sess.direction) : 'even-odd-scanner';
+                const signal: BotSignal = {
+                    symbol:          sess.symbol,
+                    symbolLabel:     sess.symbol,
+                    direction:       sess.direction,
+                    entryPoint:      `Digit ${editEntryPoint}`,
+                    confidence:      50,
+                    market:          tradeType,
+                    recoveryBarrier: tradeType === 'over_under' ? (editRecoveryBarrier ?? sess.barrier ?? undefined) : undefined,
+                };
+                // Single-contract mode: SL just above stake (stops after 1 loss),
+                // TP just below a single win (stops after 1 win).
+                const singleSL = sess.curStake * 1.05;
+                const singleTP = sess.curStake * 0.80;
+
+                if (store.run_panel.is_running) {
+                    store.run_panel.onStopButtonClick();
+                    await new Promise(r => setTimeout(r, 1500));
+                }
+                if (destroyed || smlAbortRef.current) return;
+
+                const doc    = await fetchAndPatchBot(botId, signal, sess.curStake, singleTP, singleSL, 0);
+                const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
+                const Blockly = (window as any).Blockly;
+                if (!Blockly?.derivWorkspace) throw new Error('Blockly workspace not ready');
+
+                const dom = Blockly.utils.xml.textToDom(xmlStr);
+                Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
+                Blockly.derivWorkspace.cleanUp();
+                Blockly.derivWorkspace.clearUndo();
+
+                await new Promise(r => setTimeout(r, 500));
+                if (destroyed || smlAbortRef.current) return;
+                if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
+
+                // Reset the tx baseline so watching picks up the next contract
+                smlTxCountRef.current = (store.transactions.transactions as any[])
+                    .filter(t => t.type === 'contract' && typeof t.data === 'object' && t.data?.is_completed).length;
+
+                const watching: SmlSession = { ...sess, phase: 'watching' };
+                smlRef.current = watching; if (!destroyed) setSml(watching);
+            } catch (e: any) {
+                store.journal.pushMessage(`⚠️ Smart Mart re-fire failed: ${e?.message ?? 'unknown error'}`, MessageTypes.ERROR, '');
+                if (!destroyed) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
+            }
+        }, 5000);
+
+        return () => { destroyed = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sml?.phase === 'waiting', store, tradeType, editEntryPoint, editRecoveryBarrier]);
 
     // ── Drag handlers ─────────────────────────────────────────────────────────
     const onPointerDown = useCallback((e: React.PointerEvent) => {
@@ -920,7 +1203,17 @@ const AiSignalOrb: React.FC = () => {
             // Martingale OFF → reset the martingale block to 0 (no stake increase after a loss).
             const martingale = cfgMartingaleOn ? (parseFloat(cfgMartingale) || 1.5) : 0;
 
-            const doc    = await fetchAndPatchBot(botId, signal, stake, takeProfit, stopLoss, martingale);
+            // ── Smart Martingale mode (EO + OU only) ──────────────────────────
+            // When ON the bot XML is set to single-contract mode (SL/TP just big
+            // enough to stop after exactly 1 trade).  The orb owns the full loop:
+            // after a loss it waits for conditions, then re-fires at the doubled
+            // stake.  The bot's internal martingale is disabled (martingale = 0).
+            const isSml = cfgSmartMart && (tradeType === 'even_odd' || tradeType === 'over_under');
+            const patchSL   = isSml ? stake * 1.05 : stopLoss;    // 1 loss  → stop
+            const patchTP   = isSml ? stake * 0.80 : takeProfit;  // 1 win   → stop
+            const patchMart = isSml ? 0             : martingale; // no auto-double
+
+            const doc    = await fetchAndPatchBot(botId, signal, stake, patchTP, patchSL, patchMart);
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
 
             const Blockly = (window as any).Blockly;
@@ -938,13 +1231,39 @@ const AiSignalOrb: React.FC = () => {
                 setRunState('idle');
                 setShowRunConfig(false);
                 setOpen(false);
+
+                // ── Initialise SML session ────────────────────────────────────
+                if (isSml) {
+                    smlAbortRef.current = false;
+                    // Baseline: count already-completed txs so the watcher only
+                    // reacts to NEW contracts from this session onward.
+                    smlTxCountRef.current = (store.transactions.transactions as any[])
+                        .filter(t => t.type === 'contract' && typeof t.data === 'object' && (t.data as any)?.is_completed).length;
+
+                    const sess: SmlSession = {
+                        phase: 'watching', baseStake: stake, curStake: stake,
+                        multiplier: martingale || 1.5,
+                        lossCount: 0, totalLost: 0, totalWon: 0,
+                        sessionSL: stopLoss, sessionTP: takeProfit,
+                        symbol: result.sym.code, pip: result.pip,
+                        direction, barrier: tradeType === 'over_under' ? editBarrier : null,
+                        waitSecs: 0,
+                    };
+                    smlRef.current = sess;
+                    setSml(sess);
+
+                    store.journal.pushMessage(
+                        `🤖 Smart Martingale ON — ${direction} | ${result.sym.label} | Stake ${stake.toFixed(2)} × ${(martingale || 1.5).toFixed(1)} | SL ${stopLoss} | TP ${takeProfit}`,
+                        MessageTypes.NOTIFY, 'journal__item--content'
+                    );
+                }
             }, 500);
         } catch (e: any) {
             setRunState('error');
             setRunErr(e?.message || 'Failed to launch bot.');
         }
     }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editMatchesSide, editTargetDigit, editEntryPoint,
-        cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, store]);
+        cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, cfgSmartMart, store]);
 
     // ── Layout helpers ────────────────────────────────────────────────────────
     const orbStyle: React.CSSProperties = dragged
@@ -1539,6 +1858,43 @@ const AiSignalOrb: React.FC = () => {
                                 </div>
                             )}
 
+                            {/* ── Smart Martingale live status banner ── */}
+                            {sml && (
+                                <div className='ai-panel__sml'>
+                                    <div className='ai-panel__sml-header'>
+                                        <span className='ai-panel__sml-title'>
+                                            {sml.phase === 'watching'  && '👁 Smart Martingale — Watching'}
+                                            {sml.phase === 'waiting'   && '⏳ Smart Martingale — Waiting for conditions'}
+                                            {sml.phase === 'refiring'  && '🚀 Smart Martingale — Firing recovery'}
+                                        </span>
+                                        <button className='ai-panel__sml-stop' onClick={stopSml} title='Stop Smart Martingale'>✕</button>
+                                    </div>
+                                    <div className='ai-panel__sml-row'>
+                                        <span>Direction</span><strong>{sml.direction}</strong>
+                                        <span>Market</span><strong>{sml.symbol}</strong>
+                                    </div>
+                                    <div className='ai-panel__sml-row'>
+                                        <span>Current stake</span><strong>${sml.curStake.toFixed(2)}</strong>
+                                        <span>Loss #</span><strong>{sml.lossCount}</strong>
+                                    </div>
+                                    <div className='ai-panel__sml-row'>
+                                        <span>Session won</span>
+                                        <strong style={{ color: sml.totalWon > 0 ? '#10b981' : '#94a3b8' }}>
+                                            +${sml.totalWon.toFixed(2)}
+                                        </strong>
+                                        <span>Session lost</span>
+                                        <strong style={{ color: sml.totalLost > 0 ? '#ef4444' : '#94a3b8' }}>
+                                            -${sml.totalLost.toFixed(2)}
+                                        </strong>
+                                    </div>
+                                    {sml.phase === 'waiting' && (
+                                        <div className='ai-panel__sml-wait'>
+                                            Checking {sml.direction} conditions… {sml.waitSecs}s elapsed
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Execute */}
                             <div className='ai-panel__run-cta'>
                                 <button
@@ -1630,6 +1986,25 @@ const AiSignalOrb: React.FC = () => {
                                 ? 'Stake multiplies by this factor after a loss.'
                                 : 'Off — martingale is reset to 0, stake stays flat after a loss.'}
                         </span>
+
+                        {/* Smart Martingale — only for EO and OU */}
+                        {(tradeType === 'even_odd' || tradeType === 'over_under') && (
+                            <div className='ai-runcfg__smart-mart'>
+                                <label className='ai-runcfg__mart-toggle'>
+                                    <input
+                                        type='checkbox'
+                                        checked={cfgSmartMart}
+                                        onChange={e => setCfgSmartMart(e.target.checked)}
+                                    />
+                                    <span>Smart Martingale</span>
+                                </label>
+                                <span className='ai-runcfg__mart-hint' style={{ marginTop: 4 }}>
+                                    {cfgSmartMart
+                                        ? '✅ After a loss the bot waits for entry conditions to return before re-firing at the doubled stake. Everything logged to journal.'
+                                        : 'Off — bot martingales immediately after a loss without re-checking conditions.'}
+                                </span>
+                            </div>
+                        )}
 
                         <button
                             className='ai-runcfg__execute'

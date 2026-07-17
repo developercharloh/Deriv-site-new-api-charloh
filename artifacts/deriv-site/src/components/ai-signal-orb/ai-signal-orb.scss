@@ -1246,6 +1246,45 @@
     &:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 .ai-runcfg__mart-hint { font-size: 9.5px; color: #64748b; line-height: 1.4; margin-top: -6px; }
+
+.ai-runcfg__smart-mart {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 10px 12px; margin-top: 4px;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 8px;
+}
+
+// ── Smart Martingale live status banner ────────────────────────────────────────
+.ai-panel__sml {
+    margin: 0 -4px 8px;
+    padding: 10px 12px;
+    background: rgba(99, 102, 241, 0.10);
+    border: 1px solid rgba(99, 102, 241, 0.30);
+    border-radius: 10px;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.ai-panel__sml-header {
+    display: flex; align-items: center; justify-content: space-between;
+}
+.ai-panel__sml-title {
+    font-size: 10.5px; font-weight: 700; color: #a5b4fc; letter-spacing: 0.01em;
+}
+.ai-panel__sml-stop {
+    background: none; border: none; cursor: pointer; color: #64748b;
+    font-size: 12px; padding: 0 2px; line-height: 1;
+    &:hover { color: #ef4444; }
+}
+.ai-panel__sml-row {
+    display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 4px 8px;
+    align-items: center;
+    span   { font-size: 9px; color: #64748b; }
+    strong { font-size: 10px; color: #e2e8f0; font-weight: 700; }
+}
+.ai-panel__sml-wait {
+    font-size: 9px; color: #818cf8; font-style: italic;
+    animation: ai-orb-pulse 2s ease-in-out infinite;
+}
 .ai-runcfg__select {
     width: 100%;
     padding: 9px 11px;
