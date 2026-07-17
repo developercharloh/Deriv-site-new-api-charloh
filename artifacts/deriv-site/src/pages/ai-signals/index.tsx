@@ -514,7 +514,9 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         const mostOnWin   = winFn(mostFreqDigit);
         const leastOnWin  = winFn(leastFreqDigit);
         const secondOnWin = winFn(secondFreqDigit);
-        // ≥3 winning-side digits must hold above 10% in ALL 4 windows
+        // Most appearing digit must hold above 11% in the 1 000-tick window
+        const mostAbove11 = dpWindows[3][mostFreqDigit] > 0.11;
+        // ≥4 winning-side digits must hold above 10% in ALL 4 windows
         const winDigitsAbove10 = winSideArr.filter(d =>
             dpWindows.every(w => w[d] > 0.10)
         ).length;
@@ -522,7 +524,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         const losingCapOk = lossSideArr.every(d =>
             dpWindows.filter(w => w[d] < 0.10).length >= 3
         );
-        digitDomPass    = mostOnWin && leastOnWin && secondOnWin && winDigitsAbove10 >= 3;
+        digitDomPass    = mostOnWin && leastOnWin && secondOnWin && mostAbove11 && winDigitsAbove10 >= 4;
         digitDomDetails = { pass: digitDomPass, mostOnWin, leastOnWin, secondOnWin, losingCapOk, winTrend: 'flat', lossTrend: 'flat' };
 
     } else if (tradeType === 'over_under') {
