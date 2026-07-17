@@ -64,7 +64,7 @@ interface StatsChecks {
     digitDominance: {
         pass: boolean;
         mostOnWin: boolean;   // most-appearing digit is on winning side
-        leastOnWin: boolean;  // least-appearing digit is on winning side
+        leastOnWin: boolean;  // least OR 2nd-least appearing digit is on winning side
         secondOnWin: boolean; // 2nd most-appearing digit is on winning side (EO)
         losingCapOk: boolean; // every losing-side digit stays below 10% / 10.3% cap
         winTrend: TrendDir;   // winning-side freq trend across time bands (OU)
@@ -502,18 +502,20 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         return cnt.map(c => c / sl.length);  // per-digit frequency fraction
     });
     // Rank digits by frequency in the 1 000-tick window (dpWindows[3])
-    const freqRanked      = [0,1,2,3,4,5,6,7,8,9].sort((a, b) => dpWindows[3][b] - dpWindows[3][a]);
-    const mostFreqDigit   = freqRanked[0];
-    const secondFreqDigit = freqRanked[1];
-    const leastFreqDigit  = freqRanked[9];
+    const freqRanked          = [0,1,2,3,4,5,6,7,8,9].sort((a, b) => dpWindows[3][b] - dpWindows[3][a]);
+    const mostFreqDigit       = freqRanked[0];
+    const secondFreqDigit     = freqRanked[1];
+    const leastFreqDigit      = freqRanked[9];
+    const secondLeastFreqDigit = freqRanked[8];
 
     let digitDomPass: boolean;
     let digitDomDetails: StatsChecks['digitDominance'];
 
     if (tradeType === 'even_odd') {
         const mostOnWin   = winFn(mostFreqDigit);
-        const leastOnWin  = winFn(leastFreqDigit);
         const secondOnWin = winFn(secondFreqDigit);
+        // Either the least OR the 2nd-least appearing digit must be on the winning side
+        const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
         // Most appearing digit must hold above 11% in the 1 000-tick window
         const mostAbove11 = dpWindows[3][mostFreqDigit] > 0.11;
         // ≥4 winning-side digits must hold above 10% in ALL 4 windows
@@ -529,7 +531,8 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
 
     } else if (tradeType === 'over_under') {
         const mostOnWin  = winFn(mostFreqDigit);
-        const leastOnWin = winFn(leastFreqDigit);
+        // Either the least OR the 2nd-least appearing digit must be on the winning side
+        const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
         // Every losing-side digit must be below 10.3% in ALL 4 windows
         const losingCapOk = lossSideArr.every(d =>
             dpWindows.every(w => w[d] < 0.103)
