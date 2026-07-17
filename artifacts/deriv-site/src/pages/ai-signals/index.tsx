@@ -60,6 +60,16 @@ interface StatsChecks {
     sideMomentum: { pass: boolean; bandRates: number[]; trend: TrendDir; longTermOk: boolean; } | null;
     freqAlignment: { pass: boolean; windows: { size: number; winPct: number; dominant: boolean }[]; allAgree: boolean; alignScore: number } | null;
     microConfirm:  { pass: boolean; last2Wins: number; last2: boolean[] } | null;
+    /** Check 11 — digit position dominance (EO + OU only) */
+    digitDominance: {
+        pass: boolean;
+        mostOnWin: boolean;   // most-appearing digit is on winning side
+        leastOnWin: boolean;  // least-appearing digit is on winning side
+        secondOnWin: boolean; // 2nd most-appearing digit is on winning side (EO)
+        losingCapOk: boolean; // every losing-side digit stays below 10% / 10.3% cap
+        winTrend: TrendDir;   // winning-side freq trend across time bands (OU)
+        lossTrend: TrendDir;  // losing-side freq trend across time bands (OU)
+    } | null;
     passCount: number; totalChecks: number; isSignal: boolean;
 }
 
@@ -306,11 +316,27 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         }
     }
     const minSmp  = Math.max(50, Math.floor(N / 50));
+
+    // Per-digit frequency trend across 4 equal time bands (oldest → newest).
+    // Used by OU entry scoring: rising winning-side digits get a bonus so the
+    // best entry point aligns with current momentum, not just historical frequency.
+    const entryBandSz = Math.max(1, Math.floor(N / 4));
+    const digitBandTrend = Array.from({ length: 10 }, (_, d) => {
+        const rates = Array.from({ length: 4 }, (_, b) => {
+            const band = digits.slice(b * entryBandSz, (b + 1) * entryBandSz);
+            return band.filter(x => x === d).length / Math.max(1, band.length);
+        });
+        return computeTrendDir(rates);
+    });
+
     const scored  = cond.map((c, d) => {
         const conditional = c.total > 0 ? c.wins / c.total : 0;
         const lb = wilsonLower(c.wins, c.total);
+        // OU only: reward winning-side digits whose frequency is actively rising.
+        // This ensures the entry point is in sync with the momentum the user described.
+        const trendBonus = (tradeType === 'over_under' && winFn(d) && digitBandTrend[d] === 'rising') ? 0.04 : 0;
         return { digit: d, conditional, lowerBound: lb, total: c.total,
-            freqScore: lb * Math.sqrt(Math.max(0.3, freqPct[d] / 0.10)), freqPct: freqPct[d] };
+            freqScore: lb * Math.sqrt(Math.max(0.3, freqPct[d] / 0.10)) + trendBonus, freqPct: freqPct[d] };
     });
     let entryRaw = scored.filter(c => c.total >= minSmp && c.lowerBound >= winProb + 0.01).sort((a, b) => b.freqScore - a.freqScore || b.lowerBound - a.lowerBound).slice(0, 3);
     if (entryRaw.length < 3) { const used = new Set(entryRaw.map(e => e.digit)); const fb = scored.filter(c => !used.has(c.digit) && c.total >= minSmp).sort((a, b) => b.freqScore - a.freqScore || b.lowerBound - a.lowerBound); while (entryRaw.length < 3 && fb.length > 0) entryRaw.push(fb.shift()!); }
@@ -459,6 +485,75 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const microConfirmPass = last2Results.length >= 2 && last2Results.every(Boolean);
     const microConfirm = { pass: microConfirmPass, last2Wins: last2Results.filter(Boolean).length, last2: last2Results };
 
+    // CHECK 11 — Digit Position Dominance
+    // EO:  most, 2nd-most, and least appearing digits must all land on the winning
+    //      side; ≥3 of the 5 winning-side digits must hold >10% in ALL 4 freq
+    //      windows; losing-side digits must be weak (below 10% in ≥3 of 4 windows).
+    // OU:  most and least appearing digits must be on the winning side; every
+    //      losing-side digit must be below 10.3% in ALL 4 windows; winning-side
+    //      combined frequency must be flat/rising across time bands; losing-side
+    //      must be flat/falling.
+    // MD:  skipped (pass by default — different market structure).
+    const dpWinSizes = [50, 100, 500, 1000];
+    const dpWindows  = dpWinSizes.map(sz => {
+        const sl  = digits.slice(-Math.min(sz, N));
+        const cnt = new Array(10).fill(0) as number[];
+        sl.forEach(d => cnt[d]++);
+        return cnt.map(c => c / sl.length);  // per-digit frequency fraction
+    });
+    // Rank digits by frequency in the 1 000-tick window (dpWindows[3])
+    const freqRanked      = [0,1,2,3,4,5,6,7,8,9].sort((a, b) => dpWindows[3][b] - dpWindows[3][a]);
+    const mostFreqDigit   = freqRanked[0];
+    const secondFreqDigit = freqRanked[1];
+    const leastFreqDigit  = freqRanked[9];
+
+    let digitDomPass: boolean;
+    let digitDomDetails: StatsChecks['digitDominance'];
+
+    if (tradeType === 'even_odd') {
+        const mostOnWin   = winFn(mostFreqDigit);
+        const leastOnWin  = winFn(leastFreqDigit);
+        const secondOnWin = winFn(secondFreqDigit);
+        // ≥3 winning-side digits must hold above 10% in ALL 4 windows
+        const winDigitsAbove10 = winSideArr.filter(d =>
+            dpWindows.every(w => w[d] > 0.10)
+        ).length;
+        // Each losing-side digit should be below 10% in ≥3 of 4 windows
+        const losingCapOk = lossSideArr.every(d =>
+            dpWindows.filter(w => w[d] < 0.10).length >= 3
+        );
+        digitDomPass    = mostOnWin && leastOnWin && secondOnWin && winDigitsAbove10 >= 3;
+        digitDomDetails = { pass: digitDomPass, mostOnWin, leastOnWin, secondOnWin, losingCapOk, winTrend: 'flat', lossTrend: 'flat' };
+
+    } else if (tradeType === 'over_under') {
+        const mostOnWin  = winFn(mostFreqDigit);
+        const leastOnWin = winFn(leastFreqDigit);
+        // Every losing-side digit must be below 10.3% in ALL 4 windows
+        const losingCapOk = lossSideArr.every(d =>
+            dpWindows.every(w => w[d] < 0.103)
+        );
+        // Winning-side and losing-side frequency trend across 5 time bands
+        const dp5Sz = Math.max(1, Math.floor(N / 5));
+        const winBandFreqs  = Array.from({ length: 5 }, (_, b) => {
+            const band = digits.slice(b * dp5Sz, (b + 1) * dp5Sz);
+            return band.filter(d => winFn(d)).length / Math.max(1, band.length);
+        });
+        const lossBandFreqs = Array.from({ length: 5 }, (_, b) => {
+            const band = digits.slice(b * dp5Sz, (b + 1) * dp5Sz);
+            return band.filter(d => !winFn(d)).length / Math.max(1, band.length);
+        });
+        const winTrend  = computeTrendDir(winBandFreqs);
+        const lossTrend = computeTrendDir(lossBandFreqs);
+        digitDomPass    = mostOnWin && leastOnWin && losingCapOk
+                          && winTrend !== 'falling' && lossTrend !== 'rising';
+        digitDomDetails = { pass: digitDomPass, mostOnWin, leastOnWin, secondOnWin: true, losingCapOk, winTrend, lossTrend };
+
+    } else {
+        // Matches/Differs: different market structure — pass unconditionally
+        digitDomPass    = true;
+        digitDomDetails = { pass: true, mostOnWin: true, leastOnWin: true, secondOnWin: true, losingCapOk: true, winTrend: 'flat', lossTrend: 'flat' };
+    }
+
     // ── Recovery options — all barriers on both sides with safety ratings ───
     // Each option is rated using the SAME 4-window alignment check as Check 9:
     //   windows: 50 / 100 / 500 / 1 000 ticks — all must beat theoretical expectation.
@@ -512,23 +607,26 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     // ── Aggregate & gate ─────────────────────────────────────────────────────
     const checkArr = [rawWinRatePass, crossWindowPass, streakPass, autocorrPass,
                       stabilityPass, entryOverduePass, leadDigitPass, sideMomPass,
-                      freqAlignPass, microConfirmPass];
+                      freqAlignPass, microConfirmPass, digitDomPass];
     const passCount  = checkArr.filter(Boolean).length;
-    const totalChecks = 10;
+    const totalChecks = 11;
 
     let isSignal: boolean;
     if (tradeType === 'even_odd') {
-        // EO: rawWinRate + crossWindow + freqAlignment mandatory (all windows must agree on dominant side)
-        // freqAlignment is the primary new gate — blocks entries during neutral/opposing regimes
-        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && passCount >= 6;
+        // EO: rawWinRate + crossWindow + freqAlignment + digitDominance all mandatory.
+        // digitDominance ensures most/least/2nd-most digits are on winning side and
+        // ≥3 winning-side digits hold >10% across all windows.
+        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && digitDomPass && passCount >= 7;
     } else if (tradeType === 'over_under') {
-        // OU: core mandatory + stability + freq alignment + recovery market must exist + ≥ 6/10 total
+        // OU: all core checks + digit dominance mandatory.
+        // digitDominance ensures: most/least freq digit on win side, every losing-side
+        // digit < 10.3% in all windows, winning freq flat/rising, losing freq flat/falling.
         isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && stabilityPass
-            && recoveryMarketOk && winProb >= MIN_WIN_PROB_OU
-            && passCount >= 6;
+            && recoveryMarketOk && winProb >= MIN_WIN_PROB_OU && digitDomPass
+            && passCount >= 7;
     } else {
-        // MD: core mandatory + freq alignment + ≥ 6/10 total
-        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && passCount >= 6;
+        // MD: core mandatory + freq alignment + ≥ 7/11 total
+        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && passCount >= 7;
     }
 
     const statsChecks: StatsChecks = {
@@ -539,6 +637,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         stability:    { pass: stabilityPass,    windowsAbove: stabAbove, trend: stabTrend },
         entryOverdue: { pass: entryOverduePass, overdueRatio },
         leadDigit, sideMomentum, freqAlignment, microConfirm,
+        digitDominance: digitDomDetails,
         passCount, totalChecks, isSignal,
     };
 
