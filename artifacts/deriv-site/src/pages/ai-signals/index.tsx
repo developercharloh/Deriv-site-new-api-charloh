@@ -525,17 +525,20 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         const mostAbove11 = dpWindows[3][mostFreqDigit] > 0.105;
         // ≥3 winning-side digits must hold above 10% in the 1 000-tick window
         const winDigitsAbove10 = winSideArr.filter(d => dpWindows[3][d] > 0.10).length;
-        // Every losing-side digit must stay below 10% in ≥3 of 4 windows —
-        // a losing digit above 10% is actively competing with the winning side
+        // EO is a 50/50 market — losing digits naturally hover at ~10% so a hard
+        // per-digit cap would permanently block signals. losingCapOk is tracked
+        // for display only; it is NOT part of the mandatory gate.
         const losingCapOk = lossSideArr.every(d =>
             dpWindows.filter(w => w[d] < 0.10).length >= 3
         );
-        // No losing-side digit may be trending rising across the 4 time bands.
-        // A rising losing digit means it is gaining power — one climbing while
-        // others fall is the exact "competing" pattern that blows accounts.
-        const losingNotRising = lossSideArr.every(d => digitBandTrend[d] !== 'rising');
+        // At most 1 losing-side digit may be trending rising across the 4 time bands.
+        // In a 50/50 market some upward drift is normal; blocking when 2+ losing
+        // digits are rising together catches genuine competition without killing
+        // signals from natural variance.
+        const losingRisingCount = lossSideArr.filter(d => digitBandTrend[d] === 'rising').length;
+        const losingNotRising   = losingRisingCount <= 1;
         digitDomPass    = mostOnWin && leastOnWin && mostAbove11 && winDigitsAbove10 >= 3
-                          && losingCapOk && losingNotRising;
+                          && losingNotRising;
         digitDomDetails = { pass: digitDomPass, mostOnWin, leastOnWin, secondOnWin, losingCapOk, winTrend: 'flat', lossTrend: losingNotRising ? 'flat' : 'rising' };
 
     } else if (tradeType === 'over_under') {
