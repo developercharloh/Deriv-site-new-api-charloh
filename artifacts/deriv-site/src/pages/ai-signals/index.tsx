@@ -521,25 +521,35 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         const secondOnWin = true;
         // Either the least OR the 2nd-least appearing digit must be on the winning side
         const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
-        // Most appearing digit must hold above 11% in the 1 000-tick window
+        // Most appearing digit must hold above 10.5% in the 1 000-tick window
         const mostAbove11 = dpWindows[3][mostFreqDigit] > 0.105;
         // ≥3 winning-side digits must hold above 10% in the 1 000-tick window
         const winDigitsAbove10 = winSideArr.filter(d => dpWindows[3][d] > 0.10).length;
-        // Each losing-side digit should be below 10% in ≥3 of 4 windows
+        // Every losing-side digit must stay below 10% in ≥3 of 4 windows —
+        // a losing digit above 10% is actively competing with the winning side
         const losingCapOk = lossSideArr.every(d =>
             dpWindows.filter(w => w[d] < 0.10).length >= 3
         );
-        digitDomPass    = mostOnWin && leastOnWin && mostAbove11 && winDigitsAbove10 >= 3;
-        digitDomDetails = { pass: digitDomPass, mostOnWin, leastOnWin, secondOnWin, losingCapOk, winTrend: 'flat', lossTrend: 'flat' };
+        // No losing-side digit may be trending rising across the 4 time bands.
+        // A rising losing digit means it is gaining power — one climbing while
+        // others fall is the exact "competing" pattern that blows accounts.
+        const losingNotRising = lossSideArr.every(d => digitBandTrend[d] !== 'rising');
+        digitDomPass    = mostOnWin && leastOnWin && mostAbove11 && winDigitsAbove10 >= 3
+                          && losingCapOk && losingNotRising;
+        digitDomDetails = { pass: digitDomPass, mostOnWin, leastOnWin, secondOnWin, losingCapOk, winTrend: 'flat', lossTrend: losingNotRising ? 'flat' : 'rising' };
 
     } else if (tradeType === 'over_under') {
         const mostOnWin  = winFn(mostFreqDigit);
         // Either the least OR the 2nd-least appearing digit must be on the winning side
         const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
-        // Every losing-side digit must be below 10.3% in the 1 000-tick window.
-        // Multi-window was too noisy on the 50-tick slice.
+        // Every losing-side digit must be below 10.3% in the 1 000-tick window
         const losingCapOk = lossSideArr.every(d => dpWindows[3][d] < 0.103);
-        // Winning-side and losing-side frequency trend across 5 time bands
+        // No individual losing-side digit may be trending rising — a single digit
+        // climbing while others fall is the "competing" pattern that causes losses
+        // (e.g. UNDER 7: if digit 8 is rising while 9 is falling, the losing side
+        //  is unstable and will fight back against the trade)
+        const losingNotRising = lossSideArr.every(d => digitBandTrend[d] !== 'rising');
+        // Combined winning-side and losing-side trend across 5 time bands
         const dp5Sz = Math.max(1, Math.floor(N / 5));
         const winBandFreqs  = Array.from({ length: 5 }, (_, b) => {
             const band = digits.slice(b * dp5Sz, (b + 1) * dp5Sz);
@@ -551,7 +561,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         });
         const winTrend  = computeTrendDir(winBandFreqs);
         const lossTrend = computeTrendDir(lossBandFreqs);
-        digitDomPass    = mostOnWin && leastOnWin && losingCapOk
+        digitDomPass    = mostOnWin && leastOnWin && losingCapOk && losingNotRising
                           && winTrend !== 'falling' && lossTrend !== 'rising';
         digitDomDetails = { pass: digitDomPass, mostOnWin, leastOnWin, secondOnWin: true, losingCapOk, winTrend, lossTrend };
 
