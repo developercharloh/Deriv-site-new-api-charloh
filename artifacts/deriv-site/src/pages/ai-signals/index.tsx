@@ -516,30 +516,55 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     let digitDomDetails: StatsChecks['digitDominance'];
 
     if (tradeType === 'even_odd') {
-        const mostOnWin   = winFn(mostFreqDigit);
-        // 2nd most-appearing digit is NOT required on the winning side — it can fall anywhere
-        const secondOnWin = true;
-        // Either the least OR the 2nd-least appearing digit must be on the winning side
-        const leastOnWin = winFn(leastFreqDigit) || winFn(secondLeastFreqDigit);
-        // Most appearing digit must hold above 10.5% in the 1 000-tick window
-        const mostAbove11 = dpWindows[3][mostFreqDigit] > 0.105;
-        // ≥3 winning-side digits must hold above 10% in the 1 000-tick window
-        const winDigitsAbove10 = winSideArr.filter(d => dpWindows[3][d] > 0.10).length;
-        // EO is a 50/50 market — losing digits naturally hover at ~10% so a hard
-        // per-digit cap would permanently block signals. losingCapOk is tracked
-        // for display only; it is NOT part of the mandatory gate.
-        const losingCapOk = lossSideArr.every(d =>
-            dpWindows.filter(w => w[d] < 0.10).length >= 3
+        // ── EO Check 11: combined PARITY analysis across 4 time windows ──────
+        // Per-digit rules (most-appearing, least, second-least) are dropped.
+        // In a 50/50 market the individual digit that appears "most" is noise —
+        // what actually matters is whether EVEN% > ODD% (or vice-versa) and
+        // whether that edge holds CONSISTENTLY across recent AND historical windows.
+        //
+        // This directly fixes the blow-up pattern: the 1 000-tick window can
+        // show ODD bias while the market is currently running hot EVEN.
+        // Requiring the 50-tick window to agree blocks signals that have gone stale.
+
+        // Combined winning-side (even OR odd) frequency in each window
+        // dpWindows order: [50-tick, 100-tick, 500-tick, 1 000-tick]
+        const winFreqByWindow = dpWindows.map(w =>
+            winSideArr.reduce((sum, d) => sum + w[d], 0)
         );
-        // At most 1 losing-side digit may be trending rising across the 4 time bands.
-        // In a 50/50 market some upward drift is normal; blocking when 2+ losing
-        // digits are rising together catches genuine competition without killing
-        // signals from natural variance.
-        const losingRisingCount = lossSideArr.filter(d => digitBandTrend[d] === 'rising').length;
-        const losingNotRising   = losingRisingCount <= 1;
-        digitDomPass    = mostOnWin && leastOnWin && mostAbove11 && winDigitsAbove10 >= 3
-                          && losingNotRising;
-        digitDomDetails = { pass: digitDomPass, mostOnWin, leastOnWin, secondOnWin, losingCapOk, winTrend: 'flat', lossTrend: losingNotRising ? 'flat' : 'rising' };
+
+        // Count how many windows the winning side leads in (> 50%)
+        const windowsWinLeads = winFreqByWindow.filter(f => f > 0.50).length;
+
+        // ≥ 3 of 4 windows must agree — one rogue window is noise, two means
+        // the bias is inconsistent and not worth trading
+        const windowAgreement = windowsWinLeads >= 3;
+
+        // The 50-tick (most recent) window MUST agree.
+        // If recent market behaviour contradicts the historical bias the signal
+        // is stale — exactly what caused the account blow in the screenshot.
+        const recentAgreement = winFreqByWindow[0] > 0.50;
+
+        // Winning side must hold a real edge in the 1 000-tick window (> 51%).
+        // 50.1% is coin-flip noise; 51% = ~510 wins out of 1 000 ticks.
+        const winFreq1000   = winFreqByWindow[3];
+        const edgeConfirmed = winFreq1000 > 0.51;
+
+        // For display: is the edge strengthening across windows?
+        // Arrange oldest→newest so computeTrendDir reads time forward
+        const winFreqOldToNew = [...winFreqByWindow].reverse();
+        const lossFreqOldToNew = winFreqOldToNew.map(f => 1 - f);
+        const losingCapOk = winFreqByWindow.filter(f => f > 0.505).length >= 2;
+
+        digitDomPass    = windowAgreement && recentAgreement && edgeConfirmed;
+        digitDomDetails = {
+            pass:        digitDomPass,
+            mostOnWin:   edgeConfirmed,    // winning side holds real 1 000-tick edge (>51%)
+            leastOnWin:  recentAgreement,  // 50-tick window confirms direction
+            secondOnWin: windowAgreement,  // ≥3 of 4 windows agree
+            losingCapOk,
+            winTrend:  computeTrendDir(winFreqOldToNew),
+            lossTrend: computeTrendDir(lossFreqOldToNew),
+        };
 
     } else if (tradeType === 'over_under') {
         const mostOnWin  = winFn(mostFreqDigit);
