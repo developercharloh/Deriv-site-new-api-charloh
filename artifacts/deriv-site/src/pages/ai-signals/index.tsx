@@ -1121,9 +1121,9 @@ const AiSignalsPage: React.FC = () => {
     }, [store]);
 
     // ── Smart Martingale: WATCHING phase ──────────────────────────────────────
-    // Polls completed transactions every 1.5 s.
-    // WIN  → reset stake to base, enter WAITING
-    // LOSS → multiply stake, enter WAITING (bot fired exactly 1 trade because Max Loss < stake)
+    // Polls completed transactions every 500 ms.
+    // WIN  → stop bot → re-fire immediately at base stake
+    // LOSS → stop bot → multiply stake → enter WAITING (condition check)
     // Session SL/TP hit → ends session
     useEffect(() => {
         if (!sml || sml.phase !== 'watching') return;
@@ -1137,6 +1137,8 @@ const AiSignalsPage: React.FC = () => {
             );
             if (txs.length <= smlTxCountRef.current) return;
             clearInterval(id);
+            // Stop the bot immediately so it doesn't fire another trade
+            if (store.run_panel.is_running) store.run_panel.onStopButtonClick();
             smlTxCountRef.current = txs.length;
             const newest  = txs[0];
             const profit  = Number(newest.data?.profit   ?? 0);
@@ -1146,28 +1148,54 @@ const AiSignalsPage: React.FC = () => {
             store.journal.onLogSuccess({ log_type: isWin ? LogTypes.PROFIT : LogTypes.LOST, extra: { currency, profit: isWin ? profit : -buyPx } });
             if (isWin) {
                 const totalWon = sess.totalWon + profit;
-                store.journal.pushMessage(`✅ Smart Mart WIN +${profit.toFixed(2)} | Session: +${totalWon.toFixed(2)} | Resetting stake → ${sess.baseStake.toFixed(2)}`, MessageTypes.SUCCESS, 'journal__text');
+                store.journal.pushMessage(`✅ WIN +${profit.toFixed(2)} | Session P&L: +${totalWon.toFixed(2)} | Re-loading at base ${sess.baseStake.toFixed(2)}`, MessageTypes.SUCCESS, 'journal__text');
                 if (totalWon >= sess.sessionTP) {
-                    store.journal.pushMessage(`🎯 Session take profit reached — closing. Total: +${totalWon.toFixed(2)}`, MessageTypes.SUCCESS, 'journal__text');
+                    store.journal.pushMessage(`🎯 Session target profit reached — stopping. Total: +${totalWon.toFixed(2)}`, MessageTypes.SUCCESS, 'journal__text');
                     if (!destroyed) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
                     return;
                 }
-                const next = { ...sess, totalWon, curStake: sess.baseStake, lossCount: 0, phase: 'waiting', waitSecs: 0 };
-                smlRef.current = next; if (!destroyed) setSml(next);
+                // Re-fire immediately at base stake — conditions were just confirmed
+                const refiring = { ...sess, totalWon, curStake: sess.baseStake, lossCount: 0, phase: 'refiring', waitSecs: 0 };
+                smlRef.current = refiring; if (!destroyed) setSml(refiring);
+                (async () => {
+                    try {
+                        await new Promise(r => setTimeout(r, 1200));
+                        if (destroyed || smlAbortRef.current) return;
+                        const remSL = Math.max(0.1, sess.sessionSL - sess.totalLost);
+                        const remTP = Math.max(0.1, sess.sessionTP - totalWon);
+                        const doc = await fetchAndPatchBot(sess.botId, sess.signal, sess.baseStake, remTP, remSL, 0);
+                        const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
+                        const Blockly = (window as any).Blockly;
+                        if (!Blockly?.derivWorkspace) throw new Error('Blockly not ready');
+                        Blockly.Xml.clearWorkspaceAndLoadFromXml(Blockly.utils.xml.textToDom(xmlStr), Blockly.derivWorkspace);
+                        Blockly.derivWorkspace.cleanUp(); Blockly.derivWorkspace.clearUndo();
+                        await new Promise(r => setTimeout(r, 500));
+                        if (destroyed || smlAbortRef.current) return;
+                        smlTxCountRef.current = (store.transactions.transactions as any[]).filter(
+                            t => t.type === 'contract' && typeof t.data === 'object' && t.data?.is_completed
+                        ).length;
+                        if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
+                        const watching = { ...refiring, phase: 'watching' };
+                        smlRef.current = watching; if (!destroyed) setSml(watching);
+                    } catch (e: any) {
+                        store.journal.pushMessage(`⚠️ Smart Mart re-fire failed: ${e?.message ?? 'error'}`, MessageTypes.ERROR, '');
+                        if (!destroyed) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
+                    }
+                })();
             } else {
                 const totalLost = sess.totalLost + buyPx;
                 const lossCount = sess.lossCount + 1;
-                const nextStake = sess.curStake * sess.multiplier;
-                store.journal.pushMessage(`❌ Smart Mart LOSS -${buyPx.toFixed(2)} (loss #${lossCount}) | ⏳ Waiting for ${sess.direction} conditions… | Next stake: ${nextStake.toFixed(2)}`, MessageTypes.NOTIFY, 'journal__item--content');
+                const nextStake = parseFloat((sess.curStake * sess.multiplier).toFixed(2));
+                store.journal.pushMessage(`❌ LOSS -${buyPx.toFixed(2)} (loss #${lossCount}) | ⏳ Waiting for ${sess.direction} conditions… | Next stake: ${nextStake.toFixed(2)}`, MessageTypes.NOTIFY, 'journal__item--content');
                 if (totalLost >= sess.sessionSL) {
-                    store.journal.pushMessage(`🛑 Session stop loss hit — closing. Total loss: -${totalLost.toFixed(2)}`, MessageTypes.ERROR, '');
+                    store.journal.pushMessage(`🛑 Session stop loss hit — stopping. Total loss: -${totalLost.toFixed(2)}`, MessageTypes.ERROR, '');
                     if (!destroyed) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
                     return;
                 }
                 const next = { ...sess, totalLost, lossCount, curStake: nextStake, phase: 'waiting', waitSecs: 0 };
                 smlRef.current = next; if (!destroyed) setSml(next);
             }
-        }, 1500);
+        }, 500);
         return () => { destroyed = true; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sml?.phase === 'watching', store]);
@@ -1200,12 +1228,12 @@ const AiSignalsPage: React.FC = () => {
             const refiring = { ...sess, phase: 'refiring' };
             smlRef.current = refiring; if (!destroyed) setSml(refiring);
             try {
-                // Single-contract mode: Max Loss < stake → bot stops before recovery fires
-                const singleSL = sess.curStake * 0.95;
-                const singleTP = sess.curStake * 0.50;
+                // Use remaining session SL/TP so user's values are respected
+                const remSL = Math.max(0.1, sess.sessionSL - sess.totalLost);
+                const remTP = Math.max(0.1, sess.sessionTP - sess.totalWon);
                 if (store.run_panel.is_running) { store.run_panel.onStopButtonClick(); await new Promise(r => setTimeout(r, 1500)); }
                 if (destroyed || smlAbortRef.current) return;
-                const doc = await fetchAndPatchBot(sess.botId, sess.signal, sess.curStake, singleTP, singleSL, 0);
+                const doc = await fetchAndPatchBot(sess.botId, sess.signal, sess.curStake, remTP, remSL, 0);
                 const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
                 const Blockly = (window as any).Blockly;
                 if (!Blockly?.derivWorkspace) throw new Error('Blockly not ready');
@@ -1270,15 +1298,14 @@ const AiSignalsPage: React.FC = () => {
             const stopLoss   = parseFloat(cfgStopLoss)   || 30;
             const martingale = cfgMartingaleOn ? (parseFloat(cfgMartingale) || 1.5) : 0;
 
-            // ── Smart Martingale: single-contract mode ─────────────────────────
-            // EO only.  Max Loss MUST be < stake so the bot stops after exactly 1
-            // loss (running total = stake > maxLoss = stake×0.95) before it can
-            // fire any internal recovery trade.  TP at stake×0.50 stops after any
-            // win (~95% payout >> 50% threshold).
+            // ── Smart Martingale: disable internal martingale; SML manages recovery ─
+            // Use the user's actual SL and TP in the bot so their settings are
+            // respected.  Martingale is set to 0 so the bot never doubles internally —
+            // SML handles the stake doubling externally after each loss.
             const isSml = cfgSmartMart && tradeType === 'even_odd';
-            const patchSL   = isSml ? stake * 0.95 : stopLoss;
-            const patchTP   = isSml ? stake * 0.50 : takeProfit;
-            const patchMart = isSml ? 0             : martingale;
+            const patchSL   = stopLoss;
+            const patchTP   = takeProfit;
+            const patchMart = isSml ? 0 : martingale;
 
             const doc = await fetchAndPatchBot(botId, signal, stake, patchTP, patchSL, patchMart);
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
