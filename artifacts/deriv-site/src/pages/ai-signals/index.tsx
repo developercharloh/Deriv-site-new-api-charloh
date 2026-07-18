@@ -266,7 +266,7 @@ function eoRecoveryRec(s: StatsChecks): { recommended: boolean; neutral: boolean
 }
 
 // ─── Stats-driven signal analysis (replaces 10-model voting) ─────────────────
-function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeType: TradeType): MarketResult {
+function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeType: TradeType, lastLost = false): MarketResult {
     const N = prices.length;
     const digits = prices.map(p => lastDigitOf(p, pip));
     const freq = new Array(10).fill(0);
@@ -280,15 +280,20 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     let winFn: (d: number) => boolean;
 
     if (tradeType === 'even_odd') {
-        const evenCt = digits.filter(d => d % 2 === 0).length;
-        const oddCt  = N - evenCt;
-        // Trade WITH the dominant side — direction follows actual dominance
-        if (evenCt >= oddCt) {
+        // Direction from last 100 ticks — tracks the current micro-regime, not
+        // the full-window average which lags by many minutes.
+        const recent100 = digits.slice(-Math.min(100, N));
+        const evenCt100 = recent100.filter(d => d % 2 === 0).length;
+        const oddCt100  = recent100.length - evenCt100;
+        // winProb from full window for statistical accuracy; direction from recent window
+        const evenCtAll = digits.filter(d => d % 2 === 0).length;
+        const oddCtAll  = N - evenCtAll;
+        if (evenCt100 >= oddCt100) {
             direction = 'EVEN'; contractType = 'DIGITEVEN';
-            winProb = evenCt / N; winFn = d => d % 2 === 0;
+            winProb = evenCtAll / N; winFn = d => d % 2 === 0;
         } else {
             direction = 'ODD'; contractType = 'DIGITODD';
-            winProb = oddCt / N; winFn = d => d % 2 !== 0;
+            winProb = oddCtAll / N; winFn = d => d % 2 !== 0;
         }
     } else if (tradeType === 'matches_differs') {
         const exp2 = N / 10;
@@ -515,12 +520,24 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     const freqAlignScore = Math.round((freqWinPass / freqWinWindows.length) * 100);
     const freqAlignment = { pass: freqAlignPass, windows: freqWinWindows, allAgree: freqWinPass === 4, alignScore: freqAlignScore };
 
-    // CHECK 10 — Micro-confirmation entry gate
-    // Last 2 ticks must be on the winning side — confirms the market is actively moving
-    // in the signal direction right now, not just historically.
+    // CHECK 10 — ACF-aware micro-confirmation entry gate
+    // Gate logic depends on market structure (alternating vs streaking):
+    //   Alternating (acf < -0.03): last tick on LOSING side → flip is statistically due
+    //   Streaking   (acf >  0.03): last 2 ticks on winning side → momentum continues
+    //   Neutral                  : last tick on winning side (simple recency)
     const last2digits = digits.slice(-2);
     const last2Results = last2digits.map(winFn);
-    const microConfirmPass = last2Results.length >= 2 && last2Results.every(Boolean);
+    let microConfirmPass: boolean;
+    if (a1 < -0.03) {
+        // Alternating market: enter after a losing tick — the flip is coming
+        microConfirmPass = last2digits.length >= 1 && !winFn(last2digits[last2digits.length - 1]);
+    } else if (a1 > 0.03) {
+        // Streaking market: both recent ticks on winning side confirms momentum
+        microConfirmPass = last2Results.length >= 2 && last2Results.every(Boolean);
+    } else {
+        // Neutral: just need the most recent tick on the winning side
+        microConfirmPass = last2Results.length >= 1 && last2Results[last2Results.length - 1] === true;
+    }
     const microConfirm = { pass: microConfirmPass, last2Wins: last2Results.filter(Boolean).length, last2: last2Results };
 
     // CHECK 11 — Digit Position Dominance
@@ -692,13 +709,17 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
 
     let isSignal: boolean;
     if (tradeType === 'even_odd') {
-        // EO: rawWinRate + crossWindow + freqAlignment + digitDominance all mandatory.
-        // 6/11 overall — adding Check 11 as mandatory already tightened the gate;
-        // keeping threshold at 6 avoids double-tightening that blocks valid signals.
-        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && digitDomPass && passCount >= 6;
+        // EO mandatory gates: rawWinRate + crossWindow + freqAlignment + digitDominance.
+        // Streak exhaustion gate: if the winning side has run 4+ consecutive ticks,
+        // the streak is mature and entry risk is elevated — hold off.
+        // Base threshold raised to 8/11 for higher-quality signals.
+        // Post-loss enhanced threshold: 9/11 required after a confirmed loss to
+        // avoid consecutive losses by demanding stronger market consensus.
+        const eoMinPass = lastLost ? 9 : 8;
+        const streakExhausted = streakLen >= 4;
+        isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && digitDomPass
+            && !streakExhausted && passCount >= eoMinPass;
     } else if (tradeType === 'over_under') {
-        // OU: all core checks + digit dominance mandatory.
-        // 6/11 overall — same rationale as EO.
         isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && stabilityPass
             && recoveryMarketOk && winProb >= MIN_WIN_PROB_OU && digitDomPass
             && passCount >= 6;
@@ -750,7 +771,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
 }
 
 // ─── Scan all markets ─────────────────────────────────────────────────────────
-async function scanAllMarkets(tradeType: TradeType, onProgress: (received: number) => void): Promise<{ best: MarketResult | null; noVotesBest: MarketResult | null; allResults: MarketResult[]; spikedMarkets: SpikeInfo[] }> {
+async function scanAllMarkets(tradeType: TradeType, onProgress: (received: number) => void, lastLost = false): Promise<{ best: MarketResult | null; noVotesBest: MarketResult | null; allResults: MarketResult[]; spikedMarkets: SpikeInfo[] }> {
     return new Promise(resolve => {
         const ws = new WebSocket(DERIV_WS);
         const priceMap = new Map<number, { prices: number[]; times: number[]; pip: number; sym: DerivVolatility }>();
@@ -766,9 +787,9 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
                 if (spiked) detectedSpikes.push({ code: sym.code, label: sym.short, sigma: Math.round(sigma * 10) / 10 });
                 const { gapDetected } = detectGap(times);
                 const tfMicro = prices.slice(-200); const tfShort = prices.slice(-1000); const tfMedium = prices.length >= 3000 ? prices.slice(-3000) : prices; const tfLong = prices;
-                const full = runModels(tfShort, pip, sym, tradeType);
-                if (tfShort.length >= 1600) { const seg = runModels(tfShort.slice(-1500), pip, sym, tradeType); full.segmentAgrees = seg.direction === full.direction && seg.statsChecks.passCount >= 3; }
-                const rMicro = runModels(tfMicro, pip, sym, tradeType); const rMedium = runModels(tfMedium, pip, sym, tradeType); const rLong = runModels(tfLong, pip, sym, tradeType);
+                const full = runModels(tfShort, pip, sym, tradeType, lastLost);
+                if (tfShort.length >= 1600) { const seg = runModels(tfShort.slice(-1500), pip, sym, tradeType, lastLost); full.segmentAgrees = seg.direction === full.direction && seg.statsChecks.passCount >= 3; }
+                const rMicro = runModels(tfMicro, pip, sym, tradeType, lastLost); const rMedium = runModels(tfMedium, pip, sym, tradeType, lastLost); const rLong = runModels(tfLong, pip, sym, tradeType, lastLost);
                 const mainDir = full.direction; const tfAgreement = [rMicro, full, rMedium, rLong].filter(r => r.direction === mainDir).length;
                 const regimeOk = rMedium.direction === mainDir && rLong.direction === mainDir;
                 const divergence = jsDiv(digitFreqArr(tfMicro, pip), digitFreqArr(tfLong, pip));
@@ -927,7 +948,7 @@ const AiSignalsPage: React.FC = () => {
             if (busy || !mounted) return; busy = true; setWatchScanning(true);
             let foundSignal = false;
             try {
-                const { allResults, spikedMarkets: spikes } = await scanAllMarkets(tradeType, () => {});
+                const { allResults, spikedMarkets: spikes } = await scanAllMarkets(tradeType, () => {}, false);
                 if (!mounted) return;
                 const spikeSet = new Set(spikes.map(s => s.code));
                 setWatchResults(allResults); setWatchSpikes(spikeSet);
@@ -940,8 +961,8 @@ const AiSignalsPage: React.FC = () => {
                 if (mounted) {
                     setWatchScanning(false);
                     // Signal found → re-validate after 90 s
-                    // No signal → rescan immediately after a 3 s breath
-                    startCountdown(foundSignal ? WATCH_INTERVAL_S : 3);
+                    // No signal → rescan immediately after a 1 s breath
+                    startCountdown(foundSignal ? WATCH_INTERVAL_S : 1);
                 }
             }
         };
@@ -1043,7 +1064,12 @@ const AiSignalsPage: React.FC = () => {
         setScanState('scanning'); setProgress(0); setResult(null); setNoSigBest(null);
         setHasSignal(false); setSessionCount(0); setSpikedMarkets([]);
         try {
-            const { best, noVotesBest, spikedMarkets: spikes } = await scanAllMarkets(tradeType, n => setProgress(n));
+            // Detect if last completed trade was a loss — used to raise the
+            // signal threshold and break consecutive-loss patterns.
+            const txs = (store.transactions.transactions as any[]);
+            const lastCompleted = txs.find((t: any) => t.type === 'contract' && t.data?.is_completed === true);
+            const lastLost = lastCompleted ? (Number(lastCompleted.data?.profit ?? 0) < 0) : false;
+            const { best, noVotesBest, spikedMarkets: spikes } = await scanAllMarkets(tradeType, n => setProgress(n), lastLost);
             setSpikedMarkets(spikes);
             if (best) {
                 setResult(best); setScanState('done');
