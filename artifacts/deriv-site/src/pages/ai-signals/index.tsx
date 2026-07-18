@@ -1135,11 +1135,12 @@ const AiSignalsPage: React.FC = () => {
     // the bot stops before recovery fires). TP = stake×0.90 (< win payout ~95%,
     // so after 1 win the bot stops). Martingale = 0 (no internal doubling).
     const smlRefire = async (sess: SmlSession, stake: number, totalWon: number, totalLost: number, lossCount: number, destroyed: () => boolean) => {
-        const singleSL = stake * 0.95;
-        const singleTP = stake * 0.90;
+        // SML always uses the user's session SL/TP; bot internal values are irrelevant.
+        // We pass generous internal limits (session values) so the bot never self-stops mid-trade.
+        // Internal recovery is killed by stopping the bot 300 ms after start (see below).
         if (store.run_panel.is_running) { store.run_panel.onStopButtonClick(); await new Promise(r => setTimeout(r, 1000)); }
         if (destroyed()) return;
-        const doc = await fetchAndPatchBot(sess.botId, sess.signal, stake, singleTP, singleSL, 0);
+        const doc = await fetchAndPatchBot(sess.botId, sess.signal, stake, sess.sessionTP, sess.sessionSL, 0);
         const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
         const Blockly = (window as any).Blockly;
         if (!Blockly?.derivWorkspace) throw new Error('Blockly not ready');
@@ -1151,6 +1152,15 @@ const AiSignalsPage: React.FC = () => {
             t => t.type === 'contract' && typeof t.data === 'object' && t.data?.is_completed
         ).length;
         if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
+        // ── Kill internal recovery ─────────────────────────────────────────────
+        // The DBot system fires the bot's built-in recovery block BEFORE it checks
+        // max loss, so stake×0.95 Max Loss never stops it in time.
+        // Fix: stop the bot 300 ms after start. The first contract is purchased
+        // within ~100 ms; stopping early can't cancel an existing contract —
+        // it only prevents the bot from queuing any further (recovery) purchases.
+        setTimeout(() => {
+            if (!destroyed() && store.run_panel.is_running) store.run_panel.onStopButtonClick();
+        }, 300);
     };
 
     // ── Smart Martingale: WATCHING phase ──────────────────────────────────────
@@ -1299,15 +1309,15 @@ const AiSignalsPage: React.FC = () => {
             const stopLoss   = parseFloat(cfgStopLoss)   || 30;
             const martingale = cfgMartingaleOn ? (parseFloat(cfgMartingale) || 1.5) : 0;
 
-            // ── Smart Martingale: single-contract enforcement ──────────────────
-            // MaxLoss = stake×0.95 → after 1 loss the bot's running loss (= stake)
-            // exceeds MaxLoss before recovery can fire → bot stops itself.
-            // TP = stake×0.90 → after 1 win (~95% payout) profit exceeds TP → stops.
-            // Martingale = 0 so internal doubling never runs. SML manages everything.
-            // The user's SL/TP values are used as SESSION totals tracked by SML.
+            // ── Smart Martingale: internal recovery is killed by stopping the bot
+            // 300 ms after it starts (see setTimeout below). Stopping early cannot
+            // cancel an already-purchased contract but prevents recovery from queuing.
+            // We pass the session SL/TP so the bot's own limits are never hit
+            // (SML manages all session tracking externally). Martingale = 0 so the
+            // bot never doubles stake internally even if somehow recovery fires.
             const isSml = cfgSmartMart && tradeType === 'even_odd';
-            const patchSL   = isSml ? stake * 0.95 : stopLoss;
-            const patchTP   = isSml ? stake * 0.90 : takeProfit;
+            const patchSL   = isSml ? stopLoss   : stopLoss;
+            const patchTP   = isSml ? takeProfit : takeProfit;
             const patchMart = isSml ? 0             : martingale;
 
             const doc = await fetchAndPatchBot(botId, signal, stake, patchTP, patchSL, patchMart);
@@ -1317,10 +1327,8 @@ const AiSignalsPage: React.FC = () => {
             const dom = Blockly.utils.xml.textToDom(xmlStr);
             Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
             Blockly.derivWorkspace.cleanUp(); Blockly.derivWorkspace.clearUndo();
-            // Only show Bot Builder when NOT in SML mode — in SML mode the user
-            // monitors via the on-page SML card; the bot's internal numbers
-            // (tiny SL/TP) should never be visible to them.
-            if (!isSml) store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+            // Always switch to Bot Builder so the user can watch trades in real-time.
+            store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
             setTimeout(() => {
                 if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
                 setRunState('idle'); setShowRunConfig(false);
@@ -1343,6 +1351,12 @@ const AiSignalsPage: React.FC = () => {
                         `🤖 Smart Martingale ON — ${direction} | ${result.sym.label} | Stake ${stake.toFixed(2)} × ${(martingale || 1.5).toFixed(1)} | SL ${stopLoss} | TP ${takeProfit}`,
                         MessageTypes.NOTIFY, 'journal__item--content'
                     );
+                    // Kill internal recovery: stop the bot 300 ms after start.
+                    // Contract is purchased within ~100 ms; stopping early cannot
+                    // cancel it — it only prevents recovery purchases from queuing.
+                    setTimeout(() => {
+                        if (!smlAbortRef.current && store.run_panel.is_running) store.run_panel.onStopButtonClick();
+                    }, 300);
                 }
             }, 500);
         } catch (e: any) { setRunState('error'); setRunErr(e?.message || 'Failed to launch bot.'); }
