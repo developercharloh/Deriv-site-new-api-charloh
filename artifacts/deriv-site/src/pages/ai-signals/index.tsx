@@ -14,25 +14,6 @@ interface OrbRunConfig { stake: string; takeProfit: string; stopLoss: string; ma
 const DEFAULT_RUN_CFG: OrbRunConfig = { stake: '0.5', takeProfit: '10', stopLoss: '30', martingale: '1.5', martingaleOn: true, eoRecovery: false };
 type RunState = 'idle' | 'launching' | 'no-ws' | 'error';
 
-// ─── Smart Martingale session ─────────────────────────────────────────────────
-interface SmlSession {
-    phase:       'watching' | 'settling' | 'waiting' | 'refiring';
-    purchaseId?: string;   // transaction_ids.buy of the active in-progress contract
-    baseStake:   number;
-    curStake:    number;
-    multiplier:  number;
-    lossCount:   number;
-    totalLost:   number;
-    totalWon:    number;
-    sessionSL:   number;
-    sessionTP:   number;
-    symbol:      string;
-    direction:   string;
-    waitSecs:    number;
-    botId:       string;
-    signal:      any;
-}
-
 // Checks whether the current EO market still meets the parity entry conditions.
 // Fetches the last 1 000 ticks, mirrors the Check-11 logic from ai-signals.
 async function checkEoParity(symbol: string, direction: string): Promise<boolean> {
@@ -876,16 +857,6 @@ const AiSignalsPage: React.FC = () => {
     const [cfgMartingaleOn, setCfgMartingaleOn] = useState(DEFAULT_RUN_CFG.martingaleOn);
     const [cfgEoRecovery,   setCfgEoRecovery]   = useState(DEFAULT_RUN_CFG.eoRecovery);
 
-    // ── Smart Martingale (EO only) ────────────────────────────────────────────
-    const [cfgSmartMart, setCfgSmartMart] = useState(false);
-    const [sml,          setSml]          = useState<SmlSession | null>(null);
-    const smlRef        = useRef<SmlSession | null>(null);
-    const smlAbortRef   = useRef(false);
-    const smlTxCountRef = useRef(0);
-    // On-page live log (visible without needing to open DBot journal)
-    const smlLogRef  = useRef<string[]>([]);
-    const [smlLog, setSmlLog] = useState<string[]>([]);
-
     // Live Market Watch — starts automatically on mount
     const [watchActive,    setWatchActive]    = useState(true);
     const [watchResults,   setWatchResults]   = useState<MarketResult[]>([]);
@@ -1116,195 +1087,6 @@ const AiSignalsPage: React.FC = () => {
         setRunState('idle'); setRunErr(''); setShowRunConfig(true);
     }, [result]);
 
-    // ── Smart Martingale: stop ────────────────────────────────────────────────
-    const stopSml = useCallback(() => {
-        smlAbortRef.current = true;
-        smlRef.current = null;
-        setSml(null);
-        if (store.run_panel.is_running) store.run_panel.onStopButtonClick();
-    }, [store]);
-
-    // ── Smart Martingale: on-page log helper ─────────────────────────────────
-    const addSmlLog = (msg: string) => {
-        const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        smlLogRef.current = [`${ts}  ${msg}`, ...smlLogRef.current].slice(0, 20);
-        setSmlLog([...smlLogRef.current]);
-    };
-
-    // ── Smart Martingale: shared re-fire helper ───────────────────────────────
-    // Single-contract enforcement: MaxLoss = stake×0.95 (< stake, so after 1 loss
-    // the bot stops before recovery fires). TP = stake×0.90 (< win payout ~95%,
-    // so after 1 win the bot stops). Martingale = 0 (no internal doubling).
-    const smlRefire = async (sess: SmlSession, stake: number, totalWon: number, totalLost: number, lossCount: number, destroyed: () => boolean) => {
-        // SML always uses the user's session SL/TP; bot internal values are irrelevant.
-        // We pass generous internal limits (session values) so the bot never self-stops mid-trade.
-        // Internal recovery is killed by stopping the bot 300 ms after start (see below).
-        if (store.run_panel.is_running) { store.run_panel.onStopButtonClick(); await new Promise(r => setTimeout(r, 1000)); }
-        if (destroyed()) return;
-        const doc = await fetchAndPatchBot(sess.botId, sess.signal, stake, sess.sessionTP, sess.sessionSL, 0);
-        const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
-        const Blockly = (window as any).Blockly;
-        if (!Blockly?.derivWorkspace) throw new Error('Blockly not ready');
-        Blockly.Xml.clearWorkspaceAndLoadFromXml(Blockly.utils.xml.textToDom(xmlStr), Blockly.derivWorkspace);
-        Blockly.derivWorkspace.cleanUp(); Blockly.derivWorkspace.clearUndo();
-        await new Promise(r => setTimeout(r, 500));
-        if (destroyed()) return;
-        // Count ALL contracts so WATCHING detects the next purchase immediately.
-        smlTxCountRef.current = (store.transactions.transactions as any[]).filter(
-            t => t.type === 'contract' && typeof t.data === 'object'
-        ).length;
-        if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
-    };
-
-    // ── Smart Martingale: shared result handler ───────────────────────────────
-    // Called once we have a completed contract. Handles WIN/LOSS accounting and
-    // transitions phase accordingly. `dead` is the effect's cleanup flag.
-    const handleSmlResult = useCallback((sess: SmlSession, contractData: any, dead: boolean) => {
-        const profit   = Number(contractData?.profit   ?? 0);
-        const buyPx    = Number(contractData?.buy_price ?? sess.curStake);
-        const currency = contractData?.currency ?? 'USD';
-        const isWin    = profit > 0;
-        store.journal.onLogSuccess({ log_type: isWin ? LogTypes.PROFIT : LogTypes.LOST, extra: { currency, profit: isWin ? profit : -buyPx } });
-        if (isWin) {
-            const totalWon = sess.totalWon + profit;
-            addSmlLog(`✅ WIN  +${profit.toFixed(2)}  |  Session: +${totalWon.toFixed(2)}  |  Resetting → ${sess.baseStake.toFixed(2)}`);
-            if (totalWon >= sess.sessionTP) {
-                addSmlLog(`🎯 Target profit reached — session closed. Total: +${totalWon.toFixed(2)}`);
-                if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
-                return;
-            }
-            const refiring = { ...sess, totalWon, curStake: sess.baseStake, lossCount: 0, phase: 'refiring' as const, waitSecs: 0 };
-            smlRef.current = refiring; if (!dead) setSml(refiring);
-            addSmlLog(`🚀 Re-firing at base ${sess.baseStake.toFixed(2)}…`);
-            (async () => {
-                try {
-                    await new Promise(r => setTimeout(r, 1200));
-                    if (dead || smlAbortRef.current) return;
-                    await smlRefire(sess, sess.baseStake, totalWon, sess.totalLost, 0, () => dead || smlAbortRef.current);
-                    if (dead || smlAbortRef.current) return;
-                    const watching = { ...refiring, phase: 'watching' as const };
-                    smlRef.current = watching; if (!dead) setSml(watching);
-                    addSmlLog(`👁 Watching for next trade…`);
-                } catch (e: any) {
-                    addSmlLog(`⚠️ Re-fire failed: ${e?.message ?? 'error'}`);
-                    if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
-                }
-            })();
-        } else {
-            const totalLost = sess.totalLost + buyPx;
-            const lossCount = sess.lossCount + 1;
-            const nextStake = parseFloat((sess.curStake * sess.multiplier).toFixed(2));
-            addSmlLog(`❌ LOSS  -${buyPx.toFixed(2)}  |  Loss #${lossCount}  |  Next stake: ${nextStake.toFixed(2)}`);
-            if (totalLost >= sess.sessionSL) {
-                addSmlLog(`🛑 Stop loss hit — session closed. Total lost: -${totalLost.toFixed(2)}`);
-                if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
-                return;
-            }
-            addSmlLog(`⏳ Cooldown 15 s before re-firing at ${nextStake.toFixed(2)}…`);
-            const next = { ...sess, totalLost, lossCount, curStake: nextStake, phase: 'waiting' as const, waitSecs: 0 };
-            smlRef.current = next; if (!dead) setSml(next);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [store]);
-
-    // ── Smart Martingale: WATCHING phase ──────────────────────────────────────
-    // Polls ALL contracts (including in-progress) at 100 ms.
-    // The INSTANT a new contract appears (purchase detected) we stop the bot —
-    // this is BEFORE internal recovery can queue a second purchase.
-    // If the contract is already completed, handle it immediately.
-    // If it's in-progress, transition to SETTLING to wait for it.
-    useEffect(() => {
-        if (!sml || sml.phase !== 'watching') return;
-        let dead = false;
-        const id = setInterval(() => {
-            if (dead || smlAbortRef.current) return;
-            const sess = smlRef.current;
-            if (!sess || sess.phase !== 'watching') return;
-            // Watch for ANY new contract entry (is_completed may be false = in-progress)
-            const allContracts = (store.transactions.transactions as any[]).filter(
-                t => t.type === 'contract' && typeof t.data === 'object'
-            );
-            if (allContracts.length <= smlTxCountRef.current) return;
-            // Purchase detected — stop bot NOW before recovery can queue
-            clearInterval(id);
-            if (store.run_panel.is_running) store.run_panel.onStopButtonClick();
-            smlTxCountRef.current = allContracts.length;
-            const newest     = allContracts[0];
-            const purchaseId = String(newest.data?.transaction_ids?.buy ?? '');
-            if (newest.data?.is_completed) {
-                // Already settled (very fast contract) — handle result immediately
-                handleSmlResult(sess, newest.data, dead);
-            } else {
-                // In-progress — wait for it to settle in SETTLING phase
-                addSmlLog(`📋 Trade purchased — waiting for settlement…`);
-                const settling = { ...sess, phase: 'settling' as const, purchaseId };
-                smlRef.current = settling; if (!dead) setSml(settling);
-            }
-        }, 100);
-        return () => { dead = true; clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sml?.phase === 'watching', store, handleSmlResult]);
-
-    // ── Smart Martingale: SETTLING phase ─────────────────────────────────────
-    // Waits for the purchased contract (identified by purchaseId) to become
-    // is_completed = true, then calls handleSmlResult.
-    useEffect(() => {
-        if (!sml || sml.phase !== 'settling') return;
-        let dead = false;
-        const id = setInterval(() => {
-            if (dead || smlAbortRef.current) return;
-            const sess = smlRef.current;
-            if (!sess || sess.phase !== 'settling') return;
-            const allContracts = (store.transactions.transactions as any[]).filter(
-                t => t.type === 'contract' && typeof t.data === 'object'
-            );
-            // Find our specific contract by its purchase transaction ID
-            const target = allContracts.find(
-                t => String(t.data?.transaction_ids?.buy ?? '') === sess.purchaseId
-            );
-            if (!target || !target.data?.is_completed) return;
-            clearInterval(id);
-            handleSmlResult(sess, target.data, dead);
-        }, 200);
-        return () => { dead = true; clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sml?.phase === 'settling', store, handleSmlResult]);
-
-    // ── Smart Martingale: WAITING phase ──────────────────────────────────────
-    // Counts down 15 s then re-fires at the doubled stake. No condition check —
-    // the user already confirmed the signal; re-fire is their intent.
-    useEffect(() => {
-        if (!sml || sml.phase !== 'waiting') return;
-        const COOLDOWN = 15;
-        let dead = false;
-        let elapsed = 0;
-        const id = setInterval(async () => {
-            if (dead || smlAbortRef.current) return;
-            const sess = smlRef.current;
-            if (!sess || sess.phase !== 'waiting') return;
-            elapsed += 1;
-            const tick = { ...sess, waitSecs: elapsed };
-            smlRef.current = tick; if (!dead) setSml(tick);
-            if (elapsed < COOLDOWN) return;
-            clearInterval(id);
-            const refiring = { ...sess, phase: 'refiring', waitSecs: 0 };
-            smlRef.current = refiring; if (!dead) setSml(refiring);
-            addSmlLog(`🚀 Re-firing at ${sess.curStake.toFixed(2)} after cooldown…`);
-            try {
-                await smlRefire(sess, sess.curStake, sess.totalWon, sess.totalLost, sess.lossCount, () => dead || smlAbortRef.current);
-                if (dead || smlAbortRef.current) return;
-                const watching = { ...refiring, phase: 'watching' };
-                smlRef.current = watching; if (!dead) setSml(watching);
-                addSmlLog(`👁 Watching for next trade…`);
-            } catch (e: any) {
-                addSmlLog(`⚠️ Re-fire failed: ${e?.message ?? 'error'}`);
-                if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
-            }
-        }, 1000);
-        return () => { dead = true; clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sml?.phase === 'waiting', store]);
-
     const handleExecuteTrade = useCallback(async () => {
         if (!result) return;
         setRunState('launching'); setRunErr('');
@@ -1347,18 +1129,7 @@ const AiSignalsPage: React.FC = () => {
             const stopLoss   = parseFloat(cfgStopLoss)   || 30;
             const martingale = cfgMartingaleOn ? (parseFloat(cfgMartingale) || 1.5) : 0;
 
-            // ── Smart Martingale: internal recovery is killed by stopping the bot
-            // 300 ms after it starts (see setTimeout below). Stopping early cannot
-            // cancel an already-purchased contract but prevents recovery from queuing.
-            // We pass the session SL/TP so the bot's own limits are never hit
-            // (SML manages all session tracking externally). Martingale = 0 so the
-            // bot never doubles stake internally even if somehow recovery fires.
-            const isSml = cfgSmartMart && tradeType === 'even_odd';
-            const patchSL   = isSml ? stopLoss   : stopLoss;
-            const patchTP   = isSml ? takeProfit : takeProfit;
-            const patchMart = isSml ? 0             : martingale;
-
-            const doc = await fetchAndPatchBot(botId, signal, stake, patchTP, patchSL, patchMart);
+            const doc = await fetchAndPatchBot(botId, signal, stake, takeProfit, stopLoss, martingale);
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
             const Blockly = (window as any).Blockly;
             if (!Blockly?.derivWorkspace) { setRunState('no-ws'); return; }
@@ -1370,31 +1141,9 @@ const AiSignalsPage: React.FC = () => {
             setTimeout(() => {
                 if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
                 setRunState('idle'); setShowRunConfig(false);
-
-                if (isSml) {
-                    smlAbortRef.current = false;
-                    // Count ALL contracts (including in-progress) — WATCHING phase
-                    // detects purchase the instant any new contract entry appears.
-                    smlTxCountRef.current = (store.transactions.transactions as any[]).filter(
-                        t => t.type === 'contract' && typeof t.data === 'object'
-                    ).length;
-                    const sess: SmlSession = {
-                        phase: 'watching', baseStake: stake, curStake: stake,
-                        multiplier: martingale || 1.5,
-                        lossCount: 0, totalLost: 0, totalWon: 0,
-                        sessionSL: stopLoss, sessionTP: takeProfit,
-                        symbol: result.sym.code, direction,
-                        waitSecs: 0, botId, signal,
-                    };
-                    smlRef.current = sess; setSml(sess);
-                    store.journal.pushMessage(
-                        `🤖 Smart Martingale ON — ${direction} | ${result.sym.label} | Stake ${stake.toFixed(2)} × ${(martingale || 1.5).toFixed(1)} | SL ${stopLoss} | TP ${takeProfit}`,
-                        MessageTypes.NOTIFY, 'journal__item--content'
-                    );
-                }
             }, 500);
         } catch (e: any) { setRunState('error'); setRunErr(e?.message || 'Failed to launch bot.'); }
-    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editRecoveryMode, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, cfgEoRecovery, cfgSmartMart, store]);
+    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editRecoveryMode, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, cfgEoRecovery, store]);
 
     // ── Derived display values ────────────────────────────────────────────────
     const vc = result ? voteColor(result.statsChecks.passCount) : '#6366f1';
@@ -1948,42 +1697,6 @@ const AiSignalsPage: React.FC = () => {
 
             </div>
 
-            {/* ── Smart Martingale live status card (always visible when active) ── */}
-            {sml && (
-                <div className='ai-sml-card'>
-                    <div className='ai-sml-card__header'>
-                        <span className='ai-sml-card__title'>
-                            {sml.phase === 'watching'  && '👁 Smart Martingale — Watching'}
-                            {sml.phase === 'settling'  && '⏳ Smart Martingale — Trade settling…'}
-                            {sml.phase === 'waiting'   && `⏳ Smart Martingale — Re-firing in ${Math.max(0, 15 - sml.waitSecs)}s`}
-                            {sml.phase === 'refiring'  && '🚀 Smart Martingale — Re-loading bot…'}
-                        </span>
-                        <button className='ai-sml-card__stop' onClick={stopSml} title='Stop Smart Martingale'>✕ Stop</button>
-                    </div>
-                    <div className='ai-sml-card__row'>
-                        <span>Direction</span><strong>{sml.direction}</strong>
-                        <span>Stake</span><strong>${sml.curStake.toFixed(2)}</strong>
-                        <span>Loss #</span><strong>{sml.lossCount}</strong>
-                    </div>
-                    <div className='ai-sml-card__row'>
-                        <span>Session won</span>
-                        <strong style={{ color: sml.totalWon > 0 ? '#10b981' : '#94a3b8' }}>+${sml.totalWon.toFixed(2)}</strong>
-                        <span>Session lost</span>
-                        <strong style={{ color: sml.totalLost > 0 ? '#ef4444' : '#94a3b8' }}>-${sml.totalLost.toFixed(2)}</strong>
-                        <span>SL/TP</span><strong>${sml.sessionSL.toFixed(0)} / ${sml.sessionTP.toFixed(0)}</strong>
-                    </div>
-                    {sml.phase === 'waiting' && (
-                        <div className='ai-sml-card__countdown'>
-                            Re-firing at <strong>${sml.curStake.toFixed(2)}</strong> in <strong>{Math.max(0, 15 - sml.waitSecs)}s</strong>
-                        </div>
-                    )}
-                    {smlLog.length > 0 && (
-                        <div className='ai-sml-card__log'>
-                            {smlLog.slice(0, 8).map((l, i) => <div key={i} className='ai-sml-card__log-row'>{l}</div>)}
-                        </div>
-                    )}
-                </div>
-            )}
 
             {/* ── Sticky Save & Run bar ──────────────────────────────────────── */}
             {scanState === 'done' && result && !showRunConfig && (
@@ -2006,38 +1719,18 @@ const AiSignalsPage: React.FC = () => {
                         <div className='ai-runcfg__sub'>Deploying to <strong>{runTargetLabel}</strong> — market, prediction and entry point are already set from the AI signal.</div>
                         <label className='ai-runcfg__field'><span>Stake</span><input type='number' min='0' step='0.01' value={cfgStake} onChange={e => setCfgStake(e.target.value)} /></label>
                         <label className='ai-runcfg__field'>
-                            <span>{cfgSmartMart && tradeType === 'even_odd' ? 'Session Target Profit' : 'Target Profit'}</span>
+                            <span>Target Profit</span>
                             <input type='number' min='0' step='0.01' value={cfgTakeProfit} onChange={e => setCfgTakeProfit(e.target.value)} />
                         </label>
                         <label className='ai-runcfg__field'>
-                            <span>{cfgSmartMart && tradeType === 'even_odd' ? 'Session Stop Loss' : 'Stop Loss'}</span>
+                            <span>Stop Loss</span>
                             <input type='number' min='0' step='0.01' value={cfgStopLoss} onChange={e => setCfgStopLoss(e.target.value)} />
                         </label>
-                        {cfgSmartMart && tradeType === 'even_odd' && (
-                            <div className='ai-runcfg__mart-hint' style={{ color: '#94a3b8', fontSize: 11, marginTop: -4 }}>
-                                ℹ️ Smart Martingale runs 1 trade at a time. Session Stop Loss / Target Profit are your total limits across all rounds.
-                            </div>
-                        )}
                         <div className='ai-runcfg__mart'>
                             <label className='ai-runcfg__mart-toggle'><input type='checkbox' checked={cfgMartingaleOn} onChange={e => setCfgMartingaleOn(e.target.checked)} /><span>Martingale</span></label>
                             <input type='number' min='0' step='0.1' value={cfgMartingale} disabled={!cfgMartingaleOn} onChange={e => setCfgMartingale(e.target.value)} className='ai-runcfg__mart-input' />
                         </div>
                         <span className='ai-runcfg__mart-hint'>{cfgMartingaleOn ? 'Stake multiplies by this factor after a loss.' : 'Off — martingale is reset to 0, stake stays flat after a loss.'}</span>
-
-                        {/* ── Smart Martingale (EO only) ─────────────────────── */}
-                        {tradeType === 'even_odd' && (
-                            <div className='ai-runcfg__smart-mart'>
-                                <label className='ai-runcfg__mart-toggle'>
-                                    <input type='checkbox' checked={cfgSmartMart} onChange={e => setCfgSmartMart(e.target.checked)} />
-                                    <span>Smart Martingale</span>
-                                </label>
-                                <span className='ai-runcfg__mart-hint' style={{ marginTop: 4 }}>
-                                    {cfgSmartMart
-                                        ? '✅ After each loss the bot STOPS, the orb waits for EVEN/ODD conditions to return, then re-fires at the doubled stake. All steps logged to Journal.'
-                                        : 'Off — bot uses its own internal recovery immediately after a loss.'}
-                                </span>
-                            </div>
-                        )}
 
                         {/* ── Recovery picker (Over/Under only) ──────────────── */}
                         {tradeType === 'over_under' && result && (() => {
@@ -2132,7 +1825,7 @@ const AiSignalsPage: React.FC = () => {
                             </div>
                         )}
                         <button className='ai-runcfg__execute' disabled={runState === 'launching'} onClick={handleExecuteTrade}>
-                            {runState === 'launching' ? <><Loader2 size={16} className='ai-panel__spin' /> Launching…</> : <><PlayCircle size={16} /> {sml ? 'Re-fire Smart Martingale' : 'Execute Trades'}</>}
+                            {runState === 'launching' ? <><Loader2 size={16} className='ai-panel__spin' /> Launching…</> : <><PlayCircle size={16} /> Execute Trades</>}
                         </button>
                         {runState === 'no-ws' && (<div className='ai-panel__run-err'>Open the <strong>Bot Builder</strong> tab once first, then try again.</div>)}
                         {runState === 'error'  && (<div className='ai-panel__run-err'>{runErr}</div>)}
