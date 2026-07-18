@@ -16,20 +16,21 @@ type RunState = 'idle' | 'launching' | 'no-ws' | 'error';
 
 // ─── Smart Martingale session ─────────────────────────────────────────────────
 interface SmlSession {
-    phase:      'watching' | 'waiting' | 'refiring';
-    baseStake:  number;
-    curStake:   number;
-    multiplier: number;
-    lossCount:  number;
-    totalLost:  number;
-    totalWon:   number;
-    sessionSL:  number;
-    sessionTP:  number;
-    symbol:     string;
-    direction:  string;
-    waitSecs:   number;
-    botId:      string;
-    signal:     any;
+    phase:       'watching' | 'settling' | 'waiting' | 'refiring';
+    purchaseId?: string;   // transaction_ids.buy of the active in-progress contract
+    baseStake:   number;
+    curStake:    number;
+    multiplier:  number;
+    lossCount:   number;
+    totalLost:   number;
+    totalWon:    number;
+    sessionSL:   number;
+    sessionTP:   number;
+    symbol:      string;
+    direction:   string;
+    waitSecs:    number;
+    botId:       string;
+    signal:      any;
 }
 
 // Checks whether the current EO market still meets the parity entry conditions.
@@ -1148,26 +1149,70 @@ const AiSignalsPage: React.FC = () => {
         Blockly.derivWorkspace.cleanUp(); Blockly.derivWorkspace.clearUndo();
         await new Promise(r => setTimeout(r, 500));
         if (destroyed()) return;
+        // Count ALL contracts so WATCHING detects the next purchase immediately.
         smlTxCountRef.current = (store.transactions.transactions as any[]).filter(
-            t => t.type === 'contract' && typeof t.data === 'object' && t.data?.is_completed
+            t => t.type === 'contract' && typeof t.data === 'object'
         ).length;
         if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
-        // ── Kill internal recovery ─────────────────────────────────────────────
-        // The DBot system fires the bot's built-in recovery block BEFORE it checks
-        // max loss, so stake×0.95 Max Loss never stops it in time.
-        // Fix: stop the bot 300 ms after start. The first contract is purchased
-        // within ~100 ms; stopping early can't cancel an existing contract —
-        // it only prevents the bot from queuing any further (recovery) purchases.
-        setTimeout(() => {
-            if (!destroyed() && store.run_panel.is_running) store.run_panel.onStopButtonClick();
-        }, 300);
     };
 
+    // ── Smart Martingale: shared result handler ───────────────────────────────
+    // Called once we have a completed contract. Handles WIN/LOSS accounting and
+    // transitions phase accordingly. `dead` is the effect's cleanup flag.
+    const handleSmlResult = useCallback((sess: SmlSession, contractData: any, dead: boolean) => {
+        const profit   = Number(contractData?.profit   ?? 0);
+        const buyPx    = Number(contractData?.buy_price ?? sess.curStake);
+        const currency = contractData?.currency ?? 'USD';
+        const isWin    = profit > 0;
+        store.journal.onLogSuccess({ log_type: isWin ? LogTypes.PROFIT : LogTypes.LOST, extra: { currency, profit: isWin ? profit : -buyPx } });
+        if (isWin) {
+            const totalWon = sess.totalWon + profit;
+            addSmlLog(`✅ WIN  +${profit.toFixed(2)}  |  Session: +${totalWon.toFixed(2)}  |  Resetting → ${sess.baseStake.toFixed(2)}`);
+            if (totalWon >= sess.sessionTP) {
+                addSmlLog(`🎯 Target profit reached — session closed. Total: +${totalWon.toFixed(2)}`);
+                if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
+                return;
+            }
+            const refiring = { ...sess, totalWon, curStake: sess.baseStake, lossCount: 0, phase: 'refiring' as const, waitSecs: 0 };
+            smlRef.current = refiring; if (!dead) setSml(refiring);
+            addSmlLog(`🚀 Re-firing at base ${sess.baseStake.toFixed(2)}…`);
+            (async () => {
+                try {
+                    await new Promise(r => setTimeout(r, 1200));
+                    if (dead || smlAbortRef.current) return;
+                    await smlRefire(sess, sess.baseStake, totalWon, sess.totalLost, 0, () => dead || smlAbortRef.current);
+                    if (dead || smlAbortRef.current) return;
+                    const watching = { ...refiring, phase: 'watching' as const };
+                    smlRef.current = watching; if (!dead) setSml(watching);
+                    addSmlLog(`👁 Watching for next trade…`);
+                } catch (e: any) {
+                    addSmlLog(`⚠️ Re-fire failed: ${e?.message ?? 'error'}`);
+                    if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
+                }
+            })();
+        } else {
+            const totalLost = sess.totalLost + buyPx;
+            const lossCount = sess.lossCount + 1;
+            const nextStake = parseFloat((sess.curStake * sess.multiplier).toFixed(2));
+            addSmlLog(`❌ LOSS  -${buyPx.toFixed(2)}  |  Loss #${lossCount}  |  Next stake: ${nextStake.toFixed(2)}`);
+            if (totalLost >= sess.sessionSL) {
+                addSmlLog(`🛑 Stop loss hit — session closed. Total lost: -${totalLost.toFixed(2)}`);
+                if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
+                return;
+            }
+            addSmlLog(`⏳ Cooldown 15 s before re-firing at ${nextStake.toFixed(2)}…`);
+            const next = { ...sess, totalLost, lossCount, curStake: nextStake, phase: 'waiting' as const, waitSecs: 0 };
+            smlRef.current = next; if (!dead) setSml(next);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [store]);
+
     // ── Smart Martingale: WATCHING phase ──────────────────────────────────────
-    // Polls completed transactions every 500 ms.
-    // WIN  → stop bot → re-fire immediately at base stake
-    // LOSS → stop bot → 15-second cooldown → re-fire at doubled stake
-    // Session SL/TP hit → ends session
+    // Polls ALL contracts (including in-progress) at 100 ms.
+    // The INSTANT a new contract appears (purchase detected) we stop the bot —
+    // this is BEFORE internal recovery can queue a second purchase.
+    // If the contract is already completed, handle it immediately.
+    // If it's in-progress, transition to SETTLING to wait for it.
     useEffect(() => {
         if (!sml || sml.phase !== 'watching') return;
         let dead = false;
@@ -1175,62 +1220,55 @@ const AiSignalsPage: React.FC = () => {
             if (dead || smlAbortRef.current) return;
             const sess = smlRef.current;
             if (!sess || sess.phase !== 'watching') return;
-            const txs  = (store.transactions.transactions as any[]).filter(
-                t => t.type === 'contract' && typeof t.data === 'object' && t.data?.is_completed
+            // Watch for ANY new contract entry (is_completed may be false = in-progress)
+            const allContracts = (store.transactions.transactions as any[]).filter(
+                t => t.type === 'contract' && typeof t.data === 'object'
             );
-            if (txs.length <= smlTxCountRef.current) return;
+            if (allContracts.length <= smlTxCountRef.current) return;
+            // Purchase detected — stop bot NOW before recovery can queue
             clearInterval(id);
             if (store.run_panel.is_running) store.run_panel.onStopButtonClick();
-            smlTxCountRef.current = txs.length;
-            const newest  = txs[0];
-            const profit  = Number(newest.data?.profit   ?? 0);
-            const buyPx   = Number(newest.data?.buy_price ?? sess.curStake);
-            const currency= newest.data?.currency ?? 'USD';
-            const isWin   = profit > 0;
-            store.journal.onLogSuccess({ log_type: isWin ? LogTypes.PROFIT : LogTypes.LOST, extra: { currency, profit: isWin ? profit : -buyPx } });
-            if (isWin) {
-                const totalWon = sess.totalWon + profit;
-                addSmlLog(`✅ WIN  +${profit.toFixed(2)}  |  Session: +${totalWon.toFixed(2)}  |  Resetting → ${sess.baseStake.toFixed(2)}`);
-                if (totalWon >= sess.sessionTP) {
-                    addSmlLog(`🎯 Target profit reached — session closed. Total: +${totalWon.toFixed(2)}`);
-                    if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
-                    return;
-                }
-                const refiring = { ...sess, totalWon, curStake: sess.baseStake, lossCount: 0, phase: 'refiring', waitSecs: 0 };
-                smlRef.current = refiring; if (!dead) setSml(refiring);
-                addSmlLog(`🚀 Re-firing at base ${sess.baseStake.toFixed(2)}…`);
-                (async () => {
-                    try {
-                        await new Promise(r => setTimeout(r, 1200));
-                        if (dead || smlAbortRef.current) return;
-                        await smlRefire(sess, sess.baseStake, totalWon, sess.totalLost, 0, () => dead || smlAbortRef.current);
-                        if (dead || smlAbortRef.current) return;
-                        const watching = { ...refiring, phase: 'watching' };
-                        smlRef.current = watching; if (!dead) setSml(watching);
-                        addSmlLog(`👁 Watching for next trade…`);
-                    } catch (e: any) {
-                        addSmlLog(`⚠️ Re-fire failed: ${e?.message ?? 'error'}`);
-                        if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
-                    }
-                })();
+            smlTxCountRef.current = allContracts.length;
+            const newest     = allContracts[0];
+            const purchaseId = String(newest.data?.transaction_ids?.buy ?? '');
+            if (newest.data?.is_completed) {
+                // Already settled (very fast contract) — handle result immediately
+                handleSmlResult(sess, newest.data, dead);
             } else {
-                const totalLost = sess.totalLost + buyPx;
-                const lossCount = sess.lossCount + 1;
-                const nextStake = parseFloat((sess.curStake * sess.multiplier).toFixed(2));
-                addSmlLog(`❌ LOSS  -${buyPx.toFixed(2)}  |  Loss #${lossCount}  |  Next stake: ${nextStake.toFixed(2)}`);
-                if (totalLost >= sess.sessionSL) {
-                    addSmlLog(`🛑 Stop loss hit — session closed. Total lost: -${totalLost.toFixed(2)}`);
-                    if (!dead) { smlAbortRef.current = true; smlRef.current = null; setSml(null); }
-                    return;
-                }
-                addSmlLog(`⏳ Cooldown 15 s before re-firing at ${nextStake.toFixed(2)}…`);
-                const next = { ...sess, totalLost, lossCount, curStake: nextStake, phase: 'waiting', waitSecs: 0 };
-                smlRef.current = next; if (!dead) setSml(next);
+                // In-progress — wait for it to settle in SETTLING phase
+                addSmlLog(`📋 Trade purchased — waiting for settlement…`);
+                const settling = { ...sess, phase: 'settling' as const, purchaseId };
+                smlRef.current = settling; if (!dead) setSml(settling);
             }
-        }, 500);
+        }, 100);
         return () => { dead = true; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sml?.phase === 'watching', store]);
+    }, [sml?.phase === 'watching', store, handleSmlResult]);
+
+    // ── Smart Martingale: SETTLING phase ─────────────────────────────────────
+    // Waits for the purchased contract (identified by purchaseId) to become
+    // is_completed = true, then calls handleSmlResult.
+    useEffect(() => {
+        if (!sml || sml.phase !== 'settling') return;
+        let dead = false;
+        const id = setInterval(() => {
+            if (dead || smlAbortRef.current) return;
+            const sess = smlRef.current;
+            if (!sess || sess.phase !== 'settling') return;
+            const allContracts = (store.transactions.transactions as any[]).filter(
+                t => t.type === 'contract' && typeof t.data === 'object'
+            );
+            // Find our specific contract by its purchase transaction ID
+            const target = allContracts.find(
+                t => String(t.data?.transaction_ids?.buy ?? '') === sess.purchaseId
+            );
+            if (!target || !target.data?.is_completed) return;
+            clearInterval(id);
+            handleSmlResult(sess, target.data, dead);
+        }, 200);
+        return () => { dead = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sml?.phase === 'settling', store, handleSmlResult]);
 
     // ── Smart Martingale: WAITING phase ──────────────────────────────────────
     // Counts down 15 s then re-fires at the doubled stake. No condition check —
@@ -1335,8 +1373,10 @@ const AiSignalsPage: React.FC = () => {
 
                 if (isSml) {
                     smlAbortRef.current = false;
+                    // Count ALL contracts (including in-progress) — WATCHING phase
+                    // detects purchase the instant any new contract entry appears.
                     smlTxCountRef.current = (store.transactions.transactions as any[]).filter(
-                        t => t.type === 'contract' && typeof t.data === 'object' && t.data?.is_completed
+                        t => t.type === 'contract' && typeof t.data === 'object'
                     ).length;
                     const sess: SmlSession = {
                         phase: 'watching', baseStake: stake, curStake: stake,
@@ -1351,12 +1391,6 @@ const AiSignalsPage: React.FC = () => {
                         `🤖 Smart Martingale ON — ${direction} | ${result.sym.label} | Stake ${stake.toFixed(2)} × ${(martingale || 1.5).toFixed(1)} | SL ${stopLoss} | TP ${takeProfit}`,
                         MessageTypes.NOTIFY, 'journal__item--content'
                     );
-                    // Kill internal recovery: stop the bot 300 ms after start.
-                    // Contract is purchased within ~100 ms; stopping early cannot
-                    // cancel it — it only prevents recovery purchases from queuing.
-                    setTimeout(() => {
-                        if (!smlAbortRef.current && store.run_panel.is_running) store.run_panel.onStopButtonClick();
-                    }, 300);
                 }
             }, 500);
         } catch (e: any) { setRunState('error'); setRunErr(e?.message || 'Failed to launch bot.'); }
@@ -1920,6 +1954,7 @@ const AiSignalsPage: React.FC = () => {
                     <div className='ai-sml-card__header'>
                         <span className='ai-sml-card__title'>
                             {sml.phase === 'watching'  && '👁 Smart Martingale — Watching'}
+                            {sml.phase === 'settling'  && '⏳ Smart Martingale — Trade settling…'}
                             {sml.phase === 'waiting'   && `⏳ Smart Martingale — Re-firing in ${Math.max(0, 15 - sml.waitSecs)}s`}
                             {sml.phase === 'refiring'  && '🚀 Smart Martingale — Re-loading bot…'}
                         </span>
