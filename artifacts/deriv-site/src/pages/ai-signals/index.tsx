@@ -1131,12 +1131,15 @@ const AiSignalsPage: React.FC = () => {
     };
 
     // ── Smart Martingale: shared re-fire helper ───────────────────────────────
+    // Single-contract enforcement: MaxLoss = stake×0.95 (< stake, so after 1 loss
+    // the bot stops before recovery fires). TP = stake×0.90 (< win payout ~95%,
+    // so after 1 win the bot stops). Martingale = 0 (no internal doubling).
     const smlRefire = async (sess: SmlSession, stake: number, totalWon: number, totalLost: number, lossCount: number, destroyed: () => boolean) => {
-        const remSL = Math.max(0.1, sess.sessionSL - totalLost);
-        const remTP = Math.max(0.1, sess.sessionTP - totalWon);
+        const singleSL = stake * 0.95;
+        const singleTP = stake * 0.90;
         if (store.run_panel.is_running) { store.run_panel.onStopButtonClick(); await new Promise(r => setTimeout(r, 1000)); }
         if (destroyed()) return;
-        const doc = await fetchAndPatchBot(sess.botId, sess.signal, stake, remTP, remSL, 0);
+        const doc = await fetchAndPatchBot(sess.botId, sess.signal, stake, singleTP, singleSL, 0);
         const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
         const Blockly = (window as any).Blockly;
         if (!Blockly?.derivWorkspace) throw new Error('Blockly not ready');
@@ -1296,14 +1299,16 @@ const AiSignalsPage: React.FC = () => {
             const stopLoss   = parseFloat(cfgStopLoss)   || 30;
             const martingale = cfgMartingaleOn ? (parseFloat(cfgMartingale) || 1.5) : 0;
 
-            // ── Smart Martingale: disable internal martingale; SML manages recovery ─
-            // Use the user's actual SL and TP in the bot so their settings are
-            // respected.  Martingale is set to 0 so the bot never doubles internally —
-            // SML handles the stake doubling externally after each loss.
+            // ── Smart Martingale: single-contract enforcement ──────────────────
+            // MaxLoss = stake×0.95 → after 1 loss the bot's running loss (= stake)
+            // exceeds MaxLoss before recovery can fire → bot stops itself.
+            // TP = stake×0.90 → after 1 win (~95% payout) profit exceeds TP → stops.
+            // Martingale = 0 so internal doubling never runs. SML manages everything.
+            // The user's SL/TP values are used as SESSION totals tracked by SML.
             const isSml = cfgSmartMart && tradeType === 'even_odd';
-            const patchSL   = stopLoss;
-            const patchTP   = takeProfit;
-            const patchMart = isSml ? 0 : martingale;
+            const patchSL   = isSml ? stake * 0.95 : stopLoss;
+            const patchTP   = isSml ? stake * 0.90 : takeProfit;
+            const patchMart = isSml ? 0             : martingale;
 
             const doc = await fetchAndPatchBot(botId, signal, stake, patchTP, patchSL, patchMart);
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
@@ -1948,8 +1953,19 @@ const AiSignalsPage: React.FC = () => {
                         </div>
                         <div className='ai-runcfg__sub'>Deploying to <strong>{runTargetLabel}</strong> — market, prediction and entry point are already set from the AI signal.</div>
                         <label className='ai-runcfg__field'><span>Stake</span><input type='number' min='0' step='0.01' value={cfgStake} onChange={e => setCfgStake(e.target.value)} /></label>
-                        <label className='ai-runcfg__field'><span>Target Profit</span><input type='number' min='0' step='0.01' value={cfgTakeProfit} onChange={e => setCfgTakeProfit(e.target.value)} /></label>
-                        <label className='ai-runcfg__field'><span>Stop Loss</span><input type='number' min='0' step='0.01' value={cfgStopLoss} onChange={e => setCfgStopLoss(e.target.value)} /></label>
+                        <label className='ai-runcfg__field'>
+                            <span>{cfgSmartMart && tradeType === 'even_odd' ? 'Session Target Profit' : 'Target Profit'}</span>
+                            <input type='number' min='0' step='0.01' value={cfgTakeProfit} onChange={e => setCfgTakeProfit(e.target.value)} />
+                        </label>
+                        <label className='ai-runcfg__field'>
+                            <span>{cfgSmartMart && tradeType === 'even_odd' ? 'Session Stop Loss' : 'Stop Loss'}</span>
+                            <input type='number' min='0' step='0.01' value={cfgStopLoss} onChange={e => setCfgStopLoss(e.target.value)} />
+                        </label>
+                        {cfgSmartMart && tradeType === 'even_odd' && (
+                            <div className='ai-runcfg__mart-hint' style={{ color: '#94a3b8', fontSize: 11, marginTop: -4 }}>
+                                ℹ️ Smart Martingale runs 1 trade at a time. Session Stop Loss / Target Profit are your total limits across all rounds.
+                            </div>
+                        )}
                         <div className='ai-runcfg__mart'>
                             <label className='ai-runcfg__mart-toggle'><input type='checkbox' checked={cfgMartingaleOn} onChange={e => setCfgMartingaleOn(e.target.checked)} /><span>Martingale</span></label>
                             <input type='number' min='0' step='0.1' value={cfgMartingale} disabled={!cfgMartingaleOn} onChange={e => setCfgMartingale(e.target.value)} className='ai-runcfg__mart-input' />
