@@ -1317,7 +1317,10 @@ const AiSignalsPage: React.FC = () => {
             const dom = Blockly.utils.xml.textToDom(xmlStr);
             Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
             Blockly.derivWorkspace.cleanUp(); Blockly.derivWorkspace.clearUndo();
-            store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+            // Only show Bot Builder when NOT in SML mode — in SML mode the user
+            // monitors via the on-page SML card; the bot's internal numbers
+            // (tiny SL/TP) should never be visible to them.
+            if (!isSml) store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
             setTimeout(() => {
                 if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
                 setRunState('idle'); setShowRunConfig(false);
