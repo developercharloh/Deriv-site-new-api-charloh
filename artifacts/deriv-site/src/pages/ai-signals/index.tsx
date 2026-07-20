@@ -104,6 +104,13 @@ interface StatsChecks {
         winTrend: TrendDir;   // winning-side freq trend across time bands (OU)
         lossTrend: TrendDir;  // losing-side freq trend across time bands (OU)
     } | null;
+    /** Check 12 — HMM-inspired regime detection (EO only) */
+    regimeDetect: {
+        pass: boolean;
+        confirmedWindows: number;  // consecutive 20-tick windows agreeing with direction
+        avgWinRate: number;        // average win rate across those windows
+        justTransitioned: boolean; // regime just flipped from the other side (early entry)
+    } | null;
     passCount: number; totalChecks: number; isSignal: boolean;
 }
 
@@ -700,25 +707,54 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         recoveryMarketOk = recWinRate >= recTheoExp - 0.02;
     }
 
+    // CHECK 12 — Regime detection (HMM-inspired, EO only)
+    // Rather than predicting individual ticks, detects whether the market has
+    // entered a SUSTAINED EVEN or ODD regime and we are catching it EARLY.
+    // Uses 20-tick rolling windows over the last 200 ticks:
+    //   CONFIRMED    ≥3 consecutive recent windows show win rate > 50%
+    //   YOUNG        regime is ≤6 windows old (~120 ticks) — not exhausted
+    //   FRESH        window just before regime was on the OTHER side (we caught the flip)
+    //   STRONG       average win rate across regime windows ≥ 52%
+    // Non-EO markets pass by default (regime logic is EO-specific).
+    const REG_WIN_SZ = 20;
+    const REG_COUNT  = 10;   // 10 × 20 = 200-tick lookback
+    let regimePass = !isEO;  // non-EO always passes
+    let regRunLen = 0, regAvgRate = 0, regimeFresh = false;
+    if (isEO) {
+        const regRates: number[] = [];
+        for (let i = 0; i < REG_COUNT; i++) {
+            const end   = digits.length - i * REG_WIN_SZ;
+            const start = end - REG_WIN_SZ;
+            if (start < 0) break;
+            regRates.push(digits.slice(start, end).filter(winFn).length / REG_WIN_SZ);
+        }
+        // regRates[0] = most recent window, regRates[N] = older
+        for (const r of regRates) { if (r > 0.50) regRunLen++; else break; }
+        regAvgRate  = regRunLen > 0 ? regRates.slice(0, regRunLen).reduce((s, r) => s + r, 0) / regRunLen : 0;
+        // Fresh = the window just before the run was on the opposing side (we caught the flip early)
+        regimeFresh = regRates.length > regRunLen && regRates[regRunLen] <= 0.50;
+        regimePass  = regRunLen >= 3 && regRunLen <= 6 && regimeFresh && regAvgRate >= 0.52;
+    }
+    const regimeDetect = { pass: regimePass, confirmedWindows: regRunLen, avgWinRate: regAvgRate, justTransitioned: regimeFresh };
+
     // ── Aggregate & gate ─────────────────────────────────────────────────────
     const checkArr = [rawWinRatePass, crossWindowPass, streakPass, autocorrPass,
                       stabilityPass, entryOverduePass, leadDigitPass, sideMomPass,
-                      freqAlignPass, microConfirmPass, digitDomPass];
+                      freqAlignPass, microConfirmPass, digitDomPass, regimePass];
     const passCount  = checkArr.filter(Boolean).length;
-    const totalChecks = 11;
+    const totalChecks = 12;
 
     let isSignal: boolean;
     if (tradeType === 'even_odd') {
-        // EO mandatory gates: rawWinRate + crossWindow + freqAlignment + digitDominance.
+        // EO mandatory gates: rawWinRate + crossWindow + freqAlignment + digitDominance + regimeDetect.
         // Streak exhaustion gate: if the winning side has run 4+ consecutive ticks,
         // the streak is mature and entry risk is elevated — hold off.
-        // Base threshold raised to 8/11 for higher-quality signals.
-        // Post-loss enhanced threshold: 9/11 required after a confirmed loss to
-        // avoid consecutive losses by demanding stronger market consensus.
-        const eoMinPass = lastLost ? 9 : 8;
+        // Base threshold: 9/12 (75%) — regime check added, thresholds raised accordingly.
+        // Post-loss enhanced threshold: 10/12 after a confirmed loss.
+        const eoMinPass = lastLost ? 10 : 9;
         const streakExhausted = streakLen >= 4;
         isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && digitDomPass
-            && !streakExhausted && passCount >= eoMinPass;
+            && regimePass && !streakExhausted && passCount >= eoMinPass;
     } else if (tradeType === 'over_under') {
         isSignal = rawWinRatePass && crossWindowPass && freqAlignPass && stabilityPass
             && recoveryMarketOk && winProb >= MIN_WIN_PROB_OU && digitDomPass
@@ -737,6 +773,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         entryOverdue: { pass: entryOverduePass, overdueRatio },
         leadDigit, sideMomentum, freqAlignment, microConfirm,
         digitDominance: digitDomDetails,
+        regimeDetect,
         passCount, totalChecks, isSignal,
     };
 
