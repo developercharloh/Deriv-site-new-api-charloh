@@ -733,7 +733,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
         regAvgRate  = regRunLen > 0 ? regRates.slice(0, regRunLen).reduce((s, r) => s + r, 0) / regRunLen : 0;
         // Fresh = the window just before the run was on the opposing side (we caught the flip early)
         regimeFresh = regRates.length > regRunLen && regRates[regRunLen] <= 0.50;
-        regimePass  = regRunLen >= 3 && regRunLen <= 6 && regimeFresh && regAvgRate >= 0.52;
+        regimePass  = regRunLen >= 2 && regRunLen <= 5 && regimeFresh && regAvgRate >= 0.52;
     }
     const regimeDetect = { pass: regimePass, confirmedWindows: regRunLen, avgWinRate: regAvgRate, justTransitioned: regimeFresh };
 
@@ -833,7 +833,20 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
                 const regimeScore = Math.max(0, Math.round((1 - divergence / Math.max(divergence, REGIME_DIV_LIMIT)) * 100));
                 results.push({ ...full, regimeScore, regimeOk, gapDetected, tfAgreement });
             });
-            results.sort((a, b) => b.statsChecks.passCount - a.statsChecks.passCount || b.winProb - a.winProb);
+            // Vol 10 and Vol 25 hold regimes longer — prioritise them in EO mode
+            // when passCount is equal. All other trade types sort purely by passCount.
+            const isRegimeProne = (code: string) =>
+                code === '1HZ10V' || code === 'R_10' || code === '1HZ25V' || code === 'R_25';
+            results.sort((a, b) => {
+                const pcDiff = b.statsChecks.passCount - a.statsChecks.passCount;
+                if (pcDiff !== 0) return pcDiff;
+                if (tradeType === 'even_odd') {
+                    const aP = isRegimeProne(a.sym.code) ? 1 : 0;
+                    const bP = isRegimeProne(b.sym.code) ? 1 : 0;
+                    if (bP !== aP) return bP - aP;
+                }
+                return b.winProb - a.winProb;
+            });
             const spikedCodes = new Set(detectedSpikes.map(s => s.code));
             const best = results.find(r => !spikedCodes.has(r.sym.code) && !r.gapDetected && r.statsChecks.isSignal && !r.recentDominance.isCold) ?? null;
             const noVotesBest = best ? null : (results.find(r => !spikedCodes.has(r.sym.code)) ?? results[0] ?? null);
