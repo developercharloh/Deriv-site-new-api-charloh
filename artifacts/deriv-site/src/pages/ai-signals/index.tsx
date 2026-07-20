@@ -840,7 +840,7 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
             results.sort((a, b) => {
                 const pcDiff = b.statsChecks.passCount - a.statsChecks.passCount;
                 if (pcDiff !== 0) return pcDiff;
-                if (tradeType === 'even_odd') {
+                if (tradeType === 'even_odd' || tradeType === 'over_under') {
                     const aP = isRegimeProne(a.sym.code) ? 1 : 0;
                     const bP = isRegimeProne(b.sym.code) ? 1 : 0;
                     if (bP !== aP) return bP - aP;
