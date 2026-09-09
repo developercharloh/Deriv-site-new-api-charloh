@@ -263,6 +263,7 @@ const run = async () => {
         await waitForJson(`http://127.0.0.1:${port}/json/version`);
         client = await createCdpClient(port);
         await client.call('Page.enable');
+        await client.call('Network.enable');
         await client.call('Runtime.enable');
         await client.call('Page.navigate', { url: TARGET_URL });
 
@@ -304,7 +305,45 @@ const run = async () => {
             });
         }
 
-        console.log(JSON.stringify({ ok: true, target: TARGET_URL, scans: results }, null, 2));
+        await client.evaluate(`(() => {
+            class FailingWebSocket {
+                static OPEN = 1;
+                readyState = 0;
+                constructor() {
+                    setTimeout(() => {
+                        this.readyState = 3;
+                        this.onerror?.(new Event('error'));
+                        this.onclose?.(new Event('close'));
+                    }, 50);
+                }
+                close() {
+                    this.readyState = 3;
+                }
+                send() {}
+            }
+            window.WebSocket = FailingWebSocket;
+        })()`);
+        await client.evaluate('document.querySelector("[data-testid=\\"button-run-scan\\"]")?.click()');
+        const failedSnapshot = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return /Could not reach the public market feed|public feed took too long/i.test(next.status) ? next : false;
+            },
+            'blocked-feed error state',
+            45000,
+        );
+        if (failedSnapshot.rows.length !== 0 || failedSnapshot.coverage) {
+            throw new Error('A failed scan retained previous rows or coverage.');
+        }
+        console.log(JSON.stringify({
+            ok: true,
+            target: TARGET_URL,
+            scans: results,
+            blockedFeed: {
+                status: failedSnapshot.status,
+                rows: failedSnapshot.rows.length,
+            },
+        }, null, 2));
     } finally {
         client?.close();
         browser.kill('SIGTERM');
