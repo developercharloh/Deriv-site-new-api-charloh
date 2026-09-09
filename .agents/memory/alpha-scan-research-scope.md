@@ -7,4 +7,4 @@ Alpha Scan AI's first phase is an evidence layer: public Synthetic Index metadat
 
 **Why:** The product brief explicitly rejects fabricated probabilities, guaranteed profitability, indicator-only claims, and real-money execution before statistically validated out-of-sample evidence exists.
 
-**How to apply:** Add research and observability before adding trade actions. Keep leakage-safe chronological validation, calibration error, Brier score, and per-symbol gate reasons visible. Never turn directional imbalance, volatility, or regime heuristics into an ML probability or execution recommendation.
+**How to apply:** Add research and observability before adding trade actions. Keep leakage-safe chronological validation, calibration error, Brier score, and per-symbol gate reasons visible. Model validation must fetch the complete discovered universe automatically; scrolling is presentation only. Never turn directional imbalance, volatility, or regime heuristics into an ML probability or execution recommendation.
