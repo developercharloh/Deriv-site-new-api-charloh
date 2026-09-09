@@ -949,6 +949,48 @@
     }
 
     @include mobile-or-tablet-screen {
+        height: calc(100vh - 6rem);
+        max-height: calc(100vh - 6rem);
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: auto;
+        touch-action: pan-y;
         min-height: calc(100vh - 6rem);
+
+        // Keep the whole tab strip purple; only the active tab is a white pill.
+        .dc-tabs,
+        .dc-tabs > div:first-child,
+        .dc-tabs__list,
+        .dc-themed-scrollbars-wrapper {
+            background: #4a13a8 !important;
+        }
+
+        .dc-tabs__list {
+            justify-content: flex-start !important;
+            min-width: 100%;
+        }
+
+        .dc-tabs__list > .dc-themed-scrollbars-wrapper {
+            width: 100%;
+            min-width: 100%;
+        }
+
+        .dc-tabs__item {
+            width: auto !important;
+            min-width: max-content;
+            flex: 0 0 auto;
+            padding-inline: 1.2rem;
+            color: #fff !important;
+        }
+
+        .dc-tabs__item.dc-tabs__active {
+            color: #4a13a8 !important;
+            background: #fff !important;
+        }
+
+        .dc-tabs__active-line {
+            display: none;
+        }
     }
 }
