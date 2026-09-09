@@ -6,7 +6,7 @@ const DERIV_WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1';
 const SCAN_TIMEOUT_MS = 35_000;
 const SHORT_RETURN_WINDOW = 20;
 const SYMBOL_PAGE_SIZE = 8;
-const MODEL_VERSION = 'empirical-baseline-v1';
+const MODEL_VERSION = 'feature-logistic-v1';
 const MIN_VALIDATION_SAMPLES = 200;
 const MIN_ACCURACY = 0.52;
 const MAX_BRIER_SCORE = 0.25;
@@ -271,7 +271,17 @@ type LogisticModel = {
     scales: number[];
 };
 
+type CalibratedLogisticModel = {
+    model: LogisticModel;
+    slope: number;
+    intercept: number;
+};
+
 const sigmoid = (value: number): number => 1 / (1 + Math.exp(-Math.max(-35, Math.min(35, value))));
+const logit = (probability: number): number => Math.log(
+    Math.max(0.0001, Math.min(0.9999, probability)) /
+    Math.max(0.0001, Math.min(0.9999, 1 - probability)),
+);
 
 const buildFeatureVector = (returns: number[], index: number): number[] => {
     const values: number[] = [];
@@ -372,6 +382,40 @@ const predictLogisticRegression = (model: LogisticModel, features: number[]): nu
     return sigmoid(model.bias + normalized.reduce((total, value, featureIndex) => total + value * model.weights[featureIndex], 0));
 };
 
+const fitCalibratedLogisticRegression = (samples: FeatureRow[]): CalibratedLogisticModel | null => {
+    if (!samples.length) return null;
+
+    const calibrationStart = Math.max(40, Math.floor(samples.length * 0.7));
+    const model = fitLogisticRegression(samples.slice(0, calibrationStart));
+    const calibrationSamples = samples.slice(calibrationStart);
+    if (!model || !calibrationSamples.length) return model ? { model, slope: 1, intercept: 0 } : null;
+
+    let slope = 1;
+    let intercept = 0;
+    for (let iteration = 0; iteration < FEATURE_TRAINING_ITERATIONS; iteration += 1) {
+        let slopeGradient = 0;
+        let interceptGradient = 0;
+
+        calibrationSamples.forEach(sample => {
+            const rawProbability = predictLogisticRegression(model, sample.features);
+            const probability = sigmoid(slope * logit(rawProbability) + intercept);
+            const error = probability - sample.actual;
+            slopeGradient += error * logit(rawProbability);
+            interceptGradient += error;
+        });
+
+        slope -= FEATURE_LEARNING_RATE * (slopeGradient / calibrationSamples.length);
+        intercept -= FEATURE_LEARNING_RATE * (interceptGradient / calibrationSamples.length);
+    }
+
+    return { model, slope, intercept };
+};
+
+const predictCalibratedLogisticRegression = (model: CalibratedLogisticModel, features: number[]): number => {
+    const rawProbability = predictLogisticRegression(model.model, features);
+    return sigmoid(model.slope * logit(rawProbability) + model.intercept);
+};
+
 const calculateFeatureModel = (returns: number[]): ValidationSummary => {
     const featureRows: FeatureRow[] = [];
     for (let index = FEATURE_WARMUP; index < returns.length; index += 1) {
@@ -385,24 +429,31 @@ const calculateFeatureModel = (returns: number[]): ValidationSummary => {
     const validationStart = FEATURE_WARMUP + FEATURE_MIN_TRAINING_SAMPLES;
     const validationRows = featureRows.filter(row => row.index >= validationStart);
     const predictions: Prediction[] = [];
-    let model: LogisticModel | null = null;
+    let model: CalibratedLogisticModel | null = null;
     let lastFitIndex = -Infinity;
     let latestProbability = 0.5;
 
     validationRows.forEach(row => {
         if (!model || row.index - lastFitIndex >= FEATURE_RETRAIN_INTERVAL) {
-            model = fitLogisticRegression(featureRows.filter(trainingRow => trainingRow.index < row.index));
+            model = fitCalibratedLogisticRegression(featureRows.filter(trainingRow => trainingRow.index < row.index));
             lastFitIndex = row.index;
         }
         if (!model) return;
 
-        latestProbability = predictLogisticRegression(model, row.features);
+        latestProbability = predictCalibratedLogisticRegression(model, row.features);
         predictions.push({ probability: latestProbability, actual: row.actual });
     });
 
+    const empiricalSummary = summarizePredictions(
+        calculateWalkForwardBaseline(returns, validationStart).predictions,
+    );
+
     return {
         baselineProbability: latestProbability,
-        ...summarizePredictions(predictions),
+        ...summarizePredictions(predictions, {
+            accuracy: empiricalSummary.walkForwardAccuracy,
+            brierScore: empiricalSummary.brierScore,
+        }),
     };
 };
 
@@ -421,8 +472,7 @@ const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol
     const directionalImbalance = directionalMoves ? (positiveMoves - negativeMoves) / directionalMoves : 0;
     const reversalRate = returns.length > 1 ? reversals / (returns.length - 1) : 0;
     const validationStart = FEATURE_WARMUP + FEATURE_MIN_TRAINING_SAMPLES;
-    const empiricalBaseline = calculateWalkForwardBaseline(returns, validationStart);
-    const empiricalSummary = summarizePredictions(empiricalBaseline.predictions);
+    const empiricalSummary = summarizePredictions(calculateWalkForwardBaseline(returns, validationStart).predictions);
     const featureModel = calculateFeatureModel(returns);
 
     let regime = 'Mixed movement';
@@ -813,7 +863,7 @@ const AlphaScanAI: React.FC = () => {
                 <div className='alpha-scan__control-copy'>
                     <span className='alpha-scan__section-label'>Research action</span>
                      <h2>Build a statistical snapshot</h2>
-                     <p>Discover eligible symbols from public metadata, validate each one through live history, and evaluate the walk-forward baseline.</p>
+                     <p>Discover eligible symbols from public metadata, validate each one through live history, and evaluate a calibrated feature model against an empirical benchmark.</p>
                 </div>
                 <div className='alpha-scan__controls'>
                     <label className='alpha-scan__select-label' htmlFor='alpha-scan-sample-size'>
@@ -876,8 +926,8 @@ const AlphaScanAI: React.FC = () => {
                     </div>
                     <div className='alpha-scan__idle-content'>
                         <span className='alpha-scan__eyebrow'>First phase / evidence layer</span>
-                        <h2>Know what was observed.</h2>
-                         <p>The statistical baseline activates after live history arrives. It uses walk-forward evaluation on past ticks; a production ML model and trade decision layer remain gated until validation is complete.</p>
+                         <h2>Know what was observed.</h2>
+                          <p>The calibrated feature model activates after live history arrives. It uses leakage-safe walk-forward evaluation on past ticks; the trade decision layer remains gated until every symbol passes validation.</p>
                         <div className='alpha-scan__principles'>
                             <div><strong>01</strong><span>Walk-forward baseline, not fabricated certainty</span></div>
                             <div><strong>02</strong><span>Public data, timestamped at capture</span></div>
@@ -969,7 +1019,7 @@ const AlphaScanAI: React.FC = () => {
                                         <th scope='col'>Latest price</th>
                                         <th scope='col'>Short return<small>last 20</small></th>
                                          <th scope='col'>Realized vol.<small>per tick</small></th>
-                                        <th scope='col'>Baseline P(up)<small>latest estimate</small></th>
+                                         <th scope='col'>Model P(up)<small>latest estimate</small></th>
                                         <th scope='col'>OOS accuracy<small>walk-forward</small></th>
                                         <th scope='col'>Brier score<small>lower is better</small></th>
                                         <th scope='col'>Calibration error<small>lower is better</small></th>
@@ -1035,10 +1085,10 @@ const AlphaScanAI: React.FC = () => {
                         <div className='alpha-scan__interpretation-main'>
                             <span className='alpha-scan__section-label'>Read the evidence</span>
                             <h2>Validation metrics are not permission to trade.</h2>
-                            <p>Baseline P(up) is an empirical probability calculated only from observations available before each test tick. Accuracy and Brier score are walk-forward diagnostics; they are not a calibrated production ML forecast or a trade signal.</p>
+                            <p>Model P(up) is produced by the calibrated feature classifier using only observations available before each test tick. Accuracy and Brier score are walk-forward diagnostics; they are not a trade signal.</p>
                         </div>
                         <div className='alpha-scan__interpretation-side'>
-                            <div><span>Mean baseline P(up)</span><strong>{formatPercent(averageBaselineProbability * 100)}</strong></div>
+                             <div><span>Mean model P(up)</span><strong>{formatPercent(averageBaselineProbability * 100)}</strong></div>
                             <div><span>Mean OOS accuracy</span><strong>{formatPercent(averageWalkForwardAccuracy * 100)}</strong></div>
                             <div><span>Mean Brier score</span><strong>{formatRatio(averageBrierScore)}</strong></div>
                             <div><span>Mean calibration error</span><strong>{formatPercent(averageCalibrationError * 100)}</strong></div>
