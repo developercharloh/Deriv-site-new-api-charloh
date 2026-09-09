@@ -43,10 +43,11 @@ type WebSocketMessage = {
     echo_req?: { symbol?: string; active_symbols?: string };
 };
 
-const numberFromRecord = (record: Record<string, unknown>, keys: string[]): string =>
+const stringFromRecord = (record: Record<string, unknown>, keys: string[]): string =>
     keys.map(key => record[key]).find(value => typeof value === 'string' && value.length > 0) as string || '';
 
 const isSyntheticIndex = (record: Record<string, unknown>): boolean => {
+    const symbol = stringFromRecord(record, ['symbol']);
     const metadata = [
         record.market,
         record.market_display_name,
@@ -60,7 +61,21 @@ const isSyntheticIndex = (record: Record<string, unknown>): boolean => {
         .toLowerCase()
         .replace(/[_-]/g, ' ');
 
-    return metadata.includes('synthetic index') || metadata.includes('synthetic indices') || metadata.includes('synthetic_index');
+    const syntheticMetadata =
+        metadata.includes('synthetic') ||
+        metadata.includes('derived') ||
+        metadata.includes('volatility') ||
+        metadata.includes('continuous indice') ||
+        metadata.includes('random indice') ||
+        metadata.includes('jump index') ||
+        metadata.includes('boom') ||
+        metadata.includes('crash') ||
+        metadata.includes('step index') ||
+        metadata.includes('drift switch') ||
+        metadata.includes('range break');
+    const syntheticSymbolFamily = /^(?:R_|1HZ|JD|BOOM|CRASH|STEP|JUMP|DRIFT|RB_|RDB_)/i.test(symbol);
+
+    return syntheticMetadata || syntheticSymbolFamily;
 };
 
 const discoverSyntheticSymbols = (records: Array<Record<string, unknown>>): SyntheticSymbol[] => {
@@ -69,14 +84,14 @@ const discoverSyntheticSymbols = (records: Array<Record<string, unknown>>): Synt
     return records
         .filter(isSyntheticIndex)
         .map(record => {
-            const symbol = numberFromRecord(record, ['symbol']);
+            const symbol = stringFromRecord(record, ['symbol']);
             if (!symbol || seen.has(symbol)) return null;
             seen.add(symbol);
             return {
                 symbol,
-                displayName: numberFromRecord(record, ['display_name', 'underlying_symbol', 'symbol']) || symbol,
-                market: numberFromRecord(record, ['market_display_name', 'market']) || 'Synthetic Index',
-                submarket: numberFromRecord(record, ['submarket_display_name', 'submarket']) || 'Synthetic',
+                displayName: stringFromRecord(record, ['display_name', 'underlying_symbol', 'symbol']) || symbol,
+                market: stringFromRecord(record, ['market_display_name', 'market']) || 'Synthetic Index',
+                submarket: stringFromRecord(record, ['submarket_display_name', 'submarket']) || 'Synthetic',
             };
         })
         .filter((item): item is SyntheticSymbol => item !== null);
@@ -248,7 +263,7 @@ const AlphaScanAI: React.FC = () => {
 
         socket.onopen = () => {
             if (scanIdRef.current !== scanId) return;
-            socket.send(JSON.stringify({ active_symbols: 'brief', req_id: scanId }));
+            socket.send(JSON.stringify({ active_symbols: 'full', req_id: scanId }));
         };
 
         socket.onmessage = event => {
@@ -270,7 +285,10 @@ const AlphaScanAI: React.FC = () => {
                 discoveredSymbols = discoverSyntheticSymbols(message.active_symbols);
                 setDiscoveredCount(discoveredSymbols.length);
                 if (!discoveredSymbols.length) {
-                    finishWithCurrentData('empty', 'The public metadata response contained no synthetic index symbols.');
+                    finishWithCurrentData(
+                        'empty',
+                        `The public metadata response returned ${message.active_symbols.length} records, but none matched a Synthetic Index market or symbol family.`,
+                    );
                     closeSocket();
                     return;
                 }

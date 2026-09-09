@@ -3,3 +3,4 @@
 - [Deriv-site AI orb testing quirks](deriv-site-ai-orb-testing.md) — floating orb has a perpetual bounce animation that breaks Playwright's normal click; live bot runs always hit a login gate unrelated to the feature under test.
 - [Deriv-site verification](deriv-site-verification.md) — Rsbuild workflow/build is the reliable app check; package-level typecheck currently includes unrelated dependency gaps.
 - [Alpha Scan research gate](alpha-scan-research-scope.md) — Alpha Scan starts as a descriptive public-data cockpit; keep decisions at SKIP until OOS validation exists.
+- [Deriv symbol metadata](deriv-active-symbols-discovery.md) — public active_symbols labels vary; use full metadata plus symbol-family matching for Synthetic Index discovery.
