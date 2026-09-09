@@ -14,6 +14,13 @@ const MAX_CALIBRATION_ERROR = 0.08;
 const MIN_WINDOW_ACCURACY = 0.5;
 const VALIDATION_WINDOW_COUNT = 3;
 const CALIBRATION_BIN_COUNT = 5;
+const FEATURE_WARMUP = 50;
+const FEATURE_MIN_TRAINING_SAMPLES = 120;
+const FEATURE_RETRAIN_INTERVAL = 80;
+const FEATURE_TRAINING_ITERATIONS = 45;
+const FEATURE_LEARNING_RATE = 0.08;
+const FEATURE_L2_PENALTY = 0.02;
+const FEATURE_WINDOWS = [3, 5, 10, 20, 50];
 
 type SampleSize = 300 | 600 | 1200;
 type ScanStatus =
@@ -48,6 +55,8 @@ type ScanRow = SyntheticSymbol & {
     brierScore: number;
     validationSamples: number;
     climatologyBrierScore: number;
+    benchmarkAccuracy: number;
+    benchmarkBrierScore: number;
     calibrationError: number;
     validationWindows: ValidationWindow[];
     validationGate: ValidationGate;
@@ -136,22 +145,24 @@ const getVerifiedCatalogSymbols = (): SyntheticSymbol[] =>
 const mean = (values: number[]): number =>
     values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
 
-const calculateWalkForwardBaseline = (returns: number[]) => {
-    const minimumTrainingWindow = 40;
-    const trainingLookback = 100;
-    const predictions: Array<{ probability: number; actual: number }> = [];
-    let latestProbability = 0.5;
+type Prediction = { probability: number; actual: number };
 
-    for (let index = minimumTrainingWindow; index < returns.length; index += 1) {
-        const trainingReturns = returns.slice(Math.max(0, index - trainingLookback), index);
-        const positiveMoves = trainingReturns.filter(value => value > 0).length;
-        const probability = (positiveMoves + 1) / (trainingReturns.length + 2);
-        const actual = returns[index] > 0 ? 1 : 0;
+type ValidationSummary = {
+    baselineProbability: number;
+    walkForwardAccuracy: number;
+    brierScore: number;
+    validationSamples: number;
+    climatologyBrierScore: number;
+    calibrationError: number;
+    validationWindows: ValidationWindow[];
+    validationGate: ValidationGate;
+    gateReasons: string[];
+};
 
-        latestProbability = probability;
-        predictions.push({ probability, actual });
-    }
-
+const summarizePredictions = (
+    predictions: Prediction[],
+    benchmark?: { accuracy: number; brierScore: number },
+): Omit<ValidationSummary, 'baselineProbability'> => {
     const validationSamples = predictions.length;
     const positiveRate = mean(predictions.map(prediction => prediction.actual));
     const accuracy = predictions.length
@@ -199,6 +210,9 @@ const calculateWalkForwardBaseline = (returns: number[]) => {
     if (brierScore >= MAX_BRIER_SCORE || brierScore >= climatologyBrierScore) {
         gateReasons.push('Brier score does not beat the climatology baseline.');
     }
+    if (benchmark && (accuracy <= benchmark.accuracy || brierScore >= benchmark.brierScore)) {
+        gateReasons.push('The feature model does not improve on the empirical baseline.');
+    }
     if (calibrationError > MAX_CALIBRATION_ERROR) {
         gateReasons.push(`Calibration error ${formatPercent(calibrationError * 100)} exceeds the ${formatPercent(MAX_CALIBRATION_ERROR * 100)} gate.`);
     }
@@ -207,7 +221,6 @@ const calculateWalkForwardBaseline = (returns: number[]) => {
     }
 
     return {
-        baselineProbability: latestProbability,
         walkForwardAccuracy: accuracy,
         brierScore,
         validationSamples,
@@ -220,6 +233,176 @@ const calculateWalkForwardBaseline = (returns: number[]) => {
                 ? 'failed'
                 : 'validated',
         gateReasons,
+    };
+};
+
+const calculateWalkForwardBaseline = (returns: number[], validationStart = 40) => {
+    const minimumTrainingWindow = 40;
+    const trainingLookback = 100;
+    const predictions: Prediction[] = [];
+    let latestProbability = 0.5;
+
+    for (let index = Math.max(minimumTrainingWindow, validationStart); index < returns.length; index += 1) {
+        const trainingReturns = returns.slice(Math.max(0, index - trainingLookback), index);
+        const positiveMoves = trainingReturns.filter(value => value > 0).length;
+        const probability = (positiveMoves + 1) / (trainingReturns.length + 2);
+        const actual = returns[index] > 0 ? 1 : 0;
+
+        latestProbability = probability;
+        predictions.push({ probability, actual });
+    }
+
+    return {
+        baselineProbability: latestProbability,
+        predictions,
+    };
+};
+
+type FeatureRow = {
+    index: number;
+    features: number[];
+    actual: number;
+};
+
+type LogisticModel = {
+    weights: number[];
+    bias: number;
+    means: number[];
+    scales: number[];
+};
+
+const sigmoid = (value: number): number => 1 / (1 + Math.exp(-Math.max(-35, Math.min(35, value))));
+
+const buildFeatureVector = (returns: number[], index: number): number[] => {
+    const values: number[] = [];
+
+    FEATURE_WINDOWS.forEach(windowSize => {
+        const window = returns.slice(Math.max(0, index - windowSize), index);
+        const average = mean(window);
+        const variance = mean(window.map(value => (value - average) ** 2));
+        const volatility = Math.sqrt(variance) || 1e-8;
+        const positiveRate = window.length ? window.filter(value => value > 0).length / window.length : 0.5;
+
+        values.push(
+            average / volatility,
+            volatility,
+            (positiveRate - 0.5) * 2,
+        );
+    });
+
+    const latestReturn = returns[index - 1] || 0;
+    const recentVolatility = Math.sqrt(mean(
+        returns.slice(Math.max(0, index - 20), index).map(value => (value - mean(returns.slice(Math.max(0, index - 20), index))) ** 2),
+    )) || 1e-8;
+    let streak = 0;
+    const latestSign = Math.sign(latestReturn);
+    for (let cursor = index - 1; cursor >= 0 && Math.sign(returns[cursor]) === latestSign; cursor -= 1) {
+        if (latestSign === 0) break;
+        streak += latestSign;
+    }
+
+    const autocorrelationWindow = returns.slice(Math.max(1, index - 20), index);
+    const laggedWindow = returns.slice(Math.max(0, index - 21), index - 1);
+    const meanCurrent = mean(autocorrelationWindow);
+    const meanLagged = mean(laggedWindow);
+    const autocorrelationDenominator = Math.sqrt(
+        mean(autocorrelationWindow.map(value => (value - meanCurrent) ** 2)) *
+        mean(laggedWindow.map(value => (value - meanLagged) ** 2)),
+    );
+    const autocorrelation = autocorrelationDenominator
+        ? mean(autocorrelationWindow.map((value, offset) => (value - meanCurrent) * ((laggedWindow[offset] || 0) - meanLagged))) /
+            autocorrelationDenominator
+        : 0;
+
+    values.push(
+        latestReturn / recentVolatility,
+        streak / 10,
+        autocorrelation,
+    );
+
+    return values.map(value => Number.isFinite(value) ? value : 0);
+};
+
+const fitLogisticRegression = (samples: FeatureRow[]): LogisticModel | null => {
+    if (!samples.length) return null;
+
+    const featureCount = samples[0].features.length;
+    const means = Array.from({ length: featureCount }, (_, featureIndex) =>
+        mean(samples.map(sample => sample.features[featureIndex])),
+    );
+    const scales = Array.from({ length: featureCount }, (_, featureIndex) => {
+        const variance = mean(samples.map(sample => (sample.features[featureIndex] - means[featureIndex]) ** 2));
+        return Math.sqrt(variance) || 1;
+    });
+    const weights = Array.from({ length: featureCount }, () => 0);
+    let bias = Math.log((mean(samples.map(sample => sample.actual)) + 0.01) / (1.01 - mean(samples.map(sample => sample.actual))));
+
+    for (let iteration = 0; iteration < FEATURE_TRAINING_ITERATIONS; iteration += 1) {
+        const weightGradient = Array.from({ length: featureCount }, () => 0);
+        let biasGradient = 0;
+
+        samples.forEach(sample => {
+            const normalized = sample.features.map((value, featureIndex) =>
+                (value - means[featureIndex]) / scales[featureIndex],
+            );
+            const probability = sigmoid(bias + normalized.reduce((total, value, featureIndex) => total + value * weights[featureIndex], 0));
+            const error = probability - sample.actual;
+            biasGradient += error;
+            normalized.forEach((value, featureIndex) => {
+                weightGradient[featureIndex] += error * value;
+            });
+        });
+
+        const sampleCount = samples.length;
+        bias -= FEATURE_LEARNING_RATE * (biasGradient / sampleCount);
+        weightGradient.forEach((gradient, featureIndex) => {
+            weights[featureIndex] -= FEATURE_LEARNING_RATE * (
+                gradient / sampleCount + FEATURE_L2_PENALTY * weights[featureIndex]
+            );
+        });
+    }
+
+    return { weights, bias, means, scales };
+};
+
+const predictLogisticRegression = (model: LogisticModel, features: number[]): number => {
+    const normalized = features.map((value, featureIndex) =>
+        (value - model.means[featureIndex]) / model.scales[featureIndex],
+    );
+    return sigmoid(model.bias + normalized.reduce((total, value, featureIndex) => total + value * model.weights[featureIndex], 0));
+};
+
+const calculateFeatureModel = (returns: number[]): ValidationSummary => {
+    const featureRows: FeatureRow[] = [];
+    for (let index = FEATURE_WARMUP; index < returns.length; index += 1) {
+        featureRows.push({
+            index,
+            features: buildFeatureVector(returns, index),
+            actual: returns[index] > 0 ? 1 : 0,
+        });
+    }
+
+    const validationStart = FEATURE_WARMUP + FEATURE_MIN_TRAINING_SAMPLES;
+    const validationRows = featureRows.filter(row => row.index >= validationStart);
+    const predictions: Prediction[] = [];
+    let model: LogisticModel | null = null;
+    let lastFitIndex = -Infinity;
+    let latestProbability = 0.5;
+
+    validationRows.forEach(row => {
+        if (!model || row.index - lastFitIndex >= FEATURE_RETRAIN_INTERVAL) {
+            model = fitLogisticRegression(featureRows.filter(trainingRow => trainingRow.index < row.index));
+            lastFitIndex = row.index;
+        }
+        if (!model) return;
+
+        latestProbability = predictLogisticRegression(model, row.features);
+        predictions.push({ probability: latestProbability, actual: row.actual });
+    });
+
+    return {
+        baselineProbability: latestProbability,
+        ...summarizePredictions(predictions),
     };
 };
 
@@ -237,7 +420,10 @@ const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol
     const shortReturn = shortBase ? ((prices[prices.length - 1] - shortBase) / shortBase) * 100 : 0;
     const directionalImbalance = directionalMoves ? (positiveMoves - negativeMoves) / directionalMoves : 0;
     const reversalRate = returns.length > 1 ? reversals / (returns.length - 1) : 0;
-    const baseline = calculateWalkForwardBaseline(returns);
+    const validationStart = FEATURE_WARMUP + FEATURE_MIN_TRAINING_SAMPLES;
+    const empiricalBaseline = calculateWalkForwardBaseline(returns, validationStart);
+    const empiricalSummary = summarizePredictions(empiricalBaseline.predictions);
+    const featureModel = calculateFeatureModel(returns);
 
     let regime = 'Mixed movement';
     if (directionalImbalance > 0.18 && shortReturn > 0.1) regime = 'Rising drift';
@@ -253,7 +439,9 @@ const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol
         directionalImbalance,
         reversalRate,
         regime,
-        ...baseline,
+        ...featureModel,
+        benchmarkAccuracy: empiricalSummary.walkForwardAccuracy,
+        benchmarkBrierScore: empiricalSummary.brierScore,
     };
 };
 
