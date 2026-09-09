@@ -4,6 +4,7 @@ import './alpha-scan-ai.scss';
 const DERIV_WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1';
 const SCAN_TIMEOUT_MS = 35_000;
 const SHORT_RETURN_WINDOW = 20;
+const SYMBOL_PAGE_SIZE = 8;
 
 type SampleSize = 300 | 600 | 1200;
 type ScanStatus =
@@ -197,6 +198,8 @@ const AlphaScanAI: React.FC = () => {
     const [failedCount, setFailedCount] = useState(0);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [errorMessage, setErrorMessage] = useState('');
+    const [hasMoreSymbols, setHasMoreSymbols] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
 
     const socketRef = useRef<WebSocket | null>(null);
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -204,6 +207,8 @@ const AlphaScanAI: React.FC = () => {
     const pendingRef = useRef(new Set<number>());
     const resultRowsRef = useRef<ScanRow[]>([]);
     const failedSymbolsRef = useRef(new Set<string>());
+    const loadMoreRef = useRef<() => void>(() => {});
+    const infiniteSentinelRef = useRef<HTMLDivElement | null>(null);
 
     const closeSocket = useCallback(() => {
         if (timeoutRef.current) {
@@ -216,6 +221,7 @@ const AlphaScanAI: React.FC = () => {
             socketRef.current = null;
         }
         pendingRef.current.clear();
+        loadMoreRef.current = () => {};
     }, []);
 
     const finishWithCurrentData = useCallback((nextStatus: ScanStatus, message = '') => {
@@ -237,20 +243,78 @@ const AlphaScanAI: React.FC = () => {
         setFailedCount(0);
         setLastUpdated(null);
         setErrorMessage('');
+        setHasMoreSymbols(false);
+        setIsLoadingMore(false);
         setStatus('discovering');
 
         const socket = new WebSocket(DERIV_WS_URL);
         socketRef.current = socket;
         const requestMap = new Map<number, SyntheticSymbol>();
         let discoveredSymbols: SyntheticSymbol[] = [];
+        let nextSymbolIndex = 0;
+        let metadataReceived = false;
+        const completedCountRef = { current: 0 };
 
         const recordFailure = (symbol: string) => {
             failedSymbolsRef.current.add(symbol);
             setFailedCount(failedSymbolsRef.current.size);
         };
 
-        const completeIfDone = () => {
+        const requestNextPage = () => {
+            if (
+                scanIdRef.current !== scanId ||
+                pendingRef.current.size > 0 ||
+                nextSymbolIndex >= discoveredSymbols.length ||
+                socket.readyState !== WebSocket.OPEN
+            ) {
+                return;
+            }
+
+            const page = discoveredSymbols.slice(nextSymbolIndex, nextSymbolIndex + SYMBOL_PAGE_SIZE);
+            nextSymbolIndex += page.length;
+            setStatus('collecting');
+            setIsLoadingMore(true);
+            setHasMoreSymbols(nextSymbolIndex < discoveredSymbols.length);
+            setErrorMessage(`Loading symbols ${nextSymbolIndex - page.length + 1}–${nextSymbolIndex} of ${discoveredSymbols.length}.`);
+
+            page.forEach((symbol, pageIndex) => {
+                const reqId = scanId * 100000 + nextSymbolIndex - page.length + pageIndex + 1;
+                requestMap.set(reqId, symbol);
+                pendingRef.current.add(reqId);
+                socket.send(
+                    JSON.stringify({
+                        ticks_history: symbol.symbol,
+                        end: 'latest',
+                        count: sampleSize,
+                        style: 'ticks',
+                        req_id: reqId,
+                    }),
+                );
+            });
+        };
+
+        const completePageIfDone = () => {
             if (scanIdRef.current !== scanId || pendingRef.current.size > 0) return;
+
+            const hasMore = nextSymbolIndex < discoveredSymbols.length;
+            setIsLoadingMore(false);
+            setHasMoreSymbols(hasMore);
+
+            // If a whole page failed, keep paging until there is data to anchor
+            // the infinite scroll or the complete public universe is exhausted.
+            if (hasMore && !resultRowsRef.current.length) {
+                requestNextPage();
+                return;
+            }
+
+            if (hasMore) {
+                finishWithCurrentData(
+                    'partial-data',
+                    `Showing ${resultRowsRef.current.length} of ${discoveredSymbols.length} symbols. Scroll down for more.`,
+                );
+                return;
+            }
+
             closeSocket();
             if (!resultRowsRef.current.length) {
                 finishWithCurrentData('empty', 'No history was returned for the discovered synthetic symbols.');
@@ -281,7 +345,8 @@ const AlphaScanAI: React.FC = () => {
                 return;
             }
 
-            if (message.active_symbols) {
+            if (message.active_symbols && !metadataReceived) {
+                metadataReceived = true;
                 discoveredSymbols = discoverSyntheticSymbols(message.active_symbols);
                 setDiscoveredCount(discoveredSymbols.length);
                 if (!discoveredSymbols.length) {
@@ -293,21 +358,9 @@ const AlphaScanAI: React.FC = () => {
                     return;
                 }
 
-                setStatus('collecting');
-                discoveredSymbols.forEach((symbol, index) => {
-                    const reqId = scanId * 10000 + index + 1;
-                    requestMap.set(reqId, symbol);
-                    pendingRef.current.add(reqId);
-                    socket.send(
-                        JSON.stringify({
-                            ticks_history: symbol.symbol,
-                            end: 'latest',
-                            count: sampleSize,
-                            style: 'ticks',
-                            req_id: reqId,
-                        }),
-                    );
-                });
+                loadMoreRef.current = requestNextPage;
+                setHasMoreSymbols(true);
+                requestNextPage();
                 return;
             }
 
@@ -327,8 +380,9 @@ const AlphaScanAI: React.FC = () => {
                         recordFailure(symbol.symbol);
                     }
                 }
-                setCompletedCount(discoveredSymbols.length - pendingRef.current.size);
-                completeIfDone();
+                completedCountRef.current += 1;
+                setCompletedCount(completedCountRef.current);
+                completePageIfDone();
             }
         };
 
@@ -339,11 +393,20 @@ const AlphaScanAI: React.FC = () => {
             } else {
                 finishWithCurrentData('connection-error', 'The public market feed could not be reached.');
             }
+            setHasMoreSymbols(false);
+            setIsLoadingMore(false);
             closeSocket();
         };
 
         socket.onclose = () => {
-            if (scanIdRef.current !== scanId || pendingRef.current.size === 0) return;
+            if (scanIdRef.current !== scanId) return;
+            setHasMoreSymbols(false);
+            setIsLoadingMore(false);
+            if (pendingRef.current.size === 0 && resultRowsRef.current.length) {
+                finishWithCurrentData('partial-data', 'The public market feed closed before all pages were loaded.');
+                return;
+            }
+            if (pendingRef.current.size === 0) return;
             if (resultRowsRef.current.length) {
                 finishWithCurrentData('partial-data', 'The connection closed before every requested symbol returned.');
             } else {
@@ -358,11 +421,29 @@ const AlphaScanAI: React.FC = () => {
             } else {
                 finishWithCurrentData('timeout', 'No usable history arrived within the time limit.');
             }
+            setHasMoreSymbols(false);
+            setIsLoadingMore(false);
             closeSocket();
         }, SCAN_TIMEOUT_MS);
     }, [closeSocket, finishWithCurrentData, sampleSize]);
 
     useEffect(() => () => closeSocket(), [closeSocket]);
+
+    useEffect(() => {
+        const sentinel = infiniteSentinelRef.current;
+        if (!sentinel || !hasMoreSymbols) return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting && !isLoadingMore) {
+                    loadMoreRef.current();
+                }
+            },
+            { rootMargin: '480px 0px' },
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMoreSymbols, isLoadingMore]);
 
     const isBusy = status === 'discovering' || status === 'collecting';
     const coverage = discoveredCount ? Math.round((rows.length / discoveredCount) * 100) : 0;
@@ -572,6 +653,20 @@ const AlphaScanAI: React.FC = () => {
                             </table>
                         </div>
                     </section>
+                    {hasMoreSymbols && (
+                        <>
+                            <div ref={infiniteSentinelRef} className='alpha-scan__infinite-sentinel' aria-hidden='true' />
+                            <div className='alpha-scan__infinite-loader' aria-live='polite' data-testid='infinite-loader'>
+                                {isLoadingMore ? (
+                                    <span>Loading the next page of public observations…</span>
+                                ) : (
+                                    <button type='button' onClick={() => loadMoreRef.current()}>
+                                        Load more observations
+                                    </button>
+                                )}
+                            </div>
+                        </>
+                    )}
 
                     <section className='alpha-scan__interpretation'>
                         <div className='alpha-scan__interpretation-main'>
