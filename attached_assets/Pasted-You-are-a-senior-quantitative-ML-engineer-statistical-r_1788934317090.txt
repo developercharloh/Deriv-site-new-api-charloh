@@ -1,0 +1,1023 @@
+You are a senior quantitative ML engineer, statistical researcher, and Deriv API engineer.
+
+I want you to design and build a production-grade machine-learning research and trading platform for Deriv Synthetic Indices.
+
+OBJECTIVE
+=========
+Build an ML system that continuously analyzes ALL supported Deriv Synthetic/Volatility Indices and determines which available contract/market currently has the strongest statistically validated probability of satisfying a specified trading condition.
+
+The system must NOT assume that any market is inherently predictable or guarantee profits/win rates. Every claimed edge must be demonstrated through strictly out-of-sample testing and walk-forward validation.
+
+The system should support research and automated execution for these Deriv contract families where available through the current Deriv API:
+
+1. Rise/Fall
+2. Higher/Lower
+3. Over/Under
+4. Matches/Differs
+5. Even/Odd where available
+6. Only Ups
+7. Only Downs
+8. Multipliers
+9. Accumulators
+10. Other Synthetic Index contract types exposed by the current Deriv API
+
+Do NOT hard-code old Deriv symbols, contract names, API fields, or endpoints. First inspect the current official Deriv API documentation and dynamically discover available symbols, contract types, trading parameters, barriers, durations, and payout information.
+
+CORE PRINCIPLE
+==============
+Do NOT build a simple indicator bot.
+
+Build a machine-learning system that learns relationships between historical market state and FUTURE contract outcomes.
+
+The system must answer questions such as:
+
+- Which Synthetic Index currently has the strongest statistically supported setup?
+- Which contract type has the best expected value under the current conditions?
+- What is the probability of the selected contract finishing successfully?
+- What is the expected payout versus expected loss?
+- Is the estimated edge statistically significant?
+- Should the system trade or SKIP?
+- How does the current market regime compare with historical regimes?
+
+The model must be allowed to say SKIP.
+
+--------------------------------------------------
+1. DERIV DATA COLLECTION ENGINE
+--------------------------------------------------
+
+Build a robust historical + live data collector.
+
+Use the current official Deriv API.
+
+Discover available Synthetic Indices dynamically.
+
+Collect:
+
+- tick timestamp
+- tick price
+- tick ID where available
+- symbol
+- market/category
+- contract availability
+- contract specifications
+- minimum/maximum stake
+- duration constraints
+- barriers where applicable
+- payout/price information where available
+
+Historical data:
+
+Use the appropriate Deriv historical market-data APIs to backfill as much historical tick/candle information as legitimately available.
+
+Live data:
+
+Subscribe to live tick streams and continuously append new observations.
+
+Requirements:
+
+- automatic reconnection
+- heartbeat
+- rate-limit handling
+- duplicate detection
+- missing-tick detection
+- timestamp normalization
+- data validation
+- resumable downloads
+- incremental updates
+- logging
+- error handling
+
+Never overwrite raw data.
+
+Store the original raw tick data separately from engineered features.
+
+--------------------------------------------------
+2. DATABASE ARCHITECTURE
+--------------------------------------------------
+
+Design a database with at least:
+
+raw_ticks
+symbols
+market_metadata
+contract_metadata
+candles
+features
+labels
+predictions
+model_versions
+backtest_results
+trades
+execution_logs
+
+Every observation must have:
+
+symbol
+timestamp
+data_version
+feature_version
+
+Avoid future-data leakage.
+
+--------------------------------------------------
+3. MULTI-TIMEFRAME FEATURE ENGINE
+--------------------------------------------------
+
+Generate features from the raw tick stream.
+
+Use multiple horizons:
+
+tick
+5 ticks
+10 ticks
+20 ticks
+50 ticks
+100 ticks
+250 ticks
+500 ticks
+
+and time-based windows:
+
+1 minute
+2 minutes
+5 minutes
+10 minutes
+15 minutes
+30 minutes
+1 hour
+2 hours
+4 hours
+12 hours
+1 day
+3 days
+7 days
+14 days
+30 days
+90 days
+1 year where sufficient data exists
+
+Do not assume every timeframe exists directly from Deriv.
+
+Construct the features from the underlying tick/candle data.
+
+--------------------------------------------------
+4. FEATURES
+--------------------------------------------------
+
+Create scientifically defensible features.
+
+A. RETURNS / PRICE MOVEMENT
+
+- tick returns
+- log returns
+- percentage returns
+- rolling returns
+- normalized returns
+- acceleration/deceleration
+
+B. DIRECTIONAL BEHAVIOUR
+
+- up tick count
+- down tick count
+- up/down ratio
+- directional imbalance
+- consecutive up ticks
+- consecutive down ticks
+- reversal frequency
+- directional persistence
+
+C. VOLATILITY
+
+- rolling standard deviation
+- realized volatility
+- absolute return volatility
+- volatility expansion
+- volatility contraction
+- volatility percentile
+- short/long volatility ratio
+
+D. TREND
+
+- rolling slope
+- momentum
+- trend strength
+- distance from rolling mean
+- moving-average relationships
+- rate of change
+
+E. MEAN REVERSION
+
+- deviation from rolling mean
+- z-score
+- reversal frequency
+- distance from recent extrema
+
+F. DISTRIBUTION FEATURES
+
+- skewness
+- kurtosis
+- percentile position
+- quantiles
+- tail behaviour
+
+G. SEQUENCE FEATURES
+
+- consecutive movements
+- alternating movement frequency
+- run lengths
+- reversal after N consecutive movements
+- transition probabilities
+
+H. TIME FEATURES
+
+- minute of hour
+- hour
+- day
+- day of week
+- day of month
+- cyclical sine/cosine encodings
+
+IMPORTANT:
+Do not blindly add hundreds of technical indicators.
+
+Every feature should have a reason for existing and should be tested for predictive value.
+
+--------------------------------------------------
+5. CONTRACT-SPECIFIC LABEL GENERATION
+--------------------------------------------------
+
+This is CRITICAL.
+
+Do not use one generic label for all Deriv contracts.
+
+Create separate outcome generators for each contract family.
+
+For Rise/Fall:
+
+Given entry price P0 and contract duration:
+
+label:
+
+WIN if settlement condition satisfies Rise/Fall requirement
+LOSS otherwise
+
+For Higher/Lower:
+
+Generate labels based on the specified barrier/threshold.
+
+For Over/Under:
+
+Generate labels based on the relevant digit/contract outcome.
+
+For Matches/Differs:
+
+Generate labels based on the specified digit condition.
+
+For Only Ups:
+
+Generate the correct outcome based on the actual contract definition and settlement rules.
+
+For Only Downs:
+
+Same.
+
+For Multipliers:
+
+Model the probability of favorable movement reaching/avoiding relevant conditions and estimate expected payoff under the selected multiplier and risk controls.
+
+For Accumulators:
+
+Model probability distribution of future price path and probability of barrier knock-out / successful accumulation.
+
+DO NOT invent contract settlement logic.
+
+Use the current official Deriv documentation.
+
+--------------------------------------------------
+6. TARGETS
+--------------------------------------------------
+
+For every prediction timestamp create future-looking targets.
+
+Examples:
+
+future_return_5_ticks
+future_return_10_ticks
+future_return_20_ticks
+future_return_50_ticks
+future_return_100_ticks
+
+future_return_1m
+future_return_5m
+future_return_15m
+future_return_30m
+future_return_1h
+
+But contract-specific targets must be generated separately.
+
+Example:
+
+Rise/Fall:
+
+P(Rise wins | current information)
+
+Higher/Lower:
+
+P(price finishes above barrier | current information)
+
+Over/Under:
+
+P(contract outcome | current information)
+
+Matches/Differs:
+
+P(match)
+P(differ)
+
+Only Ups:
+
+P(contract succeeds)
+
+Only Downs:
+
+P(contract succeeds)
+
+Multipliers:
+
+P(target movement)
+expected return
+probability of stop-out
+
+Accumulators:
+
+probability of barrier survival
+expected accumulation
+expected return distribution
+
+--------------------------------------------------
+7. MARKET-AND-CONTRACT SELECTION MODEL
+--------------------------------------------------
+
+Do not simply predict each market independently.
+
+Build a second layer whose purpose is:
+
+MARKET + CONTRACT SELECTION.
+
+At each timestamp:
+
+1. Generate features for every available Synthetic Index.
+2. Generate candidate contracts.
+3. Generate model probabilities for each candidate.
+4. Estimate expected value.
+5. Estimate uncertainty.
+6. Estimate risk.
+7. Rank candidates.
+
+Example:
+
+V10 / Rise:
+Probability = 58%
+
+V25 / Rise:
+Probability = 54%
+
+V50 / Higher:
+Probability = 67%
+
+V75 / Over:
+Probability = 61%
+
+V100 / Accumulator:
+Probability = 64%
+
+Then rank them using statistically validated expected edge rather than probability alone.
+
+--------------------------------------------------
+8. EXPECTED VALUE
+--------------------------------------------------
+
+Do NOT select the highest probability contract automatically.
+
+Calculate:
+
+Expected Value =
+(P(win) × net_win)
+-
+(P(loss) × loss)
+
+Account for:
+
+- stake
+- payout
+- fees
+- spread where applicable
+- contract pricing
+- execution effects
+- slippage where applicable
+
+A 70% probability trade with poor payout may be worse than a 60% probability trade with better expected value.
+
+--------------------------------------------------
+9. MACHINE LEARNING MODELS
+--------------------------------------------------
+
+Start with strong tabular baselines:
+
+- Logistic Regression
+- Random Forest
+- Extra Trees
+- XGBoost
+- LightGBM
+- CatBoost if useful
+
+Then test sequence models only if justified:
+
+- LSTM
+- GRU
+- Temporal CNN
+- Transformer
+
+Do NOT assume deep learning is automatically better.
+
+Benchmark every model against simple baselines.
+
+--------------------------------------------------
+10. MODEL ENSEMBLE
+--------------------------------------------------
+
+Where statistically justified, build an ensemble.
+
+Example:
+
+Tabular model
++
+Temporal model
++
+Calibration model
++
+Risk model
+
+Output:
+
+P(win)
+expected return
+uncertainty
+confidence interval
+calibrated probability
+
+--------------------------------------------------
+11. PROBABILITY CALIBRATION
+--------------------------------------------------
+
+This is extremely important.
+
+The model's predicted probability must be calibrated.
+
+If it predicts 70% across many observations, approximately 70% should actually win in comparable out-of-sample observations.
+
+Test:
+
+- Platt scaling
+- Isotonic regression
+- calibration curves
+- Brier score
+- log loss
+
+Never display an ML probability as a fact.
+
+Call it:
+
+MODEL ESTIMATED PROBABILITY
+
+--------------------------------------------------
+12. DATA LEAKAGE PREVENTION
+--------------------------------------------------
+
+This is NON-NEGOTIABLE.
+
+At prediction time T, the model may ONLY use information available at or before T.
+
+Never use:
+
+future candles
+future ticks
+future payout information
+future labels
+future-normalized features
+future market statistics
+
+when constructing the feature vector.
+
+Do not randomly shuffle time-series data.
+
+--------------------------------------------------
+13. TRAINING / VALIDATION
+--------------------------------------------------
+
+Use chronological splitting.
+
+Example:
+
+Historical period:
+TRAIN
+
+Next period:
+VALIDATION
+
+Later unseen period:
+TEST
+
+Then perform WALK-FORWARD VALIDATION.
+
+Example:
+
+Train: 2021–2023
+Test: 2024
+
+Train: 2021–2024
+Test: 2025
+
+Train: 2021–2025
+Test: 2026
+
+Never allow the test period to influence feature selection, hyperparameters, thresholds, or model selection.
+
+--------------------------------------------------
+14. REGIME DETECTION
+--------------------------------------------------
+
+Build a market-regime layer.
+
+Identify regimes such as:
+
+- high volatility
+- low volatility
+- trending
+- ranging
+- strong momentum
+- weak momentum
+- reversal-heavy
+- abnormal conditions
+
+Possible methods:
+
+- clustering
+- Hidden Markov Models
+- regime classifiers
+- volatility-state models
+
+Then measure whether model performance changes between regimes.
+
+--------------------------------------------------
+15. MARKET-SPECIFIC VS CROSS-MARKET LEARNING
+--------------------------------------------------
+
+Test both:
+
+MODEL A:
+Separate model for each index.
+
+MODEL B:
+One global model trained across all indices with symbol/market embeddings or encoded market identity.
+
+MODEL C:
+Global model + market-specific calibration.
+
+Compare out-of-sample performance.
+
+Do not assume one architecture is superior.
+
+--------------------------------------------------
+16. FEATURE IMPORTANCE
+--------------------------------------------------
+
+Provide:
+
+- SHAP values
+- permutation importance
+- feature importance
+- feature stability over time
+
+Identify which features actually contribute to predictions.
+
+Pay particular attention to whether:
+
+directional imbalance
+recent tick patterns
+volatility
+momentum
+reversal frequency
+multi-timeframe behaviour
+
+provide genuine out-of-sample predictive value.
+
+--------------------------------------------------
+17. BACKTEST ENGINE
+--------------------------------------------------
+
+Build a realistic event-driven backtester.
+
+It must simulate:
+
+entry timestamp
+entry price
+contract type
+stake
+duration
+barrier
+payout
+settlement
+win/loss
+profit/loss
+model probability
+expected value
+market selected
+reason for trade
+reason for skip
+
+Do not use future information.
+
+Do not assume perfect execution.
+
+--------------------------------------------------
+18. PERFORMANCE METRICS
+--------------------------------------------------
+
+Report:
+
+Win rate
+Loss rate
+Expected value
+Profit factor
+Average win
+Average loss
+Maximum drawdown
+Sharpe ratio
+Sortino ratio
+Calmar ratio
+Return
+Number of trades
+Trade frequency
+Longest losing streak
+Longest winning streak
+
+Also report:
+
+Probability calibration
+Brier score
+Log loss
+ROC-AUC where appropriate
+Precision
+Recall
+
+Report metrics separately by:
+
+market
+contract type
+timeframe
+regime
+month
+week
+day
+hour
+model version
+
+--------------------------------------------------
+19. STATISTICAL SIGNIFICANCE
+--------------------------------------------------
+
+Do not call a model profitable because of a small backtest.
+
+Use:
+
+confidence intervals
+bootstrap analysis
+out-of-sample testing
+walk-forward testing
+multiple-period testing
+
+Check whether performance survives reasonable changes in:
+
+- entry threshold
+- duration
+- training period
+- market
+- volatility regime
+
+Look for overfitting.
+
+--------------------------------------------------
+20. TRADE FILTER
+--------------------------------------------------
+
+Create a final decision layer:
+
+TRADE
+or
+SKIP
+
+Possible conditions:
+
+- calibrated probability above threshold
+- positive expected value
+- sufficient historical sample size
+- acceptable uncertainty
+- acceptable drawdown
+- no abnormal market regime
+- no data-quality issue
+- no execution issue
+
+The system must prefer SKIP over forcing a trade.
+
+--------------------------------------------------
+21. RISK MANAGEMENT
+--------------------------------------------------
+
+Never allow the ML model to determine unlimited stake size.
+
+Implement configurable:
+
+- maximum stake
+- maximum exposure
+- daily loss limit
+- consecutive-loss protection
+- market exposure limit
+- contract exposure limit
+- emergency stop
+- maximum number of concurrent trades
+
+Do NOT use martingale as the default recovery mechanism.
+
+--------------------------------------------------
+22. LIVE PREDICTION ENGINE
+--------------------------------------------------
+
+The live system should work approximately like:
+
+LIVE TICK
+↓
+Update rolling feature state
+↓
+Generate features for ALL markets
+↓
+Generate candidate contracts
+↓
+Model inference
+↓
+Probability calibration
+↓
+Expected value calculation
+↓
+Risk filter
+↓
+Market + contract ranking
+↓
+TRADE or SKIP
+↓
+If TRADE:
+send order through authenticated Deriv API
+↓
+record complete execution
+↓
+observe settlement
+↓
+record actual outcome
+↓
+compare predicted vs actual
+↓
+feed result into monitoring/retraining pipeline
+
+--------------------------------------------------
+23. CONTINUOUS MODEL MONITORING
+--------------------------------------------------
+
+Monitor:
+
+prediction drift
+feature drift
+probability calibration drift
+win-rate drift
+expected-value drift
+market-regime changes
+data-quality problems
+
+Alert when live performance deviates significantly from validated expectations.
+
+Never automatically retrain and deploy a new model directly to production without validation.
+
+Use:
+
+candidate model
+↓
+backtest
+↓
+walk-forward test
+↓
+paper trading
+↓
+approval
+↓
+production
+
+--------------------------------------------------
+24. PAPER-TRADING MODE
+--------------------------------------------------
+
+Before real-money execution, implement:
+
+PAPER MODE
+
+The system should generate predictions and hypothetical trades but place NO real trades.
+
+Store:
+
+prediction
+probability
+selected market
+selected contract
+hypothetical stake
+hypothetical payout
+actual result
+
+Compare paper performance with backtest performance.
+
+Only allow live execution after explicit configuration.
+
+--------------------------------------------------
+25. DASHBOARD
+--------------------------------------------------
+
+Create a dashboard showing:
+
+ALL MARKETS
+
+Symbol
+Current price
+Current regime
+Predicted probabilities
+Expected value
+Risk
+Confidence
+Best contract
+Rank
+
+Example:
+
+MARKET RANKING
+
+1. V50 — Higher — 67.2% — Positive EV
+2. V100 — Rise — 63.8% — Positive EV
+3. V75 — Accumulator — 61.9% — Positive EV
+4. V25 — Rise — 56.1% — Insufficient edge
+5. V10 — Skip
+
+Also show:
+
+- live predictions
+- model version
+- recent trades
+- win/loss
+- calibration
+- drawdown
+- feature importance
+- model health
+- data health
+
+--------------------------------------------------
+26. API SAFETY
+--------------------------------------------------
+
+Never expose:
+
+API tokens
+private keys
+credentials
+secrets
+
+in frontend code, GitHub, logs, or client-side JavaScript.
+
+Use environment variables/secrets management.
+
+Separate:
+
+research API credentials
+paper trading credentials
+live trading credentials
+
+--------------------------------------------------
+27. CODE QUALITY
+--------------------------------------------------
+
+Build the project modularly.
+
+Suggested structure:
+
+/data
+    collector
+    downloader
+    validator
+
+/features
+    price
+    momentum
+    volatility
+    directional
+    regime
+
+/labels
+    rise_fall
+    higher_lower
+    over_under
+    matches_differs
+    only_up
+    only_down
+    multipliers
+    accumulators
+
+/models
+    classifiers
+    regressors
+    calibration
+    ranking
+
+/backtest
+/live
+/risk
+/execution
+/database
+/dashboard
+/tests
+/config
+
+Write unit tests for every important component.
+
+--------------------------------------------------
+28. MOST IMPORTANT RESEARCH QUESTION
+--------------------------------------------------
+
+The objective is NOT:
+
+"Can I create a model that claims 90% win rate?"
+
+The objective is:
+
+"Can I discover a statistically significant, reproducible, out-of-sample predictive edge in Deriv Synthetic Indices that survives walk-forward testing and realistic execution assumptions?"
+
+If no reliable edge exists, the system must say so.
+
+--------------------------------------------------
+29. FIRST DEVELOPMENT PHASE
+--------------------------------------------------
+
+Do NOT immediately build automatic real-money trading.
+
+First build:
+
+1. Current Deriv API integration
+2. Symbol discovery
+3. Historical data collector
+4. Raw tick database
+5. Data validation
+6. Feature engine
+7. Contract-specific label engine
+8. Baseline ML models
+9. Chronological backtesting
+10. Walk-forward validation
+11. Probability calibration
+12. Market/contract ranking
+13. Paper trading
+14. Dashboard
+
+Only after those components demonstrate robust out-of-sample results should live execution be implemented.
+
+--------------------------------------------------
+30. DELIVERABLES
+--------------------------------------------------
+
+Before writing large amounts of code, produce:
+
+A. Complete system architecture
+B. Database schema
+C. Data-flow diagram
+D. Feature dictionary
+E. Label definitions for every supported contract type
+F. Model architecture
+G. Backtesting methodology
+H. Leakage-prevention methodology
+I. Walk-forward validation methodology
+J. Risk-management design
+K. API integration plan
+L. Project folder structure
+M. Development roadmap
+
+Then implement the system incrementally.
+
+IMPORTANT:
+Use current official Deriv API documentation as the source of truth for API endpoints, authentication, symbols, contract types, pricing, and execution.
+
+Do not fabricate API endpoints or contract parameters.
+
+Do not promise profitability or a guaranteed win rate.
+
+The final system should optimize for statistically validated expected value and robustness, not an artificially high historical win percentage.
