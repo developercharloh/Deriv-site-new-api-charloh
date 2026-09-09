@@ -6,6 +6,14 @@ const DERIV_WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1';
 const SCAN_TIMEOUT_MS = 35_000;
 const SHORT_RETURN_WINDOW = 20;
 const SYMBOL_PAGE_SIZE = 8;
+const MODEL_VERSION = 'empirical-baseline-v1';
+const MIN_VALIDATION_SAMPLES = 200;
+const MIN_ACCURACY = 0.52;
+const MAX_BRIER_SCORE = 0.25;
+const MAX_CALIBRATION_ERROR = 0.08;
+const MIN_WINDOW_ACCURACY = 0.5;
+const VALIDATION_WINDOW_COUNT = 3;
+const CALIBRATION_BIN_COUNT = 5;
 
 type SampleSize = 300 | 600 | 1200;
 type ScanStatus =
@@ -39,7 +47,20 @@ type ScanRow = SyntheticSymbol & {
     walkForwardAccuracy: number;
     brierScore: number;
     validationSamples: number;
+    climatologyBrierScore: number;
+    calibrationError: number;
+    validationWindows: ValidationWindow[];
+    validationGate: ValidationGate;
+    gateReasons: string[];
 };
+
+type ValidationWindow = {
+    samples: number;
+    accuracy: number;
+    brierScore: number;
+};
+
+type ValidationGate = 'insufficient-evidence' | 'failed' | 'validated';
 
 type WebSocketMessage = {
     msg_type?: string;
@@ -118,9 +139,7 @@ const mean = (values: number[]): number =>
 const calculateWalkForwardBaseline = (returns: number[]) => {
     const minimumTrainingWindow = 40;
     const trainingLookback = 100;
-    let correct = 0;
-    let brierTotal = 0;
-    let validationSamples = 0;
+    const predictions: Array<{ probability: number; actual: number }> = [];
     let latestProbability = 0.5;
 
     for (let index = minimumTrainingWindow; index < returns.length; index += 1) {
@@ -130,16 +149,77 @@ const calculateWalkForwardBaseline = (returns: number[]) => {
         const actual = returns[index] > 0 ? 1 : 0;
 
         latestProbability = probability;
-        correct += (probability >= 0.5 ? 1 : 0) === actual ? 1 : 0;
-        brierTotal += (probability - actual) ** 2;
-        validationSamples += 1;
+        predictions.push({ probability, actual });
+    }
+
+    const validationSamples = predictions.length;
+    const positiveRate = mean(predictions.map(prediction => prediction.actual));
+    const accuracy = predictions.length
+        ? mean(predictions.map(prediction => (prediction.probability >= 0.5 ? 1 : 0) === prediction.actual ? 1 : 0))
+        : 0;
+    const brierScore = predictions.length
+        ? mean(predictions.map(prediction => (prediction.probability - prediction.actual) ** 2))
+        : 0;
+    const climatologyBrierScore = predictions.length
+        ? mean(predictions.map(prediction => (positiveRate - prediction.actual) ** 2))
+        : 0;
+    const calibrationError = validationSamples
+        ? Array.from({ length: CALIBRATION_BIN_COUNT }, (_, binIndex) => {
+            const lower = binIndex / CALIBRATION_BIN_COUNT;
+            const upper = (binIndex + 1) / CALIBRATION_BIN_COUNT;
+            const bin = predictions.filter(({ probability }) =>
+                probability >= lower && (binIndex === CALIBRATION_BIN_COUNT - 1 ? probability <= upper : probability < upper),
+            );
+            if (!bin.length) return 0;
+            return (bin.length / validationSamples) * Math.abs(
+                mean(bin.map(prediction => prediction.probability)) - mean(bin.map(prediction => prediction.actual)),
+            );
+        }).reduce((total, value) => total + value, 0)
+        : 0;
+    const windowSize = Math.max(1, Math.ceil(validationSamples / VALIDATION_WINDOW_COUNT));
+    const validationWindows = Array.from({ length: VALIDATION_WINDOW_COUNT }, (_, windowIndex) => {
+        const window = predictions.slice(windowIndex * windowSize, (windowIndex + 1) * windowSize);
+        return {
+            samples: window.length,
+            accuracy: window.length
+                ? mean(window.map(prediction => (prediction.probability >= 0.5 ? 1 : 0) === prediction.actual ? 1 : 0))
+                : 0,
+            brierScore: window.length
+                ? mean(window.map(prediction => (prediction.probability - prediction.actual) ** 2))
+                : 0,
+        };
+    });
+    const gateReasons: string[] = [];
+    if (validationSamples < MIN_VALIDATION_SAMPLES) {
+        gateReasons.push(`Needs ${MIN_VALIDATION_SAMPLES} validation ticks; received ${validationSamples}.`);
+    }
+    if (accuracy < MIN_ACCURACY) {
+        gateReasons.push(`Accuracy ${formatPercent(accuracy * 100)} is below the ${formatPercent(MIN_ACCURACY * 100)} gate.`);
+    }
+    if (brierScore >= MAX_BRIER_SCORE || brierScore >= climatologyBrierScore) {
+        gateReasons.push('Brier score does not beat the climatology baseline.');
+    }
+    if (calibrationError > MAX_CALIBRATION_ERROR) {
+        gateReasons.push(`Calibration error ${formatPercent(calibrationError * 100)} exceeds the ${formatPercent(MAX_CALIBRATION_ERROR * 100)} gate.`);
+    }
+    if (validationWindows.some(window => window.samples > 0 && window.accuracy < MIN_WINDOW_ACCURACY)) {
+        gateReasons.push('Accuracy is unstable across at least one chronological validation window.');
     }
 
     return {
         baselineProbability: latestProbability,
-        walkForwardAccuracy: validationSamples ? correct / validationSamples : 0,
-        brierScore: validationSamples ? brierTotal / validationSamples : 0,
+        walkForwardAccuracy: accuracy,
+        brierScore,
         validationSamples,
+        climatologyBrierScore,
+        calibrationError,
+        validationWindows,
+        validationGate: !validationSamples || validationSamples < MIN_VALIDATION_SAMPLES
+            ? 'insufficient-evidence'
+            : gateReasons.length
+                ? 'failed'
+                : 'validated',
+        gateReasons,
     };
 };
 
@@ -196,10 +276,10 @@ const formatTime = (value: Date | null): string =>
         : 'Not captured';
 
 const statusCopy: Record<ScanStatus, string> = {
-    idle: 'Ready for a descriptive scan',
+    idle: 'Ready for a statistical scan',
     discovering: 'Reading public market metadata',
     collecting: 'Collecting historical observations',
-    ready: 'Snapshot ready',
+    ready: 'Snapshot and validation ready',
     empty: 'No eligible synthetic symbols found',
     timeout: 'The public data request timed out',
     'connection-error': 'Could not reach the public market feed',
@@ -505,7 +585,18 @@ const AlphaScanAI: React.FC = () => {
     const averageBaselineProbability = rows.length ? mean(rows.map(row => row.baselineProbability)) : 0;
     const averageWalkForwardAccuracy = rows.length ? mean(rows.map(row => row.walkForwardAccuracy)) : 0;
     const averageBrierScore = rows.length ? mean(rows.map(row => row.brierScore)) : 0;
-    const modelActive = rows.some(row => row.validationSamples >= 100);
+    const averageCalibrationError = rows.length ? mean(rows.map(row => row.calibrationError)) : 0;
+    const validatedRows = rows.filter(row => row.validationGate === 'validated').length;
+    const modelStatus = rows.length > 0 && coverage === 100 && validatedRows === rows.length
+        ? 'ACTIVE'
+        : validatedRows > 0
+            ? 'PARTIAL'
+            : 'SKIP';
+    const modelStatusDescription = modelStatus === 'ACTIVE'
+        ? `all ${rows.length} symbols passed validation gates`
+        : modelStatus === 'PARTIAL'
+            ? `${validatedRows} of ${rows.length} symbols passed; controls remain gated`
+            : 'evidence or validation gates are incomplete';
 
     return (
         <main className='alpha-scan' aria-labelledby='alpha-scan-title'>
@@ -632,7 +723,7 @@ const AlphaScanAI: React.FC = () => {
                     <section className='alpha-scan__summary' aria-label='Snapshot summary'>
                         <div className='alpha-scan__summary-heading'>
                             <div>
-                                <span className='alpha-scan__section-label'>Snapshot / descriptive only</span>
+                                 <span className='alpha-scan__section-label'>Snapshot / validation gate</span>
                                 <h2>Coverage at a glance</h2>
                             </div>
                             <div className='alpha-scan__capture'>
@@ -658,8 +749,8 @@ const AlphaScanAI: React.FC = () => {
                             </div>
                             <div className='alpha-scan__summary-cell alpha-scan__summary-cell--decision'>
                                  <span>Model status</span>
-                                 <strong data-testid='text-model-status'>{modelActive ? 'BASELINE' : 'PENDING'}</strong>
-                                 <em>{modelActive ? 'walk-forward evaluated' : 'waiting for history'}</em>
+                                 <strong data-testid='text-model-status'>{modelStatus}</strong>
+                                 <em>{modelStatusDescription}</em>
                             </div>
                         </div>
                     </section>
@@ -684,6 +775,8 @@ const AlphaScanAI: React.FC = () => {
                                         <th scope='col'>Baseline P(up)<small>latest estimate</small></th>
                                         <th scope='col'>OOS accuracy<small>walk-forward</small></th>
                                         <th scope='col'>Brier score<small>lower is better</small></th>
+                                        <th scope='col'>Calibration error<small>lower is better</small></th>
+                                        <th scope='col'>Validation gate</th>
                                         <th scope='col'>Directional imbalance</th>
                                         <th scope='col'>Reversal rate</th>
                                         <th scope='col'>Descriptive regime</th>
@@ -708,6 +801,8 @@ const AlphaScanAI: React.FC = () => {
                                             <td data-label='Baseline probability' className='alpha-scan__mono'>{formatPercent(row.baselineProbability * 100)}</td>
                                             <td data-label='OOS accuracy' className='alpha-scan__mono'>{formatPercent(row.walkForwardAccuracy * 100)}</td>
                                             <td data-label='Brier score' className='alpha-scan__mono'>{formatRatio(row.brierScore)}</td>
+                                            <td data-label='Calibration error' className='alpha-scan__mono'>{formatPercent(row.calibrationError * 100)}</td>
+                                            <td data-label='Validation gate'><span className={`alpha-scan__regime alpha-scan__regime--${row.validationGate}`}>{row.validationGate === 'validated' ? 'Passed' : row.validationGate === 'failed' ? 'Failed' : 'Insufficient evidence'}</span></td>
                                             <td data-label='Directional imbalance' className={row.directionalImbalance >= 0 ? 'alpha-scan__positive' : 'alpha-scan__negative'}>{formatRatio(row.directionalImbalance, true)}</td>
                                             <td data-label='Reversal rate'>{formatPercent(row.reversalRate)}</td>
                                             <td data-label='Descriptive regime'><span className='alpha-scan__regime'>{row.regime}</span></td>
@@ -742,7 +837,9 @@ const AlphaScanAI: React.FC = () => {
                             <div><span>Mean baseline P(up)</span><strong>{formatPercent(averageBaselineProbability * 100)}</strong></div>
                             <div><span>Mean OOS accuracy</span><strong>{formatPercent(averageWalkForwardAccuracy * 100)}</strong></div>
                             <div><span>Mean Brier score</span><strong>{formatRatio(averageBrierScore)}</strong></div>
-                            <div><span>Decision status</span><strong>SKIP — validation pending</strong></div>
+                            <div><span>Mean calibration error</span><strong>{formatPercent(averageCalibrationError * 100)}</strong></div>
+                            <div><span>Validated symbols</span><strong>{validatedRows} / {rows.length}</strong></div>
+                            <div><span>Decision status</span><strong>SKIP — paper-only research</strong></div>
                         </div>
                     </section>
                 </>
@@ -752,7 +849,7 @@ const AlphaScanAI: React.FC = () => {
                 <div className='alpha-scan__disclosure-mark'>i</div>
                 <div>
                     <strong>Paper-only research surface</strong>
-                    <p>No authenticated trading, no live execution, no payout or contract values, and no persistence of paper trades. The decision remains <b>SKIP — validation pending</b> until out-of-sample training and walk-forward validation are implemented.</p>
+                     <p>No authenticated trading, no live execution, no payout or contract values, and no persistence of paper trades. The decision remains <b>SKIP — paper-only research</b> until every required validation gate passes.</p>
                 </div>
             </footer>
         </main>
