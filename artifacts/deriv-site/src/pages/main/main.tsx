@@ -44,13 +44,13 @@ import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
 import './main.scss';
-import AlphaScanComingSoon from '../alpha-scan-ai-coming-soon';
 
 const ChartWrapper      = lazy(() => import('../chart/chart-wrapper'));
 const AnalysisTool      = lazy(() => import('../ai-analysis-tool'));
 const ExecutionPlan     = lazy(() => import('../execution-plan'));
 const FreeBots          = lazy(() => import('../free-bots'));
 const AdvancedDTrader   = lazy(() => import('../advanced-dtrader'));
+const AlphaScanAI       = lazy(() => import('../alpha-scan-ai'));
 const AiSignalsPage     = lazy(() => import('../ai-signals'));
 
 const AppWrapper = observer(() => {
@@ -434,7 +434,9 @@ const AppWrapper = observer(() => {
                                 }
                                 id='id-alpha-scan-ai'
                             >
-                                <AlphaScanComingSoon />
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Alpha Scan AI...')} />}>
+                                    <AlphaScanAI />
+                                </Suspense>
                             </div>
                             <div
                                 label={

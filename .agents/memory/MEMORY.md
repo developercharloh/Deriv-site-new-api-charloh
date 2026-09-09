@@ -2,3 +2,4 @@
 - [Deriv-site Tabs id stripping](deriv-site-tabs-scroll.md) — custom Tabs component drops the wrapper div's `id`, so id-based mobile scroll/height CSS silently no-ops.
 - [Deriv-site AI orb testing quirks](deriv-site-ai-orb-testing.md) — floating orb has a perpetual bounce animation that breaks Playwright's normal click; live bot runs always hit a login gate unrelated to the feature under test.
 - [Deriv-site verification](deriv-site-verification.md) — Rsbuild workflow/build is the reliable app check; package-level typecheck currently includes unrelated dependency gaps.
+- [Alpha Scan research gate](alpha-scan-research-scope.md) — Alpha Scan starts as a descriptive public-data cockpit; keep decisions at SKIP until OOS validation exists.
