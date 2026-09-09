@@ -386,6 +386,23 @@ const AlphaScanAI: React.FC = () => {
             setFailedCount(failedSymbolsRef.current.size);
         };
 
+        const handleScanTimeout = () => {
+            if (scanIdRef.current !== scanId) return;
+            if (resultRowsRef.current.length) {
+                finishWithCurrentData('partial-data', 'The scan reached its time limit; rows shown are the data received so far.');
+            } else {
+                finishWithCurrentData('timeout', 'No usable history arrived within the time limit.');
+            }
+            setHasMoreSymbols(false);
+            setIsLoadingMore(false);
+            closeSocket();
+        };
+
+        const armScanTimeout = () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(handleScanTimeout, SCAN_TIMEOUT_MS);
+        };
+
         const requestNextPage = () => {
             if (
                 scanIdRef.current !== scanId ||
@@ -402,6 +419,7 @@ const AlphaScanAI: React.FC = () => {
             setIsLoadingMore(true);
             setHasMoreSymbols(nextSymbolIndex < discoveredSymbols.length);
             setErrorMessage(`Loading symbols ${nextSymbolIndex - page.length + 1}–${nextSymbolIndex} of ${discoveredSymbols.length}.`);
+            armScanTimeout();
 
             page.forEach((symbol, pageIndex) => {
                 const reqId = scanId * 100000 + nextSymbolIndex - page.length + pageIndex + 1;
@@ -423,24 +441,16 @@ const AlphaScanAI: React.FC = () => {
             if (scanIdRef.current !== scanId || pendingRef.current.size > 0) return;
 
             const hasMore = nextSymbolIndex < discoveredSymbols.length;
-            setIsLoadingMore(false);
             setHasMoreSymbols(hasMore);
 
-            // If a whole page failed, keep paging until there is data to anchor
-            // the infinite scroll or the complete public universe is exhausted.
-            if (hasMore && !resultRowsRef.current.length) {
+            // Model validation must cover the complete discovered universe. Keep
+            // requesting pages automatically while rows stream into the ledger.
+            if (hasMore) {
                 requestNextPage();
                 return;
             }
 
-            if (hasMore) {
-                finishWithCurrentData(
-                    'partial-data',
-                    `Showing ${resultRowsRef.current.length} of ${discoveredSymbols.length} symbols. Scroll down for more.`,
-                );
-                return;
-            }
-
+            setIsLoadingMore(false);
             closeSocket();
             if (!resultRowsRef.current.length) {
                 finishWithCurrentData('empty', 'No history was returned for the discovered synthetic symbols.');
@@ -548,17 +558,7 @@ const AlphaScanAI: React.FC = () => {
             }
         };
 
-        timeoutRef.current = setTimeout(() => {
-            if (scanIdRef.current !== scanId) return;
-            if (resultRowsRef.current.length) {
-                finishWithCurrentData('partial-data', 'The scan reached its time limit; rows shown are the data received so far.');
-            } else {
-                finishWithCurrentData('timeout', 'No usable history arrived within the time limit.');
-            }
-            setHasMoreSymbols(false);
-            setIsLoadingMore(false);
-            closeSocket();
-        }, SCAN_TIMEOUT_MS);
+        armScanTimeout();
     }, [closeSocket, finishWithCurrentData, sampleSize]);
 
     useEffect(() => () => closeSocket(), [closeSocket]);
