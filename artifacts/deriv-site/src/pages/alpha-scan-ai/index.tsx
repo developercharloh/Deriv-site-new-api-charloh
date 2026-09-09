@@ -1179,4 +1179,11 @@ const AlphaScanWorkspace: React.FC = () => {
     );
 };
 
+const AlphaScanAI: React.FC = () => {
+    const researchMode = typeof window !== 'undefined'
+        && new URLSearchParams(window.location.search).get('alpha_scan_research') === '1';
+
+    return researchMode ? <AlphaScanWorkspace /> : <PremiumAlphaLanding />;
+};
+
 export default AlphaScanAI;

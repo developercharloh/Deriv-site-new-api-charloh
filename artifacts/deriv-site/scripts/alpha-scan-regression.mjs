@@ -5,6 +5,11 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { URL } from 'node:url';
 
 const TARGET_URL = process.env.ALPHA_SCAN_URL || 'https://www.mrcharlohfx.site/#alpha_scan_ai';
+const RESEARCH_URL = (() => {
+    const url = new URL(TARGET_URL);
+    url.searchParams.set('alpha_scan_research', '1');
+    return url.toString();
+})();
 const SAMPLE_WINDOWS = [600, 1200];
 const MODEL_VERSION = 'feature-logistic-causal-denoise-v1';
 const findOpenPort = async () => {
@@ -268,11 +273,15 @@ const run = async () => {
         await client.call('Page.navigate', { url: TARGET_URL });
 
         await waitFor(
-            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"button-open-research\\"]"))'),
-            'premium Alpha Scan cover',
+            () => client.evaluate('Boolean(document.querySelector(".alpha-scan--premium"))'),
+            'visual-only Alpha Scan cover',
         );
         await client.evaluate(`document.querySelector('.slx-popup__dismiss')?.click()`);
-        await client.evaluate('document.querySelector("[data-testid=\\"button-open-research\\"]")?.click()');
+        const coverText = await client.evaluate('document.querySelector(".alpha-scan--premium")?.innerText || ""');
+        if (coverText.trim()) {
+            throw new Error(`Premium cover contains visible text: ${coverText.trim()}`);
+        }
+        await client.call('Page.navigate', { url: RESEARCH_URL });
         await waitFor(
             () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"button-run-scan\\"]"))'),
             'Alpha Scan research controls',
@@ -343,6 +352,7 @@ const run = async () => {
         console.log(JSON.stringify({
             ok: true,
             target: TARGET_URL,
+            cover: 'visual-only',
             scans: results,
             blockedFeed: {
                 status: failedSnapshot.status,
