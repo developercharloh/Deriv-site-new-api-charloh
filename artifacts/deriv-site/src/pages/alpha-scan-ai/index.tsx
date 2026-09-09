@@ -1,5 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { useStore } from '@/hooks/useStore';
+import {
+    DTraderEngine,
+    type DTBuyFeedback,
+    type DTConfig,
+    type DTContractType,
+    type DTPosition,
+    type DTStatus,
+} from '@/utils/dtrader-engine';
 import './alpha-scan-ai.scss';
 
 const DERIV_WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1';
@@ -653,14 +663,21 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     errorMessage,
     onScan,
 }) => {
+    const { client } = useStore();
+    const liveEngineRef = useRef<DTraderEngine | null>(null);
+    if (liveEngineRef.current === null) liveEngineRef.current = new DTraderEngine();
+    const liveEngine = liveEngineRef.current;
     const [selectedSymbol, setSelectedSymbol] = useState('');
     const [contractMarket, setContractMarket] = useState('over-1');
+    const [contractMarketTouched, setContractMarketTouched] = useState(false);
     const [stake, setStake] = useState('10');
     const [targetProfit, setTargetProfit] = useState('18');
     const [stopLoss, setStopLoss] = useState('10');
     const [martingale, setMartingale] = useState('2');
-    const [paperMode, setPaperMode] = useState(true);
-    const [paperTrade, setPaperTrade] = useState<{ symbol: string; displayName: string; contract: string; enteredAt: string } | null>(null);
+    const [liveMode, setLiveMode] = useState(true);
+    const [liveStatus, setLiveStatus] = useState<DTStatus>('idle');
+    const [liveFeedback, setLiveFeedback] = useState<DTBuyFeedback | null>(null);
+    const [liveTrade, setLiveTrade] = useState<DTPosition | null>(null);
 
     const bestModelRow = useMemo(() => {
         if (!rows.length) return undefined;
@@ -677,6 +694,24 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setSelectedSymbol(bestModelRow?.symbol || '');
         }
     }, [bestModelRow, rows, selectedSymbol]);
+
+    useEffect(() => {
+        if (!contractMarketTouched && bestModelRow) {
+            setContractMarket(bestModelRow.shortReturn >= 0 ? 'over-1' : 'under-9');
+        }
+    }, [bestModelRow, contractMarketTouched]);
+
+    useEffect(() => {
+        liveEngine.onStatus = setLiveStatus;
+        liveEngine.onBuyFeedback = setLiveFeedback;
+        liveEngine.onPosition = position => setLiveTrade(position.isOpen ? position : null);
+        return () => {
+            liveEngine.stop();
+            liveEngine.onStatus = () => {};
+            liveEngine.onBuyFeedback = () => {};
+            liveEngine.onPosition = () => {};
+        };
+    }, [liveEngine]);
 
     const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
     const modelPick = bestModelRow || selectedRow;
@@ -698,15 +733,68 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '—';
     const selectedContract = CONTRACT_MARKETS.find(market => market.value === contractMarket)?.label || 'Over 1';
+    const liveTradeContract = liveTrade
+        ? liveTrade.contractType === 'DIGITEVEN'
+            ? 'Even'
+            : liveTrade.contractType === 'DIGITODD'
+                ? 'Odd'
+                : `${liveTrade.contractType === 'DIGITUNDER' ? 'Under' : 'Over'} ${liveTrade.barrier ?? ''}`
+        : selectedContract;
+    const isLoggedIn = client?.is_logged_in ?? false;
+    const liveAuthorized = isLoggedIn && Boolean(api_base.api && api_base.is_authorized);
+    const selectedContractType: DTContractType = contractMarket === 'even'
+        ? 'DIGITEVEN'
+        : contractMarket === 'odd'
+            ? 'DIGITODD'
+            : contractMarket.startsWith('under-')
+                ? 'DIGITUNDER'
+                : 'DIGITOVER';
+    const selectedBarrier = contractMarket.startsWith('over-') || contractMarket.startsWith('under-')
+        ? contractMarket.split('-')[1]
+        : null;
+    const liveCanExecute = Boolean(
+        liveMode &&
+        liveAuthorized &&
+        modelPick &&
+        modelPick.validationGate === 'validated' &&
+        !liveTrade &&
+        !isBusy &&
+        liveStatus !== 'subscribing',
+    );
 
-    const handlePaperExecute = () => {
-        if (!paperMode || !modelPick) return;
-        setPaperTrade({
+    const handleLiveExecute = () => {
+        if (!liveMode || !modelPick) return;
+        if (!liveAuthorized) {
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
+            return;
+        }
+        if (modelPick.validationGate !== 'validated') {
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'The model pick is gated until validation evidence passes.' });
+            return;
+        }
+        if (liveTrade) {
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'A live contract is already running in the journal.' });
+            return;
+        }
+
+        const amount = Number(stake);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Enter a valid stake before executing.' });
+            return;
+        }
+
+        const config: DTConfig = {
             symbol: modelPick.symbol,
-            displayName: modelPick.displayName,
-            contract: selectedContract,
-            enteredAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        });
+            contractType: selectedContractType,
+            durationValue: 1,
+            durationUnit: 't',
+            stake: amount,
+            barrier: selectedBarrier,
+            currency: client?.currency || 'USD',
+        };
+        setLiveFeedback(null);
+        if (liveStatus === 'idle' || liveStatus === 'error') liveEngine.start(config);
+        liveEngine.placeBuyNow(config);
     };
 
     return (
@@ -766,7 +854,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <select
                         className='alpha-tool__selector-value'
                         value={contractMarket}
-                        onChange={event => setContractMarket(event.target.value)}
+                        onChange={event => {
+                            setContractMarketTouched(true);
+                            setContractMarket(event.target.value);
+                        }}
                         aria-label='Deriv contract market'
                         data-testid='select-contract-market'
                     >
@@ -799,7 +890,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
                 <div className='alpha-tool__strategy-copy'>
                     <span className='alpha-tool__strategy-spark'>✦</span>
-                    <p>{strategyReason}. Best model volatility: {modelPick?.displayName || 'waiting for data'}. Choose a Deriv digit contract before execution.</p>
+                    <p>{strategyReason}. Best model volatility: {modelPick?.displayName || 'waiting for data'}. Choose a Deriv digit contract before live execution.</p>
                 </div>
                 <ul className='alpha-tool__check-list'>
                     <li>Uses causal denoising for isolated tick spikes</li>
@@ -818,18 +909,18 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Target Profit</span><input value={`$${targetProfit}`} onChange={event => setTargetProfit(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference target profit' /></div>
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>♢</span><span>Stop Loss</span><input value={`$${stopLoss}`} onChange={event => setStopLoss(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference stop loss' /></div>
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↗</span><span>Martingale</span><select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Reference martingale'><option value='1'>x1</option><option value='2'>x2</option><option value='3'>x3</option></select></div>
-                <div className='alpha-tool__settings-note'>Model-selected symbol · paper execution until live trading is explicitly enabled</div>
+                <div className='alpha-tool__settings-note'>Digit execution sends stake + contract only · one tick · model validation gated</div>
             </section>
 
             <section className='alpha-tool__auto-trade'>
                 <span className='alpha-tool__auto-icon'>ϟ</span>
-                <div><b>Auto Trade</b><small>{paperMode ? 'Paper mode only' : 'Execution locked'}</small></div>
-                <button type='button' className={`alpha-tool__switch ${paperMode ? 'alpha-tool__switch--on' : ''}`} onClick={() => setPaperMode(value => !value)} aria-pressed={paperMode}><span /></button>
+                <div><b>Live Execution</b><small>{liveMode ? 'Deriv account required' : 'Execution locked'}</small></div>
+                <button type='button' className={`alpha-tool__switch ${liveMode ? 'alpha-tool__switch--on' : ''}`} onClick={() => setLiveMode(value => !value)} aria-pressed={liveMode}><span /></button>
                 <div className='alpha-tool__action-stack'>
-                    <button type='button' className='alpha-tool__start' onClick={handlePaperExecute} disabled={isBusy || !paperMode || !modelPick} data-testid='button-paper-execute'>
+                    <button type='button' className='alpha-tool__start' onClick={handleLiveExecute} disabled={!liveCanExecute} data-testid='button-live-execute'>
                         <span>Execute {selectedContract}</span><strong>▶</strong>
                     </button>
-                    <button type='button' className='alpha-tool__refresh' onClick={() => { setPaperTrade(null); onScan(); }} disabled={isBusy} data-testid='button-run-scan'>
+                    <button type='button' className='alpha-tool__refresh' onClick={() => { setLiveFeedback(null); onScan(); }} disabled={isBusy} data-testid='button-run-scan'>
                         <span>{isBusy ? 'Syncing' : 'Refresh Model'}</span>
                     </button>
                 </div>
@@ -838,23 +929,23 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             <section className='alpha-tool__journal panel' data-testid='tool-journal'>
                 <div className='alpha-tool__section-heading'>
                     <div><span className='alpha-tool__section-icon'>▤</span><b>Trade Journal</b></div>
-                    <span className='alpha-tool__view-label'>{paperTrade ? '1 running' : 'No trades running'}⌄</span>
+                    <span className='alpha-tool__view-label'>{liveTrade ? '1 running' : 'No trades running'}⌄</span>
                 </div>
                 <div className='alpha-tool__journal-table-wrap'>
                     <table className='alpha-tool__journal-table'>
                         <thead><tr><th>Time</th><th>Volatility</th><th>Market</th><th>Strategy</th><th>Gate</th><th>Return</th></tr></thead>
                         <tbody>
-                            {paperTrade ? (
-                                <tr data-symbol={paperTrade.symbol}>
-                                    <td>{paperTrade.enteredAt}</td>
-                                    <td><span className='alpha-tool__table-icon'>∿</span>{paperTrade.displayName.replace('Volatility ', 'V')}</td>
+                            {liveTrade ? (
+                                <tr data-symbol={liveTrade.symbol}>
+                                    <td>{liveTrade.purchaseTime}</td>
+                                    <td><span className='alpha-tool__table-icon'>∿</span>{liveTrade.symbol}</td>
                                     <td>{selectedRow?.market || 'Synthetic'}</td>
-                                    <td><span className='alpha-tool__brain'>♧</span>{paperTrade.contract}</td>
+                                    <td><span className='alpha-tool__brain'>♧</span>{liveTradeContract}</td>
                                     <td><span className='alpha-tool__result alpha-tool__result--validated'>Running</span></td>
-                                    <td className='alpha-tool__gain'>Paper</td>
+                                    <td className='alpha-tool__gain'>Live</td>
                                 </tr>
                             ) : (
-                                <tr><td colSpan={6} className='alpha-tool__journal-empty'>{isBusy ? 'No trades running · model is scanning…' : 'No trades running. Execute a model pick to start paper tracking.'}</td></tr>
+                                <tr><td colSpan={6} className='alpha-tool__journal-empty'>{isBusy ? 'No trades running · model is scanning…' : liveFeedback?.message || 'No trades running. Execute a validated model pick to start.'}</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -864,7 +955,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             <section className='alpha-tool__summary-grid'>
                 <div className='alpha-tool__summary-card alpha-tool__summary-card--blue'><span>◎</span><small>Models</small><strong>{rows.length || '—'}</strong><em>covered</em></div>
                 <div className='alpha-tool__summary-card alpha-tool__summary-card--green'><span>✓</span><small>Validated</small><strong>{validatedRows || '—'}</strong><em>{rows.length ? `${Math.round((validatedRows / rows.length) * 100)}%` : '—'}</em></div>
-                <div className='alpha-tool__summary-card alpha-tool__summary-card--pink'><span>×</span><small>Gated</small><strong>{rows.length ? rows.length - validatedRows : '—'}</strong><em>paper only</em></div>
+                <div className='alpha-tool__summary-card alpha-tool__summary-card--pink'><span>×</span><small>Gated</small><strong>{rows.length ? rows.length - validatedRows : '—'}</strong><em>live gated</em></div>
                 <div className='alpha-tool__summary-card alpha-tool__summary-card--purple'><span>✦</span><small>OOS accuracy</small><strong>{oosAccuracy ? `${oosAccuracy}%` : '—'}</strong><em>{averageVolatility ? `${formatPercent(averageVolatility)} volatility` : 'model pending'}</em></div>
             </section>
         </main>
