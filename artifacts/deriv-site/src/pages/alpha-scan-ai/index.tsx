@@ -747,10 +747,10 @@ const AlphaScanAI: React.FC = () => {
                                 <strong data-testid='text-mean-volatility'>{formatPercent(averageVolatility)}</strong>
                                 <em>log-return dispersion / tick</em>
                             </div>
-                            <div className='alpha-scan__summary-cell alpha-scan__summary-cell--decision'>
+                             <div className={`alpha-scan__summary-cell alpha-scan__summary-cell--decision alpha-scan__summary-cell--${modelStatus.toLowerCase()}`}>
                                  <span>Model status</span>
                                  <strong data-testid='text-model-status'>{modelStatus}</strong>
-                                 <em>{modelStatusDescription}</em>
+                                 <em>{MODEL_VERSION} · {modelStatusDescription}</em>
                             </div>
                         </div>
                     </section>
@@ -802,7 +802,14 @@ const AlphaScanAI: React.FC = () => {
                                             <td data-label='OOS accuracy' className='alpha-scan__mono'>{formatPercent(row.walkForwardAccuracy * 100)}</td>
                                             <td data-label='Brier score' className='alpha-scan__mono'>{formatRatio(row.brierScore)}</td>
                                             <td data-label='Calibration error' className='alpha-scan__mono'>{formatPercent(row.calibrationError * 100)}</td>
-                                            <td data-label='Validation gate'><span className={`alpha-scan__regime alpha-scan__regime--${row.validationGate}`}>{row.validationGate === 'validated' ? 'Passed' : row.validationGate === 'failed' ? 'Failed' : 'Insufficient evidence'}</span></td>
+                                            <td data-label='Validation gate'>
+                                                <span
+                                                    className={`alpha-scan__regime alpha-scan__regime--${row.validationGate}`}
+                                                    title={row.gateReasons.length ? row.gateReasons.join(' ') : `${MODEL_VERSION}: every validation gate passed.`}
+                                                >
+                                                    {row.validationGate === 'validated' ? 'Passed' : row.validationGate === 'failed' ? 'Failed' : 'Insufficient evidence'}
+                                                </span>
+                                            </td>
                                             <td data-label='Directional imbalance' className={row.directionalImbalance >= 0 ? 'alpha-scan__positive' : 'alpha-scan__negative'}>{formatRatio(row.directionalImbalance, true)}</td>
                                             <td data-label='Reversal rate'>{formatPercent(row.reversalRate)}</td>
                                             <td data-label='Descriptive regime'><span className='alpha-scan__regime'>{row.regime}</span></td>
@@ -830,7 +837,7 @@ const AlphaScanAI: React.FC = () => {
                     <section className='alpha-scan__interpretation'>
                         <div className='alpha-scan__interpretation-main'>
                             <span className='alpha-scan__section-label'>Read the evidence</span>
-                            <h2>Descriptive metrics are not validated signals.</h2>
+                            <h2>Validation metrics are not permission to trade.</h2>
                             <p>Baseline P(up) is an empirical probability calculated only from observations available before each test tick. Accuracy and Brier score are walk-forward diagnostics; they are not a calibrated production ML forecast or a trade signal.</p>
                         </div>
                         <div className='alpha-scan__interpretation-side'>
