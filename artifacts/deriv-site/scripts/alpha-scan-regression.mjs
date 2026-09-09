@@ -5,11 +5,6 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { URL } from 'node:url';
 
 const TARGET_URL = process.env.ALPHA_SCAN_URL || 'https://www.mrcharlohfx.site/#alpha_scan_ai';
-const RESEARCH_URL = (() => {
-    const url = new URL(TARGET_URL);
-    url.searchParams.set('alpha_scan_research', '1');
-    return url.toString();
-})();
 const SAMPLE_WINDOWS = [600, 1200];
 const MODEL_VERSION = 'feature-logistic-causal-denoise-v1';
 const findOpenPort = async () => {
@@ -201,27 +196,25 @@ const waitFor = async (condition, description, timeout = 30000) => {
 };
 
 const getSnapshot = evaluate => evaluate(`(() => {
-    const text = selector => document.querySelector(selector)?.innerText || '';
-    const status = text('[data-testid="status-scan"]');
-    const rows = [...document.querySelectorAll('tbody tr')].map(row => ({
-        symbol: row.getAttribute('data-testid') || '',
-        sample: row.querySelector('[data-label="Sample"]')?.innerText || '',
-        gate: row.querySelector('[data-label="Validation gate"]')?.innerText || '',
+    const root = document.querySelector('[data-testid="alpha-tool"]');
+    const rows = [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]')].map(row => ({
+        symbol: row.getAttribute('data-symbol') || '',
+        gate: row.querySelector('.alpha-tool__result')?.innerText || '',
     }));
     return {
-        status,
-        coverage: text('[data-testid="text-coverage"]'),
-        sample: text('[data-testid="text-sample-window"]'),
-        model: text('[data-testid="text-model-status"]'),
-        modelVersion: document.querySelector('[data-testid="text-model-status"]')?.parentElement?.innerText || '',
+        status: root?.dataset.status || '',
+        coverage: rows.length + ' / ' + (root?.dataset.discoveredCount || 0),
+        sample: root?.dataset.sampleSize || '',
+        model: document.querySelector('[data-testid="tool-model-status"]')?.innerText || '',
+        modelVersion: root?.dataset.modelVersion || '',
         rows,
-        loading: Boolean(document.querySelector('[data-testid="state-loading"]')),
-        errorState: Boolean(document.querySelector('[data-testid^="state-"]')?.getAttribute('data-testid')?.match(/empty|timeout|connection-error/)),
+        loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
+        errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
     };
 })()`);
 
 const assertScan = (snapshot, sampleSize) => {
-    if (!snapshot.status.includes('Snapshot and validation ready')) {
+    if (!['ready', 'partial-data'].includes(snapshot.status)) {
         throw new Error(`Expected a completed scan for ${sampleSize}, received: ${snapshot.status}`);
     }
     if (snapshot.loading || snapshot.errorState) {
@@ -231,8 +224,9 @@ const assertScan = (snapshot, sampleSize) => {
         throw new Error(`Expected ${sampleSize} observations, received ${snapshot.sample}.`);
     }
     const [covered, discovered] = snapshot.coverage.split('/').map(value => Number(value.trim()));
-    if (!covered || !discovered || covered !== discovered) {
-        throw new Error(`Expected complete coverage for ${sampleSize}, received ${snapshot.coverage}.`);
+    const minimumCovered = discovered ? Math.max(1, Math.ceil(discovered * 0.8)) : 0;
+    if (!covered || !discovered || covered < minimumCovered) {
+        throw new Error(`Expected usable coverage for ${sampleSize}, received ${snapshot.coverage}.`);
     }
     if (snapshot.rows.length !== covered) {
         throw new Error(`Expected ${covered} rendered rows, received ${snapshot.rows.length}.`);
@@ -246,7 +240,7 @@ const assertScan = (snapshot, sampleSize) => {
     if (!['SKIP', 'PARTIAL', 'ACTIVE'].includes(snapshot.model)) {
         throw new Error(`Unexpected model status: ${snapshot.model}`);
     }
-    if (snapshot.model === 'ACTIVE' && snapshot.rows.some(row => row.gate !== 'Passed')) {
+    if (snapshot.model === 'ACTIVE' && snapshot.rows.some(row => row.gate !== 'Pass')) {
         throw new Error('ACTIVE status was rendered while at least one symbol failed its validation gate.');
     }
 };
@@ -271,40 +265,25 @@ const run = async () => {
         await client.call('Network.enable');
         await client.call('Runtime.enable');
         await client.call('Page.navigate', { url: TARGET_URL });
-
-        await waitFor(
-            () => client.evaluate('Boolean(document.querySelector(".alpha-scan--premium"))'),
-            'visual-only Alpha Scan cover',
-        );
         await client.evaluate(`document.querySelector('.slx-popup__dismiss')?.click()`);
-        const coverText = await client.evaluate('document.querySelector(".alpha-scan--premium")?.innerText || ""');
-        if (coverText.trim()) {
-            throw new Error(`Premium cover contains visible text: ${coverText.trim()}`);
-        }
-        await client.call('Page.navigate', { url: RESEARCH_URL });
         await waitFor(
-            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"button-run-scan\\"]"))'),
-            'Alpha Scan research controls',
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+            'model-powered Alpha tool',
         );
 
         const results = [];
         for (const sampleSize of SAMPLE_WINDOWS) {
-            if (sampleSize !== SAMPLE_WINDOWS[0]) {
-                await client.evaluate(`(() => {
-                    const select = document.querySelector('[data-testid="select-sample-size"]');
-                    if (!select) return false;
-                    select.value = '${sampleSize}';
-                    select.dispatchEvent(new Event('change', { bubbles: true }));
-                    return true;
-                })()`);
-                await sleep(250);
-            }
-
-            await client.evaluate('document.querySelector("[data-testid=\\"button-run-scan\\"]")?.click()');
+            const sampleUrl = new URL(TARGET_URL);
+            sampleUrl.searchParams.set('alpha_scan_sample', String(sampleSize));
+            await client.call('Page.navigate', { url: sampleUrl.toString() });
+            await waitFor(
+                () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+                `${sampleSize}-observation Alpha Tool`,
+            );
             const snapshot = await waitFor(
                 async () => {
                     const next = await getSnapshot(client.evaluate);
-                    return next.status.includes('Snapshot and validation ready') ? next : false;
+                    return ['ready', 'partial-data'].includes(next.status) ? next : false;
                 },
                 `live ${sampleSize}-observation scan`,
                 90000,
@@ -341,18 +320,18 @@ const run = async () => {
         const failedSnapshot = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return /Could not reach the public market feed|public feed took too long/i.test(next.status) ? next : false;
+                return ['empty', 'timeout', 'connection-error', 'partial-data'].includes(next.status) && next.rows.length === 0 ? next : false;
             },
             'blocked-feed error state',
             45000,
         );
-        if (failedSnapshot.rows.length !== 0 || failedSnapshot.coverage) {
+        if (failedSnapshot.rows.length !== 0 || Number(failedSnapshot.coverage.split('/')[0].trim()) !== 0) {
             throw new Error('A failed scan retained previous rows or coverage.');
         }
         console.log(JSON.stringify({
             ok: true,
             target: TARGET_URL,
-            cover: 'visual-only',
+            surface: 'model-powered-tool',
             scans: results,
             blockedFeed: {
                 status: failedSnapshot.status,

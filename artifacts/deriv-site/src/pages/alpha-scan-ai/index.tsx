@@ -612,8 +612,216 @@ const PremiumAlphaLanding: React.FC = () => (
     </main>
 );
 
+type AlphaToolSurfaceProps = {
+    rows: ScanRow[];
+    sampleSize: SampleSize;
+    status: ScanStatus;
+    isBusy: boolean;
+    lastUpdated: Date | null;
+    modelStatus: string;
+    averageWalkForwardAccuracy: number;
+    averageVolatility: number;
+    validatedRows: number;
+    discoveredCount: number;
+    errorMessage: string;
+    onScan: () => void;
+};
+
+const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
+    rows,
+    sampleSize,
+    status,
+    isBusy,
+    lastUpdated,
+    modelStatus,
+    averageWalkForwardAccuracy,
+    averageVolatility,
+    validatedRows,
+    discoveredCount,
+    errorMessage,
+    onScan,
+}) => {
+    const [selectedSymbol, setSelectedSymbol] = useState('');
+    const [stake, setStake] = useState('10');
+    const [targetProfit, setTargetProfit] = useState('18');
+    const [stopLoss, setStopLoss] = useState('10');
+    const [martingale, setMartingale] = useState('2');
+    const [paperMode, setPaperMode] = useState(true);
+
+    useEffect(() => {
+        if (!selectedSymbol && rows[0]?.symbol) setSelectedSymbol(rows[0].symbol);
+        if (selectedSymbol && rows.length && !rows.some(row => row.symbol === selectedSymbol)) {
+            setSelectedSymbol(rows[0]?.symbol || '');
+        }
+    }, [rows, selectedSymbol]);
+
+    const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
+    const recoveryRow = rows.find(row => row.shortReturn < 0 && row.symbol !== selectedRow?.symbol) || rows[1] || selectedRow;
+    const volatilityName = selectedRow?.displayName || (isBusy ? 'Reading live model…' : 'Synthetic Index');
+    const marketName = selectedRow ? `${selectedRow.market || 'Market'} · ${selectedRow.submarket || 'Live'}` : 'Waiting for live data';
+    const recoveryName = recoveryRow?.displayName || 'Recovery context';
+    const strategyName = selectedRow
+        ? selectedRow.reversalRate >= 0.42
+            ? 'Trend Reversal with RSI + EMA'
+            : 'Momentum with RSI + EMA'
+        : 'Calibrating model strategy';
+    const strategyReason = selectedRow
+        ? `${selectedRow.regime} regime · ${(selectedRow.baselineProbability * 100).toFixed(0)}% baseline probability · ${(selectedRow.noiseFraction * 100).toFixed(0)}% filtered noise`
+        : errorMessage || 'Live model data will appear here after the first scan.';
+    const oosAccuracy = rows.length ? Math.round(averageWalkForwardAccuracy * 100) : 0;
+    const modelLabel = isBusy ? 'SYNCING' : modelStatus;
+    const journalRows = rows.slice(0, 8);
+    const capturedAt = lastUpdated
+        ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '—';
+
+    return (
+        <main
+            className='alpha-tool'
+            data-testid='alpha-tool'
+            data-status={status}
+            data-sample-size={sampleSize}
+            data-discovered-count={discoveredCount}
+            data-model-version={MODEL_VERSION}
+            data-error={errorMessage}
+        >
+            <header className='alpha-tool__hero'>
+                <button type='button' className='alpha-tool__menu' aria-label='Open tool menu'>
+                    <span />
+                    <span />
+                    <span />
+                </button>
+                <div className='alpha-tool__hero-copy'>
+                    <span className='alpha-tool__eyebrow'>Model-powered workspace</span>
+                    <h1>Smarter Analysis.<br />Better Decisions.<br /><strong>Higher Wins.</strong></h1>
+                </div>
+                <div className='alpha-tool__hero-art' aria-hidden='true'>
+                    <span className='alpha-tool__globe' />
+                    <span className='alpha-tool__trend-line alpha-tool__trend-line--one' />
+                    <span className='alpha-tool__trend-line alpha-tool__trend-line--two' />
+                    <span className='alpha-tool__candle alpha-tool__candle--one' />
+                    <span className='alpha-tool__candle alpha-tool__candle--two' />
+                    <span className='alpha-tool__candle alpha-tool__candle--three' />
+                    <span className='alpha-tool__hero-spark' />
+                </div>
+                <div className='alpha-tool__headline-card'>
+                    <div className='alpha-tool__headline-icon'>✦</div>
+                    <span>Model status</span>
+                    <strong data-testid='tool-model-status'>{modelLabel}</strong>
+                    <small>{rows.length ? `${rows.length} symbols · ${capturedAt}` : 'Paper research only'}</small>
+                </div>
+            </header>
+
+            <section className='alpha-tool__selector-grid' aria-label='Model selections'>
+                <label className='alpha-tool__selector alpha-tool__selector--green'>
+                    <span className='alpha-tool__selector-icon'>∿</span>
+                    <span className='alpha-tool__selector-copy'><b>Volatility</b><small>Live model index</small></span>
+                    <select
+                        value={selectedSymbol}
+                        disabled={!rows.length}
+                        onChange={event => setSelectedSymbol(event.target.value)}
+                        data-testid='select-tool-symbol'
+                    >
+                        {rows.length ? rows.map(row => <option key={row.symbol} value={row.symbol}>{row.displayName}</option>) : <option>Loading model data…</option>}
+                    </select>
+                </label>
+                <div className='alpha-tool__selector alpha-tool__selector--purple'>
+                    <span className='alpha-tool__selector-icon'>◉</span>
+                    <span className='alpha-tool__selector-copy'><b>Market</b><small>{marketName}</small></span>
+                    <strong className='alpha-tool__selector-value'>{selectedRow?.regime || 'Syncing'}</strong>
+                </div>
+                <div className='alpha-tool__selector alpha-tool__selector--blue'>
+                    <span className='alpha-tool__selector-icon'>◌</span>
+                    <span className='alpha-tool__selector-copy'><b>Recovery Market</b><small>After-loss context</small></span>
+                    <strong className='alpha-tool__selector-value'>{recoveryName.replace('Volatility ', '')}</strong>
+                </div>
+            </section>
+
+            <section className='alpha-tool__panel alpha-tool__panel--strategy'>
+                <div className='alpha-tool__panel-heading'>
+                    <span className='alpha-tool__panel-icon'>♧</span>
+                    <b>Strategy Type</b>
+                    <span className='alpha-tool__ai-badge'>✦ AI Generated</span>
+                </div>
+                <div className='alpha-tool__strategy-select'>
+                    <strong>{strategyName}</strong>
+                    <span>⌄</span>
+                </div>
+                <div className='alpha-tool__strategy-copy'>
+                    <span className='alpha-tool__strategy-spark'>✦</span>
+                    <p>{strategyReason}. This is a descriptive paper-model output and does not execute trades.</p>
+                </div>
+                <ul className='alpha-tool__check-list'>
+                    <li>Uses causal denoising for isolated tick spikes</li>
+                    <li>Walk-forward accuracy: {oosAccuracy ? `${oosAccuracy}%` : '—'}</li>
+                    <li>Uses past-only calibrated features</li>
+                    <li>Gated until validation evidence is complete</li>
+                </ul>
+            </section>
+
+            <section className='alpha-tool__panel alpha-tool__panel--settings'>
+                <div className='alpha-tool__panel-heading'>
+                    <span className='alpha-tool__panel-icon'>⚙</span>
+                    <b>Trade Settings</b>
+                </div>
+                <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Stake</span><input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference stake' /></div>
+                <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Target Profit</span><input value={`$${targetProfit}`} onChange={event => setTargetProfit(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference target profit' /></div>
+                <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>♢</span><span>Stop Loss</span><input value={`$${stopLoss}`} onChange={event => setStopLoss(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference stop loss' /></div>
+                <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↗</span><span>Martingale</span><select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Reference martingale'><option value='1'>x1</option><option value='2'>x2</option><option value='3'>x3</option></select></div>
+                <div className='alpha-tool__settings-note'>Reference controls only · no live execution connected</div>
+            </section>
+
+            <section className='alpha-tool__auto-trade'>
+                <span className='alpha-tool__auto-icon'>ϟ</span>
+                <div><b>Auto Trade</b><small>Paper mode only</small></div>
+                <button type='button' className={`alpha-tool__switch ${paperMode ? 'alpha-tool__switch--on' : ''}`} onClick={() => setPaperMode(value => !value)} aria-pressed={paperMode}><span /></button>
+                <button type='button' className='alpha-tool__start' onClick={onScan} disabled={isBusy} data-testid='button-run-scan'>
+                    <span>{isBusy ? 'Syncing' : 'Refresh Model'}</span><strong>▶</strong>
+                </button>
+            </section>
+
+            <section className='alpha-tool__journal panel' data-testid='tool-journal'>
+                <div className='alpha-tool__section-heading'>
+                    <div><span className='alpha-tool__section-icon'>▤</span><b>Model Journal</b></div>
+                    <span className='alpha-tool__view-label'>{discoveredCount ? `${rows.length}/${discoveredCount} live` : 'Awaiting data'}⌄</span>
+                </div>
+                <div className='alpha-tool__journal-table-wrap'>
+                    <table className='alpha-tool__journal-table'>
+                        <thead><tr><th>Time</th><th>Volatility</th><th>Market</th><th>Strategy</th><th>Gate</th><th>Return</th></tr></thead>
+                        <tbody>
+                            {journalRows.length ? journalRows.map(row => (
+                                <tr key={row.symbol} data-symbol={row.symbol}>
+                                    <td>{capturedAt}</td>
+                                    <td><span className='alpha-tool__table-icon'>∿</span>{row.displayName.replace('Volatility ', 'V')}</td>
+                                    <td>{row.market || 'Synthetic'}</td>
+                                    <td><span className='alpha-tool__brain'>♧</span>{row.regime}</td>
+                                    <td><span className={`alpha-tool__result alpha-tool__result--${row.validationGate}`}>{row.validationGate === 'validated' ? 'Pass' : 'Skip'}</span></td>
+                                    <td className={row.shortReturn >= 0 ? 'alpha-tool__gain' : 'alpha-tool__loss'}>{formatPercent(row.shortReturn, true)}</td>
+                                </tr>
+                            )) : (
+                                <tr><td colSpan={6} className='alpha-tool__journal-empty'>{isBusy ? 'Collecting live model observations…' : errorMessage || 'No model observations yet.'}</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section className='alpha-tool__summary-grid'>
+                <div className='alpha-tool__summary-card alpha-tool__summary-card--blue'><span>◎</span><small>Models</small><strong>{rows.length || '—'}</strong><em>covered</em></div>
+                <div className='alpha-tool__summary-card alpha-tool__summary-card--green'><span>✓</span><small>Validated</small><strong>{validatedRows || '—'}</strong><em>{rows.length ? `${Math.round((validatedRows / rows.length) * 100)}%` : '—'}</em></div>
+                <div className='alpha-tool__summary-card alpha-tool__summary-card--pink'><span>×</span><small>Gated</small><strong>{rows.length ? rows.length - validatedRows : '—'}</strong><em>paper only</em></div>
+                <div className='alpha-tool__summary-card alpha-tool__summary-card--purple'><span>✦</span><small>OOS accuracy</small><strong>{oosAccuracy ? `${oosAccuracy}%` : '—'}</strong><em>{averageVolatility ? `${formatPercent(averageVolatility)} volatility` : 'model pending'}</em></div>
+            </section>
+        </main>
+    );
+};
+
 const AlphaScanWorkspace: React.FC = () => {
-    const [sampleSize, setSampleSize] = useState<SampleSize>(600);
+    const [sampleSize, setSampleSize] = useState<SampleSize>(() => {
+        if (typeof window === 'undefined') return 600;
+        const requested = Number(new URLSearchParams(window.location.search).get('alpha_scan_sample'));
+        return requested === 1200 || requested === 300 ? requested : 600;
+    });
     const [status, setStatus] = useState<ScanStatus>('idle');
     const [rows, setRows] = useState<ScanRow[]>([]);
     const [discoveredCount, setDiscoveredCount] = useState(0);
@@ -863,6 +1071,10 @@ const AlphaScanWorkspace: React.FC = () => {
     useEffect(() => () => closeSocket(), [closeSocket]);
 
     useEffect(() => {
+        scan();
+    }, [scan]);
+
+    useEffect(() => {
         const sentinel = infiniteSentinelRef.current;
         if (!sentinel || !hasMoreSymbols) return;
 
@@ -896,6 +1108,23 @@ const AlphaScanWorkspace: React.FC = () => {
         : modelStatus === 'PARTIAL'
             ? `${validatedRows} of ${rows.length} symbols passed; controls remain gated`
             : 'evidence, stability, or noise gates are incomplete';
+
+    return (
+        <AlphaToolSurface
+            rows={rows}
+            sampleSize={sampleSize}
+            status={status}
+            isBusy={isBusy}
+            lastUpdated={lastUpdated}
+            modelStatus={modelStatus}
+            averageWalkForwardAccuracy={averageWalkForwardAccuracy}
+            averageVolatility={averageVolatility}
+            validatedRows={validatedRows}
+            discoveredCount={discoveredCount}
+            errorMessage={errorMessage}
+            onScan={scan}
+        />
+    );
 
     return (
         <main className='alpha-scan' aria-labelledby='alpha-scan-title'>
@@ -1179,11 +1408,6 @@ const AlphaScanWorkspace: React.FC = () => {
     );
 };
 
-const AlphaScanAI: React.FC = () => {
-    const researchMode = typeof window !== 'undefined'
-        && new URLSearchParams(window.location.search).get('alpha_scan_research') === '1';
-
-    return researchMode ? <AlphaScanWorkspace /> : <PremiumAlphaLanding />;
-};
+const AlphaScanAI: React.FC = () => <AlphaScanWorkspace />;
 
 export default AlphaScanAI;

@@ -3,8 +3,8 @@ name: Alpha Scan visual surface
 description: The Alpha Scan tab opens as a visual-only premium canvas while research/model output stays out of the normal user-facing route.
 ---
 
-The Alpha Scan opening experience is intentionally visual-only: no visible copy, metrics, controls, CTA, or model results. It is a colour and composition surface for a future user-built tool.
+The Alpha Scan opening experience is the model-powered premium tool surface: neon navy/cyan/purple cards, model-driven selectors, a journal, and summary metrics. It intentionally omits the screenshot's bottom Home/Journal/Settings/Help navigation.
 
-**Why:** The user wants to code a separate tool on top of the theme and does not want to view the research model when opening the tab.
+**Why:** The user supplied the target tool design and asked to integrate the existing Alpha Scan model into it while removing the footer tabs.
 
-**How to apply:** Preserve the visual-only opening route when extending Alpha Scan; keep model/data logic separate from the presentation layer and do not add explanatory text back to the cover without explicit direction.
+**How to apply:** Keep the model/data logic separate from the presentation layer, use live ScanRow values rather than fabricated trading outcomes, and preserve the paper-only boundary.

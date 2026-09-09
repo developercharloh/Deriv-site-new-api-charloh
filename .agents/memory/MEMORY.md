@@ -4,4 +4,4 @@
 - [Deriv-site verification](deriv-site-verification.md) — Rsbuild workflow/build is the reliable app check; package-level typecheck currently includes unrelated dependency gaps.
 - [Alpha Scan research gate](alpha-scan-research-scope.md) — Alpha Scan starts as a descriptive public-data cockpit; keep decisions at SKIP until OOS validation exists.
 - [Deriv symbol metadata](deriv-active-symbols-discovery.md) — public active_symbols labels vary; use full metadata plus symbol-family matching for Synthetic Index discovery.
-- [Alpha Scan visual surface](alpha-scan-visual-surface.md) — opening tab is an intentionally copy-free premium canvas; keep model/data separate from the visible theme.
+- [Alpha Scan visual surface](alpha-scan-visual-surface.md) — neon model-powered tool surface uses live ScanRow values and omits the screenshot's footer navigation.
