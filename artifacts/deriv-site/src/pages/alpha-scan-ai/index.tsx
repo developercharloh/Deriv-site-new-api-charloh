@@ -6,7 +6,7 @@ const DERIV_WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1';
 const SCAN_TIMEOUT_MS = 35_000;
 const SHORT_RETURN_WINDOW = 20;
 const SYMBOL_PAGE_SIZE = 8;
-const MODEL_VERSION = 'feature-logistic-v1';
+const MODEL_VERSION = 'feature-logistic-causal-denoise-v1';
 const MIN_VALIDATION_SAMPLES = 200;
 const MIN_ACCURACY = 0.51;
 const MAX_BRIER_SCORE = 0.26;
@@ -21,6 +21,7 @@ const FEATURE_TRAINING_ITERATIONS = 45;
 const FEATURE_LEARNING_RATE = 0.08;
 const FEATURE_L2_PENALTY = 0.02;
 const FEATURE_WINDOWS = [3, 5, 10, 20, 50];
+const MAX_NOISE_FRACTION = 0.65;
 
 type SampleSize = 300 | 600 | 1200;
 type ScanStatus =
@@ -47,6 +48,7 @@ type ScanRow = SyntheticSymbol & {
     latestPrice: number;
     shortReturn: number;
     realizedVolatility: number;
+    noiseFraction: number;
     directionalImbalance: number;
     reversalRate: number;
     regime: string;
@@ -144,6 +146,24 @@ const getVerifiedCatalogSymbols = (): SyntheticSymbol[] =>
 
 const mean = (values: number[]): number =>
     values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+
+const median = (values: number[]): number => {
+    if (!values.length) return 0;
+    const sorted = [...values].sort((left, right) => left - right);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+const causalDenoiseReturns = (returns: number[]): number[] =>
+    returns.map((_, index) => median(returns.slice(Math.max(0, index - 2), index + 1)));
+
+const calculateNoiseFraction = (returns: number[], denoisedReturns: number[]): number => {
+    const residualMagnitude = mean(returns.map((value, index) => Math.abs(value - denoisedReturns[index])));
+    const signalMagnitude = mean(denoisedReturns.map(value => Math.abs(value)));
+    return residualMagnitude + signalMagnitude
+        ? residualMagnitude / (residualMagnitude + signalMagnitude)
+        : 0;
+};
 
 type Prediction = { probability: number; actual: number };
 
@@ -416,7 +436,7 @@ const predictCalibratedLogisticRegression = (model: CalibratedLogisticModel, fea
     return sigmoid(model.slope * logit(rawProbability) + model.intercept);
 };
 
-const calculateFeatureModel = (returns: number[]): ValidationSummary => {
+const calculateFeatureModel = (returns: number[], noiseFraction: number): ValidationSummary => {
     const featureRows: FeatureRow[] = [];
     for (let index = FEATURE_WARMUP; index < returns.length; index += 1) {
         featureRows.push({
@@ -448,32 +468,45 @@ const calculateFeatureModel = (returns: number[]): ValidationSummary => {
         calculateWalkForwardBaseline(returns, validationStart).predictions,
     );
 
-    return {
+    const summary: ValidationSummary = {
         baselineProbability: latestProbability,
         ...summarizePredictions(predictions, {
             accuracy: empiricalSummary.walkForwardAccuracy,
             brierScore: empiricalSummary.brierScore,
         }),
     };
+
+    if (noiseFraction > MAX_NOISE_FRACTION) {
+        summary.gateReasons.push(
+            `Tick noise fraction ${formatPercent(noiseFraction * 100)} exceeds the ${formatPercent(MAX_NOISE_FRACTION * 100)} denoising gate.`,
+        );
+        if (summary.validationGate === 'validated') summary.validationGate = 'failed';
+    }
+
+    return summary;
 };
 
 const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol | 'prices'> => {
     const returns = prices
         .slice(1)
         .map((price, index) => (prices[index] > 0 && price > 0 ? Math.log(price / prices[index]) : 0));
-    const averageReturn = mean(returns);
-    const variance = mean(returns.map(value => (value - averageReturn) ** 2));
-    const positiveMoves = returns.filter(value => value > 0).length;
-    const negativeMoves = returns.filter(value => value < 0).length;
+    const denoisedReturns = causalDenoiseReturns(returns);
+    const noiseFraction = calculateNoiseFraction(returns, denoisedReturns);
+    const averageReturn = mean(denoisedReturns);
+    const variance = mean(denoisedReturns.map(value => (value - averageReturn) ** 2));
+    const positiveMoves = denoisedReturns.filter(value => value > 0).length;
+    const negativeMoves = denoisedReturns.filter(value => value < 0).length;
     const directionalMoves = positiveMoves + negativeMoves;
-    const reversals = returns.slice(1).filter((value, index) => value !== 0 && returns[index] !== 0 && Math.sign(value) !== Math.sign(returns[index])).length;
+    const reversals = denoisedReturns.slice(1).filter((value, index) =>
+        value !== 0 && denoisedReturns[index] !== 0 && Math.sign(value) !== Math.sign(denoisedReturns[index]),
+    ).length;
     const shortBase = prices[Math.max(0, prices.length - SHORT_RETURN_WINDOW - 1)] || prices[0] || 0;
     const shortReturn = shortBase ? ((prices[prices.length - 1] - shortBase) / shortBase) * 100 : 0;
     const directionalImbalance = directionalMoves ? (positiveMoves - negativeMoves) / directionalMoves : 0;
-    const reversalRate = returns.length > 1 ? reversals / (returns.length - 1) : 0;
+    const reversalRate = denoisedReturns.length > 1 ? reversals / (denoisedReturns.length - 1) : 0;
     const validationStart = FEATURE_WARMUP + FEATURE_MIN_TRAINING_SAMPLES;
-    const empiricalSummary = summarizePredictions(calculateWalkForwardBaseline(returns, validationStart).predictions);
-    const featureModel = calculateFeatureModel(returns);
+    const empiricalSummary = summarizePredictions(calculateWalkForwardBaseline(denoisedReturns, validationStart).predictions);
+    const featureModel = calculateFeatureModel(denoisedReturns, noiseFraction);
 
     let regime = 'Mixed movement';
     if (directionalImbalance > 0.18 && shortReturn > 0.1) regime = 'Rising drift';
@@ -486,6 +519,7 @@ const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol
         latestPrice: prices[prices.length - 1] || 0,
         shortReturn,
         realizedVolatility: Math.sqrt(variance) * 100,
+        noiseFraction,
         directionalImbalance,
         reversalRate,
         regime,
@@ -834,7 +868,7 @@ const AlphaScanAI: React.FC = () => {
         ? `all ${rows.length} symbols passed validation gates`
         : modelStatus === 'PARTIAL'
             ? `${validatedRows} of ${rows.length} symbols passed; controls remain gated`
-            : 'evidence or validation gates are incomplete';
+            : 'evidence, stability, or noise gates are incomplete';
 
     return (
         <main className='alpha-scan' aria-labelledby='alpha-scan-title'>
@@ -875,7 +909,7 @@ const AlphaScanAI: React.FC = () => {
                             disabled={isBusy}
                             onChange={event => setSampleSize(Number(event.target.value) as SampleSize)}
                         >
-                            <option value='300'>300 observations</option>
+                             <option value='300'>300 observations (descriptive)</option>
                             <option value='600'>600 observations</option>
                             <option value='1200'>1,200 observations</option>
                         </select>
@@ -892,7 +926,7 @@ const AlphaScanAI: React.FC = () => {
                     </button>
                 </div>
                 <p className='alpha-scan__control-note'>
-                    Uses <code>active_symbols</code> and live <code>ticks_history</code> over a public WebSocket.
+                     Uses <code>active_symbols</code> and live <code>ticks_history</code> over a public WebSocket. The 300-tick window is descriptive only; use 600 or 1,200 ticks for validation evidence.
                     {discoverySource === 'verified-catalog' ? ' The public catalogue is empty, so each verified Synthetic Index is validated directly through live history.' : ' No account session is requested.'}
                 </p>
             </section>
@@ -927,9 +961,9 @@ const AlphaScanAI: React.FC = () => {
                     <div className='alpha-scan__idle-content'>
                         <span className='alpha-scan__eyebrow'>First phase / evidence layer</span>
                          <h2>Know what was observed.</h2>
-                          <p>The calibrated feature model activates after live history arrives. It uses leakage-safe walk-forward evaluation on past ticks; the trade decision layer remains gated until every symbol passes validation.</p>
+                          <p>The calibrated feature model activates after live history arrives. It uses a causal median filter to remove isolated tick spikes before leakage-safe walk-forward evaluation; the trade decision layer remains gated until every symbol passes validation.</p>
                         <div className='alpha-scan__principles'>
-                            <div><strong>01</strong><span>Walk-forward baseline, not fabricated certainty</span></div>
+                             <div><strong>01</strong><span>Causal denoising, not fabricated certainty</span></div>
                             <div><strong>02</strong><span>Public data, timestamped at capture</span></div>
                             <div><strong>03</strong><span>SKIP until production validation exists</span></div>
                         </div>
@@ -994,6 +1028,11 @@ const AlphaScanAI: React.FC = () => {
                                 <strong data-testid='text-mean-volatility'>{formatPercent(averageVolatility)}</strong>
                                 <em>log-return dispersion / tick</em>
                             </div>
+                             <div className='alpha-scan__summary-cell'>
+                                 <span>Mean tick noise</span>
+                                 <strong data-testid='text-mean-noise'>{formatPercent(mean(rows.map(row => row.noiseFraction)) * 100)}</strong>
+                                 <em>residual after causal median filter</em>
+                             </div>
                              <div className={`alpha-scan__summary-cell alpha-scan__summary-cell--decision alpha-scan__summary-cell--${modelStatus.toLowerCase()}`}>
                                  <span>Model status</span>
                                  <strong data-testid='text-model-status'>{modelStatus}</strong>
@@ -1019,6 +1058,7 @@ const AlphaScanAI: React.FC = () => {
                                         <th scope='col'>Latest price</th>
                                         <th scope='col'>Short return<small>last 20</small></th>
                                          <th scope='col'>Realized vol.<small>per tick</small></th>
+                                         <th scope='col'>Tick noise<small>filtered</small></th>
                                          <th scope='col'>Model P(up)<small>latest estimate</small></th>
                                         <th scope='col'>OOS accuracy<small>walk-forward</small></th>
                                         <th scope='col'>Brier score<small>lower is better</small></th>
@@ -1045,6 +1085,7 @@ const AlphaScanAI: React.FC = () => {
                                             <td data-label='Latest price' className='alpha-scan__mono'>{formatPrice(row.latestPrice)}</td>
                                             <td data-label='Short return' className={row.shortReturn >= 0 ? 'alpha-scan__positive' : 'alpha-scan__negative'}>{formatPercent(row.shortReturn, true)}</td>
                                             <td data-label='Realized volatility' className='alpha-scan__mono'>{formatPercent(row.realizedVolatility)}</td>
+                                             <td data-label='Tick noise' className='alpha-scan__mono'>{formatPercent(row.noiseFraction * 100)}</td>
                                             <td data-label='Baseline probability' className='alpha-scan__mono'>{formatPercent(row.baselineProbability * 100)}</td>
                                             <td data-label='OOS accuracy' className='alpha-scan__mono'>{formatPercent(row.walkForwardAccuracy * 100)}</td>
                                             <td data-label='Brier score' className='alpha-scan__mono'>{formatRatio(row.brierScore)}</td>
@@ -1092,6 +1133,7 @@ const AlphaScanAI: React.FC = () => {
                             <div><span>Mean OOS accuracy</span><strong>{formatPercent(averageWalkForwardAccuracy * 100)}</strong></div>
                             <div><span>Mean Brier score</span><strong>{formatRatio(averageBrierScore)}</strong></div>
                             <div><span>Mean calibration error</span><strong>{formatPercent(averageCalibrationError * 100)}</strong></div>
+                             <div><span>Mean tick noise</span><strong>{formatPercent(mean(rows.map(row => row.noiseFraction)) * 100)}</strong></div>
                             <div><span>Validated symbols</span><strong>{validatedRows} / {rows.length}</strong></div>
                             <div><span>Decision status</span><strong>SKIP — paper-only research</strong></div>
                         </div>

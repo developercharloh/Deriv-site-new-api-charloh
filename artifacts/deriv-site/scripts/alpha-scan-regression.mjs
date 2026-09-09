@@ -6,7 +6,7 @@ import { URL } from 'node:url';
 
 const TARGET_URL = process.env.ALPHA_SCAN_URL || 'https://www.mrcharlohfx.site/#alpha_scan_ai';
 const SAMPLE_WINDOWS = [600, 1200];
-const MODEL_VERSION = 'feature-logistic-v1';
+const MODEL_VERSION = 'feature-logistic-causal-denoise-v1';
 const findOpenPort = async () => {
     const server = await new Promise((resolve, reject) => {
         const candidate = createServer();
