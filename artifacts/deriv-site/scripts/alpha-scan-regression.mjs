@@ -268,10 +268,15 @@ const run = async () => {
         await client.call('Page.navigate', { url: TARGET_URL });
 
         await waitFor(
-            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"button-run-scan\\"]"))'),
-            'Alpha Scan controls',
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"button-open-research\\"]"))'),
+            'premium Alpha Scan cover',
         );
         await client.evaluate(`document.querySelector('.slx-popup__dismiss')?.click()`);
+        await client.evaluate('document.querySelector("[data-testid=\\"button-open-research\\"]")?.click()');
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"button-run-scan\\"]"))'),
+            'Alpha Scan research controls',
+        );
 
         const results = [];
         for (const sampleSize of SAMPLE_WINDOWS) {

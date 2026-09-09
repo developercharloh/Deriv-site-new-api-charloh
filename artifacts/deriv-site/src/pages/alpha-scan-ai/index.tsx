@@ -585,7 +585,69 @@ const StatusPill: React.FC<{ status: ScanStatus }> = ({ status }) => (
     </span>
 );
 
+const PremiumAlphaLanding: React.FC<{ onEnter: () => void }> = ({ onEnter }) => (
+    <main className='alpha-scan alpha-scan--premium' aria-labelledby='alpha-premium-title'>
+        <section className='alpha-scan__premium-landing'>
+            <div className='alpha-scan__premium-grid' aria-hidden='true' />
+            <div className='alpha-scan__premium-orbit alpha-scan__premium-orbit--outer' aria-hidden='true' />
+            <div className='alpha-scan__premium-orbit alpha-scan__premium-orbit--inner' aria-hidden='true' />
+            <div className='alpha-scan__premium-noise' aria-hidden='true' />
+
+            <header className='alpha-scan__premium-topbar'>
+                <div className='alpha-scan__premium-brand'>
+                    <span className='alpha-scan__premium-mark'>A</span>
+                    <span>CHARLOH / ALPHA</span>
+                </div>
+                <span className='alpha-scan__premium-access'>
+                    <span className='alpha-scan__premium-access-dot' />
+                    PRIVATE RESEARCH LAYER
+                </span>
+            </header>
+
+            <div className='alpha-scan__premium-content'>
+                <div className='alpha-scan__premium-copy'>
+                    <span className='alpha-scan__premium-eyebrow'>Market intelligence / 01</span>
+                    <h1 id='alpha-premium-title'>Read the signal<br /><em>before the move.</em></h1>
+                    <p>One quiet surface for clean market context, disciplined research, and your next trading tool.</p>
+                    <button type='button' className='alpha-scan__premium-cta' data-testid='button-open-research' onClick={onEnter}>
+                        <span>Open research workspace</span>
+                        <span aria-hidden='true'>↗</span>
+                    </button>
+                </div>
+
+                <div className='alpha-scan__premium-console' aria-label='Alpha research workspace preview'>
+                    <div className='alpha-scan__premium-console-top'>
+                        <span>ALPHA / TERMINAL</span>
+                        <span>NOISE-AWARE</span>
+                    </div>
+                    <div className='alpha-scan__premium-console-chart'>
+                        <span className='alpha-scan__premium-chart-line alpha-scan__premium-chart-line--one' />
+                        <span className='alpha-scan__premium-chart-line alpha-scan__premium-chart-line--two' />
+                        <span className='alpha-scan__premium-chart-crosshair' />
+                        <span className='alpha-scan__premium-chart-label'>SIGNAL FIELD</span>
+                    </div>
+                    <div className='alpha-scan__premium-console-footer'>
+                        <span>PUBLIC DATA</span>
+                        <strong>01 / 03</strong>
+                        <span>PAPER ONLY</span>
+                    </div>
+                </div>
+            </div>
+
+            <footer className='alpha-scan__premium-footer'>
+                <span>DERIVATIVE INTELLIGENCE</span>
+                <span className='alpha-scan__premium-footer-rule' />
+                <span>BUILT FOR THE PATIENT</span>
+                <span className='alpha-scan__premium-footer-spacer' />
+                <span>SCROLL TO ENTER</span>
+                <span className='alpha-scan__premium-footer-arrow'>↓</span>
+            </footer>
+        </section>
+    </main>
+);
+
 const AlphaScanAI: React.FC = () => {
+    const [showWorkspace, setShowWorkspace] = useState(false);
     const [sampleSize, setSampleSize] = useState<SampleSize>(600);
     const [status, setStatus] = useState<ScanStatus>('idle');
     const [rows, setRows] = useState<ScanRow[]>([]);
@@ -869,6 +931,10 @@ const AlphaScanAI: React.FC = () => {
         : modelStatus === 'PARTIAL'
             ? `${validatedRows} of ${rows.length} symbols passed; controls remain gated`
             : 'evidence, stability, or noise gates are incomplete';
+
+    if (!showWorkspace) {
+        return <PremiumAlphaLanding onEnter={() => setShowWorkspace(true)} />;
+    }
 
     return (
         <main className='alpha-scan' aria-labelledby='alpha-scan-title'>
