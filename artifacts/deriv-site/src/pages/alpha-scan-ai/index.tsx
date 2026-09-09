@@ -661,7 +661,16 @@ const AlphaScanAI: React.FC = () => {
 
             <section className='alpha-scan__status-bar' aria-live='polite' data-testid='status-scan'>
                 <StatusPill status={status} />
-                <span className='alpha-scan__status-message'>{errorMessage || (isBusy ? `${completedCount} of ${discoveredCount || '…'} symbols processed` : 'Nothing has been requested yet.')}</span>
+                <span className='alpha-scan__status-message'>
+                    {errorMessage ||
+                        (isBusy
+                            ? `${completedCount} of ${discoveredCount || '…'} symbols processed`
+                            : status === 'ready'
+                                ? `Complete live-history coverage for ${rows.length} symbols.`
+                                : status === 'idle'
+                                    ? 'Nothing has been requested yet.'
+                                    : statusCopy[status])}
+                </span>
                 {isBusy && discoveredCount > 0 && (
                     <span className='alpha-scan__progress' aria-label={`${completedCount} of ${discoveredCount} symbols processed`}>
                         <span style={{ width: `${Math.min(100, (completedCount / discoveredCount) * 100)}%` }} />

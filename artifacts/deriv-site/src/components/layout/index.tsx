@@ -144,9 +144,10 @@ const Layout = observer(() => {
     }, [isAuthenticating, isInitialAuthCheckComplete]);
 
     const is_logged_in = store?.client?.is_logged_in;
+    const is_public_alpha_scan = window.location.hash === '#alpha_scan_ai';
 
     // Show landing page for unauthenticated visitors once auth state has settled
-    if (isInitialAuthCheckComplete && !is_logged_in && !isCallbackPage) {
+    if (isInitialAuthCheckComplete && !is_logged_in && !isCallbackPage && !is_public_alpha_scan) {
         return <LandingPage />;
     }
 
