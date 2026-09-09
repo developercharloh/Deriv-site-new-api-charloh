@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import './alpha-scan-ai.scss';
 
 const DERIV_WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1';
@@ -16,6 +17,7 @@ type ScanStatus =
     | 'timeout'
     | 'connection-error'
     | 'partial-data';
+type DiscoverySource = 'public-metadata' | 'verified-catalog';
 
 type SyntheticSymbol = {
     symbol: string;
@@ -33,6 +35,10 @@ type ScanRow = SyntheticSymbol & {
     directionalImbalance: number;
     reversalRate: number;
     regime: string;
+    baselineProbability: number;
+    walkForwardAccuracy: number;
+    brierScore: number;
+    validationSamples: number;
 };
 
 type WebSocketMessage = {
@@ -98,8 +104,44 @@ const discoverSyntheticSymbols = (records: Array<Record<string, unknown>>): Synt
         .filter((item): item is SyntheticSymbol => item !== null);
 };
 
+const getVerifiedCatalogSymbols = (): SyntheticSymbol[] =>
+    DERIV_VOLATILITIES.map(index => ({
+        symbol: index.code,
+        displayName: index.label,
+        market: 'Derived',
+        submarket: index.tickEvery === 1 ? 'Continuous Indices' : 'Volatility Indices',
+    }));
+
 const mean = (values: number[]): number =>
     values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+
+const calculateWalkForwardBaseline = (returns: number[]) => {
+    const minimumTrainingWindow = 40;
+    const trainingLookback = 100;
+    let correct = 0;
+    let brierTotal = 0;
+    let validationSamples = 0;
+    let latestProbability = 0.5;
+
+    for (let index = minimumTrainingWindow; index < returns.length; index += 1) {
+        const trainingReturns = returns.slice(Math.max(0, index - trainingLookback), index);
+        const positiveMoves = trainingReturns.filter(value => value > 0).length;
+        const probability = (positiveMoves + 1) / (trainingReturns.length + 2);
+        const actual = returns[index] > 0 ? 1 : 0;
+
+        latestProbability = probability;
+        correct += (probability >= 0.5 ? 1 : 0) === actual ? 1 : 0;
+        brierTotal += (probability - actual) ** 2;
+        validationSamples += 1;
+    }
+
+    return {
+        baselineProbability: latestProbability,
+        walkForwardAccuracy: validationSamples ? correct / validationSamples : 0,
+        brierScore: validationSamples ? brierTotal / validationSamples : 0,
+        validationSamples,
+    };
+};
 
 const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol | 'prices'> => {
     const returns = prices
@@ -115,6 +157,7 @@ const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol
     const shortReturn = shortBase ? ((prices[prices.length - 1] - shortBase) / shortBase) * 100 : 0;
     const directionalImbalance = directionalMoves ? (positiveMoves - negativeMoves) / directionalMoves : 0;
     const reversalRate = returns.length > 1 ? reversals / (returns.length - 1) : 0;
+    const baseline = calculateWalkForwardBaseline(returns);
 
     let regime = 'Mixed movement';
     if (directionalImbalance > 0.18 && shortReturn > 0.1) regime = 'Rising drift';
@@ -130,6 +173,7 @@ const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol
         directionalImbalance,
         reversalRate,
         regime,
+        ...baseline,
     };
 };
 
@@ -200,6 +244,7 @@ const AlphaScanAI: React.FC = () => {
     const [errorMessage, setErrorMessage] = useState('');
     const [hasMoreSymbols, setHasMoreSymbols] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [discoverySource, setDiscoverySource] = useState<DiscoverySource>('public-metadata');
 
     const socketRef = useRef<WebSocket | null>(null);
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -245,6 +290,7 @@ const AlphaScanAI: React.FC = () => {
         setErrorMessage('');
         setHasMoreSymbols(false);
         setIsLoadingMore(false);
+        setDiscoverySource('public-metadata');
         setStatus('discovering');
 
         const socket = new WebSocket(DERIV_WS_URL);
@@ -347,7 +393,10 @@ const AlphaScanAI: React.FC = () => {
 
             if (message.active_symbols && !metadataReceived) {
                 metadataReceived = true;
-                discoveredSymbols = discoverSyntheticSymbols(message.active_symbols);
+                const metadataSymbols = discoverSyntheticSymbols(message.active_symbols);
+                const usingVerifiedCatalog = metadataSymbols.length === 0;
+                discoveredSymbols = usingVerifiedCatalog ? getVerifiedCatalogSymbols() : metadataSymbols;
+                setDiscoverySource(usingVerifiedCatalog ? 'verified-catalog' : 'public-metadata');
                 setDiscoveredCount(discoveredSymbols.length);
                 if (!discoveredSymbols.length) {
                     finishWithCurrentData(
@@ -360,6 +409,11 @@ const AlphaScanAI: React.FC = () => {
 
                 loadMoreRef.current = requestNextPage;
                 setHasMoreSymbols(true);
+                if (usingVerifiedCatalog) {
+                    setErrorMessage(
+                        `The public catalogue returned ${message.active_symbols.length} records. Validating the verified Synthetic Index catalogue through live tick history.`,
+                    );
+                }
                 requestNextPage();
                 return;
             }
@@ -448,7 +502,10 @@ const AlphaScanAI: React.FC = () => {
     const isBusy = status === 'discovering' || status === 'collecting';
     const coverage = discoveredCount ? Math.round((rows.length / discoveredCount) * 100) : 0;
     const averageVolatility = rows.length ? mean(rows.map(row => row.realizedVolatility)) : 0;
-    const averageImbalance = rows.length ? mean(rows.map(row => row.directionalImbalance)) : 0;
+    const averageBaselineProbability = rows.length ? mean(rows.map(row => row.baselineProbability)) : 0;
+    const averageWalkForwardAccuracy = rows.length ? mean(rows.map(row => row.walkForwardAccuracy)) : 0;
+    const averageBrierScore = rows.length ? mean(rows.map(row => row.brierScore)) : 0;
+    const modelActive = rows.some(row => row.validationSamples >= 100);
 
     return (
         <main className='alpha-scan' aria-labelledby='alpha-scan-title'>
@@ -476,8 +533,8 @@ const AlphaScanAI: React.FC = () => {
             <section className='alpha-scan__control-panel' aria-label='Scan controls'>
                 <div className='alpha-scan__control-copy'>
                     <span className='alpha-scan__section-label'>Research action</span>
-                    <h2>Build a descriptive snapshot</h2>
-                    <p>Discover eligible symbols from public metadata, then request tick history for each one.</p>
+                     <h2>Build a statistical snapshot</h2>
+                     <p>Discover eligible symbols from public metadata, validate each one through live history, and evaluate the walk-forward baseline.</p>
                 </div>
                 <div className='alpha-scan__controls'>
                     <label className='alpha-scan__select-label' htmlFor='alpha-scan-sample-size'>
@@ -501,12 +558,13 @@ const AlphaScanAI: React.FC = () => {
                         onClick={scan}
                         disabled={isBusy}
                     >
-                        <span>{isBusy ? 'Scanning public feed' : status === 'idle' ? 'Run descriptive scan' : 'Run new scan'}</span>
+                         <span>{isBusy ? 'Scanning public feed' : status === 'idle' ? 'Run statistical scan' : 'Run new scan'}</span>
                         <span className='alpha-scan__button-arrow' aria-hidden='true'>↗</span>
                     </button>
                 </div>
                 <p className='alpha-scan__control-note'>
-                    Uses <code>active_symbols</code> and <code>ticks_history</code> over a public WebSocket. No account session is requested.
+                    Uses <code>active_symbols</code> and live <code>ticks_history</code> over a public WebSocket.
+                    {discoverySource === 'verified-catalog' ? ' The public catalogue is empty, so each verified Synthetic Index is validated directly through live history.' : ' No account session is requested.'}
                 </p>
             </section>
 
@@ -531,11 +589,11 @@ const AlphaScanAI: React.FC = () => {
                     <div className='alpha-scan__idle-content'>
                         <span className='alpha-scan__eyebrow'>First phase / evidence layer</span>
                         <h2>Know what was observed.</h2>
-                        <p>There is no trained model behind this surface yet. This first phase makes the raw descriptive layer inspectable before any future validation work.</p>
+                         <p>The statistical baseline activates after live history arrives. It uses walk-forward evaluation on past ticks; a production ML model and trade decision layer remain gated until validation is complete.</p>
                         <div className='alpha-scan__principles'>
-                            <div><strong>01</strong><span>Transparent metrics, not probabilities</span></div>
+                            <div><strong>01</strong><span>Walk-forward baseline, not fabricated certainty</span></div>
                             <div><strong>02</strong><span>Public data, timestamped at capture</span></div>
-                            <div><strong>03</strong><span>SKIP until out-of-sample validation exists</span></div>
+                            <div><strong>03</strong><span>SKIP until production validation exists</span></div>
                         </div>
                     </div>
                 </section>
@@ -599,9 +657,9 @@ const AlphaScanAI: React.FC = () => {
                                 <em>log-return dispersion / tick</em>
                             </div>
                             <div className='alpha-scan__summary-cell alpha-scan__summary-cell--decision'>
-                                <span>Decision gate</span>
-                                <strong data-testid='text-decision'>SKIP</strong>
-                                <em>validation pending</em>
+                                 <span>Model status</span>
+                                 <strong data-testid='text-model-status'>{modelActive ? 'BASELINE' : 'PENDING'}</strong>
+                                 <em>{modelActive ? 'walk-forward evaluated' : 'waiting for history'}</em>
                             </div>
                         </div>
                     </section>
@@ -622,7 +680,10 @@ const AlphaScanAI: React.FC = () => {
                                         <th scope='col'>Sample</th>
                                         <th scope='col'>Latest price</th>
                                         <th scope='col'>Short return<small>last 20</small></th>
-                                        <th scope='col'>Realized vol.<small>per tick</small></th>
+                                         <th scope='col'>Realized vol.<small>per tick</small></th>
+                                        <th scope='col'>Baseline P(up)<small>latest estimate</small></th>
+                                        <th scope='col'>OOS accuracy<small>walk-forward</small></th>
+                                        <th scope='col'>Brier score<small>lower is better</small></th>
                                         <th scope='col'>Directional imbalance</th>
                                         <th scope='col'>Reversal rate</th>
                                         <th scope='col'>Descriptive regime</th>
@@ -644,6 +705,9 @@ const AlphaScanAI: React.FC = () => {
                                             <td data-label='Latest price' className='alpha-scan__mono'>{formatPrice(row.latestPrice)}</td>
                                             <td data-label='Short return' className={row.shortReturn >= 0 ? 'alpha-scan__positive' : 'alpha-scan__negative'}>{formatPercent(row.shortReturn, true)}</td>
                                             <td data-label='Realized volatility' className='alpha-scan__mono'>{formatPercent(row.realizedVolatility)}</td>
+                                            <td data-label='Baseline probability' className='alpha-scan__mono'>{formatPercent(row.baselineProbability * 100)}</td>
+                                            <td data-label='OOS accuracy' className='alpha-scan__mono'>{formatPercent(row.walkForwardAccuracy * 100)}</td>
+                                            <td data-label='Brier score' className='alpha-scan__mono'>{formatRatio(row.brierScore)}</td>
                                             <td data-label='Directional imbalance' className={row.directionalImbalance >= 0 ? 'alpha-scan__positive' : 'alpha-scan__negative'}>{formatRatio(row.directionalImbalance, true)}</td>
                                             <td data-label='Reversal rate'>{formatPercent(row.reversalRate)}</td>
                                             <td data-label='Descriptive regime'><span className='alpha-scan__regime'>{row.regime}</span></td>
@@ -672,10 +736,12 @@ const AlphaScanAI: React.FC = () => {
                         <div className='alpha-scan__interpretation-main'>
                             <span className='alpha-scan__section-label'>Read the evidence</span>
                             <h2>Descriptive metrics are not validated signals.</h2>
-                            <p>Directional imbalance compares up and down moves. Reversal rate counts sign changes between adjacent returns. Realized volatility is the standard deviation of log returns for this sample. These are descriptive snapshots, not ML probabilities or forecasts.</p>
+                            <p>Baseline P(up) is an empirical probability calculated only from observations available before each test tick. Accuracy and Brier score are walk-forward diagnostics; they are not a calibrated production ML forecast or a trade signal.</p>
                         </div>
                         <div className='alpha-scan__interpretation-side'>
-                            <div><span>Mean imbalance</span><strong>{formatRatio(averageImbalance, true)}</strong></div>
+                            <div><span>Mean baseline P(up)</span><strong>{formatPercent(averageBaselineProbability * 100)}</strong></div>
+                            <div><span>Mean OOS accuracy</span><strong>{formatPercent(averageWalkForwardAccuracy * 100)}</strong></div>
+                            <div><span>Mean Brier score</span><strong>{formatRatio(averageBrierScore)}</strong></div>
                             <div><span>Decision status</span><strong>SKIP — validation pending</strong></div>
                         </div>
                     </section>
