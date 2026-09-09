@@ -44,6 +44,7 @@ import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
 import './main.scss';
+import AlphaScanComingSoon from '../alpha-scan-ai-coming-soon';
 
 const ChartWrapper      = lazy(() => import('../chart/chart-wrapper'));
 const AnalysisTool      = lazy(() => import('../ai-analysis-tool'));
@@ -433,9 +434,7 @@ const AppWrapper = observer(() => {
                                 }
                                 id='id-alpha-scan-ai'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Alpha Scan AI...')} />}>
-                                    <AiSignalsPage />
-                                </Suspense>
+                                <AlphaScanComingSoon />
                             </div>
                             <div
                                 label={
