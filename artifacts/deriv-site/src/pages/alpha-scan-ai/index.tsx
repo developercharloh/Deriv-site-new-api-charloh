@@ -73,6 +73,18 @@ type ValidationWindow = {
 
 type ValidationGate = 'insufficient-evidence' | 'failed' | 'validated';
 
+type ContractMarket = {
+    value: string;
+    label: string;
+};
+
+const CONTRACT_MARKETS: ContractMarket[] = [
+    ...Array.from({ length: 8 }, (_, index) => ({ value: `over-${index + 1}`, label: `Over ${index + 1}` })),
+    ...Array.from({ length: 9 }, (_, index) => ({ value: `under-${9 - index}`, label: `Under ${9 - index}` })),
+    { value: 'even', label: 'Even' },
+    { value: 'odd', label: 'Odd' },
+];
+
 type WebSocketMessage = {
     msg_type?: string;
     req_id?: number;
@@ -642,38 +654,60 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     onScan,
 }) => {
     const [selectedSymbol, setSelectedSymbol] = useState('');
+    const [contractMarket, setContractMarket] = useState('over-1');
     const [stake, setStake] = useState('10');
     const [targetProfit, setTargetProfit] = useState('18');
     const [stopLoss, setStopLoss] = useState('10');
     const [martingale, setMartingale] = useState('2');
     const [paperMode, setPaperMode] = useState(true);
+    const [paperTrade, setPaperTrade] = useState<{ symbol: string; displayName: string; contract: string; enteredAt: string } | null>(null);
+
+    const bestModelRow = useMemo(() => {
+        if (!rows.length) return undefined;
+        return [...rows].sort((left, right) => {
+            const gateScore = (right.validationGate === 'validated' ? 1 : 0) - (left.validationGate === 'validated' ? 1 : 0);
+            if (gateScore !== 0) return gateScore;
+            return right.realizedVolatility - left.realizedVolatility;
+        })[0];
+    }, [rows]);
 
     useEffect(() => {
-        if (!selectedSymbol && rows[0]?.symbol) setSelectedSymbol(rows[0].symbol);
+        if (!selectedSymbol && bestModelRow?.symbol) setSelectedSymbol(bestModelRow.symbol);
         if (selectedSymbol && rows.length && !rows.some(row => row.symbol === selectedSymbol)) {
-            setSelectedSymbol(rows[0]?.symbol || '');
+            setSelectedSymbol(bestModelRow?.symbol || '');
         }
-    }, [rows, selectedSymbol]);
+    }, [bestModelRow, rows, selectedSymbol]);
 
     const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
+    const modelPick = bestModelRow || selectedRow;
     const recoveryRow = rows.find(row => row.shortReturn < 0 && row.symbol !== selectedRow?.symbol) || rows[1] || selectedRow;
     const volatilityName = selectedRow?.displayName || (isBusy ? 'Reading live model…' : 'Synthetic Index');
     const marketName = selectedRow ? `${selectedRow.market || 'Market'} · ${selectedRow.submarket || 'Live'}` : 'Waiting for live data';
     const recoveryName = recoveryRow?.displayName || 'Recovery context';
     const strategyName = selectedRow
-        ? selectedRow.reversalRate >= 0.42
-            ? 'Trend Reversal with RSI + EMA'
-            : 'Momentum with RSI + EMA'
+        ? selectedRow.shortReturn >= 0
+            ? 'Model bias: Over'
+            : 'Model bias: Under'
         : 'Calibrating model strategy';
     const strategyReason = selectedRow
-        ? `${selectedRow.regime} regime · ${(selectedRow.baselineProbability * 100).toFixed(0)}% baseline probability · ${(selectedRow.noiseFraction * 100).toFixed(0)}% filtered noise`
+        ? `${selectedRow.displayName} selected at ${(selectedRow.realizedVolatility * 100).toFixed(2)}% volatility · ${selectedRow.regime} regime · ${(selectedRow.noiseFraction * 100).toFixed(0)}% filtered noise`
         : errorMessage || 'Live model data will appear here after the first scan.';
     const oosAccuracy = rows.length ? Math.round(averageWalkForwardAccuracy * 100) : 0;
     const modelLabel = isBusy ? 'SYNCING' : modelStatus;
-    const journalRows = rows.slice(0, 8);
     const capturedAt = lastUpdated
         ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '—';
+    const selectedContract = CONTRACT_MARKETS.find(market => market.value === contractMarket)?.label || 'Over 1';
+
+    const handlePaperExecute = () => {
+        if (!paperMode || !modelPick) return;
+        setPaperTrade({
+            symbol: modelPick.symbol,
+            displayName: modelPick.displayName,
+            contract: selectedContract,
+            enteredAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        });
+    };
 
     return (
         <main
@@ -682,6 +716,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-status={status}
             data-sample-size={sampleSize}
             data-discovered-count={discoveredCount}
+            data-model-row-count={rows.length}
             data-model-version={MODEL_VERSION}
             data-error={errorMessage}
         >
@@ -728,7 +763,22 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <div className='alpha-tool__selector alpha-tool__selector--purple'>
                     <span className='alpha-tool__selector-icon'>◉</span>
                     <span className='alpha-tool__selector-copy'><b>Market</b><small>{marketName}</small></span>
-                    <strong className='alpha-tool__selector-value'>{selectedRow?.regime || 'Syncing'}</strong>
+                    <select
+                        className='alpha-tool__selector-value'
+                        value={contractMarket}
+                        onChange={event => setContractMarket(event.target.value)}
+                        aria-label='Deriv contract market'
+                        data-testid='select-contract-market'
+                    >
+                        <optgroup label='Over'>
+                            {CONTRACT_MARKETS.filter(market => market.value.startsWith('over-')).map(market => <option key={market.value} value={market.value}>{market.label}</option>)}
+                        </optgroup>
+                        <optgroup label='Under'>
+                            {CONTRACT_MARKETS.filter(market => market.value.startsWith('under-')).map(market => <option key={market.value} value={market.value}>{market.label}</option>)}
+                        </optgroup>
+                        <option value='even'>Even</option>
+                        <option value='odd'>Odd</option>
+                    </select>
                 </div>
                 <div className='alpha-tool__selector alpha-tool__selector--blue'>
                     <span className='alpha-tool__selector-icon'>◌</span>
@@ -737,7 +787,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
             </section>
 
-            <section className='alpha-tool__panel alpha-tool__panel--strategy'>
+            <section className='alpha-tool__panel alpha-tool__panel--strategy' data-testid='tool-model-pick' data-symbol={modelPick?.symbol || ''}>
                 <div className='alpha-tool__panel-heading'>
                     <span className='alpha-tool__panel-icon'>♧</span>
                     <b>Strategy Type</b>
@@ -749,13 +799,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
                 <div className='alpha-tool__strategy-copy'>
                     <span className='alpha-tool__strategy-spark'>✦</span>
-                    <p>{strategyReason}. This is a descriptive paper-model output and does not execute trades.</p>
+                    <p>{strategyReason}. Best model volatility: {modelPick?.displayName || 'waiting for data'}. Choose a Deriv digit contract before execution.</p>
                 </div>
                 <ul className='alpha-tool__check-list'>
                     <li>Uses causal denoising for isolated tick spikes</li>
                     <li>Walk-forward accuracy: {oosAccuracy ? `${oosAccuracy}%` : '—'}</li>
                     <li>Uses past-only calibrated features</li>
-                    <li>Gated until validation evidence is complete</li>
+                    <li>Execution stays gated until validation evidence is complete</li>
                 </ul>
             </section>
 
@@ -768,38 +818,43 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Target Profit</span><input value={`$${targetProfit}`} onChange={event => setTargetProfit(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference target profit' /></div>
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>♢</span><span>Stop Loss</span><input value={`$${stopLoss}`} onChange={event => setStopLoss(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference stop loss' /></div>
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↗</span><span>Martingale</span><select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Reference martingale'><option value='1'>x1</option><option value='2'>x2</option><option value='3'>x3</option></select></div>
-                <div className='alpha-tool__settings-note'>Reference controls only · no live execution connected</div>
+                <div className='alpha-tool__settings-note'>Model-selected symbol · paper execution until live trading is explicitly enabled</div>
             </section>
 
             <section className='alpha-tool__auto-trade'>
                 <span className='alpha-tool__auto-icon'>ϟ</span>
-                <div><b>Auto Trade</b><small>Paper mode only</small></div>
+                <div><b>Auto Trade</b><small>{paperMode ? 'Paper mode only' : 'Execution locked'}</small></div>
                 <button type='button' className={`alpha-tool__switch ${paperMode ? 'alpha-tool__switch--on' : ''}`} onClick={() => setPaperMode(value => !value)} aria-pressed={paperMode}><span /></button>
-                <button type='button' className='alpha-tool__start' onClick={onScan} disabled={isBusy} data-testid='button-run-scan'>
-                    <span>{isBusy ? 'Syncing' : 'Refresh Model'}</span><strong>▶</strong>
-                </button>
+                <div className='alpha-tool__action-stack'>
+                    <button type='button' className='alpha-tool__start' onClick={handlePaperExecute} disabled={isBusy || !paperMode || !modelPick} data-testid='button-paper-execute'>
+                        <span>Execute {selectedContract}</span><strong>▶</strong>
+                    </button>
+                    <button type='button' className='alpha-tool__refresh' onClick={() => { setPaperTrade(null); onScan(); }} disabled={isBusy} data-testid='button-run-scan'>
+                        <span>{isBusy ? 'Syncing' : 'Refresh Model'}</span>
+                    </button>
+                </div>
             </section>
 
             <section className='alpha-tool__journal panel' data-testid='tool-journal'>
                 <div className='alpha-tool__section-heading'>
-                    <div><span className='alpha-tool__section-icon'>▤</span><b>Model Journal</b></div>
-                    <span className='alpha-tool__view-label'>{discoveredCount ? `${rows.length}/${discoveredCount} live` : 'Awaiting data'}⌄</span>
+                    <div><span className='alpha-tool__section-icon'>▤</span><b>Trade Journal</b></div>
+                    <span className='alpha-tool__view-label'>{paperTrade ? '1 running' : 'No trades running'}⌄</span>
                 </div>
                 <div className='alpha-tool__journal-table-wrap'>
                     <table className='alpha-tool__journal-table'>
                         <thead><tr><th>Time</th><th>Volatility</th><th>Market</th><th>Strategy</th><th>Gate</th><th>Return</th></tr></thead>
                         <tbody>
-                            {journalRows.length ? journalRows.map(row => (
-                                <tr key={row.symbol} data-symbol={row.symbol}>
-                                    <td>{capturedAt}</td>
-                                    <td><span className='alpha-tool__table-icon'>∿</span>{row.displayName.replace('Volatility ', 'V')}</td>
-                                    <td>{row.market || 'Synthetic'}</td>
-                                    <td><span className='alpha-tool__brain'>♧</span>{row.regime}</td>
-                                    <td><span className={`alpha-tool__result alpha-tool__result--${row.validationGate}`}>{row.validationGate === 'validated' ? 'Pass' : 'Skip'}</span></td>
-                                    <td className={row.shortReturn >= 0 ? 'alpha-tool__gain' : 'alpha-tool__loss'}>{formatPercent(row.shortReturn, true)}</td>
+                            {paperTrade ? (
+                                <tr data-symbol={paperTrade.symbol}>
+                                    <td>{paperTrade.enteredAt}</td>
+                                    <td><span className='alpha-tool__table-icon'>∿</span>{paperTrade.displayName.replace('Volatility ', 'V')}</td>
+                                    <td>{selectedRow?.market || 'Synthetic'}</td>
+                                    <td><span className='alpha-tool__brain'>♧</span>{paperTrade.contract}</td>
+                                    <td><span className='alpha-tool__result alpha-tool__result--validated'>Running</span></td>
+                                    <td className='alpha-tool__gain'>Paper</td>
                                 </tr>
-                            )) : (
-                                <tr><td colSpan={6} className='alpha-tool__journal-empty'>{isBusy ? 'Collecting live model observations…' : errorMessage || 'No model observations yet.'}</td></tr>
+                            ) : (
+                                <tr><td colSpan={6} className='alpha-tool__journal-empty'>{isBusy ? 'No trades running · model is scanning…' : 'No trades running. Execute a model pick to start paper tracking.'}</td></tr>
                             )}
                         </tbody>
                     </table>

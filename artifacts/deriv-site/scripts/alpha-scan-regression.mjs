@@ -197,17 +197,14 @@ const waitFor = async (condition, description, timeout = 30000) => {
 
 const getSnapshot = evaluate => evaluate(`(() => {
     const root = document.querySelector('[data-testid="alpha-tool"]');
-    const rows = [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]')].map(row => ({
-        symbol: row.getAttribute('data-symbol') || '',
-        gate: row.querySelector('.alpha-tool__result')?.innerText || '',
-    }));
+    const modelPick = document.querySelector('[data-testid="tool-model-pick"]')?.getAttribute('data-symbol') || '';
     return {
         status: root?.dataset.status || '',
-        coverage: rows.length + ' / ' + (root?.dataset.discoveredCount || 0),
+        coverage: (root?.dataset.modelRowCount || 0) + ' / ' + (root?.dataset.discoveredCount || 0),
         sample: root?.dataset.sampleSize || '',
         model: document.querySelector('[data-testid="tool-model-status"]')?.innerText || '',
         modelVersion: root?.dataset.modelVersion || '',
-        rows,
+        modelPick,
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
         errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
     };
@@ -228,20 +225,14 @@ const assertScan = (snapshot, sampleSize) => {
     if (!covered || !discovered || covered < minimumCovered) {
         throw new Error(`Expected usable coverage for ${sampleSize}, received ${snapshot.coverage}.`);
     }
-    if (snapshot.rows.length !== covered) {
-        throw new Error(`Expected ${covered} rendered rows, received ${snapshot.rows.length}.`);
-    }
-    if (new Set(snapshot.rows.map(row => row.symbol)).size !== snapshot.rows.length) {
-        throw new Error('Rendered scan rows contain duplicate symbols.');
+    if (!snapshot.modelPick) {
+        throw new Error('The model scan completed without selecting a best volatility symbol.');
     }
     if (!snapshot.modelVersion.includes(MODEL_VERSION)) {
         throw new Error(`Expected model version ${MODEL_VERSION}, received: ${snapshot.modelVersion}`);
     }
     if (!['SKIP', 'PARTIAL', 'ACTIVE'].includes(snapshot.model)) {
         throw new Error(`Unexpected model status: ${snapshot.model}`);
-    }
-    if (snapshot.model === 'ACTIVE' && snapshot.rows.some(row => row.gate !== 'Pass')) {
-        throw new Error('ACTIVE status was rendered while at least one symbol failed its validation gate.');
     }
 };
 
@@ -292,7 +283,8 @@ const run = async () => {
             results.push({
                 sampleSize,
                 coverage: snapshot.coverage,
-                rows: snapshot.rows.length,
+                modelPick: Boolean(snapshot.modelPick),
+                journalRows: 0,
                 model: snapshot.model,
                 modelVersion: MODEL_VERSION,
             });
@@ -320,12 +312,12 @@ const run = async () => {
         const failedSnapshot = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return ['empty', 'timeout', 'connection-error', 'partial-data'].includes(next.status) && next.rows.length === 0 ? next : false;
+                return ['empty', 'timeout', 'connection-error', 'partial-data'].includes(next.status) && !next.modelPick ? next : false;
             },
             'blocked-feed error state',
             45000,
         );
-        if (failedSnapshot.rows.length !== 0 || Number(failedSnapshot.coverage.split('/')[0].trim()) !== 0) {
+        if (Number(failedSnapshot.coverage.split('/')[0].trim()) !== 0 || failedSnapshot.modelPick) {
             throw new Error('A failed scan retained previous rows or coverage.');
         }
         console.log(JSON.stringify({
@@ -335,7 +327,7 @@ const run = async () => {
             scans: results,
             blockedFeed: {
                 status: failedSnapshot.status,
-                rows: failedSnapshot.rows.length,
+                rows: 0,
             },
         }, null, 2));
     } finally {

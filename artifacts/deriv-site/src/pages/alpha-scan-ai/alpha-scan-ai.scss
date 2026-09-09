@@ -1385,6 +1385,20 @@
         strong { font-size: 1rem; }
     }
 
+    &__action-stack { display: grid; gap: 0.32rem; min-width: 0; }
+    &__refresh {
+        min-height: 1.55rem;
+        padding: 0 0.55rem;
+        border: 1px solid rgba(111, 204, 255, 0.72);
+        border-radius: 0.45rem;
+        color: #d9f7ff;
+        background: rgba(7, 52, 105, 0.82);
+        font-size: 0.55rem;
+        font-weight: 750;
+        cursor: pointer;
+        &:disabled { opacity: 0.62; cursor: wait; }
+    }
+
     &__journal { border-color: #1f86ff; overflow: hidden; }
     &__section-heading { justify-content: space-between; padding-bottom: 0.55rem; }
     &__section-heading > div { display: flex; align-items: center; gap: 0.5rem; }
@@ -1463,6 +1477,8 @@
         &__auto-icon { width: 1.35rem; height: 1.35rem; font-size: 1rem; }
         &__switch { width: 2rem; height: 1rem; span { width: 0.68rem; height: 0.68rem; } &--on span { transform: translateX(0.9rem); } }
         &__start { min-height: 1.8rem; padding-inline: 0.45rem; font-size: 0.5rem; strong { font-size: 0.7rem; } }
+        &__action-stack { gap: 0.2rem; }
+        &__refresh { min-height: 1.35rem; padding-inline: 0.35rem; font-size: 0.42rem; }
         &__journal-table { min-width: 31rem; font-size: 0.43rem; }
         &__journal-table th { padding: 0.3rem 0.35rem; font-size: 0.39rem; }
         &__journal-table td { padding: 0.3rem 0.35rem; }
