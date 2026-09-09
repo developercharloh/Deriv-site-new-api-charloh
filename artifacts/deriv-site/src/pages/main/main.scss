@@ -919,6 +919,8 @@
 // vertical scroll context; the evidence table owns its horizontal scroll.
 .main.main--alpha-scan {
     display: block;
+    width: 100%;
+    max-width: 100vw;
     height: auto;
     min-height: calc(100vh - 9rem);
     overflow: visible;
@@ -928,6 +930,9 @@
     .dc-tabs,
     .dc-tabs__content,
     .dc-tabs__content-panel {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
         height: auto !important;
         min-height: 0;
         overflow: visible !important;
@@ -935,6 +940,12 @@
 
     .dc-tabs__content {
         width: 100%;
+    }
+
+    #id-alpha-scan-ai {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
     }
 
     @include mobile-or-tablet-screen {
