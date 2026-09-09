@@ -83,7 +83,17 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'chart', 'free_bots', 'ai_analysis'];
+    const hash = [
+        'dashboard',
+        'bot_builder',
+        'alpha_scan_ai',
+        'chart',
+        'ai_signals',
+        'free_bots',
+        'ai_analysis',
+        'd_circles',
+        'advanced_dtrader',
+    ];
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -418,6 +428,23 @@ const AppWrapper = observer(() => {
                                             width='24px'
                                             fill='var(--text-general)'
                                         />
+                                        <Localize i18n_default_text='Alpha Scan AI' />
+                                    </>
+                                }
+                                id='id-alpha-scan-ai'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Alpha Scan AI...')} />}>
+                                    <AiSignalsPage />
+                                </Suspense>
+                            </div>
+                            <div
+                                label={
+                                    <>
+                                        <LabelPairedChartLineCaptionRegularIcon
+                                            height='24px'
+                                            width='24px'
+                                            fill='var(--text-general)'
+                                        />
                                         <Localize i18n_default_text='Charts' />
                                     </>
                                 }
@@ -511,12 +538,23 @@ const AppWrapper = observer(() => {
             <DesktopWrapper>
                 <div className='main__run-strategy-wrapper'>
                     <RunStrategy />
-                    {![3, 6, 7].includes(active_tab) && <RunPanel />}
+                    {![
+                        DBOT_TABS.AI_SIGNALS,
+                        DBOT_TABS.D_CIRCLES,
+                        DBOT_TABS.ADVANCED_DTRADER,
+                    ].includes(active_tab) && <RunPanel />}
                 </div>
                 <ChartModal />
                 <TradingViewModal />
             </DesktopWrapper>
-            <MobileWrapper>{!is_open && ![3, 6, 7].includes(active_tab) && <RunPanel />}</MobileWrapper>
+            <MobileWrapper>
+                {!is_open &&
+                    ![
+                        DBOT_TABS.AI_SIGNALS,
+                        DBOT_TABS.D_CIRCLES,
+                        DBOT_TABS.ADVANCED_DTRADER,
+                    ].includes(active_tab) && <RunPanel />}
+            </MobileWrapper>
             <Dialog
                 cancel_button_text={cancel_button_text || localize('Cancel')}
                 className='dc-dialog__wrapper--fixed'
