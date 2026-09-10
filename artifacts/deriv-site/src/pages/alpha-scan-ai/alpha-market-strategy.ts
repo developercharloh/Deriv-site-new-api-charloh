@@ -2,6 +2,7 @@ export type StrategyContractType =
     | 'CALL'
     | 'PUT'
     | 'DIGITMATCH'
+    | 'DIGITDIFF'
     | 'DIGITEVEN'
     | 'DIGITODD'
     | 'DIGITOVER'
@@ -18,6 +19,16 @@ export type MarketCondition =
     | `over-${number}`
     | `under-${number}`
     | `matches-${number}`;
+
+export type PurchaseMarket =
+    | 'even'
+    | 'odd'
+    | 'rise'
+    | 'fall'
+    | `over-${number}`
+    | `under-${number}`
+    | `matches-${number}`
+    | `differs-${number}`;
 
 export type MarketOptionGroup = {
     label: string;
@@ -64,6 +75,56 @@ export const MARKET_OPTION_GROUPS: MarketOptionGroup[] = [
 ];
 
 export const MARKET_OPTIONS = MARKET_OPTION_GROUPS.flatMap(group => group.options);
+
+export type PurchaseMarketOptionGroup = {
+    label: string;
+    options: Array<{ value: PurchaseMarket; label: string }>;
+};
+
+export const PURCHASE_MARKET_OPTION_GROUPS: PurchaseMarketOptionGroup[] = [
+    {
+        label: 'Over prediction',
+        options: Array.from({ length: 9 }, (_, digit) => ({
+            value: `over-${digit}` as PurchaseMarket,
+            label: `Over prediction ${digit}`,
+        })),
+    },
+    {
+        label: 'Under prediction',
+        options: Array.from({ length: 9 }, (_, index) => {
+            const digit = 9 - index;
+            return { value: `under-${digit}` as PurchaseMarket, label: `Under prediction ${digit}` };
+        }),
+    },
+    {
+        label: 'Direction and parity',
+        options: [
+            { value: 'even', label: 'Even' },
+            { value: 'odd', label: 'Odd' },
+            { value: 'rise', label: 'Rise' },
+            { value: 'fall', label: 'Fall' },
+        ],
+    },
+    {
+        label: 'Matches prediction',
+        options: Array.from({ length: 10 }, (_, digit) => ({
+            value: `matches-${digit}` as PurchaseMarket,
+            label: `Matches prediction ${digit}`,
+        })),
+    },
+    {
+        label: 'Differs prediction',
+        options: Array.from({ length: 10 }, (_, digit) => ({
+            value: `differs-${digit}` as PurchaseMarket,
+            label: `Differs prediction ${digit}`,
+        })),
+    },
+];
+
+export const PURCHASE_MARKET_OPTIONS = PURCHASE_MARKET_OPTION_GROUPS.flatMap(group => group.options);
+
+export const purchaseMarketLabel = (market: PurchaseMarket): string =>
+    PURCHASE_MARKET_OPTIONS.find(option => option.value === market)?.label || market;
 
 export const marketConditionLabel = (condition: MarketCondition): string =>
     MARKET_OPTIONS.find(option => option.value === condition)?.label ||
@@ -235,28 +296,25 @@ export const selectConfiguredMarket = (
     return decision ? { ...decision, symbol: source.symbol, displayName: source.displayName } : null;
 };
 
-export const withPurchaseCondition = (
+export const withPurchaseMarket = (
     decision: RankedMarketDecision,
-    condition: MarketCondition,
+    market: PurchaseMarket,
 ): RankedMarketDecision => {
-    const barrierMatch = condition.match(/^(?:over|under|matches)-(\d+)$/) || condition.match(/^all-(?:over|under)-(\d+)$/);
-    const latestDigit = decision.digits[decision.digits.length - 1];
-    let contractType: StrategyContractType = 'DIGITMATCH';
-    let barrier: string | null = barrierMatch ? barrierMatch[1] : null;
+    const barrierMatch = market.match(/^(?:over|under|matches|differs)-(\d+)$/);
+    let contractType: StrategyContractType = 'DIGITDIFF';
+    const barrier: string | null = barrierMatch ? barrierMatch[1] : null;
 
-    if (condition === 'all-even') contractType = 'DIGITEVEN';
-    else if (condition === 'all-odd') contractType = 'DIGITODD';
-    else if (condition === 'all-rise') contractType = 'CALL';
-    else if (condition === 'all-fall') contractType = 'PUT';
-    else if (condition === 'all-same') barrier = String(latestDigit);
-    else if (condition.startsWith('over-') || condition.startsWith('all-over-')) contractType = 'DIGITOVER';
-    else if (condition.startsWith('under-') || condition.startsWith('all-under-')) contractType = 'DIGITUNDER';
-    else if (condition.startsWith('matches-')) contractType = 'DIGITMATCH';
+    if (market === 'even') contractType = 'DIGITEVEN';
+    else if (market === 'odd') contractType = 'DIGITODD';
+    else if (market === 'rise') contractType = 'CALL';
+    else if (market === 'fall') contractType = 'PUT';
+    else if (market.startsWith('over-')) contractType = 'DIGITOVER';
+    else if (market.startsWith('under-')) contractType = 'DIGITUNDER';
+    else if (market.startsWith('matches-')) contractType = 'DIGITMATCH';
 
     return {
         ...decision,
-        condition,
-        label: marketConditionLabel(condition),
+        label: purchaseMarketLabel(market),
         contractType,
         barrier,
     };
