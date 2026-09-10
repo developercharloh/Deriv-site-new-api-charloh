@@ -1568,6 +1568,49 @@
     }
 }
 
+@media (min-width: 621px) {
+    .alpha-tool {
+        max-width: 76rem;
+        margin-inline: auto;
+        padding-inline: clamp(1.2rem, 3vw, 2.4rem);
+
+        &__selector-grid { gap: 0.4rem; }
+        &__selector {
+            grid-template-columns: 2rem auto minmax(0, 1fr);
+            align-items: center;
+            min-height: 3.65rem;
+            padding: 0.42rem 0.55rem;
+            gap: 0.5rem;
+        }
+        &__selector--green {
+            grid-template-columns: 2rem auto minmax(0, 1fr);
+            min-height: 3.25rem;
+        }
+        &__selector--rule {
+            grid-template-columns: 2rem auto minmax(0, 1fr);
+            align-content: center;
+            min-height: 4.2rem;
+        }
+        &__selector--rule .alpha-tool__selector-copy,
+        &__selector--green .alpha-tool__selector-copy { grid-column: 2; grid-row: 1; }
+        &__selector--rule .alpha-tool__selector-rule,
+        &__selector--green .alpha-tool__selector-value { grid-column: 3; grid-row: 1; }
+        &__selector--rule .alpha-tool__selector-rule { gap: 0.25rem; }
+        &__selector--rule .alpha-tool__selector-rule-line { flex-wrap: nowrap; gap: 0.22rem; white-space: nowrap; }
+        &__selector--rule .alpha-tool__rule-select { min-height: 1.4rem; padding: 0.2rem 0.28rem; font-size: 0.43rem; &--digits { width: 2rem; } &--market { min-width: 7.6rem; } }
+        &__selector--green .alpha-tool__selector-value { padding: 0.28rem 0.4rem; }
+
+        &__panel, &__journal { margin-top: 0.45rem; }
+        &__panel-heading, &__section-heading { min-height: 2rem; padding: 0.35rem 0.65rem 0.28rem; }
+        &__panel-icon, &__section-icon { width: 1.4rem; height: 1.4rem; font-size: 0.9rem; }
+        &__setting-row { min-height: 1.65rem; margin-inline: 0.6rem; }
+        &__setting-icon { width: 1.1rem; height: 1.1rem; font-size: 0.78rem; }
+        &__settings-note { padding: 0.28rem 0.65rem 0.4rem; }
+        &__auto-trade { margin-top: 0.45rem; padding: 0.38rem 0.5rem; }
+        &__auto-icon { width: 1.45rem; height: 1.45rem; font-size: 1.05rem; }
+    }
+}
+
 @media (max-width: 620px) {
     .alpha-tool {
         padding: 0.65rem 0.55rem 1rem;
@@ -1584,19 +1627,25 @@
         &__headline-card { padding: 0.52rem 0.35rem 0.45rem 2rem; border-radius: 0.52rem; span, small { font-size: 0.42rem; } strong { font-size: 0.76rem; } small { font-size: 0.37rem; } }
         &__headline-icon { top: 0.55rem; left: 0.4rem; width: 1.2rem; height: 1.2rem; font-size: 0.7rem; }
         &__selector-grid { gap: 0.3rem; }
-        &__selector { grid-template-columns: 1.3rem minmax(0, 1fr); gap: 0.16rem; min-height: 0; padding: 0.18rem 0.26rem; border-radius: 0.5rem; }
-        &__selector--green { height: 2.95rem; }
+        &__selector { grid-template-columns: 1.15rem minmax(0, 1fr); gap: 0.16rem; min-height: 0; padding: 0.14rem 0.22rem; border-radius: 0.45rem; }
+        &__selector--green { grid-template-columns: 1.15rem auto minmax(0, 1fr); align-items: center; height: 2.35rem; }
+        &__selector--green .alpha-tool__selector-copy { grid-column: 2; grid-row: 1; }
+        &__selector--green .alpha-tool__selector-copy small { display: none; }
+        &__selector--green .alpha-tool__selector-value { grid-column: 3; grid-row: 1; }
         &__selector--toggle { grid-template-columns: 1.3rem minmax(0, 1fr) auto; }
-        &__selector--rule { height: 3.75rem; min-height: 0; overflow: hidden; }
-        &__selector-icon { width: 1.15rem; height: 1.15rem; border-radius: 0.3rem; font-size: 0.9rem; }
-        &__selector-copy { b { font-size: 0.55rem; } small { margin-top: 0.15rem; font-size: 0.4rem; } }
-        &__selector select, &__selector-value { padding: 0.3rem 0.28rem; border-radius: 0.32rem; font-size: 0.44rem; }
+        &__selector--rule { grid-template-columns: 1.15rem auto minmax(0, 1fr); align-items: center; height: 2.65rem; min-height: 0; overflow: hidden; }
+        &__selector--rule .alpha-tool__selector-copy { grid-column: 2; grid-row: 1; }
+        &__selector--rule .alpha-tool__selector-copy small { display: none; }
+        &__selector--rule .alpha-tool__selector-rule { grid-column: 3; grid-row: 1; }
+        &__selector-icon { width: 1rem; height: 1rem; border-radius: 0.28rem; font-size: 0.78rem; }
+        &__selector-copy { b { font-size: 0.48rem; } small { margin-top: 0.1rem; font-size: 0.36rem; } }
+        &__selector select, &__selector-value { padding: 0.22rem 0.2rem; border-radius: 0.28rem; font-size: 0.38rem; }
         &__selector-rule { gap: 0.18rem; }
-        &__selector-rule-line { flex-wrap: nowrap; gap: 0.12rem; font-size: 0.36rem; white-space: nowrap; }
-        &__selector-rule .alpha-tool__rule-select { min-height: 1.05rem; padding: 0.1rem 0.16rem; font-size: 0.34rem; &--digits { width: 1.65rem; } &--market { min-width: 5.45rem; flex: 1 1 5.45rem; } }
+        &__selector-rule-line { flex-wrap: nowrap; gap: 0.1rem; font-size: 0.32rem; white-space: nowrap; }
+        &__selector-rule .alpha-tool__rule-select { min-height: 0.9rem; padding: 0.07rem 0.12rem; font-size: 0.3rem; &--digits { width: 1.5rem; } &--market { min-width: 4.8rem; flex: 1 1 4.8rem; } }
         &__panel, &__journal { margin-top: 0.3rem; border-radius: 0.5rem; }
-        &__panel-heading, &__section-heading { min-height: 1.35rem; padding: 0.16rem 0.4rem 0.12rem; font-size: 0.56rem; }
-        &__panel-icon, &__section-icon { width: 1.15rem; height: 1.15rem; font-size: 0.72rem; }
+        &__panel-heading, &__section-heading { min-height: 1.2rem; padding: 0.12rem 0.35rem 0.08rem; font-size: 0.52rem; }
+        &__panel-icon, &__section-icon { width: 1rem; height: 1rem; font-size: 0.64rem; }
         &__ai-badge { padding: 0.2rem 0.35rem; font-size: 0.43rem; }
         &__strategy-select { margin-inline: 0.45rem; padding: 0.42rem 0.48rem; font-size: 0.54rem; }
         &__strategy-copy { margin: 0.3rem 0.45rem 0; padding: 0.35rem; p { font-size: 0.44rem; } }
@@ -1606,16 +1655,16 @@
         &__rule-line { gap: 0.25rem; font-size: 0.48rem; }
         &__rule-select { min-height: 1.55rem; padding: 0.25rem 0.28rem; font-size: 0.43rem; &--digits { width: 2.25rem; } &--market { min-width: 7.2rem; max-width: 100%; } }
         &__check-list { gap: 0.18rem; padding: 0.38rem 0.55rem 0.5rem 1.45rem; font-size: 0.44rem; li::before { left: -0.85rem; font-size: 0.68rem; } }
-        &__setting-row { grid-template-columns: 0.95rem minmax(4rem, 1fr) minmax(5rem, 0.8fr); min-height: 1.12rem; margin-inline: 0.36rem; gap: 0.22rem; font-size: 0.44rem; input, select { padding: 0.1rem 0.26rem; font-size: 0.42rem; } }
+        &__setting-row { grid-template-columns: 0.88rem minmax(4rem, 1fr) minmax(5rem, 0.8fr); min-height: 0.96rem; margin-inline: 0.32rem; gap: 0.18rem; font-size: 0.4rem; input, select { padding: 0.07rem 0.22rem; font-size: 0.38rem; } }
         &__setting-row--toggle { grid-template-columns: 1.2rem minmax(4rem, 1fr) auto; }
-        &__setting-icon { width: 0.82rem; height: 0.82rem; font-size: 0.56rem; }
-        &__settings-note { padding: 0.12rem 0.36rem 0.18rem; font-size: 0.34rem; }
-        &__auto-trade { grid-template-columns: 1rem minmax(4rem, 1fr) auto minmax(6.8rem, 0.9fr); gap: 0.18rem; height: 2.25rem; margin-top: 0.22rem; padding: 0.12rem 0.28rem; border-radius: 0.44rem; b { font-size: 0.46rem; } small { font-size: 0.33rem; } }
-        &__auto-icon { width: 0.84rem; height: 0.84rem; font-size: 0.64rem; }
-        &__switch { width: 1.6rem; height: 0.76rem; span { width: 0.5rem; height: 0.5rem; } &--on span { transform: translateX(0.7rem); } }
+        &__setting-icon { width: 0.74rem; height: 0.74rem; font-size: 0.5rem; }
+        &__settings-note { padding: 0.08rem 0.32rem 0.12rem; font-size: 0.3rem; }
+        &__auto-trade { grid-template-columns: 0.9rem minmax(4rem, 1fr) auto minmax(6.2rem, 0.9fr); gap: 0.14rem; height: 1.9rem; margin-top: 0.18rem; padding: 0.08rem 0.24rem; border-radius: 0.4rem; b { font-size: 0.42rem; } small { font-size: 0.3rem; } }
+        &__auto-icon { width: 0.72rem; height: 0.72rem; font-size: 0.56rem; }
+        &__switch { width: 1.45rem; height: 0.68rem; span { width: 0.44rem; height: 0.44rem; } &--on span { transform: translateX(0.63rem); } }
         &__start { min-height: 1.8rem; padding-inline: 0.45rem; font-size: 0.5rem; strong { font-size: 0.7rem; } }
         &__action-stack { gap: 0.2rem; }
-        &__refresh { min-height: 0.84rem; padding-inline: 0.26rem; font-size: 0.34rem; }
+        &__refresh { min-height: 0.7rem; padding-inline: 0.22rem; font-size: 0.3rem; }
         &__journal-table { min-width: 31rem; font-size: 0.43rem; }
         &__journal-table th { padding: 0.3rem 0.35rem; font-size: 0.39rem; }
         &__journal-table td { padding: 0.3rem 0.35rem; }
