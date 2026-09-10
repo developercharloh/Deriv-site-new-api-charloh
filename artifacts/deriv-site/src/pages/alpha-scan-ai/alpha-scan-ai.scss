@@ -1584,17 +1584,17 @@
         &__headline-card { padding: 0.52rem 0.35rem 0.45rem 2rem; border-radius: 0.52rem; span, small { font-size: 0.42rem; } strong { font-size: 0.76rem; } small { font-size: 0.37rem; } }
         &__headline-icon { top: 0.55rem; left: 0.4rem; width: 1.2rem; height: 1.2rem; font-size: 0.7rem; }
         &__selector-grid { gap: 0.3rem; }
-        &__selector { grid-template-columns: 1.3rem minmax(0, 1fr); gap: 0.25rem; min-height: 4.2rem; padding: 0.4rem 0.35rem; border-radius: 0.5rem; }
+        &__selector { grid-template-columns: 1.3rem minmax(0, 1fr); gap: 0.25rem; min-height: 3.35rem; padding: 0.32rem 0.35rem; border-radius: 0.5rem; }
         &__selector--toggle { grid-template-columns: 1.3rem minmax(0, 1fr) auto; }
-        &__selector--rule { min-height: 7.1rem; }
+        &__selector--rule { min-height: 5.15rem; }
         &__selector-icon { width: 1.25rem; height: 1.25rem; border-radius: 0.35rem; font-size: 1rem; }
         &__selector-copy { b { font-size: 0.55rem; } small { margin-top: 0.15rem; font-size: 0.4rem; } }
         &__selector select, &__selector-value { padding: 0.3rem 0.28rem; border-radius: 0.32rem; font-size: 0.44rem; }
         &__selector-rule { gap: 0.28rem; }
         &__selector-rule-line { gap: 0.18rem; font-size: 0.4rem; }
         &__selector-rule .alpha-tool__rule-select { min-height: 1.4rem; padding: 0.2rem 0.22rem; font-size: 0.39rem; &--digits { width: 2rem; } &--market { min-width: 6.6rem; flex: 1 1 6.6rem; } }
-        &__panel, &__journal { margin-top: 0.45rem; border-radius: 0.55rem; }
-        &__panel-heading, &__section-heading { min-height: 2.1rem; padding: 0.42rem 0.5rem 0.35rem; font-size: 0.64rem; }
+        &__panel, &__journal { margin-top: 0.35rem; border-radius: 0.55rem; }
+        &__panel-heading, &__section-heading { min-height: 1.8rem; padding: 0.3rem 0.5rem 0.25rem; font-size: 0.64rem; }
         &__panel-icon, &__section-icon { width: 1.35rem; height: 1.35rem; font-size: 0.85rem; }
         &__ai-badge { padding: 0.2rem 0.35rem; font-size: 0.43rem; }
         &__strategy-select { margin-inline: 0.45rem; padding: 0.42rem 0.48rem; font-size: 0.54rem; }
@@ -1605,16 +1605,16 @@
         &__rule-line { gap: 0.25rem; font-size: 0.48rem; }
         &__rule-select { min-height: 1.55rem; padding: 0.25rem 0.28rem; font-size: 0.43rem; &--digits { width: 2.25rem; } &--market { min-width: 7.2rem; max-width: 100%; } }
         &__check-list { gap: 0.18rem; padding: 0.38rem 0.55rem 0.5rem 1.45rem; font-size: 0.44rem; li::before { left: -0.85rem; font-size: 0.68rem; } }
-        &__setting-row { grid-template-columns: 1.2rem minmax(4rem, 1fr) minmax(5rem, 0.8fr); min-height: 1.8rem; margin-inline: 0.45rem; gap: 0.35rem; font-size: 0.52rem; input, select { padding: 0.25rem 0.35rem; font-size: 0.5rem; } }
+        &__setting-row { grid-template-columns: 1.2rem minmax(4rem, 1fr) minmax(5rem, 0.8fr); min-height: 1.55rem; margin-inline: 0.45rem; gap: 0.35rem; font-size: 0.52rem; input, select { padding: 0.2rem 0.35rem; font-size: 0.5rem; } }
         &__setting-row--toggle { grid-template-columns: 1.2rem minmax(4rem, 1fr) auto; }
         &__setting-icon { width: 1.05rem; height: 1.05rem; font-size: 0.7rem; }
-        &__settings-note { padding: 0.35rem 0.5rem 0.5rem; font-size: 0.42rem; }
-        &__auto-trade { grid-template-columns: 1.45rem minmax(4rem, 1fr) auto minmax(7.6rem, 0.9fr); gap: 0.32rem; margin-top: 0.45rem; padding: 0.4rem; border-radius: 0.52rem; b { font-size: 0.56rem; } small { font-size: 0.4rem; } }
-        &__auto-icon { width: 1.35rem; height: 1.35rem; font-size: 1rem; }
+        &__settings-note { padding: 0.25rem 0.5rem 0.35rem; font-size: 0.42rem; }
+        &__auto-trade { grid-template-columns: 1.25rem minmax(4rem, 1fr) auto minmax(7.6rem, 0.9fr); gap: 0.28rem; margin-top: 0.35rem; padding: 0.25rem 0.4rem; border-radius: 0.52rem; b { font-size: 0.56rem; } small { font-size: 0.4rem; } }
+        &__auto-icon { width: 1.15rem; height: 1.15rem; font-size: 0.86rem; }
         &__switch { width: 2rem; height: 1rem; span { width: 0.68rem; height: 0.68rem; } &--on span { transform: translateX(0.9rem); } }
         &__start { min-height: 1.8rem; padding-inline: 0.45rem; font-size: 0.5rem; strong { font-size: 0.7rem; } }
         &__action-stack { gap: 0.2rem; }
-        &__refresh { min-height: 1.35rem; padding-inline: 0.35rem; font-size: 0.42rem; }
+        &__refresh { min-height: 1.15rem; padding-inline: 0.35rem; font-size: 0.42rem; }
         &__journal-table { min-width: 31rem; font-size: 0.43rem; }
         &__journal-table th { padding: 0.3rem 0.35rem; font-size: 0.39rem; }
         &__journal-table td { padding: 0.3rem 0.35rem; }
