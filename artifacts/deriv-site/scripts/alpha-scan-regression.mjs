@@ -200,11 +200,19 @@ const waitFor = async (condition, description, timeout = 30000) => {
 const getSnapshot = evaluate => evaluate(`(() => {
     const root = document.querySelector('[data-testid="alpha-tool"]');
     const modelPick = document.querySelector('[data-testid="tool-model-pick"]')?.getAttribute('data-symbol') || '';
+    let failedSymbols = [];
+    try {
+        failedSymbols = JSON.parse(root?.dataset.failedSymbols || '[]');
+    } catch {
+        failedSymbols = [];
+    }
     return {
         status: root?.dataset.status || '',
         scanSource: root?.dataset.scanSource || '',
         coverage: (root?.dataset.modelRowCount || 0) + ' / ' + (root?.dataset.discoveredCount || 0),
         sample: root?.dataset.sampleSize || '',
+        error: root?.dataset.error || '',
+        failedSymbols,
         model: document.querySelector('[data-testid="tool-model-status"]')?.innerText || '',
         modelVersion: root?.dataset.modelVersion || '',
         modelPick,
@@ -413,6 +421,8 @@ const run = async () => {
                     sampleSize,
                     coverage: snapshot.coverage,
                     modelPick: Boolean(snapshot.modelPick),
+                    failedSymbols: snapshot.failedSymbols,
+                    error: snapshot.error,
                     journalRows: 0,
                     model: snapshot.model,
                     modelVersion: MODEL_VERSION,
@@ -467,6 +477,8 @@ const run = async () => {
                 blockedFeed: {
                     status: blockedFeed.status,
                     rows: 0,
+                    failedSymbols: blockedFeed.failedSymbols,
+                    error: blockedFeed.error,
                 },
             } : {
                 status: 'skipped',

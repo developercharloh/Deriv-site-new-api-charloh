@@ -57,6 +57,7 @@ type ScanStatus =
     | 'connection-error'
     | 'partial-data';
 type DiscoverySource = 'public-metadata' | 'verified-catalog' | 'fixture';
+type FailurePhase = 'Metadata discovery' | 'History collection' | 'Symbol history';
 
 type SyntheticSymbol = {
     symbol: string;
@@ -714,6 +715,7 @@ type AlphaToolSurfaceProps = {
     averageVolatility: number;
     validatedRows: number;
     discoveredCount: number;
+    failedSymbols: string[];
     errorMessage: string;
     onScan: () => void;
 };
@@ -776,6 +778,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     averageVolatility,
     validatedRows,
     discoveredCount,
+    failedSymbols,
     errorMessage,
     onScan,
 }) => {
@@ -1026,6 +1029,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-model-row-count={rows.length}
             data-model-version={MODEL_VERSION}
             data-error={errorMessage}
+            data-failed-symbols={JSON.stringify(failedSymbols)}
             data-digit-window={digitWindow}
             data-recovery-digit-window={recoveryDigitWindow}
             data-primary-condition={primaryCondition}
@@ -1196,6 +1200,7 @@ const AlphaScanWorkspace: React.FC = () => {
     const [discoveredCount, setDiscoveredCount] = useState(0);
     const [completedCount, setCompletedCount] = useState(0);
     const [failedCount, setFailedCount] = useState(0);
+    const [failedSymbols, setFailedSymbols] = useState<string[]>([]);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [errorMessage, setErrorMessage] = useState('');
     const [hasMoreSymbols, setHasMoreSymbols] = useState(false);
@@ -1242,6 +1247,7 @@ const AlphaScanWorkspace: React.FC = () => {
         setDiscoveredCount(0);
         setCompletedCount(0);
         setFailedCount(0);
+        setFailedSymbols([]);
         setLastUpdated(null);
         setErrorMessage('');
         setHasMoreSymbols(false);
@@ -1256,6 +1262,7 @@ const AlphaScanWorkspace: React.FC = () => {
             setDiscoveredCount(fixtureRows.length);
             setCompletedCount(fixtureRows.length);
             setFailedCount(0);
+            setFailedSymbols([]);
             setLastUpdated(new Date());
             setErrorMessage('Deterministic fixture data — live market feed not requested.');
             setStatus('ready');
@@ -1272,15 +1279,46 @@ const AlphaScanWorkspace: React.FC = () => {
 
         const recordFailure = (symbol: string) => {
             failedSymbolsRef.current.add(symbol);
-            setFailedCount(failedSymbolsRef.current.size);
+            const nextFailedSymbols = Array.from(failedSymbolsRef.current);
+            setFailedCount(nextFailedSymbols.length);
+            setFailedSymbols(nextFailedSymbols);
+        };
+
+        const recordPendingFailures = () => {
+            for (const symbol of requestMap.values()) recordFailure(symbol.symbol);
+        };
+
+        const failedSymbolMessage = (phase: FailurePhase) => {
+            const symbols = Array.from(failedSymbolsRef.current);
+            return symbols.length
+                ? `${phase} incomplete for symbols: ${symbols.join(', ')}.`
+                : '';
         };
 
         const handleScanTimeout = () => {
             if (scanIdRef.current !== scanId) return;
+            recordPendingFailures();
+            const failures = failedSymbolMessage('History collection');
+            if (!metadataReceived) {
+                finishWithCurrentData(
+                    'timeout',
+                    'Metadata discovery timed out: no public market metadata arrived within the time limit.',
+                );
+                setHasMoreSymbols(false);
+                setIsLoadingMore(false);
+                closeSocket();
+                return;
+            }
             if (resultRowsRef.current.length) {
-                finishWithCurrentData('partial-data', 'The scan reached its time limit; rows shown are the data received so far.');
+                finishWithCurrentData(
+                    'partial-data',
+                    `History collection timed out; rows shown are the data received so far.${failures ? ` ${failures}` : ''}`,
+                );
             } else {
-                finishWithCurrentData('timeout', 'No usable history arrived within the time limit.');
+                finishWithCurrentData(
+                    'timeout',
+                    `History collection timed out: no usable history arrived within the time limit.${failures ? ` ${failures}` : ''}`,
+                );
             }
             setHasMoreSymbols(false);
             setIsLoadingMore(false);
@@ -1342,9 +1380,16 @@ const AlphaScanWorkspace: React.FC = () => {
             setIsLoadingMore(false);
             closeSocket();
             if (!resultRowsRef.current.length) {
-                finishWithCurrentData('empty', 'No history was returned for the discovered synthetic symbols.');
+                const failures = failedSymbolMessage('History collection');
+                finishWithCurrentData(
+                    'empty',
+                    `History collection failed: no history was returned for the discovered synthetic symbols.${failures ? ` ${failures}` : ''}`,
+                );
             } else if (failedSymbolsRef.current.size) {
-                finishWithCurrentData('partial-data', `${failedSymbolsRef.current.size} symbol${failedSymbolsRef.current.size === 1 ? '' : 's'} did not return a complete sample.`);
+                finishWithCurrentData(
+                    'partial-data',
+                    `${failedSymbolMessage('History collection')} ${failedSymbolsRef.current.size} symbol${failedSymbolsRef.current.size === 1 ? '' : 's'} did not return a complete sample.`,
+                );
             } else {
                 finishWithCurrentData('ready');
             }
@@ -1365,7 +1410,10 @@ const AlphaScanWorkspace: React.FC = () => {
             }
 
             if (message.error && message.echo_req?.active_symbols) {
-                finishWithCurrentData('connection-error', message.error.message || 'The market metadata request was rejected.');
+                finishWithCurrentData(
+                    'connection-error',
+                    `Metadata discovery failed: ${message.error.message || 'the market metadata request was rejected.'}`,
+                );
                 closeSocket();
                 return;
             }
@@ -1380,7 +1428,7 @@ const AlphaScanWorkspace: React.FC = () => {
                 if (!discoveredSymbols.length) {
                     finishWithCurrentData(
                         'empty',
-                        `The public metadata response returned ${message.active_symbols.length} records, but none matched a Synthetic Index market or symbol family.`,
+                        `Metadata discovery failed: the public metadata response returned ${message.active_symbols.length} records, but none matched a Synthetic Index market or symbol family.`,
                     );
                     closeSocket();
                     return;
@@ -1402,7 +1450,12 @@ const AlphaScanWorkspace: React.FC = () => {
                 requestMap.delete(message.req_id);
                 pendingRef.current.delete(message.req_id);
                 if (message.error || !message.history?.prices) {
-                    if (symbol) recordFailure(symbol.symbol);
+                    if (symbol) {
+                        recordFailure(symbol.symbol);
+                        setErrorMessage(
+                            `History collection failed for ${symbol.symbol}: ${message.error?.message || 'no history response returned.'}`,
+                        );
+                    }
                 } else if (symbol) {
                     const prices = message.history.prices.map(Number).filter(Number.isFinite);
                     if (prices.length > 1) {
@@ -1420,6 +1473,9 @@ const AlphaScanWorkspace: React.FC = () => {
                         setRows(resultRowsRef.current);
                     } else {
                         recordFailure(symbol.symbol);
+                        setErrorMessage(
+                            `History collection failed for ${symbol.symbol}: the response contained fewer than two usable prices.`,
+                        );
                     }
                 }
                 completedCountRef.current += 1;
@@ -1430,10 +1486,25 @@ const AlphaScanWorkspace: React.FC = () => {
 
         socket.onerror = () => {
             if (scanIdRef.current !== scanId) return;
+            if (!metadataReceived) {
+                finishWithCurrentData('connection-error', 'Metadata discovery connection error: the public market feed could not be reached.');
+                setHasMoreSymbols(false);
+                setIsLoadingMore(false);
+                closeSocket();
+                return;
+            }
+            recordPendingFailures();
+            const failures = failedSymbolMessage('History collection');
             if (resultRowsRef.current.length) {
-                finishWithCurrentData('partial-data', 'The connection closed before every requested symbol returned.');
+                finishWithCurrentData(
+                    'partial-data',
+                    `History collection connection error: the connection closed before every requested symbol returned.${failures ? ` ${failures}` : ''}`,
+                );
             } else {
-                finishWithCurrentData('connection-error', 'The public market feed could not be reached.');
+                finishWithCurrentData(
+                    'connection-error',
+                    `History collection connection error: the public market feed could not be reached.${failures ? ` ${failures}` : ''}`,
+                );
             }
             setHasMoreSymbols(false);
             setIsLoadingMore(false);
@@ -1445,14 +1516,27 @@ const AlphaScanWorkspace: React.FC = () => {
             setHasMoreSymbols(false);
             setIsLoadingMore(false);
             if (pendingRef.current.size === 0 && resultRowsRef.current.length) {
-                finishWithCurrentData('partial-data', 'The public market feed closed before all pages were loaded.');
+                finishWithCurrentData('partial-data', 'History collection ended before all pages were loaded.');
                 return;
             }
-            if (pendingRef.current.size === 0) return;
+            if (pendingRef.current.size === 0) {
+                if (!metadataReceived) {
+                    finishWithCurrentData('connection-error', 'Metadata discovery connection error: the public market feed closed before returning metadata.');
+                }
+                return;
+            }
+            recordPendingFailures();
+            const failures = failedSymbolMessage('History collection');
             if (resultRowsRef.current.length) {
-                finishWithCurrentData('partial-data', 'The connection closed before every requested symbol returned.');
+                finishWithCurrentData(
+                    'partial-data',
+                    `History collection ended before every requested symbol returned.${failures ? ` ${failures}` : ''}`,
+                );
             } else {
-                finishWithCurrentData('connection-error', 'The public market feed closed before returning history.');
+                finishWithCurrentData(
+                    'connection-error',
+                    `History collection ended before returning history.${failures ? ` ${failures}` : ''}`,
+                );
             }
         };
 
@@ -1513,6 +1597,7 @@ const AlphaScanWorkspace: React.FC = () => {
             averageVolatility={averageVolatility}
             validatedRows={validatedRows}
             discoveredCount={discoveredCount}
+            failedSymbols={failedSymbols}
             errorMessage={errorMessage}
             onScan={scan}
         />
