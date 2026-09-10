@@ -6,10 +6,16 @@ import {
     DTraderEngine,
     type DTBuyFeedback,
     type DTConfig,
-    type DTContractType,
     type DTPosition,
     type DTStatus,
 } from '@/utils/dtrader-engine';
+import {
+    type RankedMarketDecision,
+    type StrategySource,
+    quotesToLastDigits,
+    selectStrongestMarket,
+    selectMarketForWindow,
+} from './alpha-market-strategy';
 import './alpha-scan-ai.scss';
 
 const DERIV_WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1';
@@ -50,10 +56,13 @@ type SyntheticSymbol = {
     displayName: string;
     market: string;
     submarket: string;
+    pipSize?: number;
 };
 
 type ScanRow = SyntheticSymbol & {
     prices: number[];
+    lastDigits: number[];
+    pipSize: number;
     sampleSize: number;
     latestPrice: number;
     shortReturn: number;
@@ -83,29 +92,26 @@ type ValidationWindow = {
 
 type ValidationGate = 'insufficient-evidence' | 'failed' | 'validated';
 
-type ContractMarket = {
-    value: string;
-    label: string;
-};
-
-const CONTRACT_MARKETS: ContractMarket[] = [
-    ...Array.from({ length: 8 }, (_, index) => ({ value: `over-${index + 1}`, label: `Over ${index + 1}` })),
-    ...Array.from({ length: 9 }, (_, index) => ({ value: `under-${9 - index}`, label: `Under ${9 - index}` })),
-    { value: 'even', label: 'Even' },
-    { value: 'odd', label: 'Odd' },
-];
-
 type WebSocketMessage = {
     msg_type?: string;
     req_id?: number;
     error?: { message?: string };
     active_symbols?: Array<Record<string, unknown>>;
     history?: { prices?: Array<number | string> };
+    pip_size?: number | string;
     echo_req?: { symbol?: string; active_symbols?: string };
 };
 
 const stringFromRecord = (record: Record<string, unknown>, keys: string[]): string =>
     keys.map(key => record[key]).find(value => typeof value === 'string' && value.length > 0) as string || '';
+
+const numberFromRecord = (record: Record<string, unknown>, keys: string[]): number | undefined => {
+    const value = keys.map(key => record[key]).find(candidate =>
+        typeof candidate === 'number' || (typeof candidate === 'string' && candidate.length > 0),
+    );
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+};
 
 const isSyntheticIndex = (record: Record<string, unknown>): boolean => {
     const symbol = stringFromRecord(record, ['symbol']);
@@ -153,6 +159,7 @@ const discoverSyntheticSymbols = (records: Array<Record<string, unknown>>): Synt
                 displayName: stringFromRecord(record, ['display_name', 'underlying_symbol', 'symbol']) || symbol,
                 market: stringFromRecord(record, ['market_display_name', 'market']) || 'Synthetic Index',
                 submarket: stringFromRecord(record, ['submarket_display_name', 'submarket']) || 'Synthetic',
+                pipSize: numberFromRecord(record, ['pip_size']),
             };
         })
         .filter((item): item is SyntheticSymbol => item !== null);
@@ -508,7 +515,7 @@ const calculateFeatureModel = (returns: number[], noiseFraction: number): Valida
     return summary;
 };
 
-const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol | 'prices'> => {
+const calculateMetrics = (prices: number[]): Omit<ScanRow, keyof SyntheticSymbol | 'prices' | 'lastDigits' | 'pipSize'> => {
     const returns = prices
         .slice(1)
         .map((price, index) => (prices[index] > 0 && price > 0 ? Math.log(price / prices[index]) : 0));
@@ -668,16 +675,29 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     if (liveEngineRef.current === null) liveEngineRef.current = new DTraderEngine();
     const liveEngine = liveEngineRef.current;
     const [selectedSymbol, setSelectedSymbol] = useState('');
-    const [contractMarket, setContractMarket] = useState('over-1');
-    const [contractMarketTouched, setContractMarketTouched] = useState(false);
+    const [digitWindow, setDigitWindow] = useState(3);
     const [stake, setStake] = useState('10');
-    const [targetProfit, setTargetProfit] = useState('18');
-    const [stopLoss, setStopLoss] = useState('10');
-    const [martingale, setMartingale] = useState('2');
     const [liveMode, setLiveMode] = useState(true);
     const [liveStatus, setLiveStatus] = useState<DTStatus>('idle');
     const [liveFeedback, setLiveFeedback] = useState<DTBuyFeedback | null>(null);
     const [liveTrade, setLiveTrade] = useState<DTPosition | null>(null);
+    const [liveTradeLeg, setLiveTradeLeg] = useState<'primary' | 'recovery' | null>(null);
+    const [liveTradeDecision, setLiveTradeDecision] = useState<RankedMarketDecision | null>(null);
+    const [executionLeg, setExecutionLeg] = useState<'idle' | 'primary-pending' | 'primary-running' | 'recovery-pending' | 'recovery-running'>('idle');
+    const [primaryDecision, setPrimaryDecision] = useState<RankedMarketDecision | null>(null);
+    const [recoveryDecision, setRecoveryDecision] = useState<RankedMarketDecision | null>(null);
+    const activeLegRef = useRef<'primary' | 'recovery' | null>(null);
+    const activeDecisionRef = useRef<RankedMarketDecision | null>(null);
+    const recoveryUsedRef = useRef(false);
+    const executeDecisionRef = useRef<(decision: RankedMarketDecision, leg: 'primary' | 'recovery') => void>(() => {});
+    const runtimeRef = useRef({
+        rows,
+        digitWindow,
+        liveMode,
+        liveAuthorized: false,
+        currency: 'USD',
+        stake,
+    });
 
     const bestModelRow = useMemo(() => {
         if (!rows.length) return undefined;
@@ -695,16 +715,129 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         }
     }, [bestModelRow, rows, selectedSymbol]);
 
+    const strategySources = useMemo<StrategySource[]>(() => rows.map(row => ({
+        symbol: row.symbol,
+        displayName: row.displayName,
+        prices: row.prices,
+        lastDigits: row.lastDigits,
+    })), [rows]);
+
+    const calculatedPrimaryDecision = useMemo(() => {
+        if (!bestModelRow) return null;
+        const decision = selectMarketForWindow(
+            bestModelRow.lastDigits.slice(-digitWindow),
+            bestModelRow.prices,
+        );
+        return decision
+            ? { ...decision, symbol: bestModelRow.symbol, displayName: bestModelRow.displayName }
+            : null;
+    }, [bestModelRow, digitWindow]);
+
+    const calculatedRecoveryDecision = useMemo(
+        () => selectStrongestMarket(strategySources, digitWindow),
+        [digitWindow, strategySources],
+    );
+
     useEffect(() => {
-        if (!contractMarketTouched && bestModelRow) {
-            setContractMarket(bestModelRow.shortReturn >= 0 ? 'over-1' : 'under-9');
+        setPrimaryDecision(calculatedPrimaryDecision);
+        setRecoveryDecision(calculatedRecoveryDecision);
+    }, [calculatedPrimaryDecision, calculatedRecoveryDecision]);
+
+    const isLoggedIn = client?.is_logged_in ?? false;
+    const liveAuthorized = isLoggedIn && Boolean(api_base.api && api_base.is_authorized);
+
+    useEffect(() => {
+        runtimeRef.current = {
+            rows,
+            digitWindow,
+            liveMode,
+            liveAuthorized,
+            currency: client?.currency || 'USD',
+            stake,
+        };
+    }, [client?.currency, digitWindow, liveAuthorized, liveMode, rows, stake]);
+
+    const executeDecision = useCallback((decision: RankedMarketDecision, leg: 'primary' | 'recovery') => {
+        const runtime = runtimeRef.current;
+        if (!runtime.liveMode || !runtime.liveAuthorized) {
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
+            setExecutionLeg('idle');
+            return;
         }
-    }, [bestModelRow, contractMarketTouched]);
+
+        const amount = Number(runtime.stake);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Enter a valid stake before executing.' });
+            setExecutionLeg('idle');
+            return;
+        }
+
+        const config: DTConfig = {
+            symbol: decision.symbol,
+            contractType: decision.contractType,
+            durationValue: 1,
+            durationUnit: 't',
+            stake: amount,
+            barrier: decision.barrier,
+            currency: runtime.currency,
+        };
+        activeLegRef.current = leg;
+        activeDecisionRef.current = decision;
+        setExecutionLeg(leg === 'primary' ? 'primary-pending' : 'recovery-pending');
+        setLiveFeedback(null);
+        // Restarting for every leg ensures recovery subscribes to the selected
+        // volatility before the fresh proposal is purchased.
+        liveEngine.start(config);
+        liveEngine.placeBuyNow(config);
+    }, [liveEngine]);
+
+    executeDecisionRef.current = executeDecision;
 
     useEffect(() => {
         liveEngine.onStatus = setLiveStatus;
         liveEngine.onBuyFeedback = setLiveFeedback;
-        liveEngine.onPosition = position => setLiveTrade(position.isOpen ? position : null);
+        liveEngine.onPosition = position => {
+            const leg = activeLegRef.current;
+            if (position.isOpen) {
+                setLiveTrade(position);
+                setLiveTradeLeg(leg);
+                setLiveTradeDecision(activeDecisionRef.current);
+                setExecutionLeg(leg === 'recovery' ? 'recovery-running' : 'primary-running');
+                return;
+            }
+
+            setLiveTrade(null);
+            setLiveTradeLeg(null);
+            setLiveTradeDecision(null);
+
+            if (leg === 'primary' && position.isWin === false && !recoveryUsedRef.current) {
+                recoveryUsedRef.current = true;
+                const recovery = selectStrongestMarket(
+                    runtimeRef.current.rows.map(row => ({
+                        symbol: row.symbol,
+                        displayName: row.displayName,
+                        prices: row.prices,
+                        lastDigits: row.lastDigits,
+                    })),
+                    runtimeRef.current.digitWindow,
+                );
+                setRecoveryDecision(recovery);
+                if (recovery) {
+                    setExecutionLeg('recovery-pending');
+                    setTimeout(() => executeDecisionRef.current(recovery, 'recovery'), 0);
+                    return;
+                }
+                setLiveFeedback({
+                    seq: Date.now(),
+                    kind: 'error',
+                    message: 'Primary trade lost, but no recovery pattern qualified.',
+                });
+            }
+
+            setExecutionLeg('idle');
+            activeLegRef.current = null;
+            activeDecisionRef.current = null;
+        };
         return () => {
             liveEngine.stop();
             liveEngine.onStatus = () => {};
@@ -715,55 +848,30 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
     const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
     const modelPick = bestModelRow || selectedRow;
-    const recoveryRow = rows.find(row => row.shortReturn < 0 && row.symbol !== selectedRow?.symbol) || rows[1] || selectedRow;
-    const volatilityName = selectedRow?.displayName || (isBusy ? 'Reading live model…' : 'Synthetic Index');
-    const marketName = selectedRow ? `${selectedRow.market || 'Market'} · ${selectedRow.submarket || 'Live'}` : 'Waiting for live data';
-    const recoveryName = recoveryRow?.displayName || 'Recovery context';
-    const strategyName = selectedRow
-        ? selectedRow.shortReturn >= 0
-            ? 'Model bias: Over'
-            : 'Model bias: Under'
-        : 'Calibrating model strategy';
-    const strategyReason = selectedRow
-        ? `${selectedRow.displayName} selected at ${(selectedRow.realizedVolatility * 100).toFixed(2)}% volatility · ${selectedRow.regime} regime · ${(selectedRow.noiseFraction * 100).toFixed(0)}% filtered noise`
+    const strategyName = primaryDecision
+        ? `Primary Market 1: ${primaryDecision.label}`
+        : 'Waiting for a qualifying pattern';
+    const strategyReason = modelPick
+        ? `${modelPick.displayName} selected at ${(modelPick.realizedVolatility * 100).toFixed(2)}% volatility · ${modelPick.regime} regime · ${(modelPick.noiseFraction * 100).toFixed(0)}% filtered noise`
         : errorMessage || 'Live model data will appear here after the first scan.';
     const oosAccuracy = rows.length ? Math.round(averageWalkForwardAccuracy * 100) : 0;
     const modelLabel = isBusy ? 'SYNCING' : modelStatus;
     const capturedAt = lastUpdated
         ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '—';
-    const selectedContract = CONTRACT_MARKETS.find(market => market.value === contractMarket)?.label || 'Over 1';
-    const liveTradeContract = liveTrade
-        ? liveTrade.contractType === 'DIGITEVEN'
-            ? 'Even'
-            : liveTrade.contractType === 'DIGITODD'
-                ? 'Odd'
-                : `${liveTrade.contractType === 'DIGITUNDER' ? 'Under' : 'Over'} ${liveTrade.barrier ?? ''}`
-        : selectedContract;
-    const isLoggedIn = client?.is_logged_in ?? false;
-    const liveAuthorized = isLoggedIn && Boolean(api_base.api && api_base.is_authorized);
-    const selectedContractType: DTContractType = contractMarket === 'even'
-        ? 'DIGITEVEN'
-        : contractMarket === 'odd'
-            ? 'DIGITODD'
-            : contractMarket.startsWith('under-')
-                ? 'DIGITUNDER'
-                : 'DIGITOVER';
-    const selectedBarrier = contractMarket.startsWith('over-') || contractMarket.startsWith('under-')
-        ? contractMarket.split('-')[1]
-        : null;
     const liveCanExecute = Boolean(
         liveMode &&
         liveAuthorized &&
-        modelPick &&
-        modelPick.validationGate === 'validated' &&
+        primaryDecision &&
+        modelPick?.validationGate === 'validated' &&
         !liveTrade &&
         !isBusy &&
+        executionLeg === 'idle' &&
         liveStatus !== 'subscribing',
     );
 
     const handleLiveExecute = () => {
-        if (!liveMode || !modelPick) return;
+        if (!liveMode || !primaryDecision) return;
         if (!liveAuthorized) {
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
             return;
@@ -772,29 +880,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'The model pick is gated until validation evidence passes.' });
             return;
         }
-        if (liveTrade) {
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'A live contract is already running in the journal.' });
-            return;
-        }
-
-        const amount = Number(stake);
-        if (!Number.isFinite(amount) || amount <= 0) {
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Enter a valid stake before executing.' });
-            return;
-        }
-
-        const config: DTConfig = {
-            symbol: modelPick.symbol,
-            contractType: selectedContractType,
-            durationValue: 1,
-            durationUnit: 't',
-            stake: amount,
-            barrier: selectedBarrier,
-            currency: client?.currency || 'USD',
-        };
-        setLiveFeedback(null);
-        if (liveStatus === 'idle' || liveStatus === 'error') liveEngine.start(config);
-        liveEngine.placeBuyNow(config);
+        if (liveTrade || executionLeg !== 'idle') return;
+        recoveryUsedRef.current = false;
+        executeDecision(primaryDecision, 'primary');
     };
 
     return (
@@ -807,6 +895,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-model-row-count={rows.length}
             data-model-version={MODEL_VERSION}
             data-error={errorMessage}
+            data-digit-window={digitWindow}
+            data-primary-condition={primaryDecision?.condition || ''}
+            data-primary-market={primaryDecision?.label || ''}
+            data-recovery-condition={recoveryDecision?.condition || ''}
+            data-recovery-market={recoveryDecision?.label || ''}
+            data-execution-leg={executionLeg}
         >
             <header className='alpha-tool__hero'>
                 <button type='button' className='alpha-tool__menu' aria-label='Open tool menu'>
@@ -835,46 +929,29 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
             </header>
 
-            <section className='alpha-tool__selector-grid' aria-label='Model selections'>
-                <label className='alpha-tool__selector alpha-tool__selector--green'>
+            <section className='alpha-tool__selector-grid' aria-label='Execution strategy'>
+                <div className='alpha-tool__selector alpha-tool__selector--green'>
                     <span className='alpha-tool__selector-icon'>∿</span>
-                    <span className='alpha-tool__selector-copy'><b>Volatility</b><small>Live model index</small></span>
-                    <select
-                        value={selectedSymbol}
-                        disabled={!rows.length}
-                        onChange={event => setSelectedSymbol(event.target.value)}
-                        data-testid='select-tool-symbol'
-                    >
-                        {rows.length ? rows.map(row => <option key={row.symbol} value={row.symbol}>{row.displayName}</option>) : <option>Loading model data…</option>}
-                    </select>
-                </label>
-                <div className='alpha-tool__selector alpha-tool__selector--purple'>
+                    <span className='alpha-tool__selector-copy'><b>Primary Index</b><small>Model-selected volatility</small></span>
+                    <strong className='alpha-tool__selector-value'>{modelPick?.displayName || 'Waiting for scan'}</strong>
+                </div>
+                <label className='alpha-tool__selector alpha-tool__selector--purple'>
                     <span className='alpha-tool__selector-icon'>◉</span>
-                    <span className='alpha-tool__selector-copy'><b>Market</b><small>{marketName}</small></span>
+                    <span className='alpha-tool__selector-copy'><b>Digit Window X</b><small>Latest digits to analyze</small></span>
                     <select
                         className='alpha-tool__selector-value'
-                        value={contractMarket}
-                        onChange={event => {
-                            setContractMarketTouched(true);
-                            setContractMarket(event.target.value);
-                        }}
-                        aria-label='Deriv contract market'
-                        data-testid='select-contract-market'
+                        value={digitWindow}
+                        onChange={event => setDigitWindow(Number(event.target.value))}
+                        aria-label='Number of latest digits'
+                        data-testid='select-digit-window'
                     >
-                        <optgroup label='Over'>
-                            {CONTRACT_MARKETS.filter(market => market.value.startsWith('over-')).map(market => <option key={market.value} value={market.value}>{market.label}</option>)}
-                        </optgroup>
-                        <optgroup label='Under'>
-                            {CONTRACT_MARKETS.filter(market => market.value.startsWith('under-')).map(market => <option key={market.value} value={market.value}>{market.label}</option>)}
-                        </optgroup>
-                        <option value='even'>Even</option>
-                        <option value='odd'>Odd</option>
+                        {Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
                     </select>
-                </div>
+                </label>
                 <div className='alpha-tool__selector alpha-tool__selector--blue'>
                     <span className='alpha-tool__selector-icon'>◌</span>
-                    <span className='alpha-tool__selector-copy'><b>Recovery Market</b><small>After-loss context</small></span>
-                    <strong className='alpha-tool__selector-value'>{recoveryName.replace('Volatility ', '')}</strong>
+                    <span className='alpha-tool__selector-copy'><b>Recovery Market 2</b><small>Strongest qualifying pattern</small></span>
+                    <strong className='alpha-tool__selector-value'>{recoveryDecision?.label || 'Awaiting loss'}</strong>
                 </div>
             </section>
 
@@ -886,17 +963,17 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
                 <div className='alpha-tool__strategy-select'>
                     <strong>{strategyName}</strong>
-                    <span>⌄</span>
+                    <span>{primaryDecision ? `${digitWindow} digits` : '—'}</span>
                 </div>
                 <div className='alpha-tool__strategy-copy'>
                     <span className='alpha-tool__strategy-spark'>✦</span>
-                    <p>{strategyReason}. Best model volatility: {modelPick?.displayName || 'waiting for data'}. Choose a Deriv digit contract before live execution.</p>
+                    <p>{strategyReason}. Latest digits: {primaryDecision?.digits.join(' · ') || '—'}. Condition: {primaryDecision?.reason || 'no qualifying condition yet'} Purchase: {primaryDecision?.label || '—'}.</p>
                 </div>
                 <ul className='alpha-tool__check-list'>
-                    <li>Uses causal denoising for isolated tick spikes</li>
-                    <li>Walk-forward accuracy: {oosAccuracy ? `${oosAccuracy}%` : '—'}</li>
-                    <li>Uses past-only calibrated features</li>
-                    <li>Execution stays gated until validation evidence is complete</li>
+                    <li>Primary Market 1 analyzes the latest {digitWindow} digits</li>
+                    <li>Recovery Market 2 scans all {rows.length || 'available'} volatility indices</li>
+                    <li>Exactly one qualifying market is selected per leg</li>
+                    <li>Execution stays gated until model validation evidence is complete</li>
                 </ul>
             </section>
 
@@ -905,11 +982,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <span className='alpha-tool__panel-icon'>⚙</span>
                     <b>Trade Settings</b>
                 </div>
-                <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Stake</span><input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference stake' /></div>
-                <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Target Profit</span><input value={`$${targetProfit}`} onChange={event => setTargetProfit(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference target profit' /></div>
-                <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>♢</span><span>Stop Loss</span><input value={`$${stopLoss}`} onChange={event => setStopLoss(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Reference stop loss' /></div>
-                <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↗</span><span>Martingale</span><select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Reference martingale'><option value='1'>x1</option><option value='2'>x2</option><option value='3'>x3</option></select></div>
-                <div className='alpha-tool__settings-note'>Digit execution sends stake + contract only · one tick · model validation gated</div>
+                <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Stake</span><input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Stake' /></div>
+                <div className='alpha-tool__settings-note'>One-tick contract · market is selected from the latest X digits · recovery starts only after a primary loss</div>
             </section>
 
             <section className='alpha-tool__auto-trade'>
@@ -918,7 +992,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <button type='button' className={`alpha-tool__switch ${liveMode ? 'alpha-tool__switch--on' : ''}`} onClick={() => setLiveMode(value => !value)} aria-pressed={liveMode}><span /></button>
                 <div className='alpha-tool__action-stack'>
                     <button type='button' className='alpha-tool__start' onClick={handleLiveExecute} disabled={!liveCanExecute} data-testid='button-live-execute'>
-                        <span>Execute {selectedContract}</span><strong>▶</strong>
+                        <span>Purchase {primaryDecision?.label || 'Market 1'}</span><strong>▶</strong>
                     </button>
                     <button type='button' className='alpha-tool__refresh' onClick={() => { setLiveFeedback(null); onScan(); }} disabled={isBusy} data-testid='button-run-scan'>
                         <span>{isBusy ? 'Syncing' : 'Refresh Model'}</span>
@@ -939,8 +1013,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                 <tr data-symbol={liveTrade.symbol}>
                                     <td>{liveTrade.purchaseTime}</td>
                                     <td><span className='alpha-tool__table-icon'>∿</span>{liveTrade.symbol}</td>
-                                    <td>{selectedRow?.market || 'Synthetic'}</td>
-                                    <td><span className='alpha-tool__brain'>♧</span>{liveTradeContract}</td>
+                                    <td>{liveTradeLeg === 'recovery' ? 'Market 2' : 'Market 1'}</td>
+                                    <td><span className='alpha-tool__brain'>♧</span>{liveTradeDecision?.label || 'Selected market'}</td>
                                     <td><span className='alpha-tool__result alpha-tool__result--validated'>Running</span></td>
                                     <td className='alpha-tool__gain'>Live</td>
                                 </tr>
@@ -1170,7 +1244,16 @@ const AlphaScanWorkspace: React.FC = () => {
                 } else if (symbol) {
                     const prices = message.history.prices.map(Number).filter(Number.isFinite);
                     if (prices.length > 1) {
-                        const row = { ...symbol, prices, ...calculateMetrics(prices) };
+                        const pipSize = Number.isFinite(Number(message.pip_size))
+                            ? Number(message.pip_size)
+                            : symbol.pipSize;
+                        const row = {
+                            ...symbol,
+                            prices,
+                            pipSize: Number.isFinite(pipSize) ? pipSize as number : 0,
+                            lastDigits: quotesToLastDigits(prices, pipSize),
+                            ...calculateMetrics(prices),
+                        };
                         resultRowsRef.current = [...resultRowsRef.current, row];
                         setRows(resultRowsRef.current);
                     } else {

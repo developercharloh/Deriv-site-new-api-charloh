@@ -205,6 +205,11 @@ const getSnapshot = evaluate => evaluate(`(() => {
         model: document.querySelector('[data-testid="tool-model-status"]')?.innerText || '',
         modelVersion: root?.dataset.modelVersion || '',
         modelPick,
+        digitWindow: root?.dataset.digitWindow || '',
+        primaryCondition: root?.dataset.primaryCondition || '',
+        primaryMarket: root?.dataset.primaryMarket || '',
+        recoveryCondition: root?.dataset.recoveryCondition || '',
+        recoveryMarket: root?.dataset.recoveryMarket || '',
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
         errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
     };
@@ -233,6 +238,15 @@ const assertScan = (snapshot, sampleSize) => {
     }
     if (!['SKIP', 'PARTIAL', 'ACTIVE'].includes(snapshot.model)) {
         throw new Error(`Unexpected model status: ${snapshot.model}`);
+    }
+    if (!snapshot.primaryCondition || !snapshot.primaryMarket) {
+        throw new Error(`Primary Market 1 did not select exactly one qualifying market: ${snapshot.primaryCondition} / ${snapshot.primaryMarket}`);
+    }
+    if (!snapshot.recoveryCondition || !snapshot.recoveryMarket) {
+        throw new Error(`Recovery Market 2 did not select exactly one qualifying market: ${snapshot.recoveryCondition} / ${snapshot.recoveryMarket}`);
+    }
+    if (!['1', '2', '3', '4', '5', '6', '7', '8'].includes(snapshot.digitWindow)) {
+        throw new Error(`Digit window is outside the 1–8 range: ${snapshot.digitWindow}`);
     }
 };
 
@@ -280,6 +294,30 @@ const run = async () => {
                 90000,
             );
             assertScan(snapshot, sampleSize);
+            if (sampleSize === 600) {
+                for (const windowSize of [1, 2, 4, 8]) {
+                    await client.evaluate(`(() => {
+                        const select = document.querySelector('[data-testid="select-digit-window"]');
+                        if (!select) return false;
+                        select.value = '${windowSize}';
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                        return true;
+                    })()`);
+                    const windowSnapshot = await waitFor(
+                        async () => {
+                            const next = await getSnapshot(client.evaluate);
+                            return next.digitWindow === String(windowSize) ? next : false;
+                        },
+                        `digit window ${windowSize}`,
+                    );
+                    if ((windowSnapshot.primaryCondition && !windowSnapshot.primaryMarket) ||
+                        (windowSnapshot.recoveryCondition && !windowSnapshot.recoveryMarket) ||
+                        (!windowSnapshot.primaryCondition && windowSnapshot.primaryMarket) ||
+                        (!windowSnapshot.recoveryCondition && windowSnapshot.recoveryMarket)) {
+                        throw new Error(`Digit window ${windowSize} produced an incomplete market decision.`);
+                    }
+                }
+            }
             results.push({
                 sampleSize,
                 coverage: snapshot.coverage,
@@ -287,6 +325,8 @@ const run = async () => {
                 journalRows: 0,
                 model: snapshot.model,
                 modelVersion: MODEL_VERSION,
+                primaryMarket: snapshot.primaryMarket,
+                recoveryMarket: snapshot.recoveryMarket,
             });
         }
 
