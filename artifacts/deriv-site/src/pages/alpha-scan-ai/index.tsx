@@ -18,6 +18,7 @@ import {
     quotesToLastDigits,
     selectConfiguredMarket,
     selectStrongestMarket,
+    withPurchaseCondition,
 } from './alpha-market-strategy';
 import './alpha-scan-ai.scss';
 
@@ -705,6 +706,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [recoveryDigitWindow, setRecoveryDigitWindow] = useState(3);
     const [primaryCondition, setPrimaryCondition] = useState<MarketCondition>('all-even');
     const [recoveryCondition, setRecoveryCondition] = useState<MarketCondition>('all-odd');
+    const [primaryPurchaseCondition, setPrimaryPurchaseCondition] = useState<MarketCondition>('all-even');
+    const [recoveryPurchaseCondition, setRecoveryPurchaseCondition] = useState<MarketCondition>('all-odd');
     const [multiMarketScanning, setMultiMarketScanning] = useState(true);
     const [stake, setStake] = useState('10');
     const [liveMode, setLiveMode] = useState(true);
@@ -763,7 +766,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const calculatedPrimaryDecision = useMemo(() => {
         const source = multiMarketScanning ? bestModelRow : selectedRow;
         if (!source) return null;
-        return selectConfiguredMarket(
+        const decision = selectConfiguredMarket(
             {
                 symbol: source.symbol,
                 displayName: source.displayName,
@@ -773,14 +776,16 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             digitWindow,
             primaryCondition,
         );
-    }, [bestModelRow, digitWindow, multiMarketScanning, primaryCondition, selectedRow]);
+        return decision ? withPurchaseCondition(decision, primaryPurchaseCondition) : null;
+    }, [bestModelRow, digitWindow, multiMarketScanning, primaryCondition, primaryPurchaseCondition, selectedRow]);
 
     const calculatedRecoveryDecision = useMemo(() => {
         if (multiMarketScanning) {
-            return selectStrongestMarket(strategySources, recoveryDigitWindow, recoveryCondition);
+            const decision = selectStrongestMarket(strategySources, recoveryDigitWindow, recoveryCondition);
+            return decision ? withPurchaseCondition(decision, recoveryPurchaseCondition) : null;
         }
         if (!selectedRow) return null;
-        return selectConfiguredMarket(
+        const decision = selectConfiguredMarket(
             {
                 symbol: selectedRow.symbol,
                 displayName: selectedRow.displayName,
@@ -790,7 +795,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             recoveryDigitWindow,
             recoveryCondition,
         );
-    }, [multiMarketScanning, recoveryCondition, recoveryDigitWindow, selectedRow, strategySources]);
+        return decision ? withPurchaseCondition(decision, recoveryPurchaseCondition) : null;
+    }, [multiMarketScanning, recoveryCondition, recoveryDigitWindow, recoveryPurchaseCondition, selectedRow, strategySources]);
 
     useEffect(() => {
         setPrimaryDecision(calculatedPrimaryDecision);
@@ -811,10 +817,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             stake,
             primaryCondition,
             recoveryCondition,
+            primaryPurchaseCondition,
+            recoveryPurchaseCondition,
             multiMarketScanning,
             selectedSymbol,
         };
-    }, [client?.currency, digitWindow, liveAuthorized, liveMode, multiMarketScanning, primaryCondition, recoveryCondition, recoveryDigitWindow, rows, selectedSymbol, stake]);
+    }, [client?.currency, digitWindow, liveAuthorized, liveMode, multiMarketScanning, primaryCondition, primaryPurchaseCondition, recoveryCondition, recoveryDigitWindow, recoveryPurchaseCondition, rows, selectedSymbol, stake]);
 
     const executeDecision = useCallback((decision: RankedMarketDecision, leg: 'primary' | 'recovery') => {
         const runtime = runtimeRef.current;

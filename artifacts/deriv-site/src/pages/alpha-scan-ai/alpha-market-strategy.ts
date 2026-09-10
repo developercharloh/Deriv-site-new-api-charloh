@@ -235,6 +235,33 @@ export const selectConfiguredMarket = (
     return decision ? { ...decision, symbol: source.symbol, displayName: source.displayName } : null;
 };
 
+export const withPurchaseCondition = (
+    decision: RankedMarketDecision,
+    condition: MarketCondition,
+): RankedMarketDecision => {
+    const barrierMatch = condition.match(/^(?:over|under|matches)-(\d+)$/) || condition.match(/^all-(?:over|under)-(\d+)$/);
+    const latestDigit = decision.digits[decision.digits.length - 1];
+    let contractType: StrategyContractType = 'DIGITMATCH';
+    let barrier: string | null = barrierMatch ? barrierMatch[1] : null;
+
+    if (condition === 'all-even') contractType = 'DIGITEVEN';
+    else if (condition === 'all-odd') contractType = 'DIGITODD';
+    else if (condition === 'all-rise') contractType = 'CALL';
+    else if (condition === 'all-fall') contractType = 'PUT';
+    else if (condition === 'all-same') barrier = String(latestDigit);
+    else if (condition.startsWith('over-') || condition.startsWith('all-over-')) contractType = 'DIGITOVER';
+    else if (condition.startsWith('under-') || condition.startsWith('all-under-')) contractType = 'DIGITUNDER';
+    else if (condition.startsWith('matches-')) contractType = 'DIGITMATCH';
+
+    return {
+        ...decision,
+        condition,
+        label: marketConditionLabel(condition),
+        contractType,
+        barrier,
+    };
+};
+
 /**
  * Select exactly one market. More specific patterns outrank broad patterns:
  * same-digit > monotonic movement > parity > the tightest valid Over/Under
