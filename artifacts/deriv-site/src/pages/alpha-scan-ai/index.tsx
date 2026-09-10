@@ -885,7 +885,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     prices: row.prices,
                     lastDigits: row.lastDigits,
                 }));
-                const recovery = runtimeRef.current.multiMarketScanning
+                const recoverySignal = runtimeRef.current.multiMarketScanning
                     ? selectStrongestMarket(runtimeRows, runtimeRef.current.recoveryDigitWindow, runtimeRef.current.recoveryCondition)
                     : (() => {
                         const row = runtimeRef.current.rows.find(item => item.symbol === runtimeRef.current.selectedSymbol) || runtimeRef.current.rows[0];
@@ -898,6 +898,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                             }, runtimeRef.current.recoveryDigitWindow, runtimeRef.current.recoveryCondition)
                             : null;
                     })();
+                const recovery = recoverySignal
+                    ? withPurchaseCondition(recoverySignal, runtimeRef.current.recoveryPurchaseCondition)
+                    : null;
                 setRecoveryDecision(recovery);
                 if (recovery) {
                     setExecutionLeg('recovery-pending');
@@ -983,8 +986,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-recovery-digit-window={recoveryDigitWindow}
             data-primary-condition={primaryCondition}
             data-primary-market={marketConditionLabel(primaryCondition)}
+            data-primary-purchase-condition={primaryPurchaseCondition}
+            data-primary-purchase={marketConditionLabel(primaryPurchaseCondition)}
             data-recovery-condition={recoveryCondition}
             data-recovery-market={marketConditionLabel(recoveryCondition)}
+            data-recovery-purchase-condition={recoveryPurchaseCondition}
+            data-recovery-purchase={marketConditionLabel(recoveryPurchaseCondition)}
             data-execution-leg={executionLeg}
         >
             <header className='alpha-tool__hero'>
@@ -1037,15 +1044,17 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                             </select>
                             <span>digits are</span>
                             <MarketConditionSelect value={primaryCondition} onChange={setPrimaryCondition} label='Market 1 condition' testId='select-primary-market' />
+                            <span>purchase</span>
+                            <MarketConditionSelect value={primaryPurchaseCondition} onChange={setPrimaryPurchaseCondition} label='Market 1 purchase option' testId='select-primary-purchase' />
                         </div>
                         <button type='button' className='alpha-tool__start alpha-tool__selector-purchase' onClick={handleLiveExecute} disabled={!liveCanExecute} data-testid='button-live-execute'>
-                            <span>Purchase {marketConditionLabel(primaryCondition)}</span><strong>▶</strong>
+                            <span>Buy selected market</span><strong>▶</strong>
                         </button>
                     </div>
                 </div>
                 <div className='alpha-tool__selector alpha-tool__selector--blue alpha-tool__selector--rule alpha-tool__selector--recovery-rule' data-testid='market-2-rule'>
                     <span className='alpha-tool__selector-icon'>◌</span>
-                    <span className='alpha-tool__selector-copy'><b>Market 2</b><small>Recovery purchase after loss</small></span>
+                    <span className='alpha-tool__selector-copy'><b>Recovery Market</b><small>After Market 1 loss</small></span>
                     <div className='alpha-tool__selector-rule'>
                         <div className='alpha-tool__selector-rule-line'>
                             <span>If the last</span>
@@ -1059,10 +1068,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                 {Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
                             </select>
                             <span>digits are</span>
-                            <MarketConditionSelect value={recoveryCondition} onChange={setRecoveryCondition} label='Market 2 condition' testId='select-recovery-market' />
+                            <MarketConditionSelect value={recoveryCondition} onChange={setRecoveryCondition} label='Recovery market condition' testId='select-recovery-market' />
+                            <span>purchase</span>
+                            <MarketConditionSelect value={recoveryPurchaseCondition} onChange={setRecoveryPurchaseCondition} label='Recovery market purchase option' testId='select-recovery-purchase' />
                         </div>
                         <button type='button' className='alpha-tool__start alpha-tool__selector-purchase' onClick={handleRecoveryExecute} disabled={!liveCanExecute || !recoveryDecision} data-testid='button-recovery-execute'>
-                            <span>Purchase {marketConditionLabel(recoveryCondition)}</span><strong>▶</strong>
+                            <span>Buy selected recovery market</span><strong>▶</strong>
                         </button>
                     </div>
                 </div>

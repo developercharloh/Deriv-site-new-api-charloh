@@ -216,6 +216,8 @@ const getSnapshot = evaluate => evaluate(`(() => {
             Boolean(document.querySelector('[data-testid="toggle-multi-market"]')),
         purchaseControls: Boolean(document.querySelector('[data-testid="button-live-execute"]')) &&
             Boolean(document.querySelector('[data-testid="button-recovery-execute"]')),
+        purchaseSelections: Boolean(document.querySelector('[data-testid="select-primary-purchase"]')) &&
+            Boolean(document.querySelector('[data-testid="select-recovery-purchase"]')),
         legacyExecutionRules: [...document.querySelectorAll('body *')].some(element => element.textContent?.trim() === 'Execution Rules'),
         primaryOptions: [...document.querySelectorAll('[data-testid="select-primary-market"] option')].map(option => option.textContent?.trim() || ''),
         multiMarketScanning: document.querySelector('[data-testid="toggle-multi-market"]')?.getAttribute('aria-pressed') || '',
@@ -259,6 +261,9 @@ const assertScan = (snapshot, sampleSize) => {
     }
     if (!snapshot.purchaseControls) {
         throw new Error('Market 1 and Market 2 purchase controls are missing from their rule cards.');
+    }
+    if (!snapshot.purchaseSelections) {
+        throw new Error('Market 1 and Recovery Market purchase dropdowns are missing.');
     }
     if (snapshot.legacyExecutionRules) {
         throw new Error('The separate Execution Rules block should be removed.');
