@@ -7,6 +7,8 @@ import { URL } from 'node:url';
 const TARGET_URL = process.env.ALPHA_SCAN_URL || 'https://www.mrcharlohfx.site/#alpha_scan_ai';
 const SAMPLE_WINDOWS = [600, 1200];
 const MODEL_VERSION = 'feature-logistic-causal-denoise-v1';
+const RUN_LIVE = process.env.ALPHA_SCAN_LIVE === '1';
+let phase = 'fixture';
 const findOpenPort = async () => {
     const server = await new Promise((resolve, reject) => {
         const candidate = createServer();
@@ -200,6 +202,7 @@ const getSnapshot = evaluate => evaluate(`(() => {
     const modelPick = document.querySelector('[data-testid="tool-model-pick"]')?.getAttribute('data-symbol') || '';
     return {
         status: root?.dataset.status || '',
+        scanSource: root?.dataset.scanSource || '',
         coverage: (root?.dataset.modelRowCount || 0) + ' / ' + (root?.dataset.discoveredCount || 0),
         sample: root?.dataset.sampleSize || '',
         model: document.querySelector('[data-testid="tool-model-status"]')?.innerText || '',
@@ -225,12 +228,16 @@ const getSnapshot = evaluate => evaluate(`(() => {
     };
 })()`);
 
-const assertScan = (snapshot, sampleSize) => {
+const assertScan = (snapshot, sampleSize, expectedSource = 'fixture') => {
+    const acceptedSources = Array.isArray(expectedSource) ? expectedSource : [expectedSource];
     if (!['ready', 'partial-data'].includes(snapshot.status)) {
         throw new Error(`Expected a completed scan for ${sampleSize}, received: ${snapshot.status}`);
     }
     if (snapshot.loading || snapshot.errorState) {
         throw new Error(`Scan ended in an invalid state for ${sampleSize}.`);
+    }
+    if (!acceptedSources.includes(snapshot.scanSource)) {
+        throw new Error(`Expected ${acceptedSources.join(' or ')} data for ${sampleSize}, received ${snapshot.scanSource || 'unknown'}.`);
     }
     if (snapshot.sample.replace(/,/g, '') !== String(sampleSize)) {
         throw new Error(`Expected ${sampleSize} observations, received ${snapshot.sample}.`);
@@ -304,7 +311,20 @@ const run = async () => {
         await client.call('Page.enable');
         await client.call('Network.enable');
         await client.call('Runtime.enable');
-        await client.call('Page.navigate', { url: TARGET_URL });
+        const fixtureUrl = sampleSize => {
+            const url = new URL(TARGET_URL);
+            url.searchParams.set('alpha_scan_sample', String(sampleSize));
+            url.searchParams.set('alpha_scan_fixture', '1');
+            return url.toString();
+        };
+        const liveUrl = sampleSize => {
+            const url = new URL(TARGET_URL);
+            url.searchParams.set('alpha_scan_sample', String(sampleSize));
+            url.searchParams.delete('alpha_scan_fixture');
+            return url.toString();
+        };
+
+        await client.call('Page.navigate', { url: fixtureUrl(SAMPLE_WINDOWS[0]) });
         await client.evaluate(`document.querySelector('.slx-popup__dismiss')?.click()`);
         await waitFor(
             () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
@@ -315,6 +335,7 @@ const run = async () => {
         for (const sampleSize of SAMPLE_WINDOWS) {
             const sampleUrl = new URL(TARGET_URL);
             sampleUrl.searchParams.set('alpha_scan_sample', String(sampleSize));
+            sampleUrl.searchParams.set('alpha_scan_fixture', '1');
             await client.call('Page.navigate', { url: sampleUrl.toString() });
             await waitFor(
                 () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
@@ -325,14 +346,14 @@ const run = async () => {
                     const next = await getSnapshot(client.evaluate);
                     return ['ready', 'partial-data'].includes(next.status) ? next : false;
                 },
-                `live ${sampleSize}-observation scan`,
+                `fixture ${sampleSize}-observation scan`,
                 90000,
             );
-            assertScan(snapshot, sampleSize);
+            assertScan(snapshot, sampleSize, 'fixture');
             if (sampleSize === 600) {
                 for (const windowSize of [1, 2, 4, 8]) {
                     await client.evaluate(`(() => {
-                        const select = document.querySelector('[data-testid="select-digit-window"]');
+                         const select = document.querySelector('[data-testid="select-primary-digit-window"]');
                         if (!select) return false;
                         select.value = '${windowSize}';
                         select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -365,7 +386,42 @@ const run = async () => {
             });
         }
 
-        await client.evaluate(`(() => {
+        const fixtureResults = results.splice(0);
+        let liveResults = [];
+        let blockedFeed;
+
+        if (RUN_LIVE) {
+            phase = 'external-feed';
+            for (const sampleSize of SAMPLE_WINDOWS) {
+                await client.call('Page.navigate', { url: liveUrl(sampleSize) });
+                await waitFor(
+                    () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+                    `${sampleSize}-observation Alpha Tool`,
+                );
+                const snapshot = await waitFor(
+                    async () => {
+                        const next = await getSnapshot(client.evaluate);
+                        return ['ready', 'partial-data', 'empty', 'timeout', 'connection-error'].includes(next.status)
+                            ? next
+                            : false;
+                    },
+                    `external-feed ${sampleSize}-observation scan`,
+                    90000,
+                );
+                assertScan(snapshot, sampleSize, ['public-metadata', 'verified-catalog']);
+                liveResults.push({
+                    sampleSize,
+                    coverage: snapshot.coverage,
+                    modelPick: Boolean(snapshot.modelPick),
+                    journalRows: 0,
+                    model: snapshot.model,
+                    modelVersion: MODEL_VERSION,
+                    primaryMarket: snapshot.primaryMarket,
+                    recoveryMarket: snapshot.recoveryMarket,
+                });
+            }
+
+            await client.evaluate(`(() => {
             class FailingWebSocket {
                 static OPEN = 1;
                 readyState = 0;
@@ -383,8 +439,8 @@ const run = async () => {
             }
             window.WebSocket = FailingWebSocket;
         })()`);
-        await client.evaluate('document.querySelector("[data-testid=\\"button-run-scan\\"]")?.click()');
-        const failedSnapshot = await waitFor(
+            await client.evaluate('document.querySelector("[data-testid=\\"button-run-scan\\"]")?.click()');
+            blockedFeed = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
                 return ['empty', 'timeout', 'connection-error', 'partial-data'].includes(next.status) && !next.modelPick ? next : false;
@@ -392,17 +448,29 @@ const run = async () => {
             'blocked-feed error state',
             45000,
         );
-        if (Number(failedSnapshot.coverage.split('/')[0].trim()) !== 0 || failedSnapshot.modelPick) {
-            throw new Error('A failed scan retained previous rows or coverage.');
+            if (Number(blockedFeed.coverage.split('/')[0].trim()) !== 0 || blockedFeed.modelPick) {
+                throw new Error('A failed external-feed scan retained previous rows or coverage.');
+            }
         }
+
         console.log(JSON.stringify({
             ok: true,
             target: TARGET_URL,
             surface: 'model-powered-tool',
-            scans: results,
-            blockedFeed: {
-                status: failedSnapshot.status,
-                rows: 0,
+            fixture: {
+                status: 'passed',
+                scans: fixtureResults,
+            },
+            externalFeed: RUN_LIVE ? {
+                status: 'passed',
+                scans: liveResults,
+                blockedFeed: {
+                    status: blockedFeed.status,
+                    rows: 0,
+                },
+            } : {
+                status: 'skipped',
+                reason: 'Set ALPHA_SCAN_LIVE=1 to run public-feed integration coverage.',
             },
         }, null, 2));
     } finally {
@@ -412,6 +480,6 @@ const run = async () => {
 };
 
 run().catch(error => {
-    console.error(`[alpha-scan-regression] ${error.message}`);
+    console.error(`[alpha-scan-regression][${phase}] ${error.message}`);
     process.exitCode = 1;
 });

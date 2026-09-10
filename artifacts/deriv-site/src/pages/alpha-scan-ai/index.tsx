@@ -56,7 +56,7 @@ type ScanStatus =
     | 'timeout'
     | 'connection-error'
     | 'partial-data';
-type DiscoverySource = 'public-metadata' | 'verified-catalog';
+type DiscoverySource = 'public-metadata' | 'verified-catalog' | 'fixture';
 
 type SyntheticSymbol = {
     symbol: string;
@@ -179,6 +179,60 @@ const getVerifiedCatalogSymbols = (): SyntheticSymbol[] =>
         market: 'Derived',
         submarket: index.tickEvery === 1 ? 'Continuous Indices' : 'Volatility Indices',
     }));
+
+const buildFixtureRows = (sampleSize: SampleSize): ScanRow[] => {
+    const fixtureSymbols = [
+        { symbol: 'R_10', displayName: 'Volatility 10 Index', submarket: 'Continuous Indices', digitPattern: [0, 2, 4, 6, 8] },
+        { symbol: 'R_25', displayName: 'Volatility 25 Index', submarket: 'Continuous Indices', digitPattern: [1, 3, 5, 7, 9] },
+        { symbol: 'R_50', displayName: 'Volatility 50 Index', submarket: 'Continuous Indices', digitPattern: [2, 4, 6, 8, 0] },
+        { symbol: 'R_75', displayName: 'Volatility 75 Index', submarket: 'Continuous Indices', digitPattern: [9, 7, 5, 3, 1] },
+    ];
+
+    return fixtureSymbols.map((fixture, symbolIndex) => {
+        const pipSize = 2;
+        const prices = Array.from({ length: sampleSize }, (_, index) => {
+            const digit = fixture.digitPattern[(index + symbolIndex) % fixture.digitPattern.length];
+            const wholePart = 100 + symbolIndex * 25 + Math.floor(index / 100);
+            return Number(`${wholePart}.${String(digit).padStart(2, '0')}`);
+        });
+        const lastDigits = quotesToLastDigits(prices, pipSize);
+        const shortReturn = (prices[prices.length - 1] - prices[prices.length - SHORT_RETURN_WINDOW - 1]) /
+            prices[prices.length - SHORT_RETURN_WINDOW - 1] * 100;
+
+        return {
+            symbol: fixture.symbol,
+            displayName: fixture.displayName,
+            market: 'Derived',
+            submarket: fixture.submarket,
+            pipSize,
+            prices,
+            lastDigits,
+            sampleSize,
+            latestPrice: prices[prices.length - 1],
+            shortReturn,
+            realizedVolatility: 0.12 + symbolIndex * 0.04,
+            noiseFraction: 0.08 + symbolIndex * 0.01,
+            directionalImbalance: symbolIndex % 2 === 0 ? 0.12 : -0.12,
+            reversalRate: 0.34 + symbolIndex * 0.03,
+            regime: symbolIndex % 2 === 0 ? 'Rising drift' : 'Mixed movement',
+            baselineProbability: 0.48 + symbolIndex * 0.01,
+            walkForwardAccuracy: 0.5,
+            brierScore: 0.25,
+            validationSamples: sampleSize - FEATURE_WARMUP,
+            climatologyBrierScore: 0.249,
+            benchmarkAccuracy: 0.51,
+            benchmarkBrierScore: 0.249,
+            calibrationError: 0.04,
+            validationWindows: [
+                { samples: Math.floor((sampleSize - FEATURE_WARMUP) / 3), accuracy: 0.5, brierScore: 0.25 },
+                { samples: Math.floor((sampleSize - FEATURE_WARMUP) / 3), accuracy: 0.5, brierScore: 0.25 },
+                { samples: Math.ceil((sampleSize - FEATURE_WARMUP) / 3), accuracy: 0.5, brierScore: 0.25 },
+            ],
+            validationGate: 'failed',
+            gateReasons: ['Deterministic fixture data is for layout checks only; live validation was not performed.'],
+        };
+    });
+};
 
 const mean = (values: number[]): number =>
     values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
@@ -652,6 +706,7 @@ type AlphaToolSurfaceProps = {
     rows: ScanRow[];
     sampleSize: SampleSize;
     status: ScanStatus;
+    scanSource: DiscoverySource;
     isBusy: boolean;
     lastUpdated: Date | null;
     modelStatus: string;
@@ -713,6 +768,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     rows,
     sampleSize,
     status,
+    scanSource,
     isBusy,
     lastUpdated,
     modelStatus,
@@ -964,6 +1020,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             className='alpha-tool'
             data-testid='alpha-tool'
             data-status={status}
+            data-scan-source={scanSource}
             data-sample-size={sampleSize}
             data-discovered-count={discoveredCount}
             data-model-row-count={rows.length}
@@ -1004,7 +1061,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <div className='alpha-tool__headline-icon'>✦</div>
                     <span>Volatility engine</span>
                     <strong data-testid='tool-model-status'>{modelLabel}</strong>
-                    <small>{rows.length ? `${rows.length} symbols · checked ${capturedAt}` : 'Scan required before execution'}</small>
+                    <small>{scanSource === 'fixture'
+                        ? 'Deterministic fixture · layout checks only'
+                        : rows.length
+                            ? `${rows.length} symbols · checked ${capturedAt}`
+                            : 'Scan required before execution'}</small>
                 </div>
             </header>
 
@@ -1123,6 +1184,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 };
 
 const AlphaScanWorkspace: React.FC = () => {
+    const fixtureMode = typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('alpha_scan_fixture') === '1';
     const [sampleSize, setSampleSize] = useState<SampleSize>(() => {
         if (typeof window === 'undefined') return 600;
         const requested = Number(new URLSearchParams(window.location.search).get('alpha_scan_sample'));
@@ -1183,8 +1246,21 @@ const AlphaScanWorkspace: React.FC = () => {
         setErrorMessage('');
         setHasMoreSymbols(false);
         setIsLoadingMore(false);
-        setDiscoverySource('public-metadata');
+        setDiscoverySource(fixtureMode ? 'fixture' : 'public-metadata');
         setStatus('discovering');
+
+        if (fixtureMode) {
+            const fixtureRows = buildFixtureRows(sampleSize);
+            resultRowsRef.current = fixtureRows;
+            setRows(fixtureRows);
+            setDiscoveredCount(fixtureRows.length);
+            setCompletedCount(fixtureRows.length);
+            setFailedCount(0);
+            setLastUpdated(new Date());
+            setErrorMessage('Deterministic fixture data — live market feed not requested.');
+            setStatus('ready');
+            return;
+        }
 
         const socket = new WebSocket(DERIV_WS_URL);
         socketRef.current = socket;
@@ -1381,7 +1457,7 @@ const AlphaScanWorkspace: React.FC = () => {
         };
 
         armScanTimeout();
-    }, [closeSocket, finishWithCurrentData, sampleSize]);
+    }, [closeSocket, finishWithCurrentData, fixtureMode, sampleSize]);
 
     useEffect(() => () => closeSocket(), [closeSocket]);
 
@@ -1429,6 +1505,7 @@ const AlphaScanWorkspace: React.FC = () => {
             rows={rows}
             sampleSize={sampleSize}
             status={status}
+            scanSource={discoverySource}
             isBusy={isBusy}
             lastUpdated={lastUpdated}
             modelStatus={modelStatus}
