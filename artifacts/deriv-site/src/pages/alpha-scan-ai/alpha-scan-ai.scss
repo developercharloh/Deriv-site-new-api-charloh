@@ -1236,15 +1236,6 @@
         background: #201354;
     }
 
-    &__selector-purchase {
-        width: 100%;
-        min-height: 1.75rem;
-        padding-inline: 0.5rem;
-        border-radius: 0.42rem;
-        font-size: 0.52rem;
-        box-shadow: 0 0 0.7rem rgba(67, 91, 255, 0.36);
-    }
-
     &__panel, &__journal {
         margin-top: 0.65rem;
         border: 1px solid var(--tool-blue);
@@ -1602,7 +1593,6 @@
         &__selector-rule { gap: 0.28rem; }
         &__selector-rule-line { gap: 0.18rem; font-size: 0.4rem; }
         &__selector-rule .alpha-tool__rule-select { min-height: 1.4rem; padding: 0.2rem 0.22rem; font-size: 0.39rem; &--digits { width: 2rem; } &--market { min-width: 6.6rem; flex: 1 1 6.6rem; } }
-        &__selector-purchase { min-height: 1.5rem; padding-inline: 0.3rem; font-size: 0.42rem; }
         &__panel, &__journal { margin-top: 0.45rem; border-radius: 0.55rem; }
         &__panel-heading, &__section-heading { min-height: 2.1rem; padding: 0.42rem 0.5rem 0.35rem; font-size: 0.64rem; }
         &__panel-icon, &__section-icon { width: 1.35rem; height: 1.35rem; font-size: 0.85rem; }

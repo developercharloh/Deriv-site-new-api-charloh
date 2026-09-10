@@ -959,47 +959,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const capturedAt = lastUpdated
         ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '—';
-    const liveCanExecute = Boolean(
-        liveMode &&
-        liveAuthorized &&
-        primaryDecision &&
-        modelPick?.validationGate === 'validated' &&
-        !liveTrade &&
-        !isBusy &&
-        executionLeg === 'idle' &&
-        liveStatus !== 'subscribing',
-    );
-
-    const handleLiveExecute = () => {
-        if (!liveMode || !primaryDecision) return;
-        if (!liveAuthorized) {
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
-            return;
-        }
-        if (!modelPick || modelPick.validationGate !== 'validated') {
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'The model pick is gated until validation evidence passes.' });
-            return;
-        }
-        if (liveTrade || executionLeg !== 'idle') return;
-        recoveryUsedRef.current = false;
-        executeDecision(primaryDecision, 'primary');
-    };
-
-    const handleRecoveryExecute = () => {
-        if (!liveMode || !recoveryDecision) return;
-        if (!liveAuthorized) {
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
-            return;
-        }
-        if (!modelPick || modelPick.validationGate !== 'validated') {
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'The model pick is gated until validation evidence passes.' });
-            return;
-        }
-        if (liveTrade || executionLeg !== 'idle') return;
-        recoveryUsedRef.current = true;
-        executeDecision(recoveryDecision, 'recovery');
-    };
-
     return (
         <main
             className='alpha-tool'
@@ -1075,9 +1034,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                             <span>purchase</span>
                             <PurchaseMarketSelect value={primaryPurchaseMarket} onChange={setPrimaryPurchaseMarket} label='Market 1 purchase option' testId='select-primary-purchase' />
                         </div>
-                        <button type='button' className='alpha-tool__start alpha-tool__selector-purchase' onClick={handleLiveExecute} disabled={!liveCanExecute} data-testid='button-live-execute'>
-                            <span>Buy selected market</span><strong>▶</strong>
-                        </button>
                     </div>
                 </div>
                 <div className='alpha-tool__selector alpha-tool__selector--blue alpha-tool__selector--rule alpha-tool__selector--recovery-rule' data-testid='market-2-rule'>
@@ -1100,9 +1056,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                             <span>purchase</span>
                             <PurchaseMarketSelect value={recoveryPurchaseMarket} onChange={setRecoveryPurchaseMarket} label='Recovery market purchase option' testId='select-recovery-purchase' />
                         </div>
-                        <button type='button' className='alpha-tool__start alpha-tool__selector-purchase' onClick={handleRecoveryExecute} disabled={!liveCanExecute || !recoveryDecision} data-testid='button-recovery-execute'>
-                            <span>Buy selected recovery market</span><strong>▶</strong>
-                        </button>
                     </div>
                 </div>
             </section>

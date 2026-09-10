@@ -3,7 +3,7 @@ name: Alpha Scan visual surface
 description: The Alpha Scan tab opens as a visual-only premium canvas while research/model output stays out of the normal user-facing route.
 ---
 
-The Alpha Scan opening experience is the neon strategy execution surface: Volatility is followed by stacked Market 1 and Recovery Market rule rows, each reading “If the last X digits are [condition], purchase [market option]” with a buy action below, followed by settings, a journal, and background model status. It omits the screenshot's bottom Home/Journal/Settings/Help navigation and can place validated live contracts through the existing Deriv engine.
+The Alpha Scan opening experience is the neon strategy execution surface: Volatility is followed by stacked Market 1 and Recovery Market rule rows, each reading “If the last X digits are [condition], purchase [market option]” with no separate purchase buttons, followed by settings, a journal, and background model status. It omits the screenshot's bottom Home/Journal/Settings/Help navigation and retains the existing Deriv engine integration.
 
 **Why:** The user clarified that execution must come from explicit user-selected digit rules; the model only evaluates suitable volatility indices and must not choose the market condition.
 
