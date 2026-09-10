@@ -220,6 +220,7 @@ const getSnapshot = evaluate => evaluate(`(() => {
             Boolean(document.querySelector('[data-testid="select-recovery-purchase"]')),
         legacyExecutionRules: [...document.querySelectorAll('body *')].some(element => element.textContent?.trim() === 'Execution Rules'),
         primaryOptions: [...document.querySelectorAll('[data-testid="select-primary-market"] option')].map(option => option.textContent?.trim() || ''),
+        purchaseOptions: [...document.querySelectorAll('[data-testid="select-primary-purchase"] option')].map(option => option.textContent?.trim() || ''),
         multiMarketScanning: document.querySelector('[data-testid="toggle-multi-market"]')?.getAttribute('aria-pressed') || '',
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
         errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
@@ -271,6 +272,11 @@ const assertScan = (snapshot, sampleSize) => {
     for (const option of ['All Even', 'All Odd', 'All Same', 'Over 1', 'Over 8', 'Under 9', 'Under 1', 'Rise', 'Fall', 'Matches 1', 'Matches 9']) {
         if (!snapshot.primaryOptions.includes(option)) {
             throw new Error(`Market selector is missing ${option}.`);
+        }
+    }
+    for (const option of ['Over prediction 0', 'Over prediction 8', 'Under prediction 9', 'Under prediction 1', 'Even', 'Odd', 'Rise', 'Fall', 'Matches prediction 0', 'Matches prediction 9', 'Differs prediction 0', 'Differs prediction 9']) {
+        if (!snapshot.purchaseOptions.includes(option)) {
+            throw new Error(`Purchase selector is missing ${option}.`);
         }
     }
     if (!['1', '2', '3', '4', '5', '6', '7', '8'].includes(snapshot.digitWindow)) {
