@@ -36,3 +36,11 @@ npx vercel@latest deploy --prebuilt --prod --yes --token=$VERCEL_TOKEN
 **Why:** Vercel's monorepo detection overrides any `installCommand`/`buildCommand` settings when `pnpm-workspace.yaml` is present. The only reliable approach is to bypass Vercel's build system entirely using prebuilt output.
 
 **How to apply:** Any time code needs to be deployed to Vercel, run `bash scripts/push-to-github.sh` from the project root. Do NOT re-enable Vercel git integration.
+
+## Direct API fallback
+
+If the Vercel CLI cannot be installed because its transitive dependencies are blocked, the REST API can deploy the same prebuilt output. Upload each file to `/v2/files` by SHA, then create the deployment through `/v13/deployments?prebuilt=1`. The file references must retain project-root paths such as `.vercel/output/config.json` and `.vercel/output/static/...`; flattening the output directory makes Vercel run the repository build instead of serving the prebuilt output.
+
+**Why:** The CLI may be unavailable in a restricted package environment, while the Vercel API remains reachable. Vercel’s prebuilt detector depends on both the manifest and its `.vercel/output/` path.
+
+**How to apply:** Use the existing project and team identifiers from `.vercel/project.json`, never expose the deployment token, include the project id in the deployment body, and wait for `READY` before checking the custom domain.
