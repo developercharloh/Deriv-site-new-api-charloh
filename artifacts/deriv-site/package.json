@@ -11,6 +11,7 @@
     "build": "rsbuild build",
     "test": "jest",
     "test:alpha-scan": "node scripts/alpha-scan-regression.mjs",
+    "test:alpha-scan:live": "ALPHA_SCAN_LIVE=1 node scripts/alpha-scan-regression.mjs",
     "type-check": "tsc --noEmit",
     "generate:brand-css": "node scripts/generate-brand-css.js",
     "prebuild": "rimraf node_modules/.cache && node scripts/generate-brand-css.js"

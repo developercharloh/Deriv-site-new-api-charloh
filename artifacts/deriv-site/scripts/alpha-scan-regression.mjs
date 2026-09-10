@@ -480,6 +480,7 @@ const run = async () => {
 };
 
 run().catch(error => {
-    console.error(`[alpha-scan-regression][${phase}] ${error.message}`);
+    const failureLabel = phase === 'external-feed' ? 'Public-feed integration failure' : 'Fixture layout check failure';
+    console.error(`[alpha-scan-regression][${phase}] ${failureLabel}: ${error.message}`);
     process.exitCode = 1;
 });
