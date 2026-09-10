@@ -1584,17 +1584,18 @@
         &__headline-card { padding: 0.52rem 0.35rem 0.45rem 2rem; border-radius: 0.52rem; span, small { font-size: 0.42rem; } strong { font-size: 0.76rem; } small { font-size: 0.37rem; } }
         &__headline-icon { top: 0.55rem; left: 0.4rem; width: 1.2rem; height: 1.2rem; font-size: 0.7rem; }
         &__selector-grid { gap: 0.3rem; }
-        &__selector { grid-template-columns: 1.3rem minmax(0, 1fr); gap: 0.2rem; min-height: 0; padding: 0.24rem 0.3rem; border-radius: 0.5rem; }
+        &__selector { grid-template-columns: 1.3rem minmax(0, 1fr); gap: 0.16rem; min-height: 0; padding: 0.18rem 0.26rem; border-radius: 0.5rem; }
+        &__selector--green { height: 2.95rem; }
         &__selector--toggle { grid-template-columns: 1.3rem minmax(0, 1fr) auto; }
-        &__selector--rule { min-height: 0; }
+        &__selector--rule { height: 3.75rem; min-height: 0; overflow: hidden; }
         &__selector-icon { width: 1.15rem; height: 1.15rem; border-radius: 0.3rem; font-size: 0.9rem; }
         &__selector-copy { b { font-size: 0.55rem; } small { margin-top: 0.15rem; font-size: 0.4rem; } }
         &__selector select, &__selector-value { padding: 0.3rem 0.28rem; border-radius: 0.32rem; font-size: 0.44rem; }
         &__selector-rule { gap: 0.18rem; }
-        &__selector-rule-line { gap: 0.14rem; font-size: 0.38rem; }
-        &__selector-rule .alpha-tool__rule-select { min-height: 1.15rem; padding: 0.14rem 0.18rem; font-size: 0.36rem; &--digits { width: 1.75rem; } &--market { min-width: 5.8rem; flex: 1 1 5.8rem; } }
+        &__selector-rule-line { flex-wrap: nowrap; gap: 0.12rem; font-size: 0.36rem; white-space: nowrap; }
+        &__selector-rule .alpha-tool__rule-select { min-height: 1.05rem; padding: 0.1rem 0.16rem; font-size: 0.34rem; &--digits { width: 1.65rem; } &--market { min-width: 5.45rem; flex: 1 1 5.45rem; } }
         &__panel, &__journal { margin-top: 0.3rem; border-radius: 0.5rem; }
-        &__panel-heading, &__section-heading { min-height: 1.55rem; padding: 0.22rem 0.45rem 0.18rem; font-size: 0.6rem; }
+        &__panel-heading, &__section-heading { min-height: 1.35rem; padding: 0.16rem 0.4rem 0.12rem; font-size: 0.56rem; }
         &__panel-icon, &__section-icon { width: 1.15rem; height: 1.15rem; font-size: 0.72rem; }
         &__ai-badge { padding: 0.2rem 0.35rem; font-size: 0.43rem; }
         &__strategy-select { margin-inline: 0.45rem; padding: 0.42rem 0.48rem; font-size: 0.54rem; }
@@ -1605,16 +1606,16 @@
         &__rule-line { gap: 0.25rem; font-size: 0.48rem; }
         &__rule-select { min-height: 1.55rem; padding: 0.25rem 0.28rem; font-size: 0.43rem; &--digits { width: 2.25rem; } &--market { min-width: 7.2rem; max-width: 100%; } }
         &__check-list { gap: 0.18rem; padding: 0.38rem 0.55rem 0.5rem 1.45rem; font-size: 0.44rem; li::before { left: -0.85rem; font-size: 0.68rem; } }
-        &__setting-row { grid-template-columns: 1.05rem minmax(4rem, 1fr) minmax(5rem, 0.8fr); min-height: 1.28rem; margin-inline: 0.4rem; gap: 0.28rem; font-size: 0.48rem; input, select { padding: 0.14rem 0.3rem; font-size: 0.46rem; } }
+        &__setting-row { grid-template-columns: 0.95rem minmax(4rem, 1fr) minmax(5rem, 0.8fr); min-height: 1.12rem; margin-inline: 0.36rem; gap: 0.22rem; font-size: 0.44rem; input, select { padding: 0.1rem 0.26rem; font-size: 0.42rem; } }
         &__setting-row--toggle { grid-template-columns: 1.2rem minmax(4rem, 1fr) auto; }
-        &__setting-icon { width: 0.92rem; height: 0.92rem; font-size: 0.62rem; }
-        &__settings-note { padding: 0.18rem 0.4rem 0.25rem; font-size: 0.38rem; }
-        &__auto-trade { grid-template-columns: 1.1rem minmax(4rem, 1fr) auto minmax(7rem, 0.9fr); gap: 0.22rem; margin-top: 0.28rem; padding: 0.18rem 0.32rem; border-radius: 0.48rem; b { font-size: 0.5rem; } small { font-size: 0.36rem; } }
-        &__auto-icon { width: 0.98rem; height: 0.98rem; font-size: 0.72rem; }
-        &__switch { width: 1.75rem; height: 0.85rem; span { width: 0.56rem; height: 0.56rem; } &--on span { transform: translateX(0.78rem); } }
+        &__setting-icon { width: 0.82rem; height: 0.82rem; font-size: 0.56rem; }
+        &__settings-note { padding: 0.12rem 0.36rem 0.18rem; font-size: 0.34rem; }
+        &__auto-trade { grid-template-columns: 1rem minmax(4rem, 1fr) auto minmax(6.8rem, 0.9fr); gap: 0.18rem; height: 2.25rem; margin-top: 0.22rem; padding: 0.12rem 0.28rem; border-radius: 0.44rem; b { font-size: 0.46rem; } small { font-size: 0.33rem; } }
+        &__auto-icon { width: 0.84rem; height: 0.84rem; font-size: 0.64rem; }
+        &__switch { width: 1.6rem; height: 0.76rem; span { width: 0.5rem; height: 0.5rem; } &--on span { transform: translateX(0.7rem); } }
         &__start { min-height: 1.8rem; padding-inline: 0.45rem; font-size: 0.5rem; strong { font-size: 0.7rem; } }
         &__action-stack { gap: 0.2rem; }
-        &__refresh { min-height: 0.98rem; padding-inline: 0.3rem; font-size: 0.38rem; }
+        &__refresh { min-height: 0.84rem; padding-inline: 0.26rem; font-size: 0.34rem; }
         &__journal-table { min-width: 31rem; font-size: 0.43rem; }
         &__journal-table th { padding: 0.3rem 0.35rem; font-size: 0.39rem; }
         &__journal-table td { padding: 0.3rem 0.35rem; }
