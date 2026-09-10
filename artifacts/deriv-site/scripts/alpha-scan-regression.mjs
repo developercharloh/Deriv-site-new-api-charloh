@@ -206,10 +206,16 @@ const getSnapshot = evaluate => evaluate(`(() => {
         modelVersion: root?.dataset.modelVersion || '',
         modelPick,
         digitWindow: root?.dataset.digitWindow || '',
+        recoveryDigitWindow: root?.dataset.recoveryDigitWindow || '',
         primaryCondition: root?.dataset.primaryCondition || '',
         primaryMarket: root?.dataset.primaryMarket || '',
         recoveryCondition: root?.dataset.recoveryCondition || '',
         recoveryMarket: root?.dataset.recoveryMarket || '',
+        marketControls: Boolean(document.querySelector('[data-testid="select-primary-market"]')) &&
+            Boolean(document.querySelector('[data-testid="select-recovery-market"]')) &&
+            Boolean(document.querySelector('[data-testid="toggle-multi-market"]')),
+        primaryOptions: [...document.querySelectorAll('[data-testid="select-primary-market"] option')].map(option => option.textContent?.trim() || ''),
+        multiMarketScanning: document.querySelector('[data-testid="toggle-multi-market"]')?.getAttribute('aria-pressed') || '',
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
         errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
     };
@@ -245,8 +251,22 @@ const assertScan = (snapshot, sampleSize) => {
     if (!snapshot.recoveryCondition || !snapshot.recoveryMarket) {
         throw new Error(`Recovery Market 2 did not select exactly one qualifying market: ${snapshot.recoveryCondition} / ${snapshot.recoveryMarket}`);
     }
+    if (!snapshot.marketControls) {
+        throw new Error('Market 1, Market 2, or multi-market scanning controls are missing.');
+    }
+    for (const option of ['All Even', 'All Odd', 'All Same', 'Over 1', 'Over 8', 'Under 9', 'Under 1', 'Rise', 'Fall', 'Matches 1', 'Matches 9']) {
+        if (!snapshot.primaryOptions.includes(option)) {
+            throw new Error(`Market selector is missing ${option}.`);
+        }
+    }
     if (!['1', '2', '3', '4', '5', '6', '7', '8'].includes(snapshot.digitWindow)) {
         throw new Error(`Digit window is outside the 1–8 range: ${snapshot.digitWindow}`);
+    }
+    if (!['1', '2', '3', '4', '5', '6', '7', '8'].includes(snapshot.recoveryDigitWindow)) {
+        throw new Error(`Recovery digit window is outside the 1–8 range: ${snapshot.recoveryDigitWindow}`);
+    }
+    if (!['true', 'false'].includes(snapshot.multiMarketScanning)) {
+        throw new Error(`Multi-market scanning toggle is not exposed: ${snapshot.multiMarketScanning}`);
     }
 };
 

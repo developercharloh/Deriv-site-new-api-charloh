@@ -10,11 +10,14 @@ import {
     type DTStatus,
 } from '@/utils/dtrader-engine';
 import {
+    MARKET_OPTION_GROUPS,
+    marketConditionLabel,
+    type MarketCondition,
     type RankedMarketDecision,
     type StrategySource,
     quotesToLastDigits,
+    selectConfiguredMarket,
     selectStrongestMarket,
-    selectMarketForWindow,
 } from './alpha-market-strategy';
 import './alpha-scan-ai.scss';
 
@@ -656,6 +659,29 @@ type AlphaToolSurfaceProps = {
     onScan: () => void;
 };
 
+type MarketConditionSelectProps = {
+    value: MarketCondition;
+    onChange: (value: MarketCondition) => void;
+    label: string;
+    testId: string;
+};
+
+const MarketConditionSelect: React.FC<MarketConditionSelectProps> = ({ value, onChange, label, testId }) => (
+    <select
+        className='alpha-tool__rule-select alpha-tool__rule-select--market'
+        value={value}
+        onChange={event => onChange(event.target.value as MarketCondition)}
+        aria-label={label}
+        data-testid={testId}
+    >
+        {MARKET_OPTION_GROUPS.map(group => (
+            <optgroup key={group.label} label={group.label}>
+                {group.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </optgroup>
+        ))}
+    </select>
+);
+
 const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     rows,
     sampleSize,
@@ -676,6 +702,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const liveEngine = liveEngineRef.current;
     const [selectedSymbol, setSelectedSymbol] = useState('');
     const [digitWindow, setDigitWindow] = useState(3);
+    const [recoveryDigitWindow, setRecoveryDigitWindow] = useState(3);
+    const [primaryCondition, setPrimaryCondition] = useState<MarketCondition>('all-even');
+    const [recoveryCondition, setRecoveryCondition] = useState<MarketCondition>('all-odd');
+    const [multiMarketScanning, setMultiMarketScanning] = useState(true);
     const [stake, setStake] = useState('10');
     const [liveMode, setLiveMode] = useState(true);
     const [liveStatus, setLiveStatus] = useState<DTStatus>('idle');
@@ -693,10 +723,15 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const runtimeRef = useRef({
         rows,
         digitWindow,
+        recoveryDigitWindow,
         liveMode,
         liveAuthorized: false,
         currency: 'USD',
         stake,
+        primaryCondition,
+        recoveryCondition,
+        multiMarketScanning,
+        selectedSymbol,
     });
 
     const bestModelRow = useMemo(() => {
@@ -722,21 +757,40 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         lastDigits: row.lastDigits,
     })), [rows]);
 
-    const calculatedPrimaryDecision = useMemo(() => {
-        if (!bestModelRow) return null;
-        const decision = selectMarketForWindow(
-            bestModelRow.lastDigits.slice(-digitWindow),
-            bestModelRow.prices,
-        );
-        return decision
-            ? { ...decision, symbol: bestModelRow.symbol, displayName: bestModelRow.displayName }
-            : null;
-    }, [bestModelRow, digitWindow]);
+    const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
+    const modelPick = bestModelRow || selectedRow;
 
-    const calculatedRecoveryDecision = useMemo(
-        () => selectStrongestMarket(strategySources, digitWindow),
-        [digitWindow, strategySources],
-    );
+    const calculatedPrimaryDecision = useMemo(() => {
+        const source = multiMarketScanning ? bestModelRow : selectedRow;
+        if (!source) return null;
+        return selectConfiguredMarket(
+            {
+                symbol: source.symbol,
+                displayName: source.displayName,
+                prices: source.prices,
+                lastDigits: source.lastDigits,
+            },
+            digitWindow,
+            primaryCondition,
+        );
+    }, [bestModelRow, digitWindow, multiMarketScanning, primaryCondition, selectedRow]);
+
+    const calculatedRecoveryDecision = useMemo(() => {
+        if (multiMarketScanning) {
+            return selectStrongestMarket(strategySources, recoveryDigitWindow, recoveryCondition);
+        }
+        if (!selectedRow) return null;
+        return selectConfiguredMarket(
+            {
+                symbol: selectedRow.symbol,
+                displayName: selectedRow.displayName,
+                prices: selectedRow.prices,
+                lastDigits: selectedRow.lastDigits,
+            },
+            recoveryDigitWindow,
+            recoveryCondition,
+        );
+    }, [multiMarketScanning, recoveryCondition, recoveryDigitWindow, selectedRow, strategySources]);
 
     useEffect(() => {
         setPrimaryDecision(calculatedPrimaryDecision);
@@ -750,12 +804,17 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         runtimeRef.current = {
             rows,
             digitWindow,
+            recoveryDigitWindow,
             liveMode,
             liveAuthorized,
             currency: client?.currency || 'USD',
             stake,
+            primaryCondition,
+            recoveryCondition,
+            multiMarketScanning,
+            selectedSymbol,
         };
-    }, [client?.currency, digitWindow, liveAuthorized, liveMode, rows, stake]);
+    }, [client?.currency, digitWindow, liveAuthorized, liveMode, multiMarketScanning, primaryCondition, recoveryCondition, recoveryDigitWindow, rows, selectedSymbol, stake]);
 
     const executeDecision = useCallback((decision: RankedMarketDecision, leg: 'primary' | 'recovery') => {
         const runtime = runtimeRef.current;
@@ -812,15 +871,25 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
             if (leg === 'primary' && position.isWin === false && !recoveryUsedRef.current) {
                 recoveryUsedRef.current = true;
-                const recovery = selectStrongestMarket(
-                    runtimeRef.current.rows.map(row => ({
-                        symbol: row.symbol,
-                        displayName: row.displayName,
-                        prices: row.prices,
-                        lastDigits: row.lastDigits,
-                    })),
-                    runtimeRef.current.digitWindow,
-                );
+                const runtimeRows = runtimeRef.current.rows.map(row => ({
+                    symbol: row.symbol,
+                    displayName: row.displayName,
+                    prices: row.prices,
+                    lastDigits: row.lastDigits,
+                }));
+                const recovery = runtimeRef.current.multiMarketScanning
+                    ? selectStrongestMarket(runtimeRows, runtimeRef.current.recoveryDigitWindow, runtimeRef.current.recoveryCondition)
+                    : (() => {
+                        const row = runtimeRef.current.rows.find(item => item.symbol === runtimeRef.current.selectedSymbol) || runtimeRef.current.rows[0];
+                        return row
+                            ? selectConfiguredMarket({
+                                symbol: row.symbol,
+                                displayName: row.displayName,
+                                prices: row.prices,
+                                lastDigits: row.lastDigits,
+                            }, runtimeRef.current.recoveryDigitWindow, runtimeRef.current.recoveryCondition)
+                            : null;
+                    })();
                 setRecoveryDecision(recovery);
                 if (recovery) {
                     setExecutionLeg('recovery-pending');
@@ -846,14 +915,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         };
     }, [liveEngine]);
 
-    const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
-    const modelPick = bestModelRow || selectedRow;
-    const strategyName = primaryDecision
-        ? `Primary Market 1: ${primaryDecision.label}`
-        : 'Waiting for a qualifying pattern';
+    const strategyName = `Market 1: ${marketConditionLabel(primaryCondition)}`;
     const strategyReason = modelPick
-        ? `${modelPick.displayName} selected at ${(modelPick.realizedVolatility * 100).toFixed(2)}% volatility · ${modelPick.regime} regime · ${(modelPick.noiseFraction * 100).toFixed(0)}% filtered noise`
-        : errorMessage || 'Live model data will appear here after the first scan.';
+        ? `${multiMarketScanning ? 'Model-selected' : 'Manually selected'} volatility: ${modelPick.displayName} · ${(modelPick.realizedVolatility * 100).toFixed(2)}% volatility`
+        : errorMessage || 'Scan the public feed to find eligible volatility markets.';
     const oosAccuracy = rows.length ? Math.round(averageWalkForwardAccuracy * 100) : 0;
     const modelLabel = isBusy ? 'SYNCING' : modelStatus;
     const capturedAt = lastUpdated
@@ -876,7 +941,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
             return;
         }
-        if (modelPick.validationGate !== 'validated') {
+        if (!modelPick || modelPick.validationGate !== 'validated') {
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'The model pick is gated until validation evidence passes.' });
             return;
         }
@@ -896,10 +961,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-model-version={MODEL_VERSION}
             data-error={errorMessage}
             data-digit-window={digitWindow}
-            data-primary-condition={primaryDecision?.condition || ''}
-            data-primary-market={primaryDecision?.label || ''}
-            data-recovery-condition={recoveryDecision?.condition || ''}
-            data-recovery-market={recoveryDecision?.label || ''}
+            data-recovery-digit-window={recoveryDigitWindow}
+            data-primary-condition={primaryCondition}
+            data-primary-market={marketConditionLabel(primaryCondition)}
+            data-recovery-condition={recoveryCondition}
+            data-recovery-market={marketConditionLabel(recoveryCondition)}
             data-execution-leg={executionLeg}
         >
             <header className='alpha-tool__hero'>
@@ -909,8 +975,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <span />
                 </button>
                 <div className='alpha-tool__hero-copy'>
-                    <span className='alpha-tool__eyebrow'>Model-powered workspace</span>
-                    <h1>Smarter Analysis.<br />Better Decisions.<br /><strong>Higher Wins.</strong></h1>
+                    <span className='alpha-tool__eyebrow'>Rule-based execution workspace</span>
+                    <h1>Clear Rules.<br />Live Digits.<br /><strong>Controlled Execution.</strong></h1>
                 </div>
                 <div className='alpha-tool__hero-art' aria-hidden='true'>
                     <span className='alpha-tool__globe' />
@@ -923,21 +989,21 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
                 <div className='alpha-tool__headline-card'>
                     <div className='alpha-tool__headline-icon'>✦</div>
-                    <span>Model status</span>
+                    <span>Volatility engine</span>
                     <strong data-testid='tool-model-status'>{modelLabel}</strong>
-                    <small>{rows.length ? `${rows.length} symbols · ${capturedAt}` : 'Paper research only'}</small>
+                    <small>{rows.length ? `${rows.length} symbols · checked ${capturedAt}` : 'Scan required before execution'}</small>
                 </div>
             </header>
 
-            <section className='alpha-tool__selector-grid' aria-label='Execution strategy'>
+            <section className='alpha-tool__selector-grid' aria-label='Execution controls'>
                 <div className='alpha-tool__selector alpha-tool__selector--green'>
                     <span className='alpha-tool__selector-icon'>∿</span>
-                    <span className='alpha-tool__selector-copy'><b>Primary Index</b><small>Model-selected volatility</small></span>
-                    <strong className='alpha-tool__selector-value'>{modelPick?.displayName || 'Waiting for scan'}</strong>
+                    <span className='alpha-tool__selector-copy'><b>Volatility</b><small>{multiMarketScanning ? 'Model-selected market' : 'Single selected market'}</small></span>
+                    <strong className='alpha-tool__selector-value'>{(multiMarketScanning ? modelPick : selectedRow)?.displayName || 'Waiting for scan'}</strong>
                 </div>
                 <label className='alpha-tool__selector alpha-tool__selector--purple'>
                     <span className='alpha-tool__selector-icon'>◉</span>
-                    <span className='alpha-tool__selector-copy'><b>Digit Window X</b><small>Latest digits to analyze</small></span>
+                    <span className='alpha-tool__selector-copy'><b>Last X digits</b><small>Decimal digits 0–9</small></span>
                     <select
                         className='alpha-tool__selector-value'
                         value={digitWindow}
@@ -948,33 +1014,66 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         {Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
                     </select>
                 </label>
-                <div className='alpha-tool__selector alpha-tool__selector--blue'>
+                <div className='alpha-tool__selector alpha-tool__selector--blue alpha-tool__selector--toggle'>
                     <span className='alpha-tool__selector-icon'>◌</span>
-                    <span className='alpha-tool__selector-copy'><b>Recovery Market 2</b><small>Strongest qualifying pattern</small></span>
-                    <strong className='alpha-tool__selector-value'>{recoveryDecision?.label || 'Awaiting loss'}</strong>
+                    <span className='alpha-tool__selector-copy'><b>Multi-market scanning</b><small>{multiMarketScanning ? 'Scan all suitable volatilities' : 'Use one volatility'}</small></span>
+                    <button
+                        type='button'
+                        className={`alpha-tool__switch ${multiMarketScanning ? 'alpha-tool__switch--on' : ''}`}
+                        onClick={() => setMultiMarketScanning(value => !value)}
+                        aria-pressed={multiMarketScanning}
+                        aria-label='Toggle multi-market scanning'
+                        data-testid='toggle-multi-market'
+                    ><span /></button>
                 </div>
             </section>
 
-            <section className='alpha-tool__panel alpha-tool__panel--strategy' data-testid='tool-model-pick' data-symbol={modelPick?.symbol || ''}>
+            <section className='alpha-tool__panel alpha-tool__panel--strategy alpha-tool__panel--rules' data-testid='tool-model-pick' data-symbol={modelPick?.symbol || ''}>
                 <div className='alpha-tool__panel-heading'>
-                    <span className='alpha-tool__panel-icon'>♧</span>
-                    <b>Strategy Type</b>
-                    <span className='alpha-tool__ai-badge'>✦ AI Generated</span>
+                    <span className='alpha-tool__panel-icon'>⌁</span>
+                    <b>Execution Rules</b>
+                    <span className='alpha-tool__ai-badge'>Model only selects volatility</span>
                 </div>
-                <div className='alpha-tool__strategy-select'>
-                    <strong>{strategyName}</strong>
-                    <span>{primaryDecision ? `${digitWindow} digits` : '—'}</span>
+                <div className='alpha-tool__rule-card' data-testid='market-1-rule'>
+                    <div className='alpha-tool__rule-title'><strong>Market 1</strong><span>Primary market</span><em>{primaryDecision ? 'QUALIFIED' : 'WAITING FOR RULE'}</em></div>
+                    <div className='alpha-tool__rule-line'>
+                        <span>If the last</span>
+                        <select
+                            className='alpha-tool__rule-select alpha-tool__rule-select--digits'
+                            value={digitWindow}
+                            onChange={event => setDigitWindow(Number(event.target.value))}
+                            aria-label='Market 1 last digit count'
+                            data-testid='select-primary-digit-window'
+                        >
+                            {Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
+                        </select>
+                        <span>digits are</span>
+                        <MarketConditionSelect value={primaryCondition} onChange={setPrimaryCondition} label='Market 1 condition' testId='select-primary-market' />
+                    </div>
+                    <p>{primaryDecision ? `Latest digits: ${primaryDecision.digits.join(' · ')}. ${primaryDecision.reason}` : `Waiting for the latest ${digitWindow} digits to satisfy ${marketConditionLabel(primaryCondition)}.`}</p>
+                </div>
+                <div className='alpha-tool__rule-card alpha-tool__rule-card--recovery' data-testid='market-2-rule'>
+                    <div className='alpha-tool__rule-title'><strong>Market 2</strong><span>Recovery market</span><em>{recoveryDecision ? 'READY' : 'WAITING FOR LOSS'}</em></div>
+                    <div className='alpha-tool__rule-line'>
+                        <span>If the last</span>
+                        <select
+                            className='alpha-tool__rule-select alpha-tool__rule-select--digits'
+                            value={recoveryDigitWindow}
+                            onChange={event => setRecoveryDigitWindow(Number(event.target.value))}
+                            aria-label='Market 2 last digit count'
+                            data-testid='select-recovery-digit-window'
+                        >
+                            {Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
+                        </select>
+                        <span>digits are</span>
+                        <MarketConditionSelect value={recoveryCondition} onChange={setRecoveryCondition} label='Market 2 condition' testId='select-recovery-market' />
+                    </div>
+                    <p>{recoveryDecision ? `Latest digits: ${recoveryDecision.digits.join(' · ')}. ${recoveryDecision.reason}` : 'This rule is evaluated after Market 1 settles as a loss.'}</p>
                 </div>
                 <div className='alpha-tool__strategy-copy'>
                     <span className='alpha-tool__strategy-spark'>✦</span>
-                    <p>{strategyReason}. Latest digits: {primaryDecision?.digits.join(' · ') || '—'}. Condition: {primaryDecision?.reason || 'no qualifying condition yet'} Purchase: {primaryDecision?.label || '—'}.</p>
+                    <p>{strategyReason}. One qualifying condition creates one one-tick contract; other market options are not purchased.</p>
                 </div>
-                <ul className='alpha-tool__check-list'>
-                    <li>Primary Market 1 analyzes the latest {digitWindow} digits</li>
-                    <li>Recovery Market 2 scans all {rows.length || 'available'} volatility indices</li>
-                    <li>Exactly one qualifying market is selected per leg</li>
-                    <li>Execution stays gated until model validation evidence is complete</li>
-                </ul>
             </section>
 
             <section className='alpha-tool__panel alpha-tool__panel--settings'>
@@ -983,7 +1082,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <b>Trade Settings</b>
                 </div>
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Stake</span><input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Stake' /></div>
-                <div className='alpha-tool__settings-note'>One-tick contract · market is selected from the latest X digits · recovery starts only after a primary loss</div>
+                {!multiMarketScanning && (
+                    <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>∿</span><span>Volatility</span><select value={selectedSymbol} onChange={event => setSelectedSymbol(event.target.value)} aria-label='Selected volatility' data-testid='select-volatility'>
+                        {rows.length ? rows.map(row => <option key={row.symbol} value={row.symbol}>{row.displayName}</option>) : <option value=''>Waiting for scan</option>}
+                    </select></label>
+                )}
+                <div className='alpha-tool__settings-note'>One-tick contract · one selected market condition · recovery starts only after a primary loss</div>
             </section>
 
             <section className='alpha-tool__auto-trade'>
@@ -992,7 +1096,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <button type='button' className={`alpha-tool__switch ${liveMode ? 'alpha-tool__switch--on' : ''}`} onClick={() => setLiveMode(value => !value)} aria-pressed={liveMode}><span /></button>
                 <div className='alpha-tool__action-stack'>
                     <button type='button' className='alpha-tool__start' onClick={handleLiveExecute} disabled={!liveCanExecute} data-testid='button-live-execute'>
-                        <span>Purchase {primaryDecision?.label || 'Market 1'}</span><strong>▶</strong>
+                        <span>Purchase Market 1 · {marketConditionLabel(primaryCondition)}</span><strong>▶</strong>
                     </button>
                     <button type='button' className='alpha-tool__refresh' onClick={() => { setLiveFeedback(null); onScan(); }} disabled={isBusy} data-testid='button-run-scan'>
                         <span>{isBusy ? 'Syncing' : 'Refresh Model'}</span>

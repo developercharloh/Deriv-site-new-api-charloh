@@ -14,7 +14,78 @@ export type MarketCondition =
     | 'all-fall'
     | 'all-same'
     | `all-over-${number}`
-    | `all-under-${number}`;
+    | `all-under-${number}`
+    | `over-${number}`
+    | `under-${number}`
+    | `matches-${number}`;
+
+export type MarketOptionGroup = {
+    label: string;
+    options: Array<{ value: MarketCondition; label: string }>;
+};
+
+export const MARKET_OPTION_GROUPS: MarketOptionGroup[] = [
+    {
+        label: 'Parity',
+        options: [
+            { value: 'all-even', label: 'All Even' },
+            { value: 'all-odd', label: 'All Odd' },
+        ],
+    },
+    {
+        label: 'Pattern',
+        options: [
+            { value: 'all-same', label: 'All Same' },
+            { value: 'all-rise', label: 'Rise' },
+            { value: 'all-fall', label: 'Fall' },
+        ],
+    },
+    {
+        label: 'Over',
+        options: Array.from({ length: 8 }, (_, index) => {
+            const barrier = index + 1;
+            return { value: `over-${barrier}` as MarketCondition, label: `Over ${barrier}` };
+        }),
+    },
+    {
+        label: 'Under',
+        options: Array.from({ length: 9 }, (_, index) => {
+            const barrier = 9 - index;
+            return { value: `under-${barrier}` as MarketCondition, label: `Under ${barrier}` };
+        }),
+    },
+    {
+        label: 'Matches',
+        options: Array.from({ length: 9 }, (_, index) => {
+            const digit = index + 1;
+            return { value: `matches-${digit}` as MarketCondition, label: `Matches ${digit}` };
+        }),
+    },
+];
+
+export const MARKET_OPTIONS = MARKET_OPTION_GROUPS.flatMap(group => group.options);
+
+export const marketConditionLabel = (condition: MarketCondition): string =>
+    MARKET_OPTIONS.find(option => option.value === condition)?.label ||
+    ({
+        'all-over-1': 'Over 1',
+        'all-over-2': 'Over 2',
+        'all-over-3': 'Over 3',
+        'all-over-4': 'Over 4',
+        'all-over-5': 'Over 5',
+        'all-over-6': 'Over 6',
+        'all-over-7': 'Over 7',
+        'all-over-8': 'Over 8',
+        'all-under-1': 'Under 1',
+        'all-under-2': 'Under 2',
+        'all-under-3': 'Under 3',
+        'all-under-4': 'Under 4',
+        'all-under-5': 'Under 5',
+        'all-under-6': 'Under 6',
+        'all-under-7': 'Under 7',
+        'all-under-8': 'Under 8',
+        'all-under-9': 'Under 9',
+    } as Record<string, string>)[condition] || condition;
 
 export type MarketDecision = {
     condition: MarketCondition;
@@ -75,6 +146,94 @@ export const quoteToLastDigit = (quote: number, pipSize?: number): number => {
 
 export const quotesToLastDigits = (quotes: number[], pipSize?: number): number[] =>
     quotes.map(quote => quoteToLastDigit(quote, pipSize));
+
+const buildConfiguredDecision = (
+    condition: MarketCondition,
+    rawDigits: number[],
+    rawPrices: number[],
+): MarketDecision | null => {
+    const digits = rawDigits.filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+    if (!digits.length) return null;
+
+    const prices = rawPrices.slice(-digits.length);
+    const label = marketConditionLabel(condition);
+    const latestDigit = digits[digits.length - 1];
+    const barrierMatch = condition.match(/^(?:over|under|matches)-(\d+)$/);
+    const barrier = barrierMatch ? Number(barrierMatch[1]) : null;
+    const everyDigitIsEven = all(digits, digit => digit % 2 === 0);
+    const everyDigitIsOdd = all(digits, digit => digit % 2 !== 0);
+    const everyDigitIsSame = new Set(digits).size === 1;
+    const rises = digits.length >= 2 && all(prices.slice(1), (price, index) => price > prices[index]);
+    const falls = digits.length >= 2 && all(prices.slice(1), (price, index) => price < prices[index]);
+
+    let qualifies = false;
+    let reason = '';
+    let contractType: StrategyContractType | null = null;
+    let decisionBarrier: string | null = null;
+
+    if (condition === 'all-even') {
+        qualifies = everyDigitIsEven;
+        reason = `Every one of the latest ${digits.length} digits is even.`;
+        contractType = 'DIGITEVEN';
+    } else if (condition === 'all-odd') {
+        qualifies = everyDigitIsOdd;
+        reason = `Every one of the latest ${digits.length} digits is odd.`;
+        contractType = 'DIGITODD';
+    } else if (condition === 'all-same') {
+        qualifies = everyDigitIsSame;
+        reason = `All ${digits.length} latest digits are ${digits[0]}.`;
+        contractType = 'DIGITMATCH';
+        decisionBarrier = String(digits[0]);
+    } else if (condition === 'all-rise') {
+        qualifies = rises;
+        reason = `The latest ${digits.length} quotes rose consecutively.`;
+        contractType = 'CALL';
+    } else if (condition === 'all-fall') {
+        qualifies = falls;
+        reason = `The latest ${digits.length} quotes fell consecutively.`;
+        contractType = 'PUT';
+    } else if (condition.startsWith('over-') || condition.startsWith('all-over-')) {
+        qualifies = barrier !== null && all(digits, digit => digit > barrier);
+        reason = `Every latest digit is greater than ${barrier}.`;
+        contractType = 'DIGITOVER';
+        decisionBarrier = String(barrier);
+    } else if (condition.startsWith('under-') || condition.startsWith('all-under-')) {
+        qualifies = barrier !== null && all(digits, digit => digit < barrier);
+        reason = `Every latest digit is less than ${barrier}.`;
+        contractType = 'DIGITUNDER';
+        decisionBarrier = String(barrier);
+    } else if (condition.startsWith('matches-')) {
+        qualifies = barrier !== null && latestDigit === barrier;
+        reason = `The latest digit is ${barrier}.`;
+        contractType = 'DIGITMATCH';
+        decisionBarrier = String(barrier);
+    }
+
+    if (!qualifies || !contractType) return null;
+
+    return toDigitContractDecision(
+        condition,
+        label,
+        contractType,
+        decisionBarrier,
+        digits,
+        100 + digits.length / 100,
+        reason,
+    );
+};
+
+export const selectConfiguredMarket = (
+    source: StrategySource,
+    windowSize: number,
+    condition: MarketCondition,
+): RankedMarketDecision | null => {
+    const decision = buildConfiguredDecision(
+        condition,
+        source.lastDigits.slice(-windowSize),
+        source.prices,
+    );
+    return decision ? { ...decision, symbol: source.symbol, displayName: source.displayName } : null;
+};
 
 /**
  * Select exactly one market. More specific patterns outrank broad patterns:
@@ -188,9 +347,11 @@ export const selectMarketForWindow = (
 export const selectStrongestMarket = (
     sources: StrategySource[],
     windowSize: number,
+    condition?: MarketCondition,
 ): RankedMarketDecision | null => {
     const candidates = sources
         .map(source => {
+            if (condition) return selectConfiguredMarket(source, windowSize, condition);
             const digits = source.lastDigits.slice(-windowSize);
             const decision = selectMarketForWindow(digits, source.prices);
             return decision ? { ...decision, symbol: source.symbol, displayName: source.displayName } : null;
