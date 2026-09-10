@@ -214,6 +214,9 @@ const getSnapshot = evaluate => evaluate(`(() => {
         marketControls: Boolean(document.querySelector('[data-testid="select-primary-market"]')) &&
             Boolean(document.querySelector('[data-testid="select-recovery-market"]')) &&
             Boolean(document.querySelector('[data-testid="toggle-multi-market"]')),
+        purchaseControls: Boolean(document.querySelector('[data-testid="button-live-execute"]')) &&
+            Boolean(document.querySelector('[data-testid="button-recovery-execute"]')),
+        legacyExecutionRules: [...document.querySelectorAll('body *')].some(element => element.textContent?.trim() === 'Execution Rules'),
         primaryOptions: [...document.querySelectorAll('[data-testid="select-primary-market"] option')].map(option => option.textContent?.trim() || ''),
         multiMarketScanning: document.querySelector('[data-testid="toggle-multi-market"]')?.getAttribute('aria-pressed') || '',
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
@@ -253,6 +256,12 @@ const assertScan = (snapshot, sampleSize) => {
     }
     if (!snapshot.marketControls) {
         throw new Error('Market 1, Market 2, or multi-market scanning controls are missing.');
+    }
+    if (!snapshot.purchaseControls) {
+        throw new Error('Market 1 and Market 2 purchase controls are missing from their rule cards.');
+    }
+    if (snapshot.legacyExecutionRules) {
+        throw new Error('The separate Execution Rules block should be removed.');
     }
     for (const option of ['All Even', 'All Odd', 'All Same', 'Over 1', 'Over 8', 'Under 9', 'Under 1', 'Rise', 'Fall', 'Matches 1', 'Matches 9']) {
         if (!snapshot.primaryOptions.includes(option)) {
