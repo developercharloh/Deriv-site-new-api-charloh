@@ -1547,6 +1547,19 @@
         &:disabled { opacity: 0.62; cursor: wait; }
     }
 
+    &__run {
+        min-height: 1.55rem;
+        padding: 0 0.55rem;
+        border: 1px solid #4dffb8;
+        border-radius: 0.45rem;
+        color: #061b2a;
+        background: linear-gradient(90deg, #59ffc4, #37cfff);
+        font-size: 0.58rem;
+        font-weight: 850;
+        cursor: pointer;
+        &:disabled { opacity: 0.52; cursor: not-allowed; }
+    }
+
     &__journal { border-color: #1f86ff; overflow: hidden; }
     &__section-heading { justify-content: space-between; padding-bottom: 0.55rem; }
     &__section-heading > div { display: flex; align-items: center; gap: 0.5rem; }
@@ -1559,7 +1572,9 @@
     &__table-icon, &__brain { margin-right: 0.2rem; color: #3bffbc; font-size: 0.78rem; }
     &__brain { color: #de65ff; }
     &__result { display: inline-block; min-width: 2.5rem; padding: 0.18rem 0.35rem; border-radius: 0.55rem; color: #fff; background: #14a86c; text-align: center; }
-    &__result--failed, &__result--insufficient-evidence { background: #a62676; }
+    &__result--failed, &__result--insufficient-evidence, &__result--lost { background: #a62676; }
+    &__result--running { background: #2367b5; }
+    &__result--won { background: #14a86c; }
     &__gain { color: #42ffb6 !important; }
     &__loss { color: #ff5a7a !important; }
     &__journal-empty { padding: 1rem !important; color: #aec3e7 !important; text-align: center; }
@@ -1691,7 +1706,8 @@
         &__switch { width: 1.55rem; height: 0.76rem; span { width: 0.5rem; height: 0.5rem; } &--on span { transform: translateX(0.68rem); } }
         &__start { min-height: 1.8rem; padding-inline: 0.45rem; font-size: 0.5rem; strong { font-size: 0.7rem; } }
         &__action-stack { gap: 0.2rem; }
-        &__refresh { min-height: 1.05rem; padding-inline: 0.28rem; font-size: 0.4rem; }
+        &__run, &__refresh { min-height: 1.05rem; padding-inline: 0.28rem; font-size: 0.4rem; }
+        &__action-stack { gap: 0.1rem; }
         &__journal-table { min-width: 31rem; font-size: 0.43rem; }
         &__journal-table th { padding: 0.3rem 0.35rem; font-size: 0.39rem; }
         &__journal-table td { padding: 0.3rem 0.35rem; }

@@ -92,6 +92,19 @@ type ScanRow = SyntheticSymbol & {
     gateReasons: string[];
 };
 
+type AlphaTradeJournalEntry = {
+    contractId: string;
+    leg: 'primary' | 'recovery';
+    time: string;
+    symbol: string;
+    market: string;
+    strategy: string;
+    gate: 'Running' | 'Won' | 'Lost';
+    stake: number;
+    payout: number;
+    profit: number | null;
+};
+
 type ValidationWindow = {
     samples: number;
     accuracy: number;
@@ -633,6 +646,9 @@ const formatRatio = (value: number, signed = false): string => {
     return `${prefix}${value.toFixed(2)}`;
 };
 
+const formatMoney = (value: number | null): string =>
+    value === null || !Number.isFinite(value) ? '—' : `$${value.toFixed(2)}`;
+
 const formatTime = (value: Date | null): string =>
     value
         ? value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -804,6 +820,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [liveTrade, setLiveTrade] = useState<DTPosition | null>(null);
     const [liveTradeLeg, setLiveTradeLeg] = useState<'primary' | 'recovery' | null>(null);
     const [liveTradeDecision, setLiveTradeDecision] = useState<RankedMarketDecision | null>(null);
+    const [journalRows, setJournalRows] = useState<AlphaTradeJournalEntry[]>([]);
     const [executionLeg, setExecutionLeg] = useState<'idle' | 'primary-pending' | 'primary-running' | 'recovery-pending' | 'recovery-running'>('idle');
     const [primaryDecision, setPrimaryDecision] = useState<RankedMarketDecision | null>(null);
     const [recoveryDecision, setRecoveryDecision] = useState<RankedMarketDecision | null>(null);
@@ -950,11 +967,53 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
     executeDecisionRef.current = executeDecision;
 
+    const runTrade = useCallback(() => {
+        if (executionLeg !== 'idle') return;
+        if (!liveAuthorized) {
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before running a real trade.' });
+            return;
+        }
+        if (!primaryDecision) {
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'No configured Market 1 pattern qualifies yet.' });
+            return;
+        }
+        recoveryUsedRef.current = false;
+        setLiveFeedback(null);
+        executeDecision(primaryDecision, 'primary');
+    }, [executeDecision, executionLeg, liveAuthorized, primaryDecision]);
+
+    const upsertJournalEntry = useCallback((position: DTPosition, leg: 'primary' | 'recovery', decision: RankedMarketDecision | null) => {
+        const nextEntry: AlphaTradeJournalEntry = {
+            contractId: position.contractId,
+            leg,
+            time: position.purchaseTime,
+            symbol: position.symbol,
+            market: leg === 'recovery' ? 'Market 2' : 'Market 1',
+            strategy: decision?.label || (position.contractType === 'DIGITEVEN'
+                ? 'Even'
+                : position.contractType === 'DIGITODD'
+                    ? 'Odd'
+                    : position.contractType),
+            gate: position.isOpen ? 'Running' : position.isWin ? 'Won' : 'Lost',
+            stake: position.buyPrice,
+            payout: position.payout,
+            profit: position.isOpen ? null : position.profit,
+        };
+        setJournalRows(current => {
+            const existingIndex = current.findIndex(entry => entry.contractId === nextEntry.contractId);
+            if (existingIndex < 0) return [nextEntry, ...current].slice(0, 20);
+            const next = current.slice();
+            next[existingIndex] = { ...next[existingIndex], ...nextEntry };
+            return next;
+        });
+    }, []);
+
     useEffect(() => {
         liveEngine.onStatus = setLiveStatus;
         liveEngine.onBuyFeedback = setLiveFeedback;
         liveEngine.onPosition = position => {
             const leg = activeLegRef.current;
+            upsertJournalEntry(position, leg || 'primary', activeDecisionRef.current);
             if (position.isOpen) {
                 setLiveTrade(position);
                 setLiveTradeLeg(leg);
@@ -1014,7 +1073,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             liveEngine.onBuyFeedback = () => {};
             liveEngine.onPosition = () => {};
         };
-    }, [liveEngine]);
+    }, [liveEngine, upsertJournalEntry]);
 
     const oosAccuracy = rows.length ? Math.round(averageWalkForwardAccuracy * 100) : 0;
     const modelLabel = isBusy ? 'SYNCING' : modelStatus;
@@ -1156,6 +1215,16 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <div><b>Live Execution</b><small>{liveMode ? 'Deriv account required' : 'Execution locked'}</small></div>
                 <button type='button' className={`alpha-tool__switch ${liveMode ? 'alpha-tool__switch--on' : ''}`} onClick={() => setLiveMode(value => !value)} aria-pressed={liveMode}><span /></button>
                 <div className='alpha-tool__action-stack'>
+                    <button
+                        type='button'
+                        className='alpha-tool__run'
+                        onClick={runTrade}
+                        disabled={!liveAuthorized || !liveMode || !primaryDecision || isBusy || executionLeg !== 'idle'}
+                        data-testid='button-run-trade'
+                        title={liveAuthorized ? 'Buy one one-tick Deriv contract' : 'Log in to run a real Deriv trade'}
+                    >
+                        {executionLeg !== 'idle' ? 'Running' : 'Run'}
+                    </button>
                     <button type='button' className='alpha-tool__refresh' onClick={() => { setLiveFeedback(null); onScan(); }} disabled={isBusy} data-testid='button-run-scan'>
                         <span>{isBusy ? 'Syncing' : 'Refresh Model'}</span>
                     </button>
@@ -1181,7 +1250,22 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                     <td className='alpha-tool__gain'>Live</td>
                                 </tr>
                             ) : (
-                                <tr><td colSpan={6} className='alpha-tool__journal-empty'>{isBusy ? 'No trades running · model is scanning…' : liveFeedback?.message || 'No trades running. Execute a validated model pick to start.'}</td></tr>
+                                journalRows.length ? journalRows.map(entry => (
+                                    <tr key={entry.contractId} data-contract-id={entry.contractId}>
+                                        <td>{entry.time}</td>
+                                        <td><span className='alpha-tool__table-icon'>∿</span>{entry.symbol}</td>
+                                        <td>{entry.market}</td>
+                                        <td><span className='alpha-tool__brain'>♧</span>{entry.strategy}</td>
+                                        <td><span className={`alpha-tool__result alpha-tool__result--${entry.gate.toLowerCase()}`}>{entry.gate}</span></td>
+                                        <td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-tool__gain' : 'alpha-tool__loss'}>
+                                            {entry.profit === null
+                                                ? `Open · ${formatMoney(entry.stake)} → ${formatMoney(entry.payout)}`
+                                                : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)} · ${formatMoney(entry.payout)}`}
+                                        </td>
+                                    </tr>
+                                )) : (
+                                    <tr><td colSpan={6} className='alpha-tool__journal-empty'>{isBusy ? 'No trades running · model is scanning…' : liveFeedback?.message || 'No trades running. Run a validated model pick to start.'}</td></tr>
+                                )
                             )}
                         </tbody>
                     </table>

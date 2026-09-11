@@ -818,6 +818,10 @@ export class DTraderEngine {
 
         pos.profit      = profit;
         pos.currentBid  = bid;
+        if (poc.payout !== undefined) {
+            const payout = parseFloat(poc.payout);
+            if (Number.isFinite(payout)) pos.payout = payout;
+        }
         if (spot) pos.currentSpot = spot;
         if (entry && !pos.entrySpot) pos.entrySpot = entry;
 
