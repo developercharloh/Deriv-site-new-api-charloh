@@ -38,6 +38,9 @@ const AppHeader = observer(() => {
     });
 
     const handleLogout = useLogout();
+    const isPublicAlphaScan = typeof window !== 'undefined' && window.location.hash === '#alpha_scan_ai';
+    const showPublicDemoAccount =
+        isPublicAlphaScan && !isDesktop && !activeLoginid && !is_account_regenerating && !isAuthorizing && !isOAuthPending;
 
     // Clear OAuth-pending flag once the account is set (auth succeeded)
     // or after a generous timeout in case something goes wrong.
@@ -129,6 +132,35 @@ const AppHeader = observer(() => {
         }
         navigateToTransfer(transferCurrency);
     }, [authData?.currency]);
+
+    const renderPublicDemoAccount = () => (
+        <div className='public-demo-account' aria-label='Public demo account'>
+            <div className='public-demo-account__type'>
+                <span>Demo account</span>
+                <span className='public-demo-account__chevron' aria-hidden='true'>⌄</span>
+            </div>
+            <strong>10,008.77 USD</strong>
+        </div>
+    );
+
+    const renderPublicDemoActions = () => (
+        <div className='public-demo-actions'>
+            <button
+                type='button'
+                className='hdr-refresh-btn public-demo-actions__refresh'
+                onClick={() => window.location.reload()}
+                title='Refresh page'
+                aria-label='Refresh page'
+            >
+                <svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg' width='20' height='20'>
+                    <path d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'/>
+                </svg>
+            </button>
+            <button type='button' className='public-demo-actions__transfer' onClick={handleLogin}>
+                Transfer
+            </button>
+        </div>
+    );
 
     const renderAccountSection = useCallback(
         (position: 'left' | 'right' = 'right') => {
@@ -251,10 +283,10 @@ const AppHeader = observer(() => {
                 <Wrapper variant='left'>
                     <MobileMenu onLogout={handleLogout} />
                     <AppLogo />
-                    {isDesktop ? <MenuItems /> : renderAccountSection('left')}
+                    {isDesktop ? <MenuItems /> : showPublicDemoAccount ? renderPublicDemoAccount() : renderAccountSection('left')}
                 </Wrapper>
                 <Wrapper variant='right'>
-                    {renderAccountSection('right')}
+                    {showPublicDemoAccount ? renderPublicDemoActions() : renderAccountSection('right')}
                 </Wrapper>
             </Header>
         </>
