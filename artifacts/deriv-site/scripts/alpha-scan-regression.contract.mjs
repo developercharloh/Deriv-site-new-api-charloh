@@ -48,5 +48,20 @@ assert.match(
     /phase === 'external-feed'\s*\?\s*'Public-feed integration failure'/,
     'Public-feed outages must retain the external integration failure classification.',
 );
+assert.match(
+    regressionSource,
+    /ALPHA_SCAN_RESULT_PATH/,
+    'Scheduled runs must support an explicit durable result path.',
+);
+assert.match(
+    regressionSource,
+    /const persistReport = async report =>/,
+    'Every regression run must persist a machine-readable result.',
+);
+assert.match(
+    regressionSource,
+    /failureClassification = phase === 'external-feed' \? 'public-feed' : 'fixture-layout'/,
+    'Retained failures must distinguish public-feed outages from fixture layout failures.',
+);
 
 console.log('Alpha Scan regression command contract passed.');

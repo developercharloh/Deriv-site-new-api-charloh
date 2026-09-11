@@ -1,14 +1,56 @@
 import { spawn } from 'node:child_process';
 import { createConnection, createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { URL } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 
 const TARGET_URL = process.env.ALPHA_SCAN_URL || 'https://www.mrcharlohfx.site/#alpha_scan_ai';
 const SAMPLE_WINDOWS = [600, 1200];
 const MODEL_VERSION = 'feature-logistic-causal-denoise-v1';
 const RUN_LIVE = process.env.ALPHA_SCAN_LIVE === '1';
+const RESULT_PATH = resolve(
+    process.env.ALPHA_SCAN_RESULT_PATH ||
+        fileURLToPath(new URL('../.alpha-scan-regression/latest.json', import.meta.url)),
+);
+const RUN_STARTED_AT = new Date().toISOString();
+const RUN_ID = `${RUN_STARTED_AT.replace(/[^0-9]/g, '')}-${process.pid}`;
 let phase = 'fixture';
+
+const runReport = {
+    schemaVersion: 1,
+    runId: RUN_ID,
+    startedAt: RUN_STARTED_AT,
+    target: TARGET_URL,
+    mode: RUN_LIVE ? 'live' : 'fixture',
+    status: 'running',
+    ok: false,
+    phase,
+    failureClassification: null,
+    failure: null,
+    fixture: {
+        status: 'pending',
+        scans: [],
+    },
+    externalFeed: RUN_LIVE
+        ? {
+              status: 'pending',
+              scans: [],
+          }
+        : {
+              status: 'skipped',
+              reason: 'Set ALPHA_SCAN_LIVE=1 to run public-feed integration coverage.',
+          },
+};
+
+const persistReport = async report => {
+    await mkdir(dirname(RESULT_PATH), { recursive: true });
+    const temporaryPath = `${RESULT_PATH}.${process.pid}.tmp`;
+    await writeFile(temporaryPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+    await rename(temporaryPath, RESULT_PATH);
+};
+
 const findOpenPort = async () => {
     const server = await new Promise((resolve, reject) => {
         const candidate = createServer();
@@ -397,9 +439,14 @@ const run = async () => {
         const fixtureResults = results.splice(0);
         let liveResults = [];
         let blockedFeed;
+        runReport.fixture = {
+            status: 'passed',
+            scans: fixtureResults,
+        };
 
         if (RUN_LIVE) {
             phase = 'external-feed';
+            runReport.phase = phase;
             for (const sampleSize of SAMPLE_WINDOWS) {
                 await client.call('Page.navigate', { url: liveUrl(sampleSize) });
                 await waitFor(
@@ -429,6 +476,7 @@ const run = async () => {
                     primaryMarket: snapshot.primaryMarket,
                     recoveryMarket: snapshot.recoveryMarket,
                 });
+                runReport.externalFeed.scans = liveResults;
             }
 
             await client.evaluate(`(() => {
@@ -461,10 +509,27 @@ const run = async () => {
             if (Number(blockedFeed.coverage.split('/')[0].trim()) !== 0 || blockedFeed.modelPick) {
                 throw new Error('A failed external-feed scan retained previous rows or coverage.');
             }
+            runReport.externalFeed = {
+                status: 'passed',
+                scans: liveResults,
+                blockedFeed: {
+                    status: blockedFeed.status,
+                    rows: 0,
+                    failedSymbols: blockedFeed.failedSymbols,
+                    error: blockedFeed.error,
+                },
+            };
         }
 
-        console.log(JSON.stringify({
+        const result = {
+            schemaVersion: 1,
+            runId: RUN_ID,
+            startedAt: RUN_STARTED_AT,
+            completedAt: new Date().toISOString(),
             ok: true,
+            status: 'passed',
+            failureClassification: null,
+            failure: null,
             target: TARGET_URL,
             surface: 'model-powered-tool',
             fixture: {
@@ -484,15 +549,47 @@ const run = async () => {
                 status: 'skipped',
                 reason: 'Set ALPHA_SCAN_LIVE=1 to run public-feed integration coverage.',
             },
-        }, null, 2));
+        };
+        await persistReport(result);
+        console.log(JSON.stringify(result, null, 2));
     } finally {
         client?.close();
         browser.kill('SIGTERM');
     }
 };
 
-run().catch(error => {
+run().catch(async error => {
     const failureLabel = phase === 'external-feed' ? 'Public-feed integration failure' : 'Fixture layout check failure';
+    const failureClassification = phase === 'external-feed' ? 'public-feed' : 'fixture-layout';
+    if (phase === 'external-feed') {
+        runReport.externalFeed = {
+            ...runReport.externalFeed,
+            status: 'failed',
+        };
+    } else {
+        runReport.fixture = {
+            ...runReport.fixture,
+            status: 'failed',
+        };
+    }
+    const result = {
+        ...runReport,
+        completedAt: new Date().toISOString(),
+        ok: false,
+        status: 'failed',
+        phase,
+        failureClassification,
+        failure: {
+            classification: failureClassification,
+            label: failureLabel,
+            message: error.message,
+        },
+    };
+    try {
+        await persistReport(result);
+    } catch (persistError) {
+        console.error(`[alpha-scan-regression] Could not persist result to ${RESULT_PATH}: ${persistError.message}`);
+    }
     console.error(`[alpha-scan-regression][${phase}] ${failureLabel}: ${error.message}`);
     process.exitCode = 1;
 });
