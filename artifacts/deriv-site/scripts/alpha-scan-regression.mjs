@@ -373,6 +373,12 @@ const run = async () => {
             url.searchParams.delete('alpha_scan_fixture');
             return url.toString();
         };
+        const symbolFailureUrl = sampleSize => {
+            const url = new URL(liveUrl(sampleSize));
+            url.searchParams.set('alpha_scan_failure_symbol', 'first');
+            url.searchParams.set('alpha_scan_failure_mode', 'incomplete');
+            return url.toString();
+        };
 
         await client.call('Page.navigate', { url: fixtureUrl(SAMPLE_WINDOWS[0]) });
         await client.evaluate(`document.querySelector('.slx-popup__dismiss')?.click()`);
@@ -438,6 +444,7 @@ const run = async () => {
 
         const fixtureResults = results.splice(0);
         let liveResults = [];
+        let symbolFailure;
         let blockedFeed;
         runReport.fixture = {
             status: 'passed',
@@ -479,6 +486,34 @@ const run = async () => {
                 runReport.externalFeed.scans = liveResults;
             }
 
+            await client.call('Page.navigate', { url: symbolFailureUrl(SAMPLE_WINDOWS[0]) });
+            await waitFor(
+                () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+                'deterministic symbol-failure Alpha Tool',
+            );
+            symbolFailure = await waitFor(
+                async () => {
+                    const next = await getSnapshot(client.evaluate);
+                    return ['ready', 'partial-data', 'empty', 'timeout', 'connection-error'].includes(next.status) &&
+                        next.failedSymbols.length > 0
+                        ? next
+                        : false;
+                },
+                'deterministic symbol history failure',
+                90000,
+            );
+            if (symbolFailure.failedSymbols.length !== 1) {
+                throw new Error(
+                    `Expected one deterministic failed symbol, received ${symbolFailure.failedSymbols.join(', ') || 'none'}.`,
+                );
+            }
+            const failedSymbol = symbolFailure.failedSymbols[0];
+            if (!symbolFailure.error.includes('History collection') || !symbolFailure.error.includes(failedSymbol)) {
+                throw new Error(
+                    `The deterministic history failure did not name the affected symbol: ${symbolFailure.error || 'no error reported'}.`,
+                );
+            }
+
             await client.evaluate(`(() => {
             class FailingWebSocket {
                 static OPEN = 1;
@@ -512,6 +547,11 @@ const run = async () => {
             runReport.externalFeed = {
                 status: 'passed',
                 scans: liveResults,
+                symbolFailure: {
+                    status: symbolFailure.status,
+                    failedSymbols: symbolFailure.failedSymbols,
+                    error: symbolFailure.error,
+                },
                 blockedFeed: {
                     status: blockedFeed.status,
                     rows: 0,
@@ -539,6 +579,11 @@ const run = async () => {
             externalFeed: RUN_LIVE ? {
                 status: 'passed',
                 scans: liveResults,
+                symbolFailure: {
+                    status: symbolFailure.status,
+                    failedSymbols: symbolFailure.failedSymbols,
+                    error: symbolFailure.error,
+                },
                 blockedFeed: {
                     status: blockedFeed.status,
                     rows: 0,

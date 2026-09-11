@@ -1240,6 +1240,15 @@ const AlphaScanWorkspace: React.FC = () => {
         closeSocket();
         const scanId = scanIdRef.current + 1;
         scanIdRef.current = scanId;
+        const scanSearchParams = typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search)
+            : null;
+        const simulatedFailureSymbol = scanSearchParams?.get('alpha_scan_failure_symbol') || '';
+        const simulatedFailureMode = scanSearchParams?.get('alpha_scan_failure_mode') === 'error'
+            ? 'error'
+            : 'incomplete';
+        let simulatedFailureTarget = '';
+        let simulatedFailureUsed = false;
         resultRowsRef.current = [];
         failedSymbolsRef.current = new Set<string>();
         pendingRef.current = new Set<number>();
@@ -1423,6 +1432,9 @@ const AlphaScanWorkspace: React.FC = () => {
                 const metadataSymbols = discoverSyntheticSymbols(message.active_symbols);
                 const usingVerifiedCatalog = metadataSymbols.length === 0;
                 discoveredSymbols = usingVerifiedCatalog ? getVerifiedCatalogSymbols() : metadataSymbols;
+                simulatedFailureTarget = simulatedFailureSymbol === 'first'
+                    ? discoveredSymbols[0]?.symbol || ''
+                    : simulatedFailureSymbol;
                 setDiscoverySource(usingVerifiedCatalog ? 'verified-catalog' : 'public-metadata');
                 setDiscoveredCount(discoveredSymbols.length);
                 if (!discoveredSymbols.length) {
@@ -1449,25 +1461,37 @@ const AlphaScanWorkspace: React.FC = () => {
                 const symbol = requestMap.get(message.req_id);
                 requestMap.delete(message.req_id);
                 pendingRef.current.delete(message.req_id);
-                if (message.error || !message.history?.prices) {
+                const isSimulatedFailure = Boolean(
+                    symbol &&
+                    !simulatedFailureUsed &&
+                    simulatedFailureTarget &&
+                    simulatedFailureTarget === symbol.symbol,
+                );
+                if (isSimulatedFailure) simulatedFailureUsed = true;
+                if (message.error || (isSimulatedFailure && simulatedFailureMode === 'error') || !message.history?.prices) {
                     if (symbol) {
                         recordFailure(symbol.symbol);
                         setErrorMessage(
-                            `History collection failed for ${symbol.symbol}: ${message.error?.message || 'no history response returned.'}`,
+                            `History collection failed for ${symbol.symbol}: ${
+                                isSimulatedFailure && simulatedFailureMode === 'error'
+                                    ? 'the deterministic regression response returned an error.'
+                                    : message.error?.message || 'no history response returned.'
+                            }`,
                         );
                     }
                 } else if (symbol) {
                     const prices = message.history.prices.map(Number).filter(Number.isFinite);
-                    if (prices.length > 1) {
+                    const responsePrices = isSimulatedFailure ? prices.slice(0, 1) : prices;
+                    if (responsePrices.length > 1) {
                         const pipSize = Number.isFinite(Number(message.pip_size))
                             ? Number(message.pip_size)
                             : symbol.pipSize;
                         const row = {
                             ...symbol,
-                            prices,
+                            prices: responsePrices,
                             pipSize: Number.isFinite(pipSize) ? pipSize as number : 0,
-                            lastDigits: quotesToLastDigits(prices, pipSize),
-                            ...calculateMetrics(prices),
+                            lastDigits: quotesToLastDigits(responsePrices, pipSize),
+                            ...calculateMetrics(responsePrices),
                         };
                         resultRowsRef.current = [...resultRowsRef.current, row];
                         setRows(resultRowsRef.current);
