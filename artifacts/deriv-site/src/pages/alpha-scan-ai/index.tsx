@@ -795,6 +795,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [recoveryPurchaseMarket, setRecoveryPurchaseMarket] = useState<PurchaseMarket>('odd');
     const [multiMarketScanning, setMultiMarketScanning] = useState(true);
     const [stake, setStake] = useState('10');
+    const [targetProfit, setTargetProfit] = useState('15');
+    const [stopLoss, setStopLoss] = useState('5');
+    const [martingale, setMartingale] = useState('no');
     const [liveMode, setLiveMode] = useState(true);
     const [liveStatus, setLiveStatus] = useState<DTStatus>('idle');
     const [liveFeedback, setLiveFeedback] = useState<DTBuyFeedback | null>(null);
@@ -1129,14 +1132,22 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <div className='alpha-tool__panel-heading'>
                     <span className='alpha-tool__panel-icon'>⚙</span>
                     <b>Trade Settings</b>
+                    <button
+                        type='button'
+                        className='alpha-tool__scan-mode'
+                        onClick={() => setMultiMarketScanning(value => !value)}
+                        aria-pressed={multiMarketScanning}
+                        aria-label='Toggle multi-market scanning'
+                        data-testid='toggle-multi-market'
+                    >
+                        <span>{multiMarketScanning ? 'Multi scan' : 'Single scan'}</span>
+                        <span className={`alpha-tool__switch ${multiMarketScanning ? 'alpha-tool__switch--on' : ''}`} aria-hidden='true'><span /></span>
+                    </button>
                 </div>
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Stake</span><input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Stake' /></div>
-                {!multiMarketScanning && (
-                    <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>∿</span><span>Volatility</span><select value={selectedSymbol} onChange={event => setSelectedSymbol(event.target.value)} aria-label='Selected volatility' data-testid='select-volatility'>
-                        {rows.length ? rows.map(row => <option key={row.symbol} value={row.symbol}>{row.displayName}</option>) : <option value=''>Waiting for scan</option>}
-                    </select></label>
-                )}
-                <div className='alpha-tool__setting-row alpha-tool__setting-row--toggle'><span className='alpha-tool__setting-icon'>◌</span><span>Multi-market scanning</span><button type='button' className={`alpha-tool__switch ${multiMarketScanning ? 'alpha-tool__switch--on' : ''}`} onClick={() => setMultiMarketScanning(value => !value)} aria-pressed={multiMarketScanning} aria-label='Toggle multi-market scanning' data-testid='toggle-multi-market'><span /></button></div>
+                <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↗</span><span>Target Profit</span><select value={targetProfit} onChange={event => setTargetProfit(event.target.value)} aria-label='Target profit'><option value='15'>$15</option><option value='25'>$25</option><option value='50'>$50</option></select></label>
+                <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↓</span><span>Stop Loss</span><select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option></select></label>
+                <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>×</span><span>Martingale</span><select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Martingale'><option value='no'>No (1x)</option><option value='2'>2x</option><option value='3'>3x</option></select></label>
                 <div className='alpha-tool__settings-note'>One-tick contract · one selected market condition · recovery starts only after a primary loss</div>
             </section>
 
