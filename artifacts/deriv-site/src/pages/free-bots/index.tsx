@@ -5,6 +5,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { parseDigitFrom, fetchAndPatchBot, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import type { BotConfig } from './types';
+import BinaryMatrixRunnerModal from './BinaryMatrixRunnerModal';
 import './free-bots.scss';
 
 const V2_CONFIG_KEY = 'free_bots_v2_config';
@@ -591,8 +592,10 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
     const [status,     setStatus]     = useState<BotStatus>('idle');
     const [errorMsg,   setErrorMsg]   = useState('');
     const [showSignal, setShowSignal] = useState(false);
+    const [showBinaryMatrixRunner, setShowBinaryMatrixRunner] = useState(false);
 
     const signal = useSignal(bot.signalKey);
+    const isNativeBinaryMatrix = bot.id === 'binary-matrix-ai';
 
     const loadBot = async () => {
         if (!store) return;
@@ -675,8 +678,17 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                     )}
 
                     <div className='free-bots__card-actions'>
+                        {isNativeBinaryMatrix && (
+                            <button
+                                className='free-bots__card-btn free-bots__card-btn--custom'
+                                onClick={() => setShowBinaryMatrixRunner(true)}
+                            >
+                                🧠 Open Native Runner
+                            </button>
+                        )}
+
                         {/* V2 mode: same Load-into-builder flow, also saves parsed config */}
-                        {isV2Mode && (
+                        {!isNativeBinaryMatrix && isV2Mode && (
                             <button
                                 className={`free-bots__card-btn free-bots__card-btn--v2 ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
                                 onClick={loadBot}
@@ -687,7 +699,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                         )}
 
                         {/* V1 mode: normal Load Bot button */}
-                        {engineMode !== 'v2' && (
+                        {!isNativeBinaryMatrix && engineMode !== 'v2' && (
                             <button
                                 className={`free-bots__card-btn free-bots__card-btn--load ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
                                 onClick={loadBot}
@@ -717,6 +729,13 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                     signal={signal}
                     engineMode={engineMode}
                     onClose={() => setShowSignal(false)}
+                />
+            )}
+
+            {showBinaryMatrixRunner && (
+                <BinaryMatrixRunnerModal
+                    bot={bot}
+                    onClose={() => setShowBinaryMatrixRunner(false)}
                 />
             )}
 
