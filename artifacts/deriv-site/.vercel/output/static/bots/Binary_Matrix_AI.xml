@@ -472,6 +472,159 @@
   </block>
   <block type="before_purchase" id="kp_purchase" deletable="false" x="0" y="1280">
     <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_whileUntil" id="kp_reanalysis_scan_loop">
+        <field name="MODE">UNTIL</field>
+        <value name="BOOL">
+          <block type="variables_get" id="kp_reanalysis_signal_read">
+            <field name="VAR" id="kp_signal">Entry Signal</field>
+          </block>
+        </value>
+        <statement name="DO">
+          <block type="timeout" id="kp_reanalysis_scan_delay">
+            <statement name="TIMEOUTSTACK">
+              <block type="controls_if" id="kp_reanalysis_pattern_choice">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="3"></mutation>
+                <value name="IF0">
+                  <block type="last_digits_condition" id="kp_reanalysis_all_odd">
+                    <field name="CONDITION">ALL_ODD</field>
+                    <value name="N">
+                      <shadow type="math_number" id="kp_reanalysis_odd_count">
+                        <field name="NUM">4</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="kp_reanalysis_direction_even">
+                    <field name="VAR" id="kp_direction">Trade Direction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="kp_reanalysis_direction_even_value">
+                        <field name="NUM">0</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="kp_reanalysis_signal_odd">
+                        <field name="VAR" id="kp_signal">Entry Signal</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="kp_reanalysis_true_odd">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <value name="IF1">
+                  <block type="last_digits_condition" id="kp_reanalysis_all_even">
+                    <field name="CONDITION">ALL_EVEN</field>
+                    <value name="N">
+                      <shadow type="math_number" id="kp_reanalysis_even_count">
+                        <field name="NUM">4</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO1">
+                  <block type="variables_set" id="kp_reanalysis_direction_odd">
+                    <field name="VAR" id="kp_direction">Trade Direction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="kp_reanalysis_direction_odd_value">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="kp_reanalysis_signal_even">
+                        <field name="VAR" id="kp_signal">Entry Signal</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="kp_reanalysis_true_even">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <value name="IF2">
+                  <block type="last_digits_condition" id="kp_reanalysis_less_or_equal">
+                    <field name="CONDITION">LESS_OR_EQUAL</field>
+                    <value name="N">
+                      <shadow type="math_number" id="kp_reanalysis_low_count">
+                        <field name="NUM">3</field>
+                      </shadow>
+                    </value>
+                    <value name="COMPARE_VALUE">
+                      <shadow type="math_number" id="kp_reanalysis_low_value">
+                        <field name="NUM">3</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO2">
+                  <block type="variables_set" id="kp_reanalysis_direction_over">
+                    <field name="VAR" id="kp_direction">Trade Direction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="kp_reanalysis_direction_over_value">
+                        <field name="NUM">4</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="kp_reanalysis_signal_over">
+                        <field name="VAR" id="kp_signal">Entry Signal</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="kp_reanalysis_true_over">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <value name="IF3">
+                  <block type="last_digits_condition" id="kp_reanalysis_greater_or_equal">
+                    <field name="CONDITION">GREATER_OR_EQUAL</field>
+                    <value name="N">
+                      <shadow type="math_number" id="kp_reanalysis_high_count">
+                        <field name="NUM">3</field>
+                      </shadow>
+                    </value>
+                    <value name="COMPARE_VALUE">
+                      <shadow type="math_number" id="kp_reanalysis_high_value">
+                        <field name="NUM">6</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO3">
+                  <block type="variables_set" id="kp_reanalysis_direction_under">
+                    <field name="VAR" id="kp_direction">Trade Direction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="kp_reanalysis_direction_under_value">
+                        <field name="NUM">5</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="kp_reanalysis_signal_under">
+                        <field name="VAR" id="kp_signal">Entry Signal</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="kp_reanalysis_true_under">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+            <value name="SECONDS">
+              <block type="math_number" id="kp_reanalysis_scan_delay_value">
+                <field name="NUM">1</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+      </block>
+      <next>
       <block type="controls_if" id="kp_direction_choice">
         <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="3"></mutation>
         <value name="IF0">
@@ -565,6 +718,7 @@
           </block>
         </statement>
       </block>
+      </next>
     </statement>
   </block>
 </xml>
