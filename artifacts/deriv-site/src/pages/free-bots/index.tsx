@@ -685,6 +685,10 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
             // itself when its statement stack is briefly observed as empty.
             window.setTimeout(() => {
                 (window as any).__DBOT_LOADING_XML = false;
+                // Async dropdown validation can recalculate Blockly metrics
+                // after the first reveal and restore the previous bottom
+                // scroll position. Reveal again after the settling window.
+                DBot.revealLoadedWorkspace();
             }, 1000);
 
             setStatus('loaded');

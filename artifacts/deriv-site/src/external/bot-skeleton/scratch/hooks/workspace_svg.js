@@ -153,9 +153,12 @@ window.Blockly.WorkspaceSvg.prototype.cleanUp = function (x = 0, y = 0, blocks_t
                 config().mainBlocks.findIndex(main_block_type => main_block_type === block.type);
             return blockIndex(a) - blockIndex(b);
         });
-    // Mobile DBot workspaces need one readable vertical flow. Two columns push
-    // the trade and purchase roots outside the narrow horizontal viewport.
-    const column_count = DBotStore.instance.is_mobile ? 1 : 2;
+    // Mobile DBot workspaces need one readable vertical flow. The store flag
+    // can be stale when the Builder is opened inside a mobile browser, so use
+    // the actual viewport as a fallback. Two columns push the trade and
+    // purchase roots outside the narrow horizontal viewport.
+    const is_narrow_viewport = DBotStore.instance.is_mobile || window.innerWidth < 768;
+    const column_count = is_narrow_viewport ? 1 : 2;
     const blocks_per_column = Math.ceil(root_blocks.length / column_count);
 
     let original_cursor_y = y;
@@ -175,7 +178,7 @@ window.Blockly.WorkspaceSvg.prototype.cleanUp = function (x = 0, y = 0, blocks_t
             const xy = block.getRelativeToSurfaceXY();
 
             const cursor_x = is_import ? x : -xy.x;
-            const cursor_y = original_cursor_y - (is_import ? 0 : xy.y) + (DBotStore.instance.is_mobile ? 50 : 0);
+            const cursor_y = original_cursor_y - (is_import ? 0 : xy.y) + (is_narrow_viewport ? 50 : 0);
 
             if (column_index === 0) {
                 block.moveBy(cursor_x, cursor_y);

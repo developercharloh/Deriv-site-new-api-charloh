@@ -250,6 +250,10 @@ class DBot {
                 this.revealLoadedWorkspace(is_mobile);
                 window.setTimeout(() => {
                     window.__DBOT_LOADING_XML = false;
+                    // Async dropdown validation can recalculate Blockly
+                    // metrics after the first reveal and restore the previous
+                    // bottom scroll position.
+                    this.revealLoadedWorkspace(is_mobile);
                 }, 1000);
                 window.addEventListener('dragover', DBot.handleDragOver);
                 window.addEventListener('drop', e => DBot.handleDropOver(e, handleFileChange));
