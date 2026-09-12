@@ -63,6 +63,25 @@ function confColor(conf: number): string {
 
 const BOTS: BotConfig[] = [
     {
+        id: 'binary-matrix-ai',
+        name: 'Binary Matrix AI',
+        emoji: '🧮',
+        description:
+            'Scans the latest four digits on the Volatility 25 Index and selects a binary-matrix trade direction across Even, Odd, Over 4, and Under 5 conditions. Uses one-tick contracts, 2× stake recovery after losses, stake resets after wins, and re-analyzes after three wins.',
+        market: 'Volatility 25 Index (R_25)',
+        strategy: 'Digit Even / Odd · Over / Under · Matrix Scanner · Martingale',
+        params: [
+            { label: 'Initial Stake', value: '$0.50' },
+            { label: 'Take Profit', value: '$10' },
+            { label: 'Stop Loss', value: '$50' },
+            { label: 'Martingale', value: '2×' },
+            { label: 'Re-analyse After', value: '3 wins' },
+            { label: 'Duration', value: '1 Tick' },
+        ],
+        xmlPath: '/bots/Binary_Matrix_AI.xml',
+        gradient: 'linear-gradient(135deg, #170b3d 0%, #3b176e 42%, #0ea5a8 100%)',
+    },
+    {
         id: 'rise-fall-master',
         name: 'Rise / Fall Master Bot',
         emoji: '📈📉',

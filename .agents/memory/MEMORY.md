@@ -5,3 +5,4 @@
 - [Alpha Scan research gate](alpha-scan-research-scope.md) — Alpha Scan starts as a descriptive public-data cockpit; keep decisions at SKIP until OOS validation exists.
 - [Deriv symbol metadata](deriv-active-symbols-discovery.md) — public active_symbols labels vary; use full metadata plus symbol-family matching for Synthetic Index discovery.
 - [Alpha Scan visual surface](alpha-scan-visual-surface.md) — neon model-powered tool uses live ScanRow values, omits footer navigation, and selects one primary/recovery market from X latest digits.
+- [Alpha Scan live execution](alpha-scan-live-execution.md) — use reactive auth state and keep explicit Run separate from pattern qualification so trades cannot silently remain disabled.
