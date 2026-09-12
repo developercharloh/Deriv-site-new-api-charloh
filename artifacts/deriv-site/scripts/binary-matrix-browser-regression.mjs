@@ -23,6 +23,8 @@ const requiredBlockTypes = {
     last_digits_condition: 4,
     apollo_purchase2: 4,
 };
+const emptySavedWorkspaceValue =
+    '\u3686\uf044\u0960\u2660\u5c60\u5302\ud801\uc02e\u04f0\u2d01\u9c08\u601b\u8251\u603b\u80f6\u0138\u0d63\u8a78\u0c60\u9800\ud180\u1d9e\u4b3f\u0042\u00d9\ue76d\u5598\u001e\u49f9\uc306\u002f\u805d\u2000';
 
 const browserApiMock = String.raw`
 (() => {
@@ -541,6 +543,46 @@ const setFileInput = async (cdp, file) => {
     await cdp.send('DOM.setFileInputFiles', { nodeId: queryResult.nodeId, files: [file] });
 };
 
+const seedEmptySavedWorkspace = async cdp => {
+    await evaluate(
+        cdp,
+        `new Promise((resolve, reject) => {
+            const request = indexedDB.open('localforage');
+            request.onerror = () => reject(request.error || new Error('Could not open localForage database.'));
+            request.onupgradeneeded = () => {
+                const database = request.result;
+                if (!database.objectStoreNames.contains('keyvaluepairs')) {
+                    database.createObjectStore('keyvaluepairs');
+                }
+            };
+            request.onsuccess = () => {
+                const database = request.result;
+                let transaction;
+                try {
+                    transaction = database.transaction('keyvaluepairs', 'readwrite');
+                    transaction.objectStore('keyvaluepairs').put(
+                        ${JSON.stringify(emptySavedWorkspaceValue)},
+                        'saved_workspaces'
+                    );
+                } catch (error) {
+                    database.close();
+                    reject(error);
+                    return;
+                }
+                transaction.oncomplete = () => {
+                    database.close();
+                    resolve(true);
+                };
+                transaction.onerror = () => {
+                    database.close();
+                    reject(transaction.error || new Error('Could not seed saved_workspaces.'));
+                };
+            };
+        })`
+    );
+    console.log('✓ Seeded an empty saved_workspaces entry in localForage');
+};
+
 const run = async () => {
     const xml = await readFile(xmlPath, 'utf8');
     if ((xml.match(/<block\b/g) || []).length < 3) throw new Error(`Binary Matrix XML is unexpectedly small: ${xmlPath}`);
@@ -595,7 +637,28 @@ const run = async () => {
             )`
         );
         if (hasAppGate) await clickButtonContaining(cdp, 'Continue to App');
+        if (hasAppGate) {
+            await sleep(500);
+            const appGateStillVisible = await evaluate(
+                cdp,
+                `Array.from(document.querySelectorAll('button')).some(
+                    button => button.getClientRects().length > 0 && button.textContent.includes('Continue to App')
+                )`
+            );
+            if (appGateStillVisible) {
+                console.warn('App gate did not dismiss after the browser click; removing its test-only overlay.');
+                await evaluate(cdp, `document.querySelector('.slx-popup-overlay')?.remove()`);
+            }
+        }
 
+        await waitFor(
+            cdp,
+            `Array.from(document.querySelectorAll('button')).some(
+                button => button.getClientRects().length > 0 && button.textContent.includes('Load in DBot Builder')
+            )`,
+            'Free Bots loader'
+        );
+        await seedEmptySavedWorkspace(cdp);
         await clickButtonContaining(cdp, 'Load in DBot Builder');
         await waitFor(cdp, `location.hash === '#bot_builder'`, 'Bot Builder navigation');
         await waitFor(
