@@ -1027,7 +1027,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     ? 'Odd'
                     : position.contractType),
             gate: position.isOpen ? 'Running' : position.isWin ? 'Won' : 'Lost',
-            stake: position.buyPrice,
+            stake: position.stake,
             payout: position.payout,
             profit: position.isOpen ? null : position.profit,
         };
@@ -1277,6 +1277,15 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <button type='button' className='alpha-tool__refresh' onClick={() => { setLiveFeedback(null); onScan(); }} disabled={isBusy} data-testid='button-run-scan'>
                         <span>{isBusy ? 'Syncing' : 'Refresh Model'}</span>
                     </button>
+                        {liveFeedback ? (
+                            <div
+                                className={`alpha-tool__live-feedback alpha-tool__live-feedback--${liveFeedback.kind}`}
+                                role={liveFeedback.kind === 'error' ? 'alert' : 'status'}
+                                data-testid='live-trade-feedback'
+                            >
+                                {liveFeedback.message}
+                            </div>
+                        ) : null}
                 </div>
             </section>
 
@@ -1309,7 +1318,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                         <td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-tool__gain' : 'alpha-tool__loss'}>
                                             {entry.profit === null
                                                 ? `Open · ${formatMoney(entry.stake)} → ${formatMoney(entry.payout)}`
-                                                : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)} · ${formatMoney(entry.payout)}`}
+                                                : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)} · ${formatMoney(entry.stake)} → ${formatMoney(entry.payout)}`}
                                         </td>
                                     </tr>
                                 )) : (

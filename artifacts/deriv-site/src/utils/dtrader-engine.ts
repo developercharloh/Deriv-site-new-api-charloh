@@ -565,6 +565,11 @@ export class DTraderEngine {
             if (msg.msg_type === 'buy') {
                 this.buyInflight = false;
                 this.pendingBuy = false;
+                // A rejected buy invalidates the proposal for the next tap.
+                // Do not let placeBuyNow() reuse the rejected id via its
+                // instant-buy path.
+                this.currentProposal = null;
+                this.currentProposalCfgKey = null;
                 this.emitBuyError(m);
                 // Likely a stale proposal id — refresh immediately so the next
                 // tap has a fresh price ready.

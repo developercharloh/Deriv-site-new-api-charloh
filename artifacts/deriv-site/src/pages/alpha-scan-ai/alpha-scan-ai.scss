@@ -1560,6 +1560,19 @@
         &:disabled { opacity: 0.52; cursor: not-allowed; }
     }
 
+    &__live-feedback {
+        max-width: 15rem;
+        padding: 0.28rem 0.45rem;
+        border-radius: 0.35rem;
+        color: #d9f7ff;
+        background: rgba(7, 52, 105, 0.72);
+        font-size: 0.48rem;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+        &--error { color: #ffd7df; background: rgba(133, 24, 74, 0.78); }
+        &--success { color: #caffea; background: rgba(11, 123, 76, 0.68); }
+    }
+
     &__journal { border-color: #1f86ff; overflow: hidden; }
     &__section-heading { justify-content: space-between; padding-bottom: 0.55rem; }
     &__section-heading > div { display: flex; align-items: center; gap: 0.5rem; }
