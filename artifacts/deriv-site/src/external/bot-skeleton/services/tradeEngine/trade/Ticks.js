@@ -105,19 +105,36 @@ export default Engine =>
             return this.getLastDigitList().then(digits => {
                 const size = Math.max(1, Math.floor(Number(count) || 1));
                 const recent = digits.slice(-size).map(Number);
-                if (recent.length < size) return false;
+                let result = false;
 
-                switch (condition) {
+                if (recent.length >= size) {
+                    switch (condition) {
                     case 'ALL_EVEN':
-                        return recent.every(digit => digit % 2 === 0);
+                        result = recent.every(digit => digit % 2 === 0);
+                        break;
                     case 'LESS_OR_EQUAL':
-                        return recent.every(digit => digit <= Number(compareValue));
+                        result = recent.every(digit => digit <= Number(compareValue));
+                        break;
                     case 'GREATER_OR_EQUAL':
-                        return recent.every(digit => digit >= Number(compareValue));
+                        result = recent.every(digit => digit >= Number(compareValue));
+                        break;
                     case 'ALL_ODD':
                     default:
-                        return recent.every(digit => digit % 2 !== 0);
+                        result = recent.every(digit => digit % 2 !== 0);
+                        break;
+                    }
                 }
+
+                globalObserver.emit('bot.analysis.condition', {
+                    market: this.symbol || 'N/A',
+                    condition,
+                    count: size,
+                    compareValue: Number(compareValue),
+                    digits: recent,
+                    result,
+                });
+
+                return result;
             });
         }
         getLastDigitsFromList(ticks) {
