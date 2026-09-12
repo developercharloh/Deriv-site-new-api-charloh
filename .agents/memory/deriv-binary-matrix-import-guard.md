@@ -8,3 +8,5 @@ The Binary Matrix builder import must keep a global XML-import guard active thro
 **Why:** The visible symptom was a builder containing only Restart Trading Conditions even though the importer initially created all three roots; the first roots were removed asynchronously after import.
 
 **How to apply:** Set the import guard before clearing/loading XML, keep it active through cleanup and a short post-load settling window, have root-block and market-option handlers honor both the guard and the `dbot-load` event group, and call `setY(0)` after cleanup so a previous bottom scroll cannot hide the first roots.
+
+The Builder's own initial `main.xml` load must use the same guard; otherwise the default workspace can start with only Restart Trading Conditions before a Free Bots load is attempted.

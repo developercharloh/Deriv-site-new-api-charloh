@@ -218,6 +218,7 @@ class DBot {
                 }
 
                 const event_group = `dbot-load${Date.now()}`;
+                window.__DBOT_LOADING_XML = true;
                 window.Blockly.Events.setGroup(event_group);
                 try {
                     window.Blockly.Xml.domToWorkspace(
@@ -238,6 +239,7 @@ class DBot {
                     );
                     file_name = config().default_file_name;
                 }
+                window.Blockly.Events.setGroup(false);
                 const { save_modal } = DBotStore.instance;
 
                 save_modal.updateBotName(file_name);
@@ -246,6 +248,9 @@ class DBot {
 
                 window.dispatchEvent(new Event('resize'));
                 this.revealLoadedWorkspace(is_mobile);
+                window.setTimeout(() => {
+                    window.__DBOT_LOADING_XML = false;
+                }, 1000);
                 window.addEventListener('dragover', DBot.handleDragOver);
                 window.addEventListener('drop', e => DBot.handleDropOver(e, handleFileChange));
                 // disable overflow
