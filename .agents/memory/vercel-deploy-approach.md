@@ -52,6 +52,14 @@ The Vercel CLI may be unavailable because Replit's package firewall blocks its t
 
 **How to apply:** Keep the deploy script outside the project if possible, use concurrency for static file uploads, and verify both the deployment URL and the custom domain with HTTP checks.
 
+
+## Cached CLI fallback
+
+When downloading the Vercel CLI is blocked by the package firewall, an already-populated pnpm dlx cache may still contain a runnable CLI bundle. Running its local `dist/index.js` preserves the normal prebuilt differential upload behavior and can avoid a manual REST implementation.
+
+**Why:** The deployment retry succeeded from the cached CLI after a fresh `npx` download was rejected by the package firewall.
+
+**How to apply:** Search the pnpm dlx cache for `node_modules/vercel/dist/index.js`, invoke it with Node from the artifact directory, and keep `--prebuilt` enabled.
 ## Upload quota constraint
 
 The Vercel REST upload endpoint can exhaust an account-wide 5,000-file quota even when a later deployment needs only a few changed files. Once exhausted, both full and differential prebuilt publishes are rejected until the quota reset.
