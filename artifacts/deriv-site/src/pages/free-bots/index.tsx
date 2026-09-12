@@ -629,7 +629,8 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
             const waitForWs = async (): Promise<any> => {
                 for (let i = 0; i < 50; i++) {
                     const B = (window as any).Blockly;
-                    if (B?.derivWorkspace) return B;
+                    const scratchDiv = document.getElementById('scratch_div');
+                    if (B?.derivWorkspace && scratchDiv?.querySelector('svg')) return B;
                     await new Promise(r => setTimeout(r, 100));
                 }
                 return null;
@@ -648,7 +649,16 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
             try {
                 await Blockly.derivWorkspace.asyncClear();
                 const dom = Blockly.utils.xml.textToDom(xmlText);
-                Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
+                Blockly.Xml.domToVariables(dom, Blockly.derivWorkspace);
+                const rootXmlBlocks = Array.from(dom.children).filter(
+                    (node: any) => node.localName === 'block' || node.tagName?.toLowerCase() === 'block'
+                );
+                if (rootXmlBlocks.length !== 3) {
+                    throw new Error(`Binary Matrix XML must contain 3 root blocks; found ${rootXmlBlocks.length}.`);
+                }
+                rootXmlBlocks.forEach((rootXmlBlock: any) => {
+                    Blockly.Xml.domToBlock(rootXmlBlock, Blockly.derivWorkspace);
+                });
             } finally {
                 Blockly.Events.setGroup(false);
             }
