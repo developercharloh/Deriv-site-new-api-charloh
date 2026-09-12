@@ -51,3 +51,11 @@ The Vercel CLI may be unavailable because Replit's package firewall blocks its t
 **Why:** The application can be fully built and the Vercel API remains reachable even when package installation is restricted.
 
 **How to apply:** Keep the deploy script outside the project if possible, use concurrency for static file uploads, and verify both the deployment URL and the custom domain with HTTP checks.
+
+## Upload quota constraint
+
+The Vercel REST upload endpoint can exhaust an account-wide 5,000-file quota even when a later deployment needs only a few changed files. Once exhausted, both full and differential prebuilt publishes are rejected until the quota reset.
+
+**Why:** Repeated prebuilt uploads of the same static tree still count against the upload quota when the client posts every file instead of reusing known digests.
+
+**How to apply:** Compare the local prebuilt manifest against the last READY deployment and upload only new digests. If Vercel still returns `api-upload-free` with `remaining: 0`, keep the code verified locally and do not claim production was updated; retry after the reported reset time.
