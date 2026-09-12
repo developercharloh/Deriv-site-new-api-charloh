@@ -143,33 +143,40 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
         };
     }, [is_stop_button_visible, is_stop_button_disabled]);
     const show_overlay = should_show_overlay && is_contract_completed;
+    const changeExecutionSpeed = (speed: BotExecutionSpeed) => {
+        setExecutionSpeed(speed);
+        setBotExecutionSpeed(speed);
+    };
 
     const execution_speed_control = (
-        <div className='animation__speed-toggle' role='group' aria-label={localize('Bot execution speed')}>
-            <span className='animation__speed-label'>{localize('Execution')}</span>
-            <button
-                type='button'
-                className={classNames('animation__speed-btn', {
-                    'animation__speed-btn--active': execution_speed === 'slow',
-                })}
-                aria-pressed={execution_speed === 'slow'}
-                title={localize('Keep the original bot timing')}
-                onClick={() => setBotExecutionSpeed('slow')}
-            >
-                {localize('SLOW')}
-            </button>
-            <button
-                type='button'
-                className={classNames('animation__speed-btn', {
-                    'animation__speed-btn--active-fast': execution_speed === 'fast',
-                })}
-                aria-pressed={execution_speed === 'fast'}
-                title={localize('Reduce artificial waits between bot steps')}
-                onClick={() => setBotExecutionSpeed('fast')}
-            >
-                {localize('FAST')}
-            </button>
-        </div>
+        <button
+            type='button'
+            className={classNames('animation__speed-switch', {
+                'animation__speed-switch--fast': execution_speed === 'fast',
+            })}
+            role='switch'
+            aria-checked={execution_speed === 'fast'}
+            aria-label={localize('Bot execution speed')}
+            title={
+                execution_speed === 'fast'
+                    ? localize('Switch to slow execution')
+                    : localize('Switch to fast execution')
+            }
+            onPointerDown={event => event.stopPropagation()}
+            onClick={event => {
+                event.preventDefault();
+                event.stopPropagation();
+                changeExecutionSpeed(execution_speed === 'fast' ? 'slow' : 'fast');
+            }}
+        >
+            <span className='animation__speed-switch-copy'>
+                <span className='animation__speed-switch-caption'>{localize('Execution')}</span>
+                <span className='animation__speed-switch-value'>{localize(execution_speed.toUpperCase())}</span>
+            </span>
+            <span className='animation__speed-switch-track' aria-hidden='true'>
+                <span className='animation__speed-switch-thumb' />
+            </span>
+        </button>
     );
 
     // Fix TypeScript error by ensuring active_tab is a number

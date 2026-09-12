@@ -171,96 +171,117 @@
 }
 
 .animation__run-controls {
+    position: relative;
+    z-index: 20;
     display: flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
+    pointer-events: auto;
 }
 
-// ── Shared DBot execution speed control ──────────────────────────────────────
-.animation__speed-toggle {
+// ── Shared DBot execution speed switch ───────────────────────────────────────
+.animation__speed-switch {
+    position: relative;
+    z-index: 21;
     display: inline-flex;
     align-items: center;
-    height: 28px;
-    overflow: hidden;
+    justify-content: space-between;
+    gap: 10px;
+    width: 174px;
+    height: 40px;
     flex-shrink: 0;
-    border: 1px solid rgba(100, 116, 139, 0.25);
-    border-radius: 6px;
-}
-
-.animation__speed-label {
-    padding: 0 6px;
-    color: rgba(100, 116, 139, 0.78);
-    font-size: 0.66rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-}
-
-.animation__speed-btn {
-    height: 28px;
-    padding: 0 7px;
-    border: 0;
-    border-left: 1px solid rgba(100, 116, 139, 0.18);
-    background: transparent;
-    color: rgba(100, 116, 139, 0.72);
+    padding: 4px 9px 4px 12px;
+    border: 1px solid #e4dfc9;
+    border-radius: 0;
+    background: #fffdf3;
+    color: #1c1c1c;
     cursor: pointer;
-    font-size: 0.66rem;
-    font-weight: 800;
-    line-height: 28px;
-    white-space: nowrap;
+    pointer-events: auto;
+    touch-action: manipulation;
+    user-select: none;
+    text-align: left;
 
     &:hover {
-        background: rgba(100, 116, 139, 0.1);
-        color: inherit;
+        background: #fff9df;
     }
 
-    &--active {
-        background: rgba(100, 116, 139, 0.16);
-        color: var(--text-general, #1e293b);
-    }
-
-    &--active-fast {
-        background: rgba(14, 165, 233, 0.16);
-        color: #0284c7;
+    &:focus-visible {
+        outline: 2px solid #1677d2;
+        outline-offset: 1px;
     }
 }
 
-.theme--dark .animation__speed-toggle {
-    border-color: rgba(255, 255, 255, 0.18);
+.animation__speed-switch-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1;
+}
 
-    .animation__speed-label,
-    .animation__speed-btn {
-        color: rgba(255, 255, 255, 0.55);
+.animation__speed-switch-caption {
+    margin-bottom: 4px;
+    color: #99958c;
+    font-size: 0.62rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.animation__speed-switch-value {
+    color: #252525;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+.animation__speed-switch-track {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+    padding: 2px;
+    border: 1px solid #d8d5cc;
+    border-radius: 999px;
+    background: #f0eee7;
+    transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.animation__speed-switch-thumb {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #d7a536;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 22%);
+    transform: translateX(0);
+    transition: transform 0.16s ease, background 0.16s ease;
+}
+
+.animation__speed-switch--fast {
+    .animation__speed-switch-track {
+        border-color: #9acbe4;
+        background: #e2f3fc;
     }
 
-    .animation__speed-btn {
-        border-left-color: rgba(255, 255, 255, 0.12);
-
-        &:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: #e7eaf3;
-        }
-
-        &--active {
-            background: rgba(255, 255, 255, 0.1);
-            color: #e7eaf3;
-        }
-
-        &--active-fast {
-            background: rgba(14, 165, 233, 0.2);
-            color: #38bdf8;
-        }
+    .animation__speed-switch-thumb {
+        background: #1677d2;
+        transform: translateX(18px);
     }
+}
+
+.theme--dark .animation__speed-switch {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: #fffdf3;
+    color: #1c1c1c;
 }
 
 @media screen and (width <= 480px) {
-    .animation__speed-label {
-        display: none;
-    }
-
-    .animation__speed-btn {
-        padding: 0 6px;
+    .animation__speed-switch {
+        width: 174px;
     }
 }
 

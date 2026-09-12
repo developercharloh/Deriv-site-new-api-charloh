@@ -1,4 +1,9 @@
-import { getBotExecutionDelayMs } from '@/constants/bot-execution-speed';
+import {
+    BOT_EXECUTION_SPEED_CHANGED_EVENT,
+    getBotExecutionDelayMs,
+    getBotExecutionSpeed,
+    setBotExecutionSpeed,
+} from '@/constants/bot-execution-speed';
 
 describe('bot execution speed', () => {
     it('preserves the original delay in SLOW mode', () => {
@@ -15,5 +20,19 @@ describe('bot execution speed', () => {
     it('uses a safe one-second fallback for invalid delay values', () => {
         expect(getBotExecutionDelayMs(undefined, 'slow')).toBe(1000);
         expect(getBotExecutionDelayMs('not-a-number', 'fast')).toBe(100);
+    });
+
+    it('persists the selected side and notifies the existing run panel', () => {
+        const listener = jest.fn();
+        window.addEventListener(BOT_EXECUTION_SPEED_CHANGED_EVENT, listener);
+
+        setBotExecutionSpeed('fast');
+        expect(getBotExecutionSpeed()).toBe('fast');
+        expect(listener).toHaveBeenCalledTimes(1);
+
+        setBotExecutionSpeed('slow');
+        expect(getBotExecutionSpeed()).toBe('slow');
+        expect(listener).toHaveBeenCalledTimes(2);
+        window.removeEventListener(BOT_EXECUTION_SPEED_CHANGED_EVENT, listener);
     });
 });
