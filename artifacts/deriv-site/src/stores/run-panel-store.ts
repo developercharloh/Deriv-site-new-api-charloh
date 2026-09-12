@@ -807,6 +807,10 @@ export default class RunPanelStore {
     startNativeApolloBot = () => {
         const workspace = window.Blockly?.derivWorkspace;
         if (!workspace) return;
+        // A double Run event can arrive before the first engine has emitted
+        // its initial status. Do not stop a live native runner and create a
+        // second engine for the same R_25 stream.
+        if (this.native_apollo_engine) return;
 
         const getVariableNumber = (name: string, fallback: number) => {
             const setter = workspace
@@ -838,6 +842,9 @@ export default class RunPanelStore {
 
         const syncStatus = (status: BinaryMatrixStatus) => {
             if (status === 'stopped' || status === 'idle') {
+                // A replaced engine must not clear the state owned by the
+                // current runner.
+                if (this.native_apollo_engine !== engine) return;
                 this.native_apollo_engine = null;
                 this.unregisterNativeBot();
                 return;

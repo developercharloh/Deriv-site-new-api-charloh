@@ -187,9 +187,11 @@ describe('DTraderEngine Alpha Scan execution path', () => {
         harness.engine.stop();
     });
 
-    it('recovers from an existing tick subscription before scanning', () => {
+    it('recovers from an existing tick subscription before scanning', async () => {
         const harness = makeHarness(baseConfig);
         const initialTickRequest = harness.latest(payload => payload.ticks_history === 'R_100');
+        const forgetAll = jest.fn(() => Promise.resolve());
+        (mockApiBase.api as any).forgetAll = forgetAll;
 
         harness.emit({
             msg_type: 'history',
@@ -197,9 +199,11 @@ describe('DTraderEngine Alpha Scan execution path', () => {
             error: { message: 'You are already subscribed to R_100' },
         });
 
-        expect(harness.sent.at(-1)).toMatchObject({ forget_all: 'ticks' });
+        expect(forgetAll).toHaveBeenCalledWith('ticks');
+        expect(harness.sent.some(payload => payload.forget_all === 'ticks')).toBe(false);
 
-        jest.advanceTimersByTime(300);
+        await Promise.resolve();
+        await Promise.resolve();
         const retry = harness.sent.filter(payload => payload.ticks_history === 'R_100');
         expect(retry).toHaveLength(2);
         expect(retry.at(-1)).toMatchObject({

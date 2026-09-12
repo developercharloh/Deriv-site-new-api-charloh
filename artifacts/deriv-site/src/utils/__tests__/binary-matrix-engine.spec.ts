@@ -18,11 +18,12 @@ describe('BinaryMatrixEngine live purchase path', () => {
         jest.useRealTimers();
     });
 
-    it('buys EVEN after four qualifying odd digits', () => {
+    it('buys EVEN after four qualifying odd digits', async () => {
         const sent: SentPayload[] = [];
         let handler: MessageHandler | null = null;
         const api = {
             send: jest.fn((payload: SentPayload) => sent.push(payload)),
+            forgetAll: jest.fn(() => Promise.resolve()),
             onMessage: () => ({
                 subscribe: (next: MessageHandler) => {
                     handler = next;
@@ -44,6 +45,8 @@ describe('BinaryMatrixEngine live purchase path', () => {
         const logs: string[] = [];
         engine.onLog = log => logs.push(log.message);
         engine.start();
+        await Promise.resolve();
+        await Promise.resolve();
         jest.advanceTimersByTime(300);
 
         const emit = (message: Record<string, any>) => {

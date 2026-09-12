@@ -190,6 +190,9 @@ export class DTraderEngine {
     private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
     private tickRetryTimer: ReturnType<typeof setTimeout> | null = null;
     private duplicateTickRecoveryAttempted = false;
+    /** Monotonic token that cancels an in-flight remote tick cleanup when the
+     * engine is stopped or restarted before the cleanup response arrives. */
+    private tickOperation = 0;
     private visListener: (() => void) | null = null;
     /** Contract ids the user explicitly asked us to sell — used to label
      *  their settlement event as a 'cashout' instead of 'tp'/'sl'. */
@@ -235,7 +238,10 @@ export class DTraderEngine {
             this.handle(raw?.data ?? raw);
         });
 
-        this.subscribeTick();
+        // A previous runner can still own the symbol on Deriv for a short
+        // time after its local `forget` was sent. Clear remote tick streams
+        // and only then send the new history+subscribe request.
+        this.prepareTickSubscription();
         this.scheduleProposal();
 
         // ── Liveness watchdogs — fix the "page goes to sleep" bug where
@@ -269,6 +275,7 @@ export class DTraderEngine {
     }
 
     stop(): void {
+        this.tickOperation += 1;
         if (this.proposalDebounce) { clearTimeout(this.proposalDebounce); this.proposalDebounce = null; }
         if (this.keepAliveTimer)   { clearInterval(this.keepAliveTimer);   this.keepAliveTimer = null; }
         if (this.healthCheckTimer) { clearInterval(this.healthCheckTimer); this.healthCheckTimer = null; }
@@ -299,8 +306,7 @@ export class DTraderEngine {
      *  Cheap to call repeatedly — `forget` on null sub-ids is a no-op. */
     private recoverSubscriptions(): void {
         if (!this.cfg) return;
-        if (this.tickSubId) { this.rawSend({ forget: this.tickSubId }); this.tickSubId = null; }
-        this.subscribeTick();
+        this.prepareTickSubscription();
         this.refreshProposal();
         this.lastTickAt = Date.now(); // reset the watchdog so we don't loop
     }
@@ -446,6 +452,57 @@ export class DTraderEngine {
             style: 'ticks',
             subscribe: 1,
         });
+    }
+
+    /**
+     * Deriv acknowledges `forget` asynchronously. Sending a new
+     * ticks_history request immediately after it races that acknowledgement
+     * and can produce AlreadySubscribed even though the old subscription is
+     * no longer owned locally. `forgetAll('ticks')` returns after Deriv has
+     * processed the cleanup, so serialize the next subscription behind it.
+     */
+    private prepareTickSubscription(): void {
+        const api = api_base.api as any;
+        const operation = ++this.tickOperation;
+        this.tickSubId = null;
+
+        const finish = () => {
+            if (
+                !this.cfg
+                || this.status === 'idle'
+                || operation !== this.tickOperation
+                || api_base.api !== api
+            ) {
+                return;
+            }
+            this.subscribeTick();
+        };
+
+        if (!api || typeof api.forgetAll !== 'function') {
+            finish();
+            return;
+        }
+
+        let cleanup: Promise<unknown>;
+        try {
+            cleanup = Promise.resolve(api.forgetAll('ticks'));
+        } catch (error) {
+            this.log(
+                `Could not confirm the previous tick cleanup: ${error?.message ?? 'unknown error'}`,
+                'error',
+            );
+            finish();
+            return;
+        }
+
+        cleanup
+            .catch(error => {
+                this.log(
+                    `Could not confirm the previous tick cleanup: ${error?.message ?? 'unknown error'}`,
+                    'error',
+                );
+            })
+            .then(finish);
     }
 
     private resetDigitWindow(): void {
@@ -983,12 +1040,11 @@ export class DTraderEngine {
 
         this.duplicateTickRecoveryAttempted = true;
         this.tickSubId = null;
-        this.log('Existing tick subscription detected — resetting it and retrying R_25 ticks.', 'system');
-        this.send({ forget_all: 'ticks' });
-        this.tickRetryTimer = setTimeout(() => {
-            this.tickRetryTimer = null;
-            if (this.cfg && this.status !== 'idle') this.subscribeTick();
-        }, 300);
+        this.log(
+            `Existing tick subscription detected — resetting it and retrying ${this.cfg.symbol} ticks.`,
+            'system',
+        );
+        this.prepareTickSubscription();
     }
 
     private log(message: string, type: DTLogType = 'info'): void {
