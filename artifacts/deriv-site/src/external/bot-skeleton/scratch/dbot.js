@@ -21,6 +21,43 @@ class DBot {
         this.is_bot_running = false;
     }
 
+    revealLoadedWorkspace = is_mobile => {
+        if (!is_mobile || !this.workspace) return;
+
+        const reveal = () => {
+            if (!this.workspace || !this.workspace.getTopBlocks(true).length) return;
+
+            window.Blockly.svgResize(this.workspace);
+            const metrics = this.workspace.getMetrics?.();
+            if (!metrics?.viewWidth || !metrics?.viewHeight || !metrics.contentWidth || !metrics.contentHeight) {
+                this.workspace.scrollCenter?.();
+                return;
+            }
+
+            const padding_x = 24;
+            const padding_y = 48;
+            const fit_ratio = Math.min(
+                1,
+                (metrics.viewWidth - padding_x) / metrics.contentWidth,
+                (metrics.viewHeight - padding_y) / metrics.contentHeight
+            );
+
+            if (fit_ratio < 1) {
+                const current_scale = this.workspace.getScale();
+                this.workspace.setScale(Math.max(0.25, current_scale * fit_ratio));
+                window.Blockly.svgResize(this.workspace);
+            }
+
+            this.workspace.scrollCenter?.();
+        };
+
+        window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+                window.setTimeout(reveal, 0);
+            });
+        });
+    };
+
     /**
      * Initialises the workspace and mounts it to a container element (app_contents).
      */
@@ -216,6 +253,7 @@ class DBot {
                 this.workspace.clearUndo();
 
                 window.dispatchEvent(new Event('resize'));
+                this.revealLoadedWorkspace(is_mobile);
                 window.addEventListener('dragover', DBot.handleDragOver);
                 window.addEventListener('drop', e => DBot.handleDropOver(e, handleFileChange));
                 // disable overflow

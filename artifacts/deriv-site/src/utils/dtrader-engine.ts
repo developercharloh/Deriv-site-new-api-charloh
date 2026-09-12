@@ -874,9 +874,23 @@ export class DTraderEngine {
         // Live updates while open
         const profit  = poc.profit !== undefined ? parseFloat(poc.profit) : pos.profit;
         const bid     = poc.bid_price !== undefined ? parseFloat(poc.bid_price) : pos.currentBid;
-        const spot    = poc.current_spot_display_value as string | undefined;
-        const entry   = poc.entry_tick_display_value   as string | undefined;
-        const exit    = poc.exit_tick_display_value    as string | undefined;
+        const spotValue = (...values: unknown[]): string | undefined => {
+            const value = values.find(item => item !== undefined && item !== null && item !== '');
+            return value === undefined ? undefined : String(value);
+        };
+        const spot    = spotValue(poc.current_spot_display_value, poc.current_spot);
+        const entry   = spotValue(
+            poc.entry_tick_display_value,
+            poc.entry_tick,
+            poc.entry_spot_display_value,
+            poc.entry_spot
+        );
+        const exit    = spotValue(
+            poc.exit_tick_display_value,
+            poc.exit_tick,
+            poc.exit_spot_display_value,
+            poc.exit_spot
+        );
 
         const settled = !!(poc.is_sold || poc.status === 'won' || poc.status === 'lost');
 

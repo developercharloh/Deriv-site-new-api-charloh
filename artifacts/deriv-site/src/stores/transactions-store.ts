@@ -117,7 +117,6 @@ export default class TransactionsStore {
     }
 
     pushTransaction(data: TContractInfo) {
-        const is_completed = isEnded(data as ProposalOpenContract);
         const { run_id } = this.root_store.run_panel;
         const current_account = this.core?.client?.loginid as string;
 
@@ -125,34 +124,44 @@ export default class TransactionsStore {
         // returns [] for falsy loginid, so the data would be permanently invisible.
         if (!current_account) return;
 
-        const contract: TContractInfo = {
-            ...data,
-            is_completed,
-            run_id,
-            date_start: formatDate(data.date_start, 'YYYY-M-D HH:mm:ss [GMT]'),
-            entry_tick: data.entry_spot,
-            entry_tick_time: data.entry_tick_time && formatDate(data.entry_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
-            exit_tick: (data as any).exit_spot || data.exit_tick,
-            exit_tick_time: data.exit_tick_time && formatDate(data.exit_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
-            profit: is_completed ? data.profit : 0,
-        };
-
-        // Always work from a copy so we never mutate the array in-place.
-        // MobX computed uses === equality on the return value; mutating the
-        // existing array reference and then spreading the outer object produces
-        // the SAME inner reference, so MobX considers the computed unchanged
-        // and the component never re-renders.  Creating a new array every time
-        // guarantees a fresh reference that MobX propagates correctly.
+        // Deriv can send a settlement update with the result and P/L before
+        // repeating the entry/exit spot fields. Keep the best-known values
+        // from the open update instead of replacing them with undefined.
         const existing: TTransaction[] = [...(this.elements[current_account] ?? [])];
-
         const same_contract_index = existing.findIndex(c => {
             if (typeof c.data === 'string') return false;
             return (
                 c.type === transaction_elements.CONTRACT &&
                 c.data?.transaction_ids &&
-                c.data.transaction_ids.buy === data.transaction_ids?.buy
+                String(c.data.transaction_ids.buy) === String(data.transaction_ids?.buy)
             );
         });
+        const previous_data =
+            same_contract_index >= 0 && typeof existing[same_contract_index].data === 'object'
+                ? (existing[same_contract_index].data as TContractInfo)
+                : undefined;
+        const merged_data: TContractInfo = {
+            ...previous_data,
+            ...data,
+            entry_spot: data.entry_spot ?? previous_data?.entry_spot ?? data.entry_tick ?? previous_data?.entry_tick,
+            exit_spot: data.exit_spot ?? previous_data?.exit_spot ?? data.exit_tick ?? previous_data?.exit_tick,
+            entry_tick_time: data.entry_tick_time ?? previous_data?.entry_tick_time,
+            exit_tick_time: data.exit_tick_time ?? previous_data?.exit_tick_time,
+        };
+        const is_completed = isEnded(merged_data as ProposalOpenContract);
+        const contract: TContractInfo = {
+            ...merged_data,
+            is_completed,
+            run_id,
+            date_start: formatDate(merged_data.date_start, 'YYYY-M-D HH:mm:ss [GMT]'),
+            entry_tick: merged_data.entry_spot ?? merged_data.entry_tick,
+            entry_tick_time:
+                merged_data.entry_tick_time && formatDate(merged_data.entry_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
+            exit_tick: merged_data.exit_spot ?? merged_data.exit_tick,
+            exit_tick_time:
+                merged_data.exit_tick_time && formatDate(merged_data.exit_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
+            profit: is_completed ? merged_data.profit : 0,
+        };
 
         let updated: TTransaction[];
 

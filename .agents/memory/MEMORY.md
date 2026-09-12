@@ -7,3 +7,4 @@
 - [Alpha Scan visual surface](alpha-scan-visual-surface.md) — neon model-powered tool uses live ScanRow values, omits footer navigation, and selects one primary/recovery market from X latest digits.
 - [Alpha Scan live execution](alpha-scan-live-execution.md) — use reactive auth state and keep explicit Run separate from pattern qualification so trades cannot silently remain disabled.
 - [Deriv tick subscription recovery](deriv-tick-subscription-recovery.md) — duplicate symbol streams need one-shot forget-all recovery before retrying ticks.
+- [Deriv builder and settlement validation](deriv-builder-settlement-validation.md) — validate bundled Blockly XML and merge partial settlement updates so mobile nodes and spots cannot disappear.
