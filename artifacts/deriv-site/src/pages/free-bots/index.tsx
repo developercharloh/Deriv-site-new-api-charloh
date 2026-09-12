@@ -3,7 +3,6 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { DBot } from '@/external/bot-skeleton';
-import { load as loadBotXml } from '@/external/bot-skeleton/scratch/utils';
 import { parseDigitFrom, fetchAndPatchBot, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import type { BotConfig } from './types';
@@ -640,17 +639,21 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                 throw new Error('Bot Builder workspace not ready — please open the Bot Builder tab once, then try again.');
             }
 
-            const loadResult = await loadBotXml({
-                block_string: xmlText,
-                drop_event: {},
-                file_name: bot.name,
-                strategy_id: undefined,
-                from: 'free-bot',
-                workspace: Blockly.derivWorkspace,
-                showIncompatibleStrategyDialog: undefined,
-                show_snackbar: false,
-            });
-            if (loadResult?.error) throw new Error(loadResult.error);
+            // Keep the direct loader used by the working Binary Matrix path, but
+            // use the same load event group as the normal DBot importer. Several
+            // root-block onchange handlers dispose incomplete-looking blocks
+            // unless they can identify an in-progress `dbot-load` operation.
+            const loadEventGroup = `dbot-load${Date.now()}`;
+            Blockly.Events.setGroup(loadEventGroup);
+            try {
+                await Blockly.derivWorkspace.asyncClear();
+                const dom = Blockly.utils.xml.textToDom(xmlText);
+                Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
+            } finally {
+                Blockly.Events.setGroup(false);
+            }
+            Blockly.derivWorkspace.cleanUp();
+            Blockly.derivWorkspace.clearUndo();
 
             const loadedBlocks = Blockly.derivWorkspace.getAllBlocks(true);
             const loadedTopBlocks = Blockly.derivWorkspace.getTopBlocks(true);
