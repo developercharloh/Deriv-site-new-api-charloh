@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { DBot } from '@/external/bot-skeleton';
+import { load as loadBotXml } from '@/external/bot-skeleton/scratch/utils';
 import { parseDigitFrom, fetchAndPatchBot, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import type { BotConfig } from './types';
@@ -639,10 +640,25 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                 throw new Error('Bot Builder workspace not ready — please open the Bot Builder tab once, then try again.');
             }
 
-            const dom = Blockly.utils.xml.textToDom(xmlText);
-            Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
-            Blockly.derivWorkspace.cleanUp();
-            Blockly.derivWorkspace.clearUndo();
+            const loadResult = await loadBotXml({
+                block_string: xmlText,
+                drop_event: {},
+                file_name: bot.name,
+                strategy_id: undefined,
+                from: 'free-bot',
+                workspace: Blockly.derivWorkspace,
+                showIncompatibleStrategyDialog: undefined,
+                show_snackbar: false,
+            });
+            if (loadResult?.error) throw new Error(loadResult.error);
+
+            const loadedBlocks = Blockly.derivWorkspace.getAllBlocks(true);
+            const loadedTopBlocks = Blockly.derivWorkspace.getTopBlocks(true);
+            if (loadedTopBlocks.length < 3 || loadedBlocks.length < 10) {
+                throw new Error(
+                    `Binary Matrix XML loaded incompletely (${loadedTopBlocks.length} root blocks, ${loadedBlocks.length} total blocks).`
+                );
+            }
             DBot.revealLoadedWorkspace();
 
             setStatus('loaded');
