@@ -47,6 +47,27 @@ class DBot {
         });
     };
 
+    hasUsableSavedWorkspace = strategy_xml => {
+        if (!strategy_xml || typeof strategy_xml !== 'string') return false;
+
+        try {
+            const xml = window.Blockly.utils.xml.textToDom(strategy_xml);
+            const top_level_block_types = Array.from(xml.children)
+                .filter(element => element.tagName?.toLowerCase() === 'block')
+                .map(element => element.getAttribute('type'));
+
+            // An empty recent workspace parses successfully but leaves the
+            // Builder completely blank. Require the two core roots that every
+            // runnable DBot strategy must contain before restoring it.
+            return (
+                top_level_block_types.includes('trade_definition') &&
+                top_level_block_types.includes('before_purchase')
+            );
+        } catch {
+            return false;
+        }
+    };
+
     /**
      * Initialises the workspace and mounts it to a container element (app_contents).
      */
@@ -208,13 +229,15 @@ class DBot {
                 window.Blockly.getMainWorkspace().RTL = isDbotRTL();
 
                 let file_name = config().default_file_name;
-                if (recent_files && recent_files.length) {
+                if (recent_files && recent_files.length && this.hasUsableSavedWorkspace(recent_files[0]?.xml)) {
                     const latest_file = recent_files[0];
                     window.Blockly.derivWorkspace.strategy_to_load = latest_file.xml;
                     window.Blockly.getMainWorkspace().strategy_to_load = latest_file.xml;
                     file_name = latest_file.name;
                     window.Blockly.derivWorkspace.current_strategy_id = latest_file.id;
                     window.Blockly.getMainWorkspace().current_strategy_id = latest_file.id;
+                } else if (recent_files?.length) {
+                    console.warn('[Blockly] Ignoring an empty saved workspace and loading the default workspace.');
                 }
 
                 const event_group = `dbot-load${Date.now()}`;
