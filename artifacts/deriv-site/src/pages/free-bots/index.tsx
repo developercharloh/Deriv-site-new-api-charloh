@@ -645,6 +645,8 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
             // root-block onchange handlers dispose incomplete-looking blocks
             // unless they can identify an in-progress `dbot-load` operation.
             const loadEventGroup = `dbot-load${Date.now()}`;
+            (window as any).__DBOT_LOADING_XML = true;
+            let importCompleted = false;
             Blockly.Events.setGroup(loadEventGroup);
             try {
                 await Blockly.derivWorkspace.asyncClear();
@@ -659,8 +661,12 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                 rootXmlBlocks.forEach((rootXmlBlock: any) => {
                     Blockly.Xml.domToBlock(rootXmlBlock, Blockly.derivWorkspace);
                 });
+                importCompleted = true;
             } finally {
                 Blockly.Events.setGroup(false);
+                if (!importCompleted) {
+                    (window as any).__DBOT_LOADING_XML = false;
+                }
             }
             Blockly.derivWorkspace.cleanUp();
             Blockly.derivWorkspace.clearUndo();
@@ -673,6 +679,13 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                 );
             }
             DBot.revealLoadedWorkspace();
+            // Blockly's option fields can finish validating asynchronously after
+            // domToBlock returns. Keep the root-block lifecycle guard alive until
+            // those callbacks have settled, otherwise Trade Parameters can dispose
+            // itself when its statement stack is briefly observed as empty.
+            window.setTimeout(() => {
+                (window as any).__DBOT_LOADING_XML = false;
+            }, 1000);
 
             setStatus('loaded');
 

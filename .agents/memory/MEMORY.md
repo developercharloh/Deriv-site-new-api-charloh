@@ -8,3 +8,4 @@
 - [Alpha Scan live execution](alpha-scan-live-execution.md) — use reactive auth state and keep explicit Run separate from pattern qualification so trades cannot silently remain disabled.
 - [Deriv tick subscription recovery](deriv-tick-subscription-recovery.md) — duplicate symbol streams need one-shot forget-all recovery before retrying ticks.
 - [Deriv builder and settlement validation](deriv-builder-settlement-validation.md) — validate bundled Blockly XML and merge partial settlement updates so mobile nodes and spots cannot disappear.
+- [Binary Matrix XML import guard](deriv-binary-matrix-import-guard.md) — root Blockly blocks can self-dispose during delayed option validation; hold an import guard through post-load callbacks.
