@@ -20,7 +20,18 @@ export default Engine =>
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
                 return Promise.resolve();
             }
-            if (!tryAcquireBotContractGate(this)) {
+            // Use this engine's own observed tick first. The shared latest-tick
+            // value can be absent when the ticks monitor was already warm or
+            // when another DBot session owns the shared service. In either
+            // case, the Redux tick epoch is the value that released this
+            // engine's before-purchase cycle and must be consumed once.
+            const currentTick = this.store.getState().newTick;
+            const symbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
+            const signalKey =
+                currentTick === null || currentTick === undefined || currentTick === ''
+                    ? undefined
+                    : `${symbol ?? 'unknown'}:${String(currentTick)}`;
+            if (!tryAcquireBotContractGate(this, signalKey)) {
                 return Promise.resolve();
             }
 

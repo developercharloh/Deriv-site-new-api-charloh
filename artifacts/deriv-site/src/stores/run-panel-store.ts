@@ -204,12 +204,6 @@ export default class RunPanelStore {
 
         this.registerBotListeners();
 
-        if (this.hasNativeApolloBlocks()) {
-            this.unregisterBotListeners();
-            this.startNativeApolloBot();
-            return;
-        }
-
         if (!this.dbot.shouldRunBot()) {
             this.unregisterBotListeners();
             return;
