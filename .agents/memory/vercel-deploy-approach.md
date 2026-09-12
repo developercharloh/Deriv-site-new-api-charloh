@@ -44,3 +44,10 @@ If the Vercel CLI cannot be installed because its transitive dependencies are bl
 **Why:** The CLI may be unavailable in a restricted package environment, while the Vercel API remains reachable. Vercel’s prebuilt detector depends on both the manifest and its `.vercel/output/` path.
 
 **How to apply:** Use the existing project and team identifiers from `.vercel/project.json`, never expose the deployment token, include the project id in the deployment body, and wait for `READY` before checking the custom domain.
+
+## Environment note
+The Vercel CLI may be unavailable because Replit's package firewall blocks its transitive `tar` dependency, including older CLI versions. In that case, the REST fallback is validated: upload SHA-1-addressed files to `/v2/files`, then create a production deployment at `/v13/deployments?prebuilt=1` with `.vercel/output/...` file paths and wait for `READY`.
+
+**Why:** The application can be fully built and the Vercel API remains reachable even when package installation is restricted.
+
+**How to apply:** Keep the deploy script outside the project if possible, use concurrency for static file uploads, and verify both the deployment URL and the custom domain with HTTP checks.
