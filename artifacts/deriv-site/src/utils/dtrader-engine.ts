@@ -217,9 +217,9 @@ export class DTraderEngine {
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    start(initialCfg: DTConfig): void {
-        if (!api_base.api) { this.fail('Deriv connection not ready — please log in first.'); return; }
-        if (!api_base.is_authorized) { this.fail('Not authorized — log in to your Deriv account first.'); return; }
+    start(initialCfg: DTConfig): boolean {
+        if (!api_base.api) { this.fail('Deriv connection not ready — please log in first.'); return false; }
+        if (!api_base.is_authorized) { this.fail('Not authorized — log in to your Deriv account first.'); return false; }
 
         this.stop(); // clean any prior state
         this.resetDigitWindow(); // clear stale data from previous market immediately
@@ -262,6 +262,7 @@ export class DTraderEngine {
             };
             document.addEventListener('visibilitychange', this.visListener);
         }
+        return true;
     }
 
     stop(): void {

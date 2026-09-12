@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import {
     DTraderEngine,
@@ -649,6 +650,23 @@ const formatRatio = (value: number, signed = false): string => {
 const formatMoney = (value: number | null): string =>
     value === null || !Number.isFinite(value) ? '—' : `$${value.toFixed(2)}`;
 
+const createExplicitPurchaseDecision = (
+    source: StrategySource,
+    windowSize: number,
+    condition: MarketCondition,
+    purchaseMarket: PurchaseMarket,
+): RankedMarketDecision => withPurchaseMarket({
+    condition,
+    label: marketConditionLabel(condition),
+    contractType: 'DIGITEVEN',
+    barrier: null,
+    digits: source.lastDigits.slice(-windowSize),
+    strength: 0,
+    reason: 'Explicit Run action using the selected purchase market.',
+    symbol: source.symbol,
+    displayName: source.displayName,
+}, purchaseMarket);
+
 const formatTime = (value: Date | null): string =>
     value
         ? value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -799,6 +817,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     onScan,
 }) => {
     const { client } = useStore();
+    const { isAuthorized } = useApiBase();
     const liveEngineRef = useRef<DTraderEngine | null>(null);
     if (liveEngineRef.current === null) liveEngineRef.current = new DTraderEngine();
     const liveEngine = liveEngineRef.current;
@@ -886,6 +905,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         return decision ? withPurchaseMarket(decision, primaryPurchaseMarket) : null;
     }, [bestModelRow, digitWindow, multiMarketScanning, primaryCondition, primaryPurchaseMarket, selectedRow]);
 
+    const explicitPrimaryDecision = useMemo(() => {
+        const source = multiMarketScanning ? bestModelRow : selectedRow;
+        return source
+            ? createExplicitPurchaseDecision(source, digitWindow, primaryCondition, primaryPurchaseMarket)
+            : null;
+    }, [bestModelRow, digitWindow, multiMarketScanning, primaryCondition, primaryPurchaseMarket, selectedRow]);
+
     const calculatedRecoveryDecision = useMemo(() => {
         if (multiMarketScanning) {
             const decision = selectStrongestMarket(strategySources, recoveryDigitWindow, recoveryCondition);
@@ -911,7 +937,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     }, [calculatedPrimaryDecision, calculatedRecoveryDecision]);
 
     const isLoggedIn = client?.is_logged_in ?? false;
-    const liveAuthorized = isLoggedIn && Boolean(api_base.api && api_base.is_authorized);
+    const liveAuthorized = isLoggedIn && isAuthorized && Boolean(api_base.api);
 
     useEffect(() => {
         runtimeRef.current = {
@@ -961,7 +987,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         setLiveFeedback(null);
         // Restarting for every leg ensures recovery subscribes to the selected
         // volatility before the fresh proposal is purchased.
-        liveEngine.start(config);
+        if (!liveEngine.start(config)) {
+            activeLegRef.current = null;
+            activeDecisionRef.current = null;
+            setExecutionLeg('idle');
+            return;
+        }
         liveEngine.placeBuyNow(config);
     }, [liveEngine]);
 
@@ -973,14 +1004,15 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before running a real trade.' });
             return;
         }
-        if (!primaryDecision) {
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'No configured Market 1 pattern qualifies yet.' });
+        const decision = primaryDecision || explicitPrimaryDecision;
+        if (!decision) {
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Wait for the market scan to produce a selectable volatility.' });
             return;
         }
         recoveryUsedRef.current = false;
         setLiveFeedback(null);
-        executeDecision(primaryDecision, 'primary');
-    }, [executeDecision, executionLeg, liveAuthorized, primaryDecision]);
+        executeDecision(decision, 'primary');
+    }, [executeDecision, executionLeg, explicitPrimaryDecision, liveAuthorized, primaryDecision]);
 
     const upsertJournalEntry = useCallback((position: DTPosition, leg: 'primary' | 'recovery', decision: RankedMarketDecision | null) => {
         const nextEntry: AlphaTradeJournalEntry = {
@@ -1010,7 +1042,14 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
     useEffect(() => {
         liveEngine.onStatus = setLiveStatus;
-        liveEngine.onBuyFeedback = setLiveFeedback;
+        liveEngine.onBuyFeedback = feedback => {
+            setLiveFeedback(feedback);
+            if (feedback.kind === 'error') {
+                setExecutionLeg('idle');
+                activeLegRef.current = null;
+                activeDecisionRef.current = null;
+            }
+        };
         liveEngine.onPosition = position => {
             const leg = activeLegRef.current;
             upsertJournalEntry(position, leg || 'primary', activeDecisionRef.current);
@@ -1034,6 +1073,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     prices: row.prices,
                     lastDigits: row.lastDigits,
                 }));
+                const recoverySource = runtimeRef.current.multiMarketScanning
+                    ? runtimeRows[0]
+                    : runtimeRows.find(item => item.symbol === runtimeRef.current.selectedSymbol) || runtimeRows[0];
                 const recoverySignal = runtimeRef.current.multiMarketScanning
                     ? selectStrongestMarket(runtimeRows, runtimeRef.current.recoveryDigitWindow, runtimeRef.current.recoveryCondition)
                     : (() => {
@@ -1049,7 +1091,14 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     })();
                 const recovery = recoverySignal
                     ? withPurchaseMarket(recoverySignal, runtimeRef.current.recoveryPurchaseMarket)
-                    : null;
+                    : recoverySource
+                        ? createExplicitPurchaseDecision(
+                            recoverySource,
+                            runtimeRef.current.recoveryDigitWindow,
+                            runtimeRef.current.recoveryCondition,
+                            runtimeRef.current.recoveryPurchaseMarket,
+                        )
+                        : null;
                 setRecoveryDecision(recovery);
                 if (recovery) {
                     setExecutionLeg('recovery-pending');
@@ -1219,9 +1268,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         type='button'
                         className='alpha-tool__run'
                         onClick={runTrade}
-                        disabled={!liveAuthorized || !liveMode || !primaryDecision || isBusy || executionLeg !== 'idle'}
+                        disabled={!liveAuthorized || !liveMode || !explicitPrimaryDecision || isBusy || executionLeg !== 'idle'}
                         data-testid='button-run-trade'
-                        title={liveAuthorized ? 'Buy one one-tick Deriv contract' : 'Log in to run a real Deriv trade'}
+                        title={liveAuthorized ? 'Buy one one-tick Deriv contract using the selected purchase market' : 'Log in to run a real Deriv trade'}
                     >
                         {executionLeg !== 'idle' ? 'Running' : 'Run'}
                     </button>
