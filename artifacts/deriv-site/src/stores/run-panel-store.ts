@@ -21,6 +21,15 @@ import { localize } from '@deriv-com/translations';
 import { TDbot } from 'Types';
 import RootStore from './root-store';
 
+export type TLastDigitsAnalysis = {
+    market: string;
+    condition: string;
+    count: number;
+    compareValue: number;
+    digits: number[];
+    result: boolean;
+};
+
 export type TContractState = {
     buy?: Buy;
     contract?: ProposalOpenContract;
@@ -86,6 +95,8 @@ export default class RunPanelStore {
             clear: action,
             onBotContractEvent: action,
             onError: action,
+            onLastDigitsAnalysis: action,
+            clearLastDigitsAnalysis: action,
             showErrorMessage: action,
             switchToJournal: action,
             unregisterBotListeners: action,
@@ -119,6 +130,7 @@ export default class RunPanelStore {
     is_contract_buying_in_progress = false;
     native_bot_stop_handler: (() => void) | null = null;
     native_apollo_engine: BinaryMatrixEngine | null = null;
+    last_digits_analysis: TLastDigitsAnalysis | null = null;
 
     run_id = '';
     onOkButtonClick: (() => void) | null = null;
@@ -219,6 +231,7 @@ export default class RunPanelStore {
             ui.setPromptHandler(true);
             this.toggleDrawer(true);
             this.run_id = `run-${Date.now()}`;
+            this.clearLastDigitsAnalysis();
 
             summary_card.clear();
             this.setContractStage(contract_stages.STARTING);
@@ -307,6 +320,7 @@ export default class RunPanelStore {
         this.setIsRunning(false);
         this.setHasOpenContract(false);
         this.clear();
+        this.clearLastDigitsAnalysis();
         journal.clear();
         summary_card.clear();
         transactions.clear();
@@ -914,6 +928,14 @@ export default class RunPanelStore {
         this.is_running = is_running;
     };
 
+    onLastDigitsAnalysis = (analysis: TLastDigitsAnalysis) => {
+        this.last_digits_analysis = analysis;
+    };
+
+    clearLastDigitsAnalysis = () => {
+        this.last_digits_analysis = null;
+    };
+
     onMount = () => {
         const { journal } = this.root_store;
 
@@ -990,6 +1012,7 @@ export default class RunPanelStore {
         observer.register('ui.log.error', handleUiLogError);
         observer.register('ui.log.notify', journal.onNotify);
         observer.register('ui.log.success', journal.onLogSuccess);
+        observer.register('bot.analysis.condition', this.onLastDigitsAnalysis);
         observer.register('client.invalid_token', this.handleInvalidToken);
     };
 
@@ -1007,6 +1030,7 @@ export default class RunPanelStore {
         observer.unregisterAll('ui.log.error');
         observer.unregisterAll('ui.log.notify');
         observer.unregisterAll('ui.log.success');
+        observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysis);
         observer.unregisterAll('client.invalid_token');
     };
 

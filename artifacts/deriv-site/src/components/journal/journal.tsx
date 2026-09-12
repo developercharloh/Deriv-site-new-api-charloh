@@ -10,6 +10,7 @@ import { useDevice } from '@deriv-com/ui';
 import DataList from '../data-list';
 import { TCheckedFilters, TFilterMessageValues, TJournalDataListArgs } from './journal.types';
 import { JournalItem, JournalLoader, JournalTools } from './journal-components';
+import LastDigitsAnalysis from '../last-digits-analysis/last-digits-analysis';
 
 const Journal = observer(() => {
     const { journal, run_panel } = useStore();
@@ -35,6 +36,7 @@ const Journal = observer(() => {
             })}
             data-testid='dt_mock_journal'
         >
+            {run_panel.last_digits_analysis && <LastDigitsAnalysis analysis={run_panel.last_digits_analysis} />}
             <JournalTools
                 checked_filters={checked_filters}
                 filters={filters}

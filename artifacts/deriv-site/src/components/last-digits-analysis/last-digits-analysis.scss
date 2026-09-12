@@ -1,0 +1,24 @@
+.last-digits-analysis {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1rem 1.6rem;
+    border-top: 1px solid var(--general-section-2);
+    border-bottom: 1px solid var(--general-section-2);
+    color: var(--text-general);
+    font-size: 1.2rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+
+    &--true {
+        color: var(--text-profit-success);
+    }
+
+    &--false {
+        color: var(--text-loss-danger);
+    }
+
+    &__result {
+        font-weight: bold;
+        white-space: nowrap;
+    }
+}

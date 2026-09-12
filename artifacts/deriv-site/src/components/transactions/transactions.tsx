@@ -14,6 +14,7 @@ import { DerivLightEmptyCardboardBoxIcon } from '@deriv/quill-icons/Illustration
 import { Localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import ThemedScrollbars from '../shared_ui/themed-scrollbars';
+import LastDigitsAnalysis from '../last-digits-analysis/last-digits-analysis';
 import Transaction from './transaction';
 
 type TTransactions = {
@@ -57,7 +58,7 @@ const TransactionItem = ({ row = false, onClickTransaction, active_transaction_i
 const Transactions = observer(({ is_drawer_open }: TTransactions) => {
     const [active_transaction_id, setActiveTransactionId] = React.useState<number | null>(null);
     const { run_panel, transactions } = useStore();
-    const { contract_stage } = run_panel;
+    const { contract_stage, last_digits_analysis } = run_panel;
     const { transactions: transaction_list, toggleTransactionDetailsModal, recoverPendingContracts } = transactions;
     const { isDesktop } = useDevice();
 
@@ -117,6 +118,7 @@ const Transactions = observer(({ is_drawer_open }: TTransactions) => {
                     <Localize i18n_default_text='View Detail' />
                 </Button>
             </div>
+            {last_digits_analysis && <LastDigitsAnalysis analysis={last_digits_analysis} />}
             <div className='transactions__header'>
                 <span className='transactions__header-column transactions__header-type'>
                     <Localize i18n_default_text='Type' />
