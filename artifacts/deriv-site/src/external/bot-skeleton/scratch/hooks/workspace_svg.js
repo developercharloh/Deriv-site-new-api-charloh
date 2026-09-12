@@ -153,7 +153,9 @@ window.Blockly.WorkspaceSvg.prototype.cleanUp = function (x = 0, y = 0, blocks_t
                 config().mainBlocks.findIndex(main_block_type => main_block_type === block.type);
             return blockIndex(a) - blockIndex(b);
         });
-    const column_count = 2;
+    // Mobile DBot workspaces need one readable vertical flow. Two columns push
+    // the trade and purchase roots outside the narrow horizontal viewport.
+    const column_count = DBotStore.instance.is_mobile ? 1 : 2;
     const blocks_per_column = Math.ceil(root_blocks.length / column_count);
 
     let original_cursor_y = y;

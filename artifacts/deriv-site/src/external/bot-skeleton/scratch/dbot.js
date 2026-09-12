@@ -28,27 +28,11 @@ class DBot {
             if (!this.workspace || !this.workspace.getTopBlocks(true).length) return;
 
             window.Blockly.svgResize(this.workspace);
-            const metrics = this.workspace.getMetrics?.();
-            if (!metrics?.viewWidth || !metrics?.viewHeight || !metrics.contentWidth || !metrics.contentHeight) {
-                this.workspace.scrollCenter?.();
-                return;
-            }
-
-            const padding_x = 24;
-            const padding_y = 48;
-            const fit_ratio = Math.min(
-                1,
-                (metrics.viewWidth - padding_x) / metrics.contentWidth,
-                (metrics.viewHeight - padding_y) / metrics.contentHeight
-            );
-
-            if (fit_ratio < 1) {
-                const current_scale = this.workspace.getScale();
-                this.workspace.setScale(Math.max(0.25, current_scale * fit_ratio));
-                window.Blockly.svgResize(this.workspace);
-            }
-
-            this.workspace.scrollCenter?.();
+            // Do not fit the full strategy height into the viewport. A long
+            // strategy should remain readable and scroll vertically, like the
+            // normal DBot builder. Fitting height here reduced the blocks to
+            // the 0.25 minimum and made the other roots appear missing.
+            this.workspace.scrollbar?.set(0, 0);
         };
 
         window.requestAnimationFrame(() => {
