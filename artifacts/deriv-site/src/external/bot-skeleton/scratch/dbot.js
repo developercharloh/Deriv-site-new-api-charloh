@@ -21,38 +21,6 @@ class DBot {
         this.is_bot_running = false;
     }
 
-    fitLoadedCustomBotToViewport = is_mobile => {
-        if (!is_mobile || !this.workspace) return;
-
-        const has_custom_blocks = this.workspace
-            .getAllBlocks(true)
-            .some(block => ['last_digits_condition', 'apollo_purchase2'].includes(block.type));
-        if (!has_custom_blocks) return;
-
-        const fit = () => {
-            const metrics = this.workspace.getMetrics?.();
-            if (!metrics?.viewWidth || !metrics?.viewHeight || !metrics.contentWidth || !metrics.contentHeight) return;
-
-            const padding_x = 24;
-            const padding_y = 48;
-            const fit_ratio = Math.min(
-                1,
-                (metrics.viewWidth - padding_x) / metrics.contentWidth,
-                (metrics.viewHeight - padding_y) / metrics.contentHeight
-            );
-
-            if (fit_ratio < 1) {
-                const current_scale = this.workspace.getScale();
-                this.workspace.setScale(Math.max(0.25, current_scale * fit_ratio));
-                window.Blockly.svgResize(this.workspace);
-            }
-
-            this.workspace.scrollCenter?.();
-        };
-
-        window.requestAnimationFrame(() => window.requestAnimationFrame(fit));
-    };
-
     /**
      * Initialises the workspace and mounts it to a container element (app_contents).
      */
@@ -245,7 +213,6 @@ class DBot {
 
                 save_modal.updateBotName(file_name);
                 this.workspace.cleanUp(0, is_mobile ? 60 : 56);
-                this.fitLoadedCustomBotToViewport(is_mobile);
                 this.workspace.clearUndo();
 
                 window.dispatchEvent(new Event('resize'));
