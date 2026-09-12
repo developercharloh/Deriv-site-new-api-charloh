@@ -12,6 +12,11 @@ import {
 } from './dtrader-engine';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { evaluateBinaryMatrix, type BinaryMatrixDecision } from './binary-matrix-strategy';
+import {
+    releaseBotContractGate,
+    setBotContractGateContract,
+    tryAcquireBotContractGate,
+} from './bot-contract-gate';
 
 export interface BinaryMatrixConfig {
     symbol: string;
@@ -163,6 +168,7 @@ export class BinaryMatrixEngine {
         this.running = false;
         this.pendingDecision = null;
         this.openContractId = null;
+        releaseBotContractGate(this);
         this.trader.stop();
         this.onStatus('stopped');
         this.writeLog('Binary Matrix AI stopped. No new contracts will be placed.', 'system');
@@ -188,6 +194,11 @@ export class BinaryMatrixEngine {
                 return;
             }
 
+            if (!tryAcquireBotContractGate(this)) {
+                this.writeLog('A contract is already being handled by another bot runner; signal skipped.', 'system');
+                return;
+            }
+
             this.pendingDecision = decision;
             this.onStatus('buying');
             this.writeLog(
@@ -210,6 +221,7 @@ export class BinaryMatrixEngine {
         this.trader.onLog = log => this.log(log);
         this.trader.onBuyFeedback = feedback => {
             if (feedback.kind !== 'error') return;
+            releaseBotContractGate(this);
             this.pendingDecision = null;
             this.onStatus('error');
             this.writeLog(feedback.message, 'error');
@@ -228,6 +240,7 @@ export class BinaryMatrixEngine {
         if (position.isOpen) {
             if (this.openContractId === null) {
                 this.openContractId = position.contractId;
+                setBotContractGateContract(this, position.contractId);
                 this.pendingDecision = null;
                 this.onStatus('waiting');
                 this.writeLog(
@@ -244,6 +257,7 @@ export class BinaryMatrixEngine {
         if (this.openContractId !== position.contractId) return;
 
         this.settledContracts.add(position.contractId);
+        releaseBotContractGate(this, position.contractId);
         this.openContractId = null;
         this.pendingDecision = null;
 

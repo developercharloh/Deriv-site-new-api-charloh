@@ -6,6 +6,7 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import Interface from '../Interface';
 import { createScope } from './cliTools';
+import { releaseBotContractGate } from '@/utils/bot-contract-gate';
 
 JSInterpreter.prototype.takeStateSnapshot = function () {
     const newStateStack = cloneThorough(this.stateStack, undefined, undefined, undefined, true);
@@ -202,6 +203,7 @@ const Interpreter = () => {
     async function terminateSession() {
         return new Promise((resolve, reject) => {
             try {
+                releaseBotContractGate(bot.tradeEngine);
                 $scope.stopped = true;
                 $scope.is_error_triggered = false;
                 globalObserver.emit('bot.stop');

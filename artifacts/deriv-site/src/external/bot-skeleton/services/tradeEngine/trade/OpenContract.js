@@ -3,6 +3,7 @@ import { api_base } from '../../api/api-base';
 import { contract as broadcastContract, contractStatus } from '../utils/broadcast';
 import { doUntilDone } from '../utils/helpers';
 import { openContractReceived, sell } from './state/actions';
+import { releaseBotContractGate } from '@/utils/bot-contract-gate';
 
 export default Engine =>
     class OpenContract extends Engine {
@@ -40,6 +41,7 @@ export default Engine =>
                         }
 
                         this.store.dispatch(sell());
+                        releaseBotContractGate(this, contract.contract_id);
                     } else {
                         this.store.dispatch(openContractReceived());
                     }

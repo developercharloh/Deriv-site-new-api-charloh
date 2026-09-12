@@ -3,8 +3,8 @@ name: Binary Matrix single-runner guard
 description: Preventing duplicate Binary Matrix contracts when multiple UI launch paths are available
 ---
 
-Binary Matrix must enforce one active engine across the whole browser window, not only one buy per `DTraderEngine` instance or one module copy. The Free Bots modal and DBot Builder native-run path can otherwise create separate engines, each with its own in-flight lock.
+Binary Matrix must enforce one active engine across the whole browser window and one automated contract across both native and generated DBot paths. A browser-global engine lease alone does not stop a generated `Bot.purchase()` call from racing a native purchase.
 
-**Why:** Two simultaneous contracts were opened because both engine instances independently observed the same qualifying digit pattern and each submitted one purchase.
+**Why:** Two simultaneous contracts can be opened by separate engine instances or by generated DBot purchase calls before the first buy response changes that engine's state.
 
-**How to apply:** Keep a browser-global active-engine lease, reject a second `start()`, and register the run-panel stop handler only after a start succeeds so a rejected runner cannot clear the active runner's control.
+**How to apply:** Keep the browser-global active-engine lease, and also acquire a shared automated-contract gate immediately before every native or generated buy. Hold it through settlement, release it on settlement/errors/stops, and register the run-panel stop handler only after a start succeeds.

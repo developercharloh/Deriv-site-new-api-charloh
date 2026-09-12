@@ -4,6 +4,11 @@ import { contractStatus, info, log } from '../utils/broadcast';
 import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../utils/helpers';
 import { purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
+import {
+    releaseBotContractGate,
+    setBotContractGateContract,
+    tryAcquireBotContractGate,
+} from '@/utils/bot-contract-gate';
 
 let delayIndex = 0;
 let purchase_reference;
@@ -13,6 +18,9 @@ export default Engine =>
         purchase(contract_type) {
             // Prevent calling purchase twice
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
+                return Promise.resolve();
+            }
+            if (!tryAcquireBotContractGate(this)) {
                 return Promise.resolve();
             }
 
@@ -27,6 +35,7 @@ export default Engine =>
                 });
 
                 this.contractId = buy.contract_id;
+                setBotContractGateContract(this, buy.contract_id);
                 this.store.dispatch(purchaseSuccessful());
 
                 if (this.is_proposal_subscription_required) {
@@ -62,7 +71,14 @@ export default Engine =>
             };
 
             if (this.is_proposal_subscription_required) {
-                const { id, askPrice } = this.selectProposal(contract_type);
+                let selectedProposal;
+                try {
+                    selectedProposal = this.selectProposal(contract_type);
+                } catch (error) {
+                    releaseBotContractGate(this);
+                    throw error;
+                }
+                const { id, askPrice } = selectedProposal;
 
                 const action = () => api_base.api.send({ buy: id, price: askPrice });
 
@@ -74,7 +90,10 @@ export default Engine =>
                 });
 
                 if (!this.options.timeMachineEnabled) {
-                    return doUntilDone(action).then(onSuccess);
+                    return doUntilDone(action).then(onSuccess).catch(error => {
+                        releaseBotContractGate(this);
+                        throw error;
+                    });
                 }
 
                 return recoverFromError(
@@ -97,9 +116,18 @@ export default Engine =>
                     },
                     ['PriceMoved', 'InvalidContractProposal'],
                     delayIndex++
-                ).then(onSuccess);
+                ).then(onSuccess).catch(error => {
+                    releaseBotContractGate(this);
+                    throw error;
+                });
             }
-            const trade_option = tradeOptionToBuy(contract_type, this.tradeOptions);
+            let trade_option;
+            try {
+                trade_option = tradeOptionToBuy(contract_type, this.tradeOptions);
+            } catch (error) {
+                releaseBotContractGate(this);
+                throw error;
+            }
             const action = () => api_base.api.send(trade_option);
 
             this.isSold = false;
@@ -110,7 +138,10 @@ export default Engine =>
             });
 
             if (!this.options.timeMachineEnabled) {
-                return doUntilDone(action).then(onSuccess);
+                return doUntilDone(action).then(onSuccess).catch(error => {
+                    releaseBotContractGate(this);
+                    throw error;
+                });
             }
 
             return recoverFromError(
@@ -129,7 +160,10 @@ export default Engine =>
                 },
                 ['PriceMoved', 'InvalidContractProposal'],
                 delayIndex++
-            ).then(onSuccess);
+            ).then(onSuccess).catch(error => {
+                releaseBotContractGate(this);
+                throw error;
+            });
         }
         getPurchaseReference = () => purchase_reference;
         regeneratePurchaseReference = () => {
