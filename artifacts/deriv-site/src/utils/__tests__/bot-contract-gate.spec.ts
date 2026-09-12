@@ -76,8 +76,16 @@ describe('automated contract gate', () => {
             const purchaseTypes = Array.from(document.querySelectorAll('block[type="apollo_purchase2"]')).map(block =>
                 block.querySelector('field[name="PURCHASE_LIST"]')?.textContent?.trim()
             );
+            const predictions = new Map(
+                Array.from(document.querySelectorAll('block[type="apollo_purchase2"]')).map(block => [
+                    block.querySelector('field[name="PURCHASE_LIST"]')?.textContent?.trim(),
+                    block.querySelector('value[name="PREDICTION"] field[name="NUM"]')?.textContent?.trim(),
+                ])
+            );
 
             expect(purchaseTypes).toEqual(['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER']);
+            expect(predictions.get('DIGITOVER')).toBe('4');
+            expect(predictions.get('DIGITUNDER')).toBe('5');
             expect(purchaseTypes).toContain(purchaseType);
             expect(document.querySelector('block[type="trade_again"]')).not.toBeNull();
 
@@ -125,9 +133,10 @@ describe('automated contract gate', () => {
             engine.accountInfo = api_base.account_info;
             engine.is_proposal_subscription_required = false;
             const bot = getBotInterface(engine);
+            const prediction = predictions.get(purchaseType) ?? 'undefined';
             const generatedBeforePurchase = new Function(
                 'Bot',
-                `return (async () => Bot.purchase('${purchaseType}', undefined))();`
+                `return (async () => Bot.purchase('${purchaseType}', ${prediction}))();`
             );
             const generatedTradeAgain = new Function(
                 'Bot',
@@ -203,6 +212,11 @@ describe('automated contract gate', () => {
                 purchaseType,
                 purchaseType,
             ]);
+            if (purchaseType === 'DIGITOVER' || purchaseType === 'DIGITUNDER') {
+                expect(sent.filter(payload => payload.buy).map(payload => payload.parameters.barrier)).toEqual(
+                    purchaseType === 'DIGITOVER' ? [4, 4] : [5, 5]
+                );
+            }
 
             // Keep the shared gate clean for the next generated branch case.
             settle(7002);
