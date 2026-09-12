@@ -75,11 +75,11 @@ export default class TicksService {
             const style = getType(granularity);
 
             if (style === 'ticks' && this.ticks.has(symbol)) {
-                resolve(this.ticks.get(symbol));
+                return resolve(this.ticks.get(symbol));
             }
 
             if (style === 'candles' && this.candles.hasIn([symbol, Number(granularity)])) {
-                resolve(this.candles.getIn([symbol, Number(granularity)]));
+                return resolve(this.candles.getIn([symbol, Number(granularity)]));
             }
             this.requestStream({ ...options, style })
                 .then(res => {
@@ -159,14 +159,18 @@ export default class TicksService {
         }
     }
 
-    unsubscribeAllAndSubscribeListeners(symbol) {
+    async unsubscribeAllAndSubscribeListeners(symbol) {
+        const tickSubscription = this.subscriptions.getIn(['tick', symbol]);
         const ohlcSubscriptions = this.subscriptions.getIn(['ohlc', symbol]);
 
-        const subscription = [...(ohlcSubscriptions ? Array.from(ohlcSubscriptions.values()) : [])];
-
-        Promise.all(subscription.map(id => doUntilDone(() => api_base.api.forget(id))));
+        const subscriptions = [
+            ...(tickSubscription ? [tickSubscription] : []),
+            ...(ohlcSubscriptions ? Array.from(ohlcSubscriptions.values()) : []),
+        ];
 
         this.subscriptions = new Map();
+        if (!api_base.api || subscriptions.length === 0) return;
+        await Promise.all(subscriptions.map(id => doUntilDone(() => api_base.api.forget(id), [], api_base)));
     }
 
     updateTicksAndCallListeners(symbol, ticks) {
@@ -267,7 +271,7 @@ export default class TicksService {
         };
         return new Promise((resolve, reject) => {
             if (!api_base.api) resolve([]);
-            doUntilDone(() => api_base.api.send(request_object), ['AlreadySubscribed'], api_base)
+            doUntilDone(() => api_base.api.send(request_object), [], api_base)
                 .then(r => {
                     if (style === 'ticks') {
                         const ticks = historyToTicks(r.history);
@@ -291,7 +295,28 @@ export default class TicksService {
                         } else if (style === 'candles' && this.candles.hasIn([symbol, Number(granularity)])) {
                             resolve(this.candles.getIn([symbol, Number(granularity)]));
                         } else {
-                            resolve([]);
+                            // The local service has no copy of the stream, so
+                            // clear the stale remote subscription before one
+                            // clean retry. Do not let doUntilDone retry this
+                            // error forever while the bot remains "running".
+                            api_base.api
+                                .forgetAll(style === 'ticks' ? 'ticks' : 'candles')
+                                .then(() => api_base.api.send(request_object))
+                                .then(retryResponse => {
+                                    if (style === 'ticks') {
+                                        const ticks = historyToTicks(retryResponse.history);
+                                        this.updateTicksAndCallListeners(symbol, ticks);
+                                        resolve(ticks);
+                                    } else {
+                                        const candles = parseCandles(retryResponse.candles);
+                                        this.updateCandlesAndCallListeners(
+                                            [symbol, Number(granularity)],
+                                            candles
+                                        );
+                                        resolve(candles);
+                                    }
+                                })
+                                .catch(retryError => reject(retryError));
                         }
                         return;
                     }
@@ -347,6 +372,13 @@ export default class TicksService {
                     try {
                         this.forgetCandleSubscription()
                             .then(() => {
+                                this.ticks = new Map();
+                                this.candles = new Map();
+                                this.tickListeners = new Map();
+                                this.ohlcListeners = new Map();
+                                this.subscriptions = new Map();
+                                this.ticks_history_promise = null;
+                                this.candles_promise = null;
                                 resolve();
                             })
                             .catch(reject);
@@ -355,7 +387,6 @@ export default class TicksService {
                     }
                 })
                 .catch(reject);
-            this.ticks_history_promise = null;
         });
     }
 }
