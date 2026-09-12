@@ -1,16 +1,1 @@
-{
-  "projectId": "prj_b14njNwQ1LlAnQD6tUhGbVKSjG9L",
-  "orgId": "team_BQWnsBcAsW4szAjxsE8X2my1",
-  "projectName": "traderharlo",
-  "settings": {
-    "createdAt": 1782482489807,
-    "framework": null,
-    "devCommand": null,
-    "installCommand": "echo skip",
-    "buildCommand": "cd artifacts/deriv-site && npm install --legacy-peer-deps && npm run build",
-    "outputDirectory": "artifacts/deriv-site/dist",
-    "rootDirectory": null,
-    "directoryListing": false,
-    "nodeVersion": "24.x"
-  }
-}
+{"orgId":"team_BQWnsBcAsW4szAjxsE8X2my1","projectId":"prj_b14njNwQ1LlAnQD6tUhGbVKSjG9L"}
