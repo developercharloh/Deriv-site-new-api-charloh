@@ -24,6 +24,13 @@ interface SignalSettings {
     martingale: string;
 }
 
+const openBotBuilderTab = (dashboard: { setActiveTab: (tab: number) => void }) => {
+    const nextUrl = new URL(window.location.href);
+    nextUrl.hash = 'bot_builder';
+    window.history.replaceState(window.history.state, '', nextUrl.toString());
+    dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+};
+
 // ─── Signal helpers ───────────────────────────────────────────────────────────
 
 const SIGNAL_TTL = 5 * 60 * 1000;
@@ -430,7 +437,7 @@ const SignalTradeModal: React.FC<{
             Blockly.derivWorkspace.cleanUp();
             Blockly.derivWorkspace.clearUndo();
 
-            store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+            openBotBuilderTab(store.dashboard);
             onClose();
 
             setTimeout(() => {
@@ -616,14 +623,14 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                 localStorage.setItem(V2_CONFIG_KEY, v2CfgStr);
                 window.dispatchEvent(new StorageEvent('storage', { key: V2_CONFIG_KEY, newValue: v2CfgStr }));
                 setStatus('loaded');
-                dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+                openBotBuilderTab(dashboard);
                 setTimeout(() => window.dispatchEvent(new CustomEvent('deriv-v2-autostart')), 400);
                 return;
             }
 
             // V1 path — navigate to Bot Builder FIRST so the workspace mounts and
             // the Deriv API connects before we load the XML.
-            dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+            openBotBuilderTab(dashboard);
 
             // Poll for Blockly.derivWorkspace (workspace mounts asynchronously)
             const waitForWs = async (): Promise<any> => {

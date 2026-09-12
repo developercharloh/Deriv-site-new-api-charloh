@@ -13,7 +13,7 @@ window.Blockly.Blocks.last_digits_condition = {
     },
     definition() {
         return {
-            message0: localize('Last %1 digits %2 %3 %4'),
+            message0: localize('Last %1 digits %2 %3'),
             args0: [
                 {
                     type: 'input_value',

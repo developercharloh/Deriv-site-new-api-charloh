@@ -19,6 +19,10 @@ const rootLabels = {
     before_purchase: 'Purchase Conditions',
     after_purchase: 'Restart Trading Conditions',
 };
+const requiredBlockTypes = {
+    last_digits_condition: 4,
+    apollo_purchase2: 4,
+};
 
 const browserApiMock = String.raw`
 (() => {
@@ -65,12 +69,72 @@ const browserApiMock = String.raw`
         send(payload) {
             const request = JSON.parse(payload);
             const response = { req_id: request.req_id, msg_type: Object.keys(request).find(key => key !== 'req_id') || 'ping' };
-            if (request.balance) {
+            if (request.authorize) {
+                response.authorize = {
+                    loginid: accountId,
+                    balance: 1000,
+                    currency: 'USD',
+                    is_virtual: 1,
+                    email: 'binary-matrix-test@example.invalid',
+                    fullname: 'Binary Matrix Test',
+                };
+            } else if (request.balance) {
                 response.balance = { balance: 1000, currency: 'USD', loginid: accountId };
             } else if (request.active_symbols) {
                 response.active_symbols = [
-                    { symbol: 'R_100', display_name: 'Volatility 100 Index', market: 'synthetic_index', submarket: 'random_index' }
+                    {
+                        symbol: 'R_25',
+                        display_name: 'Volatility 25 Index',
+                        market: 'synthetic_index',
+                        submarket: 'random_index',
+                        exchange_is_open: 1,
+                        is_open: 1,
+                    },
+                    {
+                        symbol: 'R_100',
+                        display_name: 'Volatility 100 Index',
+                        market: 'synthetic_index',
+                        submarket: 'random_index',
+                        exchange_is_open: 1,
+                        is_open: 1,
+                    },
                 ];
+            } else if (request.trading_times) {
+                response.trading_times = {
+                    markets: [
+                        {
+                            name: 'synthetic_index',
+                            submarkets: [
+                                {
+                                    name: 'random_index',
+                                    symbols: [
+                                        {
+                                            underlying_symbol: 'R_25',
+                                            times: { open: ['00:00:00'], close: ['23:59:59'] },
+                                        },
+                                        {
+                                            underlying_symbol: 'R_100',
+                                            times: { open: ['00:00:00'], close: ['23:59:59'] },
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                };
+            } else if (request.contracts_for) {
+                response.contracts_for = {
+                    available: [
+                        {
+                            contract_category: 'digits',
+                            contract_type: ['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER'],
+                            exchange_name: 'synthetic_index',
+                            expiry_type: 'tick',
+                            min_duration: 1,
+                            max_duration: 1,
+                        },
+                    ],
+                };
             } else if (request.time) {
                 response.time = Math.floor(Date.now() / 1000);
             } else if (request.ticks) {
@@ -333,7 +397,7 @@ const clickButtonContaining = async (cdp, text) => {
         );
         throw new Error(`${error.message}; page state: ${pageState}`);
     }
-    const buttonRect = await evaluate(
+    const buttonInfo = await evaluate(
         cdp,
         `(() => {
             const button = Array.from(document.querySelectorAll('button')).find(
@@ -342,24 +406,26 @@ const clickButtonContaining = async (cdp, text) => {
             if (!button) return null;
             button.scrollIntoView({ block: 'center', inline: 'center' });
             const rect = button.getBoundingClientRect();
-            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            return {
+                disabled: button.disabled,
+                text: button.textContent.trim(),
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2,
+            };
         })()`
     );
-    if (!buttonRect) throw new Error(`Could not locate visible button containing "${text}" after waiting.`);
-    await cdp.send('Input.dispatchMouseEvent', {
-        type: 'mousePressed',
-        x: buttonRect.x,
-        y: buttonRect.y,
-        button: 'left',
-        clickCount: 1,
-    });
-    await cdp.send('Input.dispatchMouseEvent', {
-        type: 'mouseReleased',
-        x: buttonRect.x,
-        y: buttonRect.y,
-        button: 'left',
-        clickCount: 1,
-    });
+    if (!buttonInfo) throw new Error(`Could not locate visible button containing "${text}" after waiting.`);
+    if (buttonInfo.disabled) throw new Error(`Button containing "${text}" is disabled.`);
+    await evaluate(
+        cdp,
+        `(() => {
+            const button = Array.from(document.querySelectorAll('button')).find(
+                candidate => candidate.getClientRects().length > 0 && candidate.textContent.includes(${JSON.stringify(text)})
+            );
+            button?.click();
+            return Boolean(button);
+        })()`
+    );
 };
 
 const workspaceSnapshot = async cdp => {
@@ -375,6 +441,10 @@ const workspaceSnapshot = async cdp => {
             const metrics = workspace.getMetrics?.() || {};
             return {
                 roots,
+                allBlockTypes: workspace.getAllBlocks?.(true).reduce((counts, block) => {
+                    counts[block.type] = (counts[block.type] || 0) + 1;
+                    return counts;
+                }, {}),
                 scrollY: workspace.scrollbar?.getY?.() ?? null,
                 viewTop: metrics.viewTop ?? null,
                 contentTop: metrics.contentTop ?? null,
@@ -397,8 +467,21 @@ const assertBinaryMatrixWorkspace = async (cdp, flowName) => {
         );
     } catch (error) {
         const snapshot = await workspaceSnapshot(cdp);
-        const body = await evaluate(cdp, 'document.body?.innerText?.slice(-1200)');
-        throw new Error(`${error.message}; ${flowName} snapshot=${JSON.stringify(snapshot)}; body=${JSON.stringify(body)}`);
+        const pageState = await evaluate(
+            cdp,
+            `JSON.stringify({
+                url: location.href,
+                hash: location.hash,
+                activeTab: document.querySelector('[aria-selected="true"]')?.textContent?.trim() || null,
+                binaryCard: document.querySelector('.free-bots__card')?.innerText?.slice(0, 500) || null,
+                errors: Array.from(document.querySelectorAll('[class*="error"], [role="alert"]'))
+                    .map(element => element.textContent?.trim())
+                    .filter(Boolean)
+                    .slice(0, 10),
+                body: document.body?.innerText?.slice(-1200),
+            })`
+        );
+        throw new Error(`${error.message}; ${flowName} snapshot=${JSON.stringify(snapshot)}; page=${pageState}`);
     }
     await evaluate(
         cdp,
@@ -414,6 +497,15 @@ const assertBinaryMatrixWorkspace = async (cdp, flowName) => {
     for (const type of expectedTypes) {
         if (!actualTypes.includes(type)) {
             throw new Error(`${flowName}: missing ${rootLabels[type]} (${type}); roots were ${actualTypes.join(', ')}`);
+        }
+    }
+    for (const [type, minimum] of Object.entries(requiredBlockTypes)) {
+        const actualCount = snapshot.allBlockTypes?.[type] || 0;
+        if (actualCount < minimum) {
+            throw new Error(
+                `${flowName}: expected at least ${minimum} ${type} blocks, found ${actualCount}; ` +
+                `inventory=${JSON.stringify(snapshot.allBlockTypes)}`
+            );
         }
     }
 
@@ -505,12 +597,24 @@ const run = async () => {
         if (hasAppGate) await clickButtonContaining(cdp, 'Continue to App');
 
         await clickButtonContaining(cdp, 'Load in DBot Builder');
+        await waitFor(cdp, `location.hash === '#bot_builder'`, 'Bot Builder navigation');
+        await waitFor(
+            cdp,
+            `Boolean(document.querySelector('#id-bot-builder')?.getClientRects().length)`,
+            'visible Bot Builder'
+        );
         await assertBinaryMatrixWorkspace(cdp, 'Free Bots loader');
 
         await evaluate(cdp, `document.querySelector('#db-toolbar__import-button')?.click()`);
         await waitFor(cdp, `document.querySelector('input[data-testid="dt-load-strategy-file-input"]')`, 'standard XML loader');
         await setFileInput(cdp, xmlPath);
+        await evaluate(
+            cdp,
+            `document.querySelector('input[data-testid="dt-load-strategy-file-input"]')
+                ?.dispatchEvent(new Event('change', { bubbles: true }))`
+        );
         await waitFor(cdp, `document.querySelector('#load-strategy__blockly-container')`, 'XML preview');
+        await waitFor(cdp, `Boolean(window.Blockly?.xmlValues?.convertedDom)`, 'parsed XML preview');
         await clickButtonContaining(cdp, 'Open');
         await assertBinaryMatrixWorkspace(cdp, 'standard XML loader');
     } finally {
