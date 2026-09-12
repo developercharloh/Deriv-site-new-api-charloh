@@ -158,6 +158,92 @@ export const ToolboxItems = () =>
                     </Value>
                 </Block>
             </Category>
+            <Category id='binary_matrix_ai' name={localize('Binary Matrix AI')}>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>ALL_ODD</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>ALL_EVEN</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>3</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>LESS_OR_EQUAL</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>3</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>3</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>GREATER_OR_EQUAL</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>6</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_purchase2'>
+                    <Field name='PURCHASE_LIST'>DIGITEVEN</Field>
+                    <Value name='PREDICTION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_purchase2'>
+                    <Field name='PURCHASE_LIST'>DIGITODD</Field>
+                    <Value name='PREDICTION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_purchase2'>
+                    <Field name='PURCHASE_LIST'>DIGITOVER</Field>
+                    <Value name='PREDICTION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_purchase2'>
+                    <Field name='PURCHASE_LIST'>DIGITUNDER</Field>
+                    <Value name='PREDICTION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>5</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+            </Category>
             <Category id='purchase_conditions' name={localize('Purchase conditions')}>
                 <Block type='before_purchase' />
                 <Block type='purchase' />
