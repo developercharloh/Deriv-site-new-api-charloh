@@ -178,11 +178,11 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
             type: alert.kind === 'tp' ? 'win' : 'loss',
         });
         engineRef.current = engine;
-        run_panel.registerNativeBot(() => engine.stop());
         if (!engine.start()) {
-            run_panel.unregisterNativeBot();
             engineRef.current = null;
+            return;
         }
+        run_panel.registerNativeBot(() => engine.stop());
     };
 
     const stop = () => {

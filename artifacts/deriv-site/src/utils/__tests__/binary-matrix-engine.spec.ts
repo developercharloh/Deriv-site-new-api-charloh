@@ -134,4 +134,34 @@ describe('BinaryMatrixEngine live purchase path', () => {
         engine.stop();
         mockApiBase.api = null;
     });
+
+    it('blocks a second Binary Matrix runner from starting', () => {
+        const api = {
+            send: jest.fn(),
+            forgetAll: jest.fn(() => Promise.resolve()),
+            onMessage: () => ({
+                subscribe: () => ({ unsubscribe: jest.fn() }),
+            }),
+        };
+        mockApiBase.api = api;
+
+        const config = {
+            symbol: 'R_25',
+            currency: 'USD',
+            initialStake: 0.5,
+            martingale: 2,
+            takeProfit: 10,
+            stopLoss: 50,
+            reanalyzeAfterWins: 3,
+        };
+        const first = new BinaryMatrixEngine(config);
+        const second = new BinaryMatrixEngine(config);
+
+        expect(first.start()).toBe(true);
+        expect(second.start()).toBe(false);
+
+        second.stop();
+        first.stop();
+        mockApiBase.api = null;
+    });
 });

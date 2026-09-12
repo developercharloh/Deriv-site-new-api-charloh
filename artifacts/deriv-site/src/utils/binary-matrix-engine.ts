@@ -50,6 +50,8 @@ export interface BinaryMatrixTrade {
     totalProfit: number;
 }
 
+let activeBinaryMatrixEngine: BinaryMatrixEngine | null = null;
+
 export class BinaryMatrixEngine {
     private readonly trader = new DTraderEngine();
     private config: BinaryMatrixConfig;
@@ -79,6 +81,16 @@ export class BinaryMatrixEngine {
 
     start(): boolean {
         if (this.running) return true;
+        if (activeBinaryMatrixEngine && activeBinaryMatrixEngine !== this) {
+            this.log({
+                seq: Date.now(),
+                time: this.nowTime(),
+                message: 'Binary Matrix AI is already running. The second runner was blocked to prevent duplicate contracts.',
+                type: 'error',
+            });
+            this.onStatus('error');
+            return false;
+        }
         if (!api_base.api || !api_base.is_authorized) {
             this.log({
                 seq: Date.now(),
@@ -102,6 +114,7 @@ export class BinaryMatrixEngine {
         this.settledContracts.clear();
         this.emitStats();
 
+        activeBinaryMatrixEngine = this;
         const started = this.trader.start({
             symbol: this.config.symbol,
             contractType: 'DIGITEVEN',
@@ -114,6 +127,7 @@ export class BinaryMatrixEngine {
 
         if (!started) {
             this.running = false;
+            if (activeBinaryMatrixEngine === this) activeBinaryMatrixEngine = null;
             this.onStatus('error');
             return false;
         }
@@ -124,6 +138,7 @@ export class BinaryMatrixEngine {
     }
 
     stop(): void {
+        if (activeBinaryMatrixEngine === this) activeBinaryMatrixEngine = null;
         if (!this.running && !this.openContractId) return;
         this.running = false;
         this.pendingDecision = null;

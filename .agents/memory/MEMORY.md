@@ -9,3 +9,4 @@
 - [Deriv tick subscription recovery](deriv-tick-subscription-recovery.md) — duplicate symbol streams need one-shot forget-all recovery before retrying ticks.
 - [Deriv builder and settlement validation](deriv-builder-settlement-validation.md) — validate bundled Blockly XML and merge partial settlement updates so mobile nodes and spots cannot disappear.
 - [Binary Matrix XML import guard](deriv-binary-matrix-import-guard.md) — root Blockly blocks can self-dispose during delayed option validation; hold an import guard through post-load callbacks.
+- [Binary Matrix single-runner guard](deriv-binary-matrix-single-runner.md) — modal and DBot Builder can create separate engines; only one Binary Matrix engine may start at a time.

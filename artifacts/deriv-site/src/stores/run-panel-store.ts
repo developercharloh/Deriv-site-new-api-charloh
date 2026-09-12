@@ -908,11 +908,11 @@ export default class RunPanelStore {
             this.root_store.transactions.onBotContractEvent(this.nativePositionToContractInfo(position));
         };
 
-        this.registerNativeBot(() => engine.stop());
         if (!engine.start()) {
             this.native_apollo_engine = null;
-            this.unregisterNativeBot();
+            return;
         }
+        this.registerNativeBot(() => engine.stop());
     };
 
     setContractStage = (contract_stage: TContractStage) => {
