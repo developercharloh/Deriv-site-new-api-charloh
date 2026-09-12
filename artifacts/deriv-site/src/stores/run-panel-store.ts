@@ -12,6 +12,7 @@ import { handleBackendError, isBackendError } from '@/utils/error-handler';
 import GTM from '@/utils/gtm';
 import { helpers } from '@/utils/store-helpers';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
+import { BinaryMatrixEngine, type BinaryMatrixConfig, type BinaryMatrixStatus } from '@/utils/binary-matrix-engine';
 import { Buy, ProposalOpenContract } from '@deriv/api-types';
 import { TStores } from '@deriv/stores/types';
 import { localize } from '@deriv-com/translations';
@@ -93,6 +94,7 @@ export default class RunPanelStore {
              registerNativeBot: action,
              updateNativeBot: action,
              unregisterNativeBot: action,
+             startNativeApolloBot: action,
         });
 
         this.root_store = root_store;
@@ -114,6 +116,7 @@ export default class RunPanelStore {
     show_bot_stop_message = false;
     is_contract_buying_in_progress = false;
     native_bot_stop_handler: (() => void) | null = null;
+    native_apollo_engine: BinaryMatrixEngine | null = null;
 
     run_id = '';
     onOkButtonClick: (() => void) | null = null;
@@ -198,6 +201,12 @@ export default class RunPanelStore {
         if (is_ios || isSafari()) this.preloadAudio();
 
         this.registerBotListeners();
+
+        if (this.hasNativeApolloBlocks()) {
+            this.unregisterBotListeners();
+            this.startNativeApolloBot();
+            return;
+        }
 
         if (!this.dbot.shouldRunBot()) {
             this.unregisterBotListeners();
@@ -788,6 +797,80 @@ export default class RunPanelStore {
         this.setIsRunning(false);
         this.core.ui?.setPromptHandler(false);
         this.core.ui?.setAccountSwitcherDisabledMessage();
+    };
+
+    hasNativeApolloBlocks = () => {
+        const blocks = window.Blockly?.derivWorkspace?.getAllBlocks?.(true) ?? [];
+        return blocks.some(block => ['last_digits_condition', 'apollo_purchase2'].includes(block.type));
+    };
+
+    startNativeApolloBot = () => {
+        const workspace = window.Blockly?.derivWorkspace;
+        if (!workspace) return;
+
+        const getVariableNumber = (name: string, fallback: number) => {
+            const setter = workspace
+                .getAllBlocks(true)
+                .find(block => block.type === 'variables_set' && block.getFieldValue('VAR') === name);
+            const valueBlock = setter?.getChildren?.().find(child =>
+                ['math_number', 'math_number_positive'].includes(child.type)
+            );
+            const value = Number(valueBlock?.getFieldValue?.('NUM'));
+            return Number.isFinite(value) ? value : fallback;
+        };
+
+        const marketBlock = workspace
+            .getAllBlocks(true)
+            .find(block => block.type === 'trade_definition_market');
+        const config: BinaryMatrixConfig = {
+            symbol: marketBlock?.getFieldValue?.('SYMBOL_LIST') || 'R_25',
+            currency: this.core.client.currency || 'USD',
+            initialStake: getVariableNumber('Stake', 0.5),
+            takeProfit: getVariableNumber('Take Profit', 10),
+            stopLoss: getVariableNumber('Stop Loss', 50),
+            martingale: getVariableNumber('Martingale', 2),
+            reanalyzeAfterWins: Math.max(1, Math.floor(getVariableNumber('Re Analyse After', 3))),
+        };
+
+        this.native_apollo_engine?.stop();
+        const engine = new BinaryMatrixEngine(config);
+        this.native_apollo_engine = engine;
+
+        const syncStatus = (status: BinaryMatrixStatus) => {
+            if (status === 'stopped' || status === 'idle') {
+                this.native_apollo_engine = null;
+                this.unregisterNativeBot();
+                return;
+            }
+
+            const stage = status === 'buying'
+                ? contract_stages.PURCHASE_SENT
+                : status === 'waiting'
+                  ? contract_stages.PURCHASE_RECEIVED
+                  : contract_stages.RUNNING;
+            this.updateNativeBot(stage, status === 'waiting');
+        };
+
+        engine.onStatus = syncStatus;
+        engine.onLog = log => {
+            const messageType = log.type === 'error' ? MessageTypes.ERROR : MessageTypes.NOTIFY;
+            this.root_store.journal.pushMessage(`[Binary Matrix] ${log.message}`, messageType, 'journal__text');
+        };
+        engine.onTrade = trade => {
+            const resultType = trade.isWin ? MessageTypes.SUCCESS : MessageTypes.ERROR;
+            this.root_store.journal.pushMessage(
+                `[Binary Matrix] ${trade.isWin ? 'WIN' : 'LOSS'} #${trade.contractId} ${trade.profit >= 0 ? '+' : ''}${trade.profit.toFixed(2)}`,
+                resultType,
+                'journal__text',
+                { profit: trade.profit, currency: this.core.client.currency }
+            );
+        };
+
+        this.registerNativeBot(() => engine.stop());
+        if (!engine.start()) {
+            this.native_apollo_engine = null;
+            this.unregisterNativeBot();
+        }
     };
 
     setContractStage = (contract_stage: TContractStage) => {

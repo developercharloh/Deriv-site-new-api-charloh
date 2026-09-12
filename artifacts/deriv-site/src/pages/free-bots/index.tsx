@@ -680,6 +680,16 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                     <div className='free-bots__card-actions'>
                         {isNativeBinaryMatrix && (
                             <button
+                                className={`free-bots__card-btn free-bots__card-btn--load ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
+                                onClick={loadBot}
+                                disabled={status === 'loading'}
+                            >
+                                {status === 'loading' ? '⏳ Loading…' : status === 'loaded' ? '✅ Loaded in DBot Builder' : '📂 Load in DBot Builder'}
+                            </button>
+                        )}
+
+                        {isNativeBinaryMatrix && (
+                            <button
                                 className='free-bots__card-btn free-bots__card-btn--custom'
                                 onClick={() => setShowBinaryMatrixRunner(true)}
                             >

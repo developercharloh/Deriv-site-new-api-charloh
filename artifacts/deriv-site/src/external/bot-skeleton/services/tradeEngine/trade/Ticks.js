@@ -90,6 +90,25 @@ export default Engine =>
         getLastDigitList() {
             return new Promise(resolve => this.getTicks().then(ticks => resolve(this.getLastDigitsFromList(ticks))));
         }
+        checkLastDigitsCondition(condition, count = 1, compareValue = 0) {
+            return this.getLastDigitList().then(digits => {
+                const size = Math.max(1, Math.floor(Number(count) || 1));
+                const recent = digits.slice(-size).map(Number);
+                if (recent.length < size) return false;
+
+                switch (condition) {
+                    case 'ALL_EVEN':
+                        return recent.every(digit => digit % 2 === 0);
+                    case 'LESS_OR_EQUAL':
+                        return recent.every(digit => digit <= Number(compareValue));
+                    case 'GREATER_OR_EQUAL':
+                        return recent.every(digit => digit >= Number(compareValue));
+                    case 'ALL_ODD':
+                    default:
+                        return recent.every(digit => digit % 2 !== 0);
+                }
+            });
+        }
         getLastDigitsFromList(ticks) {
             const digits = ticks.map(tick => {
                 return getLastDigit(tick.toFixed(this.getPipSize()));
