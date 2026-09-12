@@ -65,6 +65,40 @@ describe('ActiveSymbolsProcessorService', () => {
             });
         });
 
+        it('should preserve precision for every live volatility family', () => {
+            const symbols: ActiveSymbolInput[] = [
+                { underlying_symbol: '1HZ10V', pip_size: 0.01 },
+                { underlying_symbol: '1HZ15V', pip_size: 0.001 },
+                { underlying_symbol: '1HZ25V', pip_size: 0.01 },
+                { underlying_symbol: '1HZ30V', pip_size: 0.001 },
+                { underlying_symbol: '1HZ50V', pip_size: 0.01 },
+                { underlying_symbol: '1HZ75V', pip_size: 0.01 },
+                { underlying_symbol: '1HZ90V', pip_size: 0.001 },
+                { underlying_symbol: '1HZ100V', pip_size: 0.01 },
+                { underlying_symbol: 'R_10', pip_size: 0.001 },
+                { underlying_symbol: 'R_25', pip_size: 0.001 },
+                { underlying_symbol: 'R_50', pip_size: 0.0001 },
+                { underlying_symbol: 'R_75', pip_size: 0.0001 },
+                { underlying_symbol: 'R_100', pip_size: 0.01 },
+            ];
+
+            expect(service.processPipSizes(symbols)).toEqual({
+                '1HZ10V': 2,
+                '1HZ15V': 3,
+                '1HZ25V': 2,
+                '1HZ30V': 3,
+                '1HZ50V': 2,
+                '1HZ75V': 2,
+                '1HZ90V': 3,
+                '1HZ100V': 2,
+                R_10: 3,
+                R_25: 3,
+                R_50: 4,
+                R_75: 4,
+                R_100: 2,
+            });
+        });
+
         it('should handle symbols without pip sizes', () => {
             const mockSymbols: ActiveSymbolInput[] = [
                 {

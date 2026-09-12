@@ -6,7 +6,7 @@
    (Dollar Flow / Tri / Apollo), Signal Engine, etc.
 
    Two families:
-     • Continuous (1-second tick) indices — 1HZxV codes (16 symbols)
+     • Continuous (1-second tick) indices — 1HZxV codes (8 symbols)
      • Standard (2-second tick) indices    — R_x codes  (5 symbols)
 
    When Deriv adds new volatility indices, add them here ONLY and every
@@ -37,10 +37,9 @@ const std = (n: number): DerivVolatility => ({
     tickEvery: 2,
 });
 
-/** Continuous (1-second) volatility indices — verified working on DBot/DTrader.
- *  Only 5 exist on the live Deriv platform (10, 25, 50, 75, 100). */
+/** Continuous (1-second) volatility indices — verified working on DBot/DTrader. */
 export const DERIV_CONTINUOUS_VOLATILITIES: DerivVolatility[] = [
-    cont(10), cont(25), cont(50), cont(75), cont(100),
+    cont(10), cont(15), cont(25), cont(30), cont(50), cont(75), cont(90), cont(100),
 ];
 
 /** Standard (2-second) volatility indices — full Deriv lineup. */

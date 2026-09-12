@@ -53,4 +53,23 @@ describe('TicksService subscription recovery', () => {
         expect(forgetAll).toHaveBeenCalledWith('ticks');
         expect(api.send).toHaveBeenCalledTimes(2);
     });
+
+    it('refreshes pip sizes after an early empty initialization', async () => {
+        (api_base as any).pip_sizes = {};
+        const service = new TicksService();
+
+        await service.requestPipSizes();
+        expect((service as any).pipSizes).toEqual({});
+
+        (api_base as any).pip_sizes = {
+            '1HZ15V': 3,
+            R_50: 4,
+        };
+
+        await service.requestPipSizes();
+        expect((service as any).pipSizes).toEqual({
+            '1HZ15V': 3,
+            R_50: 4,
+        });
+    });
 });

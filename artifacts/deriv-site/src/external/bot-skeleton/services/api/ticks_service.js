@@ -55,17 +55,17 @@ export default class TicksService {
     }
 
     requestPipSizes() {
-        if (this.pipSizes) {
+        const currentPipSizes = api_base.pip_sizes || {};
+        if (Object.keys(currentPipSizes).length > 0) {
+            this.pipSizes = currentPipSizes;
             return Promise.resolve(this.pipSizes);
         }
 
-        if (!this.active_symbols_promise) {
-            this.active_symbols_promise = new Promise(resolve => {
-                this.pipSizes = api_base.pip_sizes;
-                resolve(this.pipSizes);
-            });
-        }
-        return this.active_symbols_promise;
+        // Do not permanently cache an empty map. The bot can request ticks while
+        // active_symbols enrichment is still completing; later requests must be
+        // able to pick up the per-symbol precision once it is available.
+        this.pipSizes = this.pipSizes || {};
+        return Promise.resolve(this.pipSizes);
     }
 
     async request(options) {
