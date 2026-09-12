@@ -29,6 +29,13 @@ const emptySavedWorkspaceValue =
 const browserApiMock = String.raw`
 (() => {
     const accountId = 'VRTC-BINARY-MATRIX';
+    const testState = (window.__binaryMatrixInterpreterTest ||= {
+        buyRequests: [],
+        contractCount: 0,
+        historyRequests: 0,
+        latestEpoch: 910000,
+        requests: [],
+    });
     localStorage.setItem('active_loginid', accountId);
     localStorage.setItem('account_type', 'demo');
     sessionStorage.setItem('deriv_accounts', JSON.stringify([{
@@ -70,6 +77,7 @@ const browserApiMock = String.raw`
 
         send(payload) {
             const request = JSON.parse(payload);
+            testState.requests.push(Object.keys(request).filter(key => key !== 'req_id'));
             const response = { req_id: request.req_id, msg_type: Object.keys(request).find(key => key !== 'req_id') || 'ping' };
             if (request.authorize) {
                 response.authorize = {
@@ -91,6 +99,7 @@ const browserApiMock = String.raw`
                         submarket: 'random_index',
                         exchange_is_open: 1,
                         is_open: 1,
+                        pip_size: 0,
                     },
                     {
                         symbol: 'R_100',
@@ -99,6 +108,7 @@ const browserApiMock = String.raw`
                         submarket: 'random_index',
                         exchange_is_open: 1,
                         is_open: 1,
+                        pip_size: 0,
                     },
                 ];
             } else if (request.trading_times) {
@@ -139,13 +149,120 @@ const browserApiMock = String.raw`
                 };
             } else if (request.time) {
                 response.time = Math.floor(Date.now() / 1000);
-            } else if (request.ticks) {
-                response.tick = { symbol: request.ticks, quote: 1000, epoch: Math.floor(Date.now() / 1000) };
-                response.subscription = { id: 'binary-matrix-test-ticks' };
+            } else if (request.ticks_history) {
+                const symbol = request.ticks_history === 'na' ? 'R_100' : request.ticks_history;
+                const initialEpoch = testState.latestEpoch;
+                response.msg_type = 'history';
+                response.history = {
+                    times: [initialEpoch - 3, initialEpoch - 2, initialEpoch - 1, initialEpoch],
+                    prices: [1001, 1003, 1005, 1007],
+                };
+                response.subscription = {
+                    id: 'binary-matrix-test-ticks-' + testState.historyRequests,
+                };
+                testState.historyRequests += 1;
+                // TicksService adds its listener after the history response resolves.
+                // Emit the first live tick after that listener is installed so the
+                // generated watch('before') loop can advance into its first buy.
+                if (testState.historyRequests === 1) {
+                    setTimeout(() => {
+                        testState.latestEpoch = initialEpoch + 1;
+                        this.dispatch('message', {
+                            data: JSON.stringify({
+                                msg_type: 'tick',
+                                tick: {
+                                    id: 'binary-matrix-test-tick-1',
+                                    symbol,
+                                    quote: 1009,
+                                    epoch: testState.latestEpoch,
+                                },
+                            }),
+                        });
+                    }, 500);
+                    setTimeout(() => {
+                        testState.latestEpoch = initialEpoch + 2;
+                        this.dispatch('message', {
+                            data: JSON.stringify({
+                                msg_type: 'tick',
+                                tick: {
+                                    id: 'binary-matrix-test-tick-2',
+                                    symbol,
+                                    quote: 1011,
+                                    epoch: testState.latestEpoch,
+                                },
+                            }),
+                        });
+                    }, 1500);
+                }
             } else if (request.proposal) {
                 response.proposal = { id: 'binary-matrix-test-proposal', ask_price: 1, payout: 1.96 };
             } else if (request.buy) {
-                response.buy = { contract_id: 1, buy_price: 1, payout: 1.96 };
+                const contractId = ++testState.contractCount;
+                const symbol = request.parameters?.underlying_symbol || 'R_25';
+                testState.buyRequests.push({
+                    symbol,
+                    epoch: testState.latestEpoch,
+                    contractId,
+                    contractType: request.parameters?.contract_type || null,
+                });
+                response.buy = { contract_id: contractId, buy_price: request.price || 0.5, payout: 1.96 };
+            } else if (request.proposal_open_contract) {
+                const contractId = Number(request.contract_id);
+                const buy = testState.buyRequests.find(item => item.contractId === contractId);
+                const isSecondContract = testState.buyRequests.length === 2;
+                response.proposal_open_contract = {
+                    contract_id: contractId,
+                    contract_type: buy?.contractType || 'DIGITEVEN',
+                    is_sold: 1,
+                    is_expired: 1,
+                    is_valid_to_sell: 0,
+                    buy_price: 0.5,
+                    sell_price: isSecondContract ? 10.5 : 0.25,
+                    profit: isSecondContract ? 10 : -0.25,
+                    currency: 'USD',
+                    transaction_ids: {
+                        buy: 'buy-' + contractId,
+                        sell: 'sell-' + contractId,
+                    },
+                    entry_tick_time: testState.latestEpoch,
+                    exit_tick_time: testState.latestEpoch,
+                    entry_tick: 1007,
+                    exit_tick: 1008,
+                };
+                // Settlement is delivered before the next tick. The first next
+                // tick lets watch('during') finish; the following tick is the
+                // only tick available to the next watch('before') cycle.
+                const settledEpoch = testState.latestEpoch;
+                setTimeout(() => {
+                    testState.latestEpoch = settledEpoch + 1;
+                    this.dispatch('message', {
+                        data: JSON.stringify({
+                            msg_type: 'tick',
+                            tick: {
+                                id: 'binary-matrix-test-tick-' + testState.latestEpoch,
+                                symbol: buy?.symbol || 'R_25',
+                                quote: 1003,
+                                epoch: testState.latestEpoch,
+                            },
+                        }),
+                    });
+                }, 60);
+                if (!isSecondContract) {
+                    setTimeout(() => {
+                        testState.latestEpoch = settledEpoch + 2;
+                        this.dispatch('message', {
+                            data: JSON.stringify({
+                                msg_type: 'tick',
+                                tick: {
+                                    id: 'binary-matrix-test-tick-' + testState.latestEpoch,
+                                    symbol: buy?.symbol || 'R_25',
+                                    quote: 1004,
+                                    epoch: testState.latestEpoch,
+                                },
+                            }),
+                        });
+                    }, 120);
+                }
             } else if (request.portfolio) {
                 response.portfolio = { contracts: [] };
             }
@@ -363,20 +480,43 @@ const evaluate = async (cdp, expression) => {
 };
 
 const waitFor = async (cdp, expression, label, timeout = 30_000) => {
-    const result = await evaluate(
-        cdp,
-        `new Promise((resolve, reject) => {
-            const started = Date.now();
-            const poll = () => {
-                let value = false;
-                try { value = Boolean(${expression}); } catch {}
-                if (value) return resolve(true);
-                if (Date.now() - started > ${timeout}) return reject(new Error(${JSON.stringify(`Timed out waiting for ${label}`)}));
-                setTimeout(poll, 100);
-            };
-            poll();
-        })`
-    );
+    let result;
+    try {
+        result = await evaluate(
+            cdp,
+            `new Promise((resolve, reject) => {
+                const started = Date.now();
+                const poll = () => {
+                    let value = false;
+                    try { value = Boolean(${expression}); } catch {}
+                    if (value) return resolve(true);
+                    if (Date.now() - started > ${timeout}) return reject(new Error(${JSON.stringify(`Timed out waiting for ${label}`)}));
+                    setTimeout(poll, 100);
+                };
+                poll();
+            })`
+        );
+    } catch (error) {
+        const pageState = await evaluate(
+            cdp,
+            `JSON.stringify({
+                url: location.href,
+                readyState: document.readyState,
+                title: document.title,
+                body: document.body?.innerText?.slice(0, 1600),
+                apiRequests: window.__binaryMatrixInterpreterTest?.requests,
+                testEpoch: window.__binaryMatrixInterpreterTest?.latestEpoch,
+                buyRequests: window.__binaryMatrixInterpreterTest?.buyRequests,
+                generatedCode: window.__binaryMatrixInterpreterTest?.generatedCode?.slice(0, 5000),
+                buttons: Array.from(document.querySelectorAll('button')).map(button => ({
+                    text: button.textContent.trim(),
+                    visible: Boolean(button.getClientRects().length),
+                    disabled: button.disabled
+                })).slice(0, 40)
+            })`
+        );
+        throw new Error(`${error.message}; page state: ${pageState}`);
+    }
     if (!result) throw new Error(`Timed out waiting for ${label}`);
 };
 
@@ -536,6 +676,70 @@ const assertBinaryMatrixWorkspace = async (cdp, flowName) => {
     );
 };
 
+const runGeneratedBinaryMatrixBot = async cdp => {
+    const generatedCode = await evaluate(
+        cdp,
+        `(() => {
+            const generator = window.Blockly?.JavaScript?.javascriptGenerator;
+            const workspace = window.Blockly?.derivWorkspace;
+            if (!generator || !workspace) throw new Error('Blockly generator or workspace is unavailable.');
+            const code = generator.workspaceToCode(workspace);
+            window.__binaryMatrixInterpreterTest.generatedCode = code;
+            return code;
+        })()`
+    );
+    if (!generatedCode?.includes("Bot.purchase('DIGITEVEN'")) {
+        throw new Error('workspaceToCode did not generate the Binary Matrix purchase callbacks.');
+    }
+    if (!generatedCode.includes('Bot.isTradeAgain(true)')) {
+        throw new Error('workspaceToCode did not generate the trade_again callback.');
+    }
+    console.log('✓ Binary Matrix XML converted through Blockly workspaceToCode');
+
+    await evaluate(
+        cdp,
+        `(() => {
+            const runButton = document.querySelector('#db-animation__run-button');
+            if (!runButton || runButton.disabled) throw new Error('DBot Run button is unavailable or disabled.');
+            runButton.click();
+            return true;
+        })()`
+    );
+    await waitFor(
+        cdp,
+        `window.__binaryMatrixInterpreterTest?.buyRequests?.length === 2`,
+        'two generated Binary Matrix buy requests',
+        30_000
+    );
+    await sleep(500);
+
+    const result = await evaluate(
+        cdp,
+        `JSON.stringify({
+            buyRequests: window.__binaryMatrixInterpreterTest.buyRequests,
+            generatedCode: window.__binaryMatrixInterpreterTest.generatedCode,
+            running: Boolean(document.querySelector('#db-animation__stop-button'))
+        })`
+    );
+    const { buyRequests } = JSON.parse(result);
+    const epochs = buyRequests.map(request => request.epoch);
+    if (
+        buyRequests.length !== 2 ||
+        buyRequests.some(request => request.symbol !== 'R_25') ||
+        epochs[0] === epochs[1] ||
+        epochs[1] !== epochs[0] + 2
+    ) {
+        throw new Error(
+            `Generated interpreter loop produced unexpected buys: ${JSON.stringify(buyRequests)}`
+        );
+    }
+    console.log(
+        `✓ Generated interpreter loop bought once per epoch after settlement: ` +
+            `${buyRequests.map(request => `${request.symbol}@${request.epoch}`).join(', ')}`
+    );
+    await evaluate(cdp, `document.querySelector('#db-animation__stop-button')?.click()`);
+};
+
 const setFileInput = async (cdp, file) => {
     const documentResult = await cdp.send('DOM.getDocument', { depth: -1 });
     const queryResult = await cdp.send('DOM.querySelector', {
@@ -550,7 +754,7 @@ const seedEmptySavedWorkspace = async cdp => {
     await evaluate(
         cdp,
         `new Promise((resolve, reject) => {
-            const request = indexedDB.open('localforage');
+            const request = indexedDB.open('localforage', 2);
             request.onerror = () => reject(request.error || new Error('Could not open localForage database.'));
             request.onupgradeneeded = () => {
                 const database = request.result;
@@ -630,6 +834,7 @@ const run = async () => {
         await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: browserApiMock });
         await cdp.send('Page.enable');
         await cdp.send('Runtime.enable');
+        await cdp.send('Log.enable');
         await cdp.send('Page.navigate', { url: `${appUrl}/#free_bots` });
         await waitFor(cdp, `document.readyState === 'complete'`, 'Deriv Site page');
 
@@ -650,7 +855,15 @@ const run = async () => {
             );
             if (appGateStillVisible) {
                 console.warn('App gate did not dismiss after the browser click; removing its test-only overlay.');
-                await evaluate(cdp, `document.querySelector('.slx-popup-overlay')?.remove()`);
+                await evaluate(
+                    cdp,
+                    `(() => {
+                        document.querySelector('.slx-popup__dismiss')?.click();
+                        document.querySelector('.slx-popup-overlay')?.remove();
+                        document.querySelector('.slx-popup')?.parentElement?.remove();
+                        return true;
+                    })()`
+                );
             }
         }
 
@@ -659,7 +872,8 @@ const run = async () => {
             `Array.from(document.querySelectorAll('button')).some(
                 button => button.getClientRects().length > 0 && button.textContent.includes('Load in DBot Builder')
             )`,
-            'Free Bots loader'
+            'Free Bots loader',
+            90_000
         );
         await seedEmptySavedWorkspace(cdp);
         await clickButtonContaining(cdp, 'Load in DBot Builder');
@@ -669,6 +883,30 @@ const run = async () => {
             `Boolean(document.querySelector('#id-bot-builder')?.getClientRects().length)`,
             'visible Bot Builder'
         );
+        const hasBuilderGuide = await evaluate(
+            cdp,
+            `Array.from(document.querySelectorAll('button')).some(
+                button => button.getClientRects().length > 0 && button.textContent.trim() === 'Skip'
+            )`
+        );
+        if (hasBuilderGuide) await clickButtonContaining(cdp, 'Skip');
+        const hasBuilderSocialPopup = await evaluate(
+            cdp,
+            `Array.from(document.querySelectorAll('button')).some(
+                button => button.getClientRects().length > 0 && button.textContent.includes('Continue to App')
+            )`
+        );
+        if (hasBuilderSocialPopup) {
+            await evaluate(
+                cdp,
+                `(() => {
+                    document.querySelector('.slx-popup__dismiss')?.click();
+                    document.querySelector('.slx-popup-overlay')?.remove();
+                    document.querySelector('.slx-popup')?.parentElement?.remove();
+                    return true;
+                })()`
+            );
+        }
         await assertBinaryMatrixWorkspace(cdp, 'Free Bots loader');
 
         await evaluate(cdp, `document.querySelector('#db-toolbar__import-button')?.click()`);
@@ -683,6 +921,7 @@ const run = async () => {
         await waitFor(cdp, `Boolean(window.Blockly?.xmlValues?.convertedDom)`, 'parsed XML preview');
         await clickButtonContaining(cdp, 'Open');
         await assertBinaryMatrixWorkspace(cdp, 'standard XML loader');
+        await runGeneratedBinaryMatrixBot(cdp);
     } finally {
         cdp?.socket.close();
         browser.kill('SIGTERM');
