@@ -52,6 +52,10 @@ window.Blockly.Blocks.before_purchase = {
         };
     },
     onchange(event) {
+        if (/^dbot-load/.test(event.group)) {
+            return;
+        }
+
         if (
             event.type === window.Blockly.Events.BLOCK_CHANGE ||
             (event.type === window.Blockly.Events.BLOCK_DRAG && !event.isStart)

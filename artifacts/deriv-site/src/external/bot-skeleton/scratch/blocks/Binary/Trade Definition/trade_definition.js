@@ -121,6 +121,10 @@ window.Blockly.Blocks.trade_definition = {
         modifyContextMenu(menu);
     },
     onchange(event) {
+        if (/^dbot-load/.test(event.group)) {
+            return;
+        }
+
         if (event.type === window.Blockly.Events.SELECTED && !this.isInit) {
             this.isInit = true;
             initErrorHandlingListener('keydown');
