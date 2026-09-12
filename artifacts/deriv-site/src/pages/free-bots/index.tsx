@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
+import { DBot } from '@/external/bot-skeleton';
 import { parseDigitFrom, fetchAndPatchBot, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import type { BotConfig } from './types';
@@ -642,6 +643,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
             Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
             Blockly.derivWorkspace.cleanUp();
             Blockly.derivWorkspace.clearUndo();
+            DBot.revealLoadedWorkspace();
 
             setStatus('loaded');
 

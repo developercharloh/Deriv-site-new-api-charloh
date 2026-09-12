@@ -21,7 +21,7 @@ class DBot {
         this.is_bot_running = false;
     }
 
-    revealLoadedWorkspace = is_mobile => {
+    revealLoadedWorkspace = (is_mobile = window.innerWidth < 768) => {
         if (!is_mobile || !this.workspace) return;
 
         const reveal = () => {
