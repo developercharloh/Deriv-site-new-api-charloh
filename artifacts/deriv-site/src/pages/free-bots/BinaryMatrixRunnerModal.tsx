@@ -10,6 +10,7 @@ import type { DTLog } from '@/utils/dtrader-engine';
 import { APOLLO_BLOCK_REGISTRY } from '@/utils/apollo-block-registry';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useStore } from '@/hooks/useStore';
+import { contract_stages } from '@/constants/contract-stage';
 
 interface Props {
     bot: BotConfig;
@@ -73,7 +74,7 @@ function numberSetting(value: string, fallback: number, minimum: number): number
 }
 
 const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
-    const { client } = useStore();
+    const { client, run_panel } = useStore();
     const [settings, setSettings] = useState<RunnerSettings>(readSettings);
     const [status, setStatus] = useState<BinaryMatrixStatus>('idle');
     const [authorized, setAuthorized] = useState(() => Boolean(api_base.is_authorized));
@@ -148,7 +149,22 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
 
         const engine = new BinaryMatrixEngine(config);
         engine.onLog = appendLog;
-        engine.onStatus = setStatus;
+        engine.onStatus = nextStatus => {
+            setStatus(nextStatus);
+            if (nextStatus === 'stopped' || nextStatus === 'idle') {
+                run_panel.unregisterNativeBot();
+                return;
+            }
+
+            const stage = nextStatus === 'buying'
+                ? contract_stages.PURCHASE_SENT
+                : nextStatus === 'waiting'
+                  ? contract_stages.PURCHASE_RECEIVED
+                  : nextStatus === 'scanning' || nextStatus === 'error'
+                    ? contract_stages.RUNNING
+                    : contract_stages.STARTING;
+            run_panel.updateNativeBot(stage, nextStatus === 'waiting');
+        };
         engine.onStats = setStats;
         engine.onAlert = alert => appendLog({
             seq: Date.now(),
@@ -159,13 +175,16 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
             type: alert.kind === 'tp' ? 'win' : 'loss',
         });
         engineRef.current = engine;
+        run_panel.registerNativeBot(() => engine.stop());
         if (!engine.start()) {
+            run_panel.unregisterNativeBot();
             engineRef.current = null;
         }
     };
 
     const stop = () => {
         engineRef.current?.stop();
+        run_panel.unregisterNativeBot();
         engineRef.current = null;
     };
 

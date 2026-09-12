@@ -56,6 +56,7 @@ export default class RunPanelStore {
             setIsRunning: action,
             onRunButtonClick: action,
             is_contract_buying_in_progress: observable,
+             native_bot_stop_handler: observable,
             SetpurchaseInProgress: action,
             onStopButtonClick: action,
             onClearStatClick: action,
@@ -89,6 +90,9 @@ export default class RunPanelStore {
             preloadAudio: action,
             onMount: action,
             onUnmount: action,
+             registerNativeBot: action,
+             updateNativeBot: action,
+             unregisterNativeBot: action,
         });
 
         this.root_store = root_store;
@@ -109,6 +113,7 @@ export default class RunPanelStore {
     is_sell_requested = false;
     show_bot_stop_message = false;
     is_contract_buying_in_progress = false;
+    native_bot_stop_handler: (() => void) | null = null;
 
     run_id = '';
     onOkButtonClick: (() => void) | null = null;
@@ -218,6 +223,10 @@ export default class RunPanelStore {
     };
 
     onStopButtonClick = () => {
+        if (this.native_bot_stop_handler) {
+            this.native_bot_stop_handler();
+            return;
+        }
         this.is_contract_buying_in_progress = false;
         const { is_multiplier } = this.root_store.summary_card;
 
@@ -229,6 +238,10 @@ export default class RunPanelStore {
     };
 
     onStopBotClick = () => {
+        if (this.native_bot_stop_handler) {
+            this.native_bot_stop_handler();
+            return;
+        }
         this.is_contract_buying_in_progress = false;
 
         const { is_multiplier } = this.root_store.summary_card;
@@ -749,6 +762,32 @@ export default class RunPanelStore {
         observer.unregisterAll('bot.contract');
         observer.unregisterAll('Error');
         observer.unregisterAll('bot.setPurchaseInProgress');
+    };
+
+    registerNativeBot = (stop_handler: () => void) => {
+        this.native_bot_stop_handler = stop_handler;
+        this.run_id = `native-${Date.now()}`;
+        this.setIsRunning(true);
+        this.setHasOpenContract(false);
+        this.setContractStage(contract_stages.STARTING);
+        this.toggleDrawer(true);
+        this.core.ui?.setPromptHandler(true);
+    };
+
+    updateNativeBot = (contract_stage: TContractStage, has_open_contract = false) => {
+        if (!this.native_bot_stop_handler) return;
+        this.setIsRunning(true);
+        this.setHasOpenContract(has_open_contract);
+        this.setContractStage(contract_stage);
+    };
+
+    unregisterNativeBot = () => {
+        this.native_bot_stop_handler = null;
+        this.setHasOpenContract(false);
+        this.setContractStage(contract_stages.NOT_RUNNING);
+        this.setIsRunning(false);
+        this.core.ui?.setPromptHandler(false);
+        this.core.ui?.setAccountSwitcherDisabledMessage();
     };
 
     setContractStage = (contract_stage: TContractStage) => {
