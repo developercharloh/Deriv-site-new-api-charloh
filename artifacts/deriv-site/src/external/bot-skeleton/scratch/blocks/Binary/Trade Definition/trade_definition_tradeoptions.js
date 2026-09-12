@@ -83,6 +83,9 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
         modifyContextMenu(menu);
     },
     onchange(event) {
+        if (window.__DBOT_LOADING_XML || /^dbot-load/.test(event.group)) {
+            return;
+        }
         if (event.type === 'change') {
             const selected_block = this.workspace.getBlockById(event.blockId);
             selected_block?.parentBlock_?.inputList

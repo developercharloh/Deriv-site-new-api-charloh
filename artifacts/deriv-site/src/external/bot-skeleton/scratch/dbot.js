@@ -32,7 +32,12 @@ class DBot {
             // strategy should remain readable and scroll vertically, like the
             // normal DBot builder. Fitting height here reduced the blocks to
             // the 0.25 minimum and made the other roots appear missing.
-            this.workspace.scrollbar?.set(0, 0);
+            // ScrollbarPair.setY(0) is the supported Blockly 10 API for
+            // returning to the first root block on mobile. Calling only the
+            // horizontal/combined helper leaves the viewport at the previous
+            // bottom position after a long XML import.
+            this.workspace.scrollbar?.setY?.(0);
+            this.workspace.scrollbar?.set?.(0, 0, true);
         };
 
         window.requestAnimationFrame(() => {
@@ -53,6 +58,9 @@ class DBot {
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         var that = this;
         window.Blockly.Blocks.trade_definition_tradetype.onchange = function (event) {
+            if (window.__DBOT_LOADING_XML || /^dbot-load/.test(event.group)) {
+                return;
+            }
             if (!this.workspace || window.Blockly.derivWorkspace.isFlyoutVisible || this.workspace.isDragging()) {
                 return;
             }

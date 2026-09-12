@@ -44,6 +44,9 @@ window.Blockly.Blocks.trade_definition_market = {
         modifyContextMenu(menu);
     },
     onchange(event) {
+        if (window.__DBOT_LOADING_XML || /^dbot-load/.test(event.group)) {
+            return;
+        }
         const allowed_events = ['BLOCK_CREATE', 'BLOCK_CHANGE', 'BLOCK_DRAG'];
         const is_allowed_event =
             allowed_events.findIndex(event_name => event.type === window.Blockly.Events[event_name]) !== -1;

@@ -261,6 +261,7 @@ export const loadBlocks = (xml, drop_event, event_group, workspace) => {
     } else {
         workspace.cleanUp();
     }
+    workspace.scrollbar?.setY?.(0);
 };
 
 export const loadWorkspace = async (xml, event_group, workspace) => {
@@ -268,6 +269,7 @@ export const loadWorkspace = async (xml, event_group, workspace) => {
     await workspace.asyncClear();
     window.Blockly.Xml.clearWorkspaceAndLoadFromXml(xml, workspace);
     workspace.cleanUp();
+    workspace.scrollbar?.setY?.(0);
 };
 
 const loadBlocksFromHeader = (xml_string, block) => {
