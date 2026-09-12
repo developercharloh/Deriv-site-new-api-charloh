@@ -43,7 +43,12 @@ describe('BinaryMatrixEngine live purchase path', () => {
             reanalyzeAfterWins: 3,
         });
         const logs: string[] = [];
+        const positions: Array<{ isOpen: boolean; contractId: string }> = [];
         engine.onLog = log => logs.push(log.message);
+        engine.onPosition = position => positions.push({
+            isOpen: position.isOpen,
+            contractId: position.contractId,
+        });
         engine.start();
         await Promise.resolve();
         await Promise.resolve();
@@ -108,6 +113,23 @@ describe('BinaryMatrixEngine live purchase path', () => {
             },
         });
         expect(logs.some(message => message.includes('Bought #24680'))).toBe(true);
+        expect(positions).toContainEqual({ isOpen: true, contractId: '24680' });
+
+        const settlement = latest(payload => payload.proposal_open_contract === 1);
+        emit({
+            msg_type: 'proposal_open_contract',
+            req_id: settlement.req_id,
+            subscription: { id: 'matrix-contract' },
+            proposal_open_contract: {
+                contract_id: 24680,
+                status: 'lost',
+                profit: '-0.50',
+                bid_price: '0',
+                entry_tick_display_value: '123.45',
+                exit_tick_display_value: '123.46',
+            },
+        });
+        expect(positions).toContainEqual({ isOpen: false, contractId: '24680' });
 
         engine.stop();
         mockApiBase.api = null;

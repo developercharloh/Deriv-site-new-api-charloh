@@ -13,6 +13,7 @@ import GTM from '@/utils/gtm';
 import { helpers } from '@/utils/store-helpers';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
 import { BinaryMatrixEngine, type BinaryMatrixConfig, type BinaryMatrixStatus } from '@/utils/binary-matrix-engine';
+import type { DTPosition } from '@/utils/dtrader-engine';
 import { Buy, ProposalOpenContract } from '@deriv/api-types';
 import { TStores } from '@deriv/stores/types';
 import { localize } from '@deriv-com/translations';
@@ -804,6 +805,37 @@ export default class RunPanelStore {
         return blocks.some(block => ['last_digits_condition', 'apollo_purchase2'].includes(block.type));
     };
 
+    nativePositionToContractInfo = (position: DTPosition) => {
+        const numericContractId = Number(position.contractId);
+        const contractId = Number.isFinite(numericContractId) ? numericContractId : position.contractId;
+        const now = new Date().toISOString();
+        const completed = !position.isOpen;
+
+        return {
+            contract_id: contractId,
+            transaction_ids: { buy: contractId },
+            contract_type: position.contractType,
+            underlying_symbol: position.symbol,
+            currency: this.core.client.currency || 'USD',
+            buy_price: position.buyPrice,
+            payout: position.payout,
+            bid_price: position.currentBid ?? undefined,
+            profit: position.profit ?? 0,
+            status: position.isOpen ? 'open' : position.isWin ? 'won' : 'lost',
+            is_expired: completed,
+            date_start: now,
+            entry_spot: position.entrySpot ?? undefined,
+            entry_tick: position.entrySpot ?? undefined,
+            entry_tick_time: now,
+            exit_spot: position.exitSpot ?? undefined,
+            exit_tick: position.exitSpot ?? undefined,
+            exit_tick_time: completed ? now : undefined,
+            tick_count: 1,
+            barrier: position.barrier ?? undefined,
+            longcode: position.longcode,
+        };
+    };
+
     startNativeApolloBot = () => {
         const workspace = window.Blockly?.derivWorkspace;
         if (!workspace) return;
@@ -871,6 +903,9 @@ export default class RunPanelStore {
                 'journal__text',
                 { profit: trade.profit, currency: this.core.client.currency }
             );
+        };
+        engine.onPosition = position => {
+            this.root_store.transactions.onBotContractEvent(this.nativePositionToContractInfo(position));
         };
 
         this.registerNativeBot(() => engine.stop());

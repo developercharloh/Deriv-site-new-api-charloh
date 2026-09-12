@@ -67,6 +67,7 @@ export class BinaryMatrixEngine {
     public onLog: (log: DTLog) => void = () => {};
     public onStatus: (status: BinaryMatrixStatus) => void = () => {};
     public onStats: (stats: BinaryMatrixStats) => void = () => {};
+    public onPosition: (position: DTPosition) => void = () => {};
     public onTrade: (trade: BinaryMatrixTrade) => void = () => {};
     public onAlert: (alert: { kind: 'tp' | 'sl'; profit: number }) => void = () => {};
 
@@ -199,6 +200,7 @@ export class BinaryMatrixEngine {
                     'info',
                 );
                 this.emitStats();
+                this.onPosition({ ...position });
             }
             return;
         }
@@ -235,6 +237,7 @@ export class BinaryMatrixEngine {
         }
 
         this.emitStats();
+        this.onPosition({ ...position });
         this.onTrade({
             contractId: position.contractId,
             decision: this.lastDecision(position),

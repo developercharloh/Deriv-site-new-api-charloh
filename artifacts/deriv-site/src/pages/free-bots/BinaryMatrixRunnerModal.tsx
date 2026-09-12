@@ -74,7 +74,7 @@ function numberSetting(value: string, fallback: number, minimum: number): number
 }
 
 const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
-    const { client, run_panel } = useStore();
+    const { client, run_panel, transactions } = useStore();
     const [settings, setSettings] = useState<RunnerSettings>(readSettings);
     const [status, setStatus] = useState<BinaryMatrixStatus>('idle');
     const [authorized, setAuthorized] = useState(() => Boolean(api_base.is_authorized));
@@ -166,6 +166,9 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
             run_panel.updateNativeBot(stage, nextStatus === 'waiting');
         };
         engine.onStats = setStats;
+        engine.onPosition = position => {
+            transactions.onBotContractEvent(run_panel.nativePositionToContractInfo(position));
+        };
         engine.onAlert = alert => appendLog({
             seq: Date.now(),
             time: new Date().toTimeString().slice(0, 8),
