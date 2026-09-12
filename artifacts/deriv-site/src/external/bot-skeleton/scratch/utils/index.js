@@ -436,6 +436,9 @@ const getAllRequiredBlocks = (workspace, required_block_types) => {
 
 const getMissingBlocks = (workspace, required_block_types) => {
     return required_block_types.filter(blockType => {
+        if (blockType === 'purchase') {
+            return !workspace.getAllBlocks().some(block => ['purchase', 'apollo_purchase2'].includes(block.type));
+        }
         return !workspace.getAllBlocks().some(block => block.type === blockType);
     });
 };
@@ -450,7 +453,12 @@ const getDisabledBlocks = required_blocks_check => {
             .map(block => [block.type, block.disabled])
     );
     const mandatory_blocks = ['before_purchase', 'purchase', 'trade_definition', 'trade_definition_tradeoptions'];
-    const has_disabled_blocks = mandatory_blocks.some(type => disabled_blocks[type]);
+    const has_disabled_blocks = mandatory_blocks.some(type => {
+        if (type === 'purchase') {
+            return disabled_blocks.purchase || disabled_blocks.apollo_purchase2;
+        }
+        return disabled_blocks[type];
+    });
 
     return has_disabled_blocks
         ? required_blocks_check.filter(block => block.disabled || block.childBlocks_?.some(child => child.disabled))
