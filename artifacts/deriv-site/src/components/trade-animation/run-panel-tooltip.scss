@@ -170,6 +170,100 @@
     opacity: 0.32;
 }
 
+.animation__run-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+// ── Shared DBot execution speed control ──────────────────────────────────────
+.animation__speed-toggle {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid rgba(100, 116, 139, 0.25);
+    border-radius: 6px;
+}
+
+.animation__speed-label {
+    padding: 0 6px;
+    color: rgba(100, 116, 139, 0.78);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.animation__speed-btn {
+    height: 28px;
+    padding: 0 7px;
+    border: 0;
+    border-left: 1px solid rgba(100, 116, 139, 0.18);
+    background: transparent;
+    color: rgba(100, 116, 139, 0.72);
+    cursor: pointer;
+    font-size: 0.66rem;
+    font-weight: 800;
+    line-height: 28px;
+    white-space: nowrap;
+
+    &:hover {
+        background: rgba(100, 116, 139, 0.1);
+        color: inherit;
+    }
+
+    &--active {
+        background: rgba(100, 116, 139, 0.16);
+        color: var(--text-general, #1e293b);
+    }
+
+    &--active-fast {
+        background: rgba(14, 165, 233, 0.16);
+        color: #0284c7;
+    }
+}
+
+.theme--dark .animation__speed-toggle {
+    border-color: rgba(255, 255, 255, 0.18);
+
+    .animation__speed-label,
+    .animation__speed-btn {
+        color: rgba(255, 255, 255, 0.55);
+    }
+
+    .animation__speed-btn {
+        border-left-color: rgba(255, 255, 255, 0.12);
+
+        &:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e7eaf3;
+        }
+
+        &--active {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e7eaf3;
+        }
+
+        &--active-fast {
+            background: rgba(14, 165, 233, 0.2);
+            color: #38bdf8;
+        }
+    }
+}
+
+@media screen and (width <= 480px) {
+    .animation__speed-label {
+        display: none;
+    }
+
+    .animation__speed-btn {
+        padding: 0 6px;
+    }
+}
+
 // ── Live engine mode toggle (V1 / V2) shown beside the Run/Stop button ────────
 .animation__engine-toggle {
     display: flex;

@@ -2,6 +2,7 @@ import TradeEngine from '../trade';
 import getBotInterface from './BotInterface';
 import getTicksInterface from './TicksInterface';
 import getToolsInterface from './ToolsInterface';
+import { getBotExecutionDelayMs, getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
 const sleep = (observer, arg = 1) => {
     return new Promise(
@@ -10,7 +11,7 @@ const sleep = (observer, arg = 1) => {
             setTimeout(() => {
                 r();
                 setTimeout(() => observer.emit('CONTINUE'), 0);
-            }, arg * 1000),
+            }, getBotExecutionDelayMs(arg, getBotExecutionSpeed())),
         () => {}
     );
 };
