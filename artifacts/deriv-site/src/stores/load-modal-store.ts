@@ -472,9 +472,28 @@ export default class LoadModalStore {
         } = window.Blockly.xmlValues;
         const derivWorkspace = window.Blockly.derivWorkspace;
 
-        window.Blockly.Xml.clearWorkspaceAndLoadFromXml(convertedDom, derivWorkspace);
-        derivWorkspace.cleanUp();
-        derivWorkspace.clearUndo();
+        const event_group = `dbot-load${Date.now()}`;
+        window.__DBOT_LOADING_XML = true;
+        window.Blockly.Events.setGroup(event_group);
+        let import_completed = false;
+        try {
+            window.Blockly.Xml.clearWorkspaceAndLoadFromXml(convertedDom, derivWorkspace);
+            derivWorkspace.cleanUp();
+            derivWorkspace.clearUndo();
+            import_completed = true;
+        } finally {
+            window.Blockly.Events.setGroup(false);
+            if (!import_completed) {
+                window.__DBOT_LOADING_XML = false;
+            } else {
+                // Blockly can validate dynamic dropdowns after the synchronous
+                // import returns. Keep root-block lifecycle handlers paused
+                // until those callbacks have settled.
+                window.setTimeout(() => {
+                    window.__DBOT_LOADING_XML = false;
+                }, 1000);
+            }
+        }
         derivWorkspace.current_strategy_id = strategy_id;
 
         /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */

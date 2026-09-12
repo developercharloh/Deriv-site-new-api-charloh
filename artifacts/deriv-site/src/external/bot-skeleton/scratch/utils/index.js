@@ -251,25 +251,52 @@ export const load = async ({
 };
 
 export const loadBlocks = (xml, drop_event, event_group, workspace) => {
+    window.__DBOT_LOADING_XML = true;
     window.Blockly.Events.setGroup(event_group);
+    let import_completed = false;
+    try {
+        const block_ids = window.Blockly.Xml.domToWorkspace(xml, workspace);
+        const added_blocks = block_ids.map(block_id => workspace.getBlockById(block_id));
 
-    const block_ids = window.Blockly.Xml.domToWorkspace(xml, workspace);
-    const added_blocks = block_ids.map(block_id => workspace.getBlockById(block_id));
-
-    if (drop_event && Object.keys(drop_event).length !== 0) {
-        cleanUpOnLoad(added_blocks, drop_event, workspace);
-    } else {
-        workspace.cleanUp();
+        if (drop_event && Object.keys(drop_event).length !== 0) {
+            cleanUpOnLoad(added_blocks, drop_event, workspace);
+        } else {
+            workspace.cleanUp();
+        }
+        workspace.scrollbar?.setY?.(0);
+        import_completed = true;
+    } finally {
+        window.Blockly.Events.setGroup(false);
+        if (!import_completed) {
+            window.__DBOT_LOADING_XML = false;
+        } else {
+            window.setTimeout(() => {
+                window.__DBOT_LOADING_XML = false;
+            }, 1000);
+        }
     }
-    workspace.scrollbar?.setY?.(0);
 };
 
 export const loadWorkspace = async (xml, event_group, workspace) => {
+    window.__DBOT_LOADING_XML = true;
     window.Blockly.Events.setGroup(event_group);
-    await workspace.asyncClear();
-    window.Blockly.Xml.clearWorkspaceAndLoadFromXml(xml, workspace);
-    workspace.cleanUp();
-    workspace.scrollbar?.setY?.(0);
+    let import_completed = false;
+    try {
+        await workspace.asyncClear();
+        window.Blockly.Xml.clearWorkspaceAndLoadFromXml(xml, workspace);
+        workspace.cleanUp();
+        workspace.scrollbar?.setY?.(0);
+        import_completed = true;
+    } finally {
+        window.Blockly.Events.setGroup(false);
+        if (!import_completed) {
+            window.__DBOT_LOADING_XML = false;
+        } else {
+            window.setTimeout(() => {
+                window.__DBOT_LOADING_XML = false;
+            }, 1000);
+        }
+    }
 };
 
 const loadBlocksFromHeader = (xml_string, block) => {

@@ -10,3 +10,4 @@
 - [Deriv builder and settlement validation](deriv-builder-settlement-validation.md) — validate bundled Blockly XML and merge partial settlement updates so mobile nodes and spots cannot disappear.
 - [Binary Matrix XML import guard](deriv-binary-matrix-import-guard.md) — root Blockly blocks can self-dispose during delayed option validation; hold an import guard through post-load callbacks.
 - [Binary Matrix single-runner guard](deriv-binary-matrix-single-runner.md) — modal and DBot Builder can create separate engines; only one Binary Matrix engine may start at a time.
+- [Binary Matrix browser regression](deriv-binary-matrix-browser-regression.md) — Node 20 needs a dependency-free CDP client and mobile Blockly metrics include document offset.
