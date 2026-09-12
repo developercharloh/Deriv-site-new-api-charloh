@@ -623,9 +623,8 @@
             </value>
           </block>
         </statement>
-      </block>
-      <next>
-      <block type="controls_if" id="kp_direction_choice">
+        <next>
+          <block type="controls_if" id="kp_direction_choice">
         <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="3"></mutation>
         <value name="IF0">
           <block type="logic_compare" id="kp_direction_is_even">
@@ -717,8 +716,9 @@
             </value>
           </block>
         </statement>
+          </block>
+        </next>
       </block>
-      </next>
     </statement>
   </block>
 </xml>
