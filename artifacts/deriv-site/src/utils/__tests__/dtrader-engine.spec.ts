@@ -187,6 +187,29 @@ describe('DTraderEngine Alpha Scan execution path', () => {
         harness.engine.stop();
     });
 
+    it('recovers from an existing tick subscription before scanning', () => {
+        const harness = makeHarness(baseConfig);
+        const initialTickRequest = harness.latest(payload => payload.ticks_history === 'R_100');
+
+        harness.emit({
+            msg_type: 'history',
+            req_id: initialTickRequest.req_id,
+            error: { message: 'You are already subscribed to R_100' },
+        });
+
+        expect(harness.sent.at(-1)).toMatchObject({ forget_all: 'ticks' });
+
+        jest.advanceTimersByTime(300);
+        const retry = harness.sent.filter(payload => payload.ticks_history === 'R_100');
+        expect(retry).toHaveLength(2);
+        expect(retry.at(-1)).toMatchObject({
+            count: 1000,
+            end: 'latest',
+            subscribe: 1,
+        });
+        harness.engine.stop();
+    });
+
     it('clears a rejected buy proposal so the next attempt requests a fresh proposal', () => {
         const harness = makeHarness(baseConfig);
         harness.engine.placeBuyNow(baseConfig);

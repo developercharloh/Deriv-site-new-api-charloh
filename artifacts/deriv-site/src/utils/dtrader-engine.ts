@@ -188,6 +188,8 @@ export class DTraderEngine {
     private lastTickAt = 0;
     private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
     private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
+    private tickRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    private duplicateTickRecoveryAttempted = false;
     private visListener: (() => void) | null = null;
     /** Contract ids the user explicitly asked us to sell — used to label
      *  their settlement event as a 'cashout' instead of 'tp'/'sl'. */
@@ -223,6 +225,7 @@ export class DTraderEngine {
 
         this.stop(); // clean any prior state
         this.resetDigitWindow(); // clear stale data from previous market immediately
+        this.duplicateTickRecoveryAttempted = false;
 
         this.cfg = { ...initialCfg };
         this.setStatus('subscribing');
@@ -269,6 +272,7 @@ export class DTraderEngine {
         if (this.proposalDebounce) { clearTimeout(this.proposalDebounce); this.proposalDebounce = null; }
         if (this.keepAliveTimer)   { clearInterval(this.keepAliveTimer);   this.keepAliveTimer = null; }
         if (this.healthCheckTimer) { clearInterval(this.healthCheckTimer); this.healthCheckTimer = null; }
+        if (this.tickRetryTimer)  { clearTimeout(this.tickRetryTimer); this.tickRetryTimer = null; }
         if (this.visListener && typeof document !== 'undefined') {
             document.removeEventListener('visibilitychange', this.visListener);
             this.visListener = null;
@@ -287,6 +291,7 @@ export class DTraderEngine {
         this.pendingBuy = false;
         this.currentProposal = null;
         this.currentProposalCfgKey = null;
+        this.cfg = null;
         this.setStatus('idle');
     }
 
@@ -552,6 +557,13 @@ export class DTraderEngine {
         if (msg.error) {
             const m = msg.error.message ?? 'Unknown error';
             this.log(`API error [${msg.msg_type}]: ${m}`, 'error');
+            if (
+                msg.msg_type === 'history'
+                && /already subscribed/i.test(m)
+            ) {
+                this.recoverDuplicateTickSubscription();
+                return;
+            }
             if (msg.msg_type === 'proposal') {
                 this.currentProposal = null;
                 this.onProposal(null);
@@ -953,6 +965,30 @@ export class DTraderEngine {
 
     private emitBuySuccess(message: string): void {
         this.onBuyFeedback({ seq: ++this.feedbackSeq, kind: 'success', message });
+    }
+
+    /**
+     * Deriv permits only one live tick subscription per symbol on a
+     * connection. A previous runner, a fast stop/start, or another builder
+     * surface can leave that subscription alive for a short time after its
+     * local owner has gone away. Reset all tick streams once, then retry the
+     * seed-and-subscribe request so the native runner can continue to its
+     * proposal and buy path instead of remaining in "Bot running".
+     */
+    private recoverDuplicateTickSubscription(): void {
+        if (!this.cfg || this.duplicateTickRecoveryAttempted) {
+            this.fail('Deriv still has an active tick subscription for this market. Stop the other bot or trading surface and try again.');
+            return;
+        }
+
+        this.duplicateTickRecoveryAttempted = true;
+        this.tickSubId = null;
+        this.log('Existing tick subscription detected — resetting it and retrying R_25 ticks.', 'system');
+        this.send({ forget_all: 'ticks' });
+        this.tickRetryTimer = setTimeout(() => {
+            this.tickRetryTimer = null;
+            if (this.cfg && this.status !== 'idle') this.subscribeTick();
+        }, 300);
     }
 
     private log(message: string, type: DTLogType = 'info'): void {
