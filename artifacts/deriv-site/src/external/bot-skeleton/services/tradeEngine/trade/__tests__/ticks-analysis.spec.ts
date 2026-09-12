@@ -1,4 +1,4 @@
-import { observer } from '../../../../../../utils/observer';
+import { observer } from '@/external/bot-skeleton/utils/observer';
 import Ticks from '../Ticks';
 
 class BaseEngine {}

@@ -95,7 +95,7 @@ export default class RunPanelStore {
             clear: action,
             onBotContractEvent: action,
             onError: action,
-            onLastDigitsAnalysis: action,
+            onLastDigitsAnalysis: action.bound,
             clearLastDigitsAnalysis: action,
             showErrorMessage: action,
             switchToJournal: action,
