@@ -151,10 +151,6 @@ window.Blockly.Blocks.trade_definition = {
                         });
                     }
                 });
-            } else {
-                runIrreversibleEvents(() => {
-                    this.dispose();
-                });
             }
         }
         if (this.isCollapsed()) {

@@ -19,6 +19,8 @@ class DBot {
         this.before_run_funcs = [];
         this.symbol = null;
         this.is_bot_running = false;
+        this.mobile_reveal_timers = [];
+        this.cancel_mobile_reveal = null;
     }
 
     revealLoadedWorkspace = (is_mobile = window.innerWidth < 768) => {
@@ -45,6 +47,43 @@ class DBot {
                 window.setTimeout(reveal, 0);
             });
         });
+    };
+
+    scheduleLoadedWorkspaceReveal = (is_mobile = window.innerWidth < 768) => {
+        if (!is_mobile || !this.workspace) return;
+
+        this.cancel_mobile_reveal?.();
+        this.mobile_reveal_timers.forEach(timer => window.clearTimeout(timer));
+        this.mobile_reveal_timers = [];
+
+        let cancelled = false;
+        const scratch_div = document.getElementById('scratch_div');
+        const cancel = () => {
+            if (cancelled) return;
+            cancelled = true;
+            this.mobile_reveal_timers.forEach(timer => window.clearTimeout(timer));
+            this.mobile_reveal_timers = [];
+            scratch_div?.removeEventListener('wheel', cancel);
+            scratch_div?.removeEventListener('touchstart', cancel);
+        };
+        this.cancel_mobile_reveal = cancel;
+
+        // API-driven dropdown updates can recalculate Blockly metrics after
+        // the initial import and move a mobile workspace back to its bottom.
+        // Keep the first roots visible until those callbacks settle, but stop
+        // immediately when the user starts interacting with the canvas.
+        scratch_div?.addEventListener('wheel', cancel, { once: true, passive: true });
+        scratch_div?.addEventListener('touchstart', cancel, { once: true, passive: true });
+
+        [0, 250, 750, 1500, 3000, 6000].forEach(delay => {
+            const timer = window.setTimeout(() => {
+                if (!cancelled) this.revealLoadedWorkspace(true);
+            }, delay);
+            this.mobile_reveal_timers.push(timer);
+        });
+
+        const cleanup_timer = window.setTimeout(cancel, 6500);
+        this.mobile_reveal_timers.push(cleanup_timer);
     };
 
     hasUsableSavedWorkspace = strategy_xml => {
@@ -270,7 +309,7 @@ class DBot {
                 this.workspace.clearUndo();
 
                 window.dispatchEvent(new Event('resize'));
-                this.revealLoadedWorkspace(is_mobile);
+                this.scheduleLoadedWorkspaceReveal(is_mobile);
                 window.setTimeout(() => {
                     window.__DBOT_LOADING_XML = false;
                     // Async dropdown validation can recalculate Blockly

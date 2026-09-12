@@ -489,7 +489,10 @@ const assertBinaryMatrixWorkspace = async (cdp, flowName) => {
         cdp,
         `document.querySelector('#scratch_div')?.scrollIntoView({ block: 'start', inline: 'nearest' })`
     );
-    await sleep(1_400);
+    // The real Deriv API can finish dropdown validation several seconds after
+    // Blockly imports the XML. Verify the settled mobile viewport, not only
+    // the first post-import layout.
+    await sleep(6_800);
 
     const snapshot = await workspaceSnapshot(cdp);
     if (!snapshot) throw new Error(`${flowName}: Blockly workspace is unavailable.`);

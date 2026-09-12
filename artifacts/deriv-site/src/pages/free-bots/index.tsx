@@ -685,7 +685,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                     `Binary Matrix XML loaded incompletely (${loadedTopBlocks.length} root blocks, ${loadedBlocks.length} total blocks).`
                 );
             }
-            DBot.revealLoadedWorkspace();
+            DBot.scheduleLoadedWorkspaceReveal();
             // Blockly's option fields can finish validating asynchronously after
             // domToBlock returns. Keep the root-block lifecycle guard alive until
             // those callbacks have settled, otherwise Trade Parameters can dispose
