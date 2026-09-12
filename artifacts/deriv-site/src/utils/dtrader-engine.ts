@@ -18,6 +18,7 @@
 //   Multipliers          (MULTUP / MULTDOWN, leverage-based, optional SL/TP)
 
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { markBotTick } from './bot-contract-gate';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -694,10 +695,11 @@ export class DTraderEngine {
         this.onPriceWindow(this.priceBuf.slice());
     }
 
-    private handleTick(tick: { quote: number; pip_size?: number } | undefined): void {
+    private handleTick(tick: { quote: number; pip_size?: number; epoch?: number } | undefined): void {
         if (!tick) return;
         if (typeof tick.pip_size === 'number') this.pipSize = tick.pip_size;
         this.lastTickAt = Date.now(); // feed the liveness watchdog
+        markBotTick(this.cfg?.symbol, tick.epoch);
         const spot  = this.formatQuote(tick.quote, this.pipSize);
         const digit = this.lastDigit(tick.quote, this.pipSize);
         if (this.status === 'subscribing') this.setStatus('ready');

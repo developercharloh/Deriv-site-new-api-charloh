@@ -8,6 +8,7 @@ import { api_base } from '../../api/api-base';
 import { getDirection, getLastDigit } from '../utils/helpers';
 import { expectPositiveInteger } from '../utils/sanitize';
 import * as constants from './state/constants';
+import { markBotTick } from '@/utils/bot-contract-gate';
 
 let tickListenerKey;
 
@@ -28,6 +29,7 @@ export default Engine =>
                     }
                     const lastTick = ticks.slice(-1)[0];
                     const { epoch } = lastTick;
+                    markBotTick(symbol, epoch);
                     this.store.dispatch({ type: constants.NEW_TICK, payload: epoch });
                 };
 
