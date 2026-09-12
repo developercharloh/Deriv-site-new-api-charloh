@@ -1,0 +1,570 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="kp_stake">Stake</variable>
+    <variable id="P{-P=.9]%2@DE!.T5Wq?">Martingale</variable>
+    <variable id="kp_signal">Entry Signal</variable>
+    <variable id="kp_take_profit">Take Profit</variable>
+    <variable id="Kc3A+R7Kq]/a=$ACDW!y">Stake []</variable>
+    <variable id="kp_runs">Runs</variable>
+    <variable id="kp_direction">Trade Direction</variable>
+    <variable id="kp_stop_loss">Stop Loss</variable>
+    <variable id="=jG$q1]n!ivZ?^4En-ea">Re Analyse After</variable>
+  </variables>
+  <block type="after_purchase" id="kp_after_purchase" x="714" y="110">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="kp_result_check" collapsed="true">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="contract_check_result" id="kp_is_win">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="variables_set" id="kp_reset_stake_on_win">
+            <field name="VAR" id="kp_stake">Stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="kp_base_stake_on_win">
+                <field name="VAR" id="Kc3A+R7Kq]/a=$ACDW!y">Stake []</field>
+              </block>
+            </value>
+            <next>
+              <block type="math_change" id="kp_increment_wins">
+                <field name="VAR" id="kp_runs">Runs</field>
+                <value name="DELTA">
+                  <shadow type="math_number" id="kp_one_win">
+                    <field name="NUM">1</field>
+                  </shadow>
+                </value>
+                <next>
+                  <block type="controls_if" id="YLcj.Z#GV*7Zdou@icmH">
+                    <value name="IF0">
+                      <block type="logic_compare" id="kp_three_wins_check">
+                        <field name="OP">GTE</field>
+                        <value name="A">
+                          <block type="variables_get" id="kp_wins_read">
+                            <field name="VAR" id="kp_runs">Runs</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="variables_get" id="qOOo/uR#IHC?wCD8BPqO">
+                            <field name="VAR" id="=jG$q1]n!ivZ?^4En-ea">Re Analyse After</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="kp_disable_signal_after_three">
+                        <field name="VAR" id="kp_signal">Entry Signal</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="kp_signal_false_after_three">
+                            <field name="BOOL">FALSE</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="kp_reset_wins_after_three">
+                            <field name="VAR" id="kp_runs">Runs</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="kp_zero_wins_after_three">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="kp_reset_stake_after_three">
+                                <field name="VAR" id="kp_stake">Stake</field>
+                                <value name="VALUE">
+                                  <block type="variables_get" id="kp_base_stake_after_three">
+                                    <field name="VAR" id="Kc3A+R7Kq]/a=$ACDW!y">Stake []</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="variables_set" id="kp_martingale_on_loss">
+            <field name="VAR" id="kp_stake">Stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="kp_martingale_multiply">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <shadow type="math_number" id="kp_stake_shadow_loss">
+                    <field name="NUM">1</field>
+                  </shadow>
+                  <block type="variables_get" id="kp_current_stake_loss">
+                    <field name="VAR" id="kp_stake">Stake</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="kp_multiplier_shadow">
+                    <field name="NUM">1</field>
+                  </shadow>
+                  <block type="variables_get" id="kp_multiplier_read">
+                    <field name="VAR" id="P{-P=.9]%2@DE!.T5Wq?">Martingale</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <next>
+          <block type="controls_if" id="kp_three_wins_or_risk" collapsed="true">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="kp_take_profit_check">
+                <field name="OP">GTE</field>
+                <value name="A">
+                  <block type="total_profit" id="kp_total_profit_tp"></block>
+                </value>
+                <value name="B">
+                  <block type="variables_get" id="kp_read_take_profit">
+                    <field name="VAR" id="kp_take_profit">Take Profit</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="text_print" id="kp_take_profit_message">
+                <value name="TEXT">
+                  <shadow type="text" id="kp_take_profit_text">
+                    <field name="TEXT">Take Profit reached</field>
+                  </shadow>
+                </value>
+              </block>
+            </statement>
+            <value name="IF1">
+              <block type="logic_compare" id="kp_stop_loss_check">
+                <field name="OP">LTE</field>
+                <value name="A">
+                  <block type="total_profit" id="kp_total_profit_sl"></block>
+                </value>
+                <value name="B">
+                  <block type="math_single" id="kp_negative_stop_loss">
+                    <field name="OP">NEG</field>
+                    <value name="NUM">
+                      <block type="variables_get" id="kp_read_stop_loss">
+                        <field name="VAR" id="kp_stop_loss">Stop Loss</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO1">
+              <block type="text_print" id="kp_stop_loss_message">
+                <value name="TEXT">
+                  <shadow type="text" id="kp_stop_loss_text">
+                    <field name="TEXT">Stop Loss reached</field>
+                  </shadow>
+                </value>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="trade_again" id="kp_continue_trading"></block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="trade_definition" id="kp_trade_definition" deletable="false" x="37" y="169">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="kp_market" deletable="false" movable="false">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" hide_trade_parameters="false" show_advanced="false" vh_enabled="false" vh_max_steps="1" vh_min_trades="1" vh_stake="0.35"></mutation>
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">R_25</field>
+        <field name="HIDE_TRADE_PARAMETERS">FALSE</field>
+        <field name="SHOW_ADVANCED">FALSE</field>
+        <field name="ALTERNATE_MARKETS">FALSE</field>
+        <field name="ALTERNATE_EVERY">1</field>
+        <field name="MULTI_MARKET">FALSE</field>
+        <field name="VH_ENABLED">FALSE</field>
+        <field name="VH_SETTINGS_BTN">VH Settings</field>
+        <next>
+          <block type="trade_definition_tradetype" id="kp_trade_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="kp_contract_type" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="kp_interval" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="kp_restart_buy_sell" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="kp_restart_error" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="kp_set_stake">
+        <field name="VAR" id="kp_stake">Stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="kp_stake_value">
+            <field name="NUM">0.5</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="Uf!H0fob^rIl,yWevfDC">
+            <field name="VAR" id="P{-P=.9]%2@DE!.T5Wq?">Martingale</field>
+            <value name="VALUE">
+              <block type="math_number" id=";v@8toz]#Y:ZE~PdJ*@L">
+                <field name="NUM">2</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="kp_set_take_profit">
+                <field name="VAR" id="kp_take_profit">Take Profit</field>
+                <value name="VALUE">
+                  <block type="math_number" id="kp_take_profit_value">
+                    <field name="NUM">10</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="kp_set_stop_loss">
+                    <field name="VAR" id="kp_stop_loss">Stop Loss</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="kp_stop_loss_value">
+                        <field name="NUM">50</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="Nhc.V)YJtz|07!`f!#Q3">
+                        <field name="VAR" id="=jG$q1]n!ivZ?^4En-ea">Re Analyse After</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="xeX-`aGAp}4oUCO4+,s1">
+                            <field name="NUM">3</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="kp_reset_signal_start" collapsed="true">
+                            <field name="VAR" id="kp_signal">Entry Signal</field>
+                            <value name="VALUE">
+                              <block type="logic_boolean" id="kp_false_start">
+                                <field name="BOOL">FALSE</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="CR{SN7=3I_y#_]^Iz4MA" collapsed="true">
+                                <field name="VAR" id="Kc3A+R7Kq]/a=$ACDW!y">Stake []</field>
+                                <value name="VALUE">
+                                  <block type="variables_get" id="!pgil}*AI8Djpi#mLKNO">
+                                    <field name="VAR" id="kp_stake">Stake</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="kp_reset_runs_start" collapsed="true">
+                                    <field name="VAR" id="kp_runs">Runs</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="kp_zero_start">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="controls_whileUntil" id="kp_initial_scan_loop">
+        <field name="MODE">UNTIL</field>
+        <value name="BOOL">
+          <block type="variables_get" id="kp_initial_signal_read">
+            <field name="VAR" id="kp_signal">Entry Signal</field>
+          </block>
+        </value>
+        <statement name="DO">
+          <block type="timeout" id="kp_initial_scan_delay">
+            <statement name="TIMEOUTSTACK">
+              <block type="controls_if" id="kp_initial_pattern_choice">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="3"></mutation>
+                <value name="IF0">
+                  <block type="last_digits_condition" id="kp_initial_all_odd">
+                    <field name="CONDITION">ALL_ODD</field>
+                    <value name="N">
+                      <shadow type="math_number" id="kp_initial_odd_count">
+                        <field name="NUM">4</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="kp_initial_direction_even">
+                    <field name="VAR" id="kp_direction">Trade Direction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="kp_direction_even_value">
+                        <field name="NUM">0</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="kp_initial_signal_odd">
+                        <field name="VAR" id="kp_signal">Entry Signal</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="kp_true_odd">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <value name="IF1">
+                  <block type="last_digits_condition" id="kp_initial_all_even">
+                    <field name="CONDITION">ALL_EVEN</field>
+                    <value name="N">
+                      <shadow type="math_number" id="kp_initial_even_count">
+                        <field name="NUM">4</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO1">
+                  <block type="variables_set" id="kp_initial_direction_odd">
+                    <field name="VAR" id="kp_direction">Trade Direction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="kp_direction_odd_value">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="kp_initial_signal_even">
+                        <field name="VAR" id="kp_signal">Entry Signal</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="kp_true_even">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <value name="IF2">
+                  <block type="last_digits_condition" id="`}njk-ICABqAC!5$gD.P">
+                    <field name="CONDITION">LESS_OR_EQUAL</field>
+                    <value name="N">
+                      <shadow type="math_number" id="@UpPu)A(0]NfCWh+3?Gh">
+                        <field name="NUM">3</field>
+                      </shadow>
+                    </value>
+                    <value name="COMPARE_VALUE">
+                      <shadow type="math_number" id="bIk}U)e-TBc._*nW)%k|">
+                        <field name="NUM">3</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO2">
+                  <block type="variables_set" id=":{T$_$PPJ=,~FGD?aeM$">
+                    <field name="VAR" id="kp_direction">Trade Direction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="=CY?=2z$32)m8I7*lIre">
+                        <field name="NUM">4</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="31fN_a}fxra0]64o8xb2">
+                        <field name="VAR" id="kp_signal">Entry Signal</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="R*a;6tUAyygec9:Is`MG">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <value name="IF3">
+                  <block type="last_digits_condition" id="36-0UomKH=_m5CP%uR)/">
+                    <field name="CONDITION">GREATER_OR_EQUAL</field>
+                    <value name="N">
+                      <shadow type="math_number" id="dr/N1-.H2{ch+i)YNEUb">
+                        <field name="NUM">3</field>
+                      </shadow>
+                    </value>
+                    <value name="COMPARE_VALUE">
+                      <shadow type="math_number" id="+g}m?At1AA6Ocl]{b+Q=">
+                        <field name="NUM">6</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO3">
+                  <block type="variables_set" id="Bp.)x)k@YF.DmGhnwzuY">
+                    <field name="VAR" id="kp_direction">Trade Direction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id=")[.~#n@2YCAoDWmGCj~D">
+                        <field name="NUM">5</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="!lt0]6c-?}d2=baYmf@|">
+                        <field name="VAR" id="kp_signal">Entry Signal</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="~3M,?|+#FF?Yd274noS4">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+            <value name="SECONDS">
+              <block type="math_number" id="kp_initial_delay_value">
+                <field name="NUM">1</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <next>
+          <block type="trade_definition_tradeoptions" id="kp_trade_options">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="kp_duration">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="kp_amount_shadow">
+                <field name="NUM">1</field>
+              </shadow>
+              <block type="variables_get" id="kp_get_stake">
+                <field name="VAR" id="kp_stake">Stake</field>
+              </block>
+            </value>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="kp_purchase" deletable="false" x="0" y="1280">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="kp_direction_choice">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="3"></mutation>
+        <value name="IF0">
+          <block type="logic_compare" id="kp_direction_is_even">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="kp_direction_read">
+                <field name="VAR" id="kp_direction">Trade Direction</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="kp_even_direction_number">
+                <field name="NUM">0</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="apollo_purchase2" id="kp_buy_even">
+            <field name="PURCHASE_LIST">DIGITEVEN</field>
+          </block>
+        </statement>
+        <value name="IF1">
+          <block type="logic_compare" id=",;L/eXODdvm)pf2=(ybB">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="1;0d?.(/_FPMv7PWyL=C">
+                <field name="VAR" id="kp_direction">Trade Direction</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="f}WKF7.0Y4VJC?(hW1P%">
+                <field name="NUM">1</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="apollo_purchase2" id="kp_buy_odd">
+            <field name="PURCHASE_LIST">DIGITODD</field>
+          </block>
+        </statement>
+        <value name="IF2">
+          <block type="logic_compare" id="};Mg_+A8TEkrrW=WD_mS">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="g#;CLh_`{]R/xO!t~#jh">
+                <field name="VAR" id="kp_direction">Trade Direction</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="j)#/I3]zn|,uITCrtH6+">
+                <field name="NUM">4</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO2">
+          <block type="apollo_purchase2" id="u)YL5+:2(9wuaM{)3_xs">
+            <field name="PURCHASE_LIST">DIGITOVER</field>
+            <value name="PREDICTION">
+              <shadow type="math_number_positive" id="Acb$LwY}5E=3a|}8m6`5">
+                <field name="NUM">4</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+        <value name="IF3">
+          <block type="logic_compare" id="m6V7xGhGpTA/.j#~5eUw">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="~@ZeUi%wsoz3HD4Z;#:N">
+                <field name="VAR" id="kp_direction">Trade Direction</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="):HRj6rGE_u*|iYgzfuP">
+                <field name="NUM">5</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO3">
+          <block type="apollo_purchase2" id="BQu;B~dpCTIn`7M.*D!L">
+            <field name="PURCHASE_LIST">DIGITUNDER</field>
+            <value name="PREDICTION">
+              <shadow type="math_number_positive" id="Y6(`sE72;uPq/mKm|PMf">
+                <field name="NUM">5</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>
