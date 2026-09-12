@@ -1,8 +1,8 @@
 // ─── Binary Matrix AI native execution engine ─────────────────────────────────
 //
-// Runs the supplied Apollo strategy through DTraderEngine. DTraderEngine owns
+// Runs the supplied Binary Matrix strategy through DTraderEngine. DTraderEngine owns
 // Deriv WebSocket authentication, proposals, buys, and open-contract
-// settlement; this class owns only the Apollo strategy state machine.
+// settlement; this class owns only the strategy state machine.
 
 import {
     DTraderEngine,
@@ -118,7 +118,7 @@ export class BinaryMatrixEngine {
         }
 
         this.onStatus('scanning');
-        this.writeLog(`Scanning ${this.config.symbol} for the registered Apollo matrix conditions.`, 'system');
+        this.writeLog(`Scanning ${this.config.symbol} for the registered matrix conditions.`, 'system');
         return true;
     }
 
@@ -274,7 +274,7 @@ export class BinaryMatrixEngine {
                 barrier: null,
                 blockType: 'apollo_purchase2',
                 label: 'EVEN',
-                reason: 'Apollo purchase mapping',
+                reason: 'Purchase mapping',
                 scannedDigits: this.digits.slice(-4),
             };
         }
@@ -286,7 +286,7 @@ export class BinaryMatrixEngine {
                 barrier: null,
                 blockType: 'apollo_purchase2',
                 label: 'ODD',
-                reason: 'Apollo purchase mapping',
+                reason: 'Purchase mapping',
                 scannedDigits: this.digits.slice(-4),
             };
         }
@@ -298,7 +298,7 @@ export class BinaryMatrixEngine {
                 barrier: null,
                 blockType: 'apollo_purchase2',
                 label: 'EVEN',
-                reason: 'Apollo purchase mapping',
+                reason: 'Purchase mapping',
                 scannedDigits: this.digits.slice(-4),
             };
         }
@@ -310,7 +310,7 @@ export class BinaryMatrixEngine {
             barrier: String(barrier),
             blockType: 'apollo_purchase2',
             label: `${contractType === 'DIGITOVER' ? 'OVER' : 'UNDER'} ${barrier}`,
-            reason: 'Apollo purchase mapping',
+            reason: 'Purchase mapping',
             scannedDigits: this.digits.slice(-4),
         };
     }

@@ -35,18 +35,13 @@ window.Blockly.Blocks.last_digits_condition = {
                     name: 'COMPARE_VALUE',
                     check: 'Number',
                 },
-                {
-                    type: 'field_label',
-                    name: 'APOLLO_LABEL',
-                    text: '',
-                },
             ],
             output: 'Boolean',
             outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
             colour: window.Blockly.Colours.Base.colour,
             colourSecondary: window.Blockly.Colours.Base.colourSecondary,
             colourTertiary: window.Blockly.Colours.Base.colourTertiary,
-            tooltip: localize('Checks the latest digits using the Apollo condition.'),
+            tooltip: localize('Checks the latest digits using the selected condition.'),
             category: window.Blockly.Categories.Tick_Analysis,
         };
     },
@@ -78,7 +73,7 @@ window.Blockly.Blocks.apollo_purchase2 = {
     },
     definition() {
         return {
-            message0: localize('Apollo purchase %1 prediction %2'),
+            message0: localize('Purchase %1 prediction %2'),
             args0: [
                 {
                     type: 'field_dropdown',
@@ -100,14 +95,14 @@ window.Blockly.Blocks.apollo_purchase2 = {
             colour: window.Blockly.Colours.Special1.colour,
             colourSecondary: window.Blockly.Colours.Special1.colourSecondary,
             colourTertiary: window.Blockly.Colours.Special1.colourTertiary,
-            tooltip: localize('Places the Apollo one-tick digit contract.'),
+            tooltip: localize('Places a one-tick digit contract.'),
             category: window.Blockly.Categories.Before_Purchase,
         };
     },
     meta() {
         return {
-            display_name: localize('Apollo purchase'),
-            description: localize('Native equivalent of the Apollo purchase2 block.'),
+            display_name: localize('Purchase'),
+            description: localize('Places a one-tick digit contract.'),
         };
     },
     customContextMenu(menu) {

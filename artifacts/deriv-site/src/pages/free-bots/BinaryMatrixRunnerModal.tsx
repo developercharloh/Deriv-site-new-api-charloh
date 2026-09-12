@@ -199,7 +199,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                 <div className='matrix-modal__header' style={{ background: bot.gradient }}>
                     <div>
                         <div className='matrix-modal__title'>{bot.emoji} {bot.name}</div>
-                        <div className='matrix-modal__badge'>NATIVE APOLLO RUNNER · R_25 · 1 TICK</div>
+                        <div className='matrix-modal__badge'>NATIVE BLOCK RUNNER · R_25 · 1 TICK</div>
                     </div>
                     <button className='matrix-modal__close' onClick={close} aria-label='Stop and close'>✕</button>
                 </div>
@@ -232,7 +232,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                     )}
 
                     <section className='matrix-modal__section'>
-                        <div className='matrix-modal__section-title'>Registered Apollo blocks</div>
+                        <div className='matrix-modal__section-title'>Registered strategy blocks</div>
                         <div className='matrix-modal__blocks'>
                             {Object.values(APOLLO_BLOCK_REGISTRY).map(block => (
                                 <div className='matrix-modal__block' key={block.type}>
@@ -242,7 +242,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                             ))}
                         </div>
                         <p className='matrix-modal__hint'>
-                            These native adapters replace the unsupported Blockly blocks without changing their condition order or purchase mapping.
+                            These custom blocks preserve the supplied strategy’s condition order and purchase mapping.
                         </p>
                     </section>
 

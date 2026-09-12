@@ -1,9 +1,7 @@
-// ─── Apollo block registry ────────────────────────────────────────────────────
+// ─── Custom Binary Matrix block registry ──────────────────────────────────────
 //
-// Apollo blocks are not part of Deriv's stock DBot Blockly toolbox. These
-// definitions are the native equivalents used by custom runners so an Apollo
-// XML export can be executed without loading unsupported block types into
-// Blockly.
+// These custom blocks are not part of Deriv's stock DBot Blockly toolbox.
+// Their serialized type names must stay compatible with the supplied XML.
 
 export type ApolloPurchaseType =
     | 'DIGITEVEN'
@@ -29,7 +27,7 @@ export const APOLLO_BLOCK_REGISTRY: Readonly<Record<string, ApolloBlockDefinitio
         type: 'apollo_purchase2',
         role: 'purchase',
         fields: ['PURCHASE_LIST', 'PREDICTION'],
-        description: 'Places a native one-tick digit contract.',
+        description: 'Places a one-tick digit contract.',
     },
 };
 
