@@ -837,6 +837,15 @@ const run = async () => {
         await cdp.send('Log.enable');
         await cdp.send('Page.navigate', { url: `${appUrl}/#free_bots` });
         await waitFor(cdp, `document.readyState === 'complete'`, 'Deriv Site page');
+        await waitFor(
+            cdp,
+            `Array.from(document.querySelectorAll('button')).some(
+                button => button.getClientRects().length > 0 &&
+                    (button.textContent.includes('Continue to App') || button.textContent.includes('Load in DBot Builder'))
+            )`,
+            'app gate or Free Bots loader',
+            90_000
+        );
 
         const hasAppGate = await evaluate(
             cdp,
@@ -907,6 +916,35 @@ const run = async () => {
                 })()`
             );
         }
+        await waitFor(
+            cdp,
+            `Boolean(document.querySelector('.animation__speed-switch')?.getClientRects().length)`,
+            'execution speed switch'
+        );
+        await evaluate(
+            cdp,
+            `(() => {
+                const speedSwitch = document.querySelector('.animation__speed-switch');
+                if (!speedSwitch) throw new Error('Execution speed switch is missing');
+                window.localStorage.setItem('dbot_execution_speed', 'slow');
+                speedSwitch.click();
+                return true;
+            })()`
+        );
+        await waitFor(
+            cdp,
+            `document.querySelector('.animation__speed-switch')?.getAttribute('aria-checked') === 'true' &&
+             window.localStorage.getItem('dbot_execution_speed') === 'fast'`,
+            'FAST execution switch state'
+        );
+        await evaluate(cdp, `document.querySelector('.animation__speed-switch')?.click()`);
+        await waitFor(
+            cdp,
+            `document.querySelector('.animation__speed-switch')?.getAttribute('aria-checked') === 'false' &&
+             window.localStorage.getItem('dbot_execution_speed') === 'slow'`,
+            'SLOW execution switch state'
+        );
+        console.log('✓ Existing run-panel execution switch toggles FAST ↔ SLOW');
         await assertBinaryMatrixWorkspace(cdp, 'Free Bots loader');
 
         await evaluate(cdp, `document.querySelector('#db-toolbar__import-button')?.click()`);
