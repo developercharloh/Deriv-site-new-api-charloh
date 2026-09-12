@@ -51,6 +51,19 @@ export interface BinaryMatrixTrade {
 }
 
 let activeBinaryMatrixEngine: BinaryMatrixEngine | null = null;
+const ACTIVE_ENGINE_KEY = '__DERIV_BINARY_MATRIX_ACTIVE_ENGINE__';
+
+const getGlobalActiveEngine = (): BinaryMatrixEngine | null =>
+    (globalThis as Record<string, unknown>)[ACTIVE_ENGINE_KEY] as BinaryMatrixEngine | null;
+
+const setGlobalActiveEngine = (engine: BinaryMatrixEngine | null): void => {
+    const globalState = globalThis as Record<string, unknown>;
+    if (engine) {
+        globalState[ACTIVE_ENGINE_KEY] = engine;
+    } else {
+        delete globalState[ACTIVE_ENGINE_KEY];
+    }
+};
 
 export class BinaryMatrixEngine {
     private readonly trader = new DTraderEngine();
@@ -81,7 +94,11 @@ export class BinaryMatrixEngine {
 
     start(): boolean {
         if (this.running) return true;
-        if (activeBinaryMatrixEngine && activeBinaryMatrixEngine !== this) {
+        const globalActiveEngine = getGlobalActiveEngine();
+        if (
+            (activeBinaryMatrixEngine && activeBinaryMatrixEngine !== this)
+            || (globalActiveEngine && globalActiveEngine !== this)
+        ) {
             this.log({
                 seq: Date.now(),
                 time: this.nowTime(),
@@ -115,6 +132,7 @@ export class BinaryMatrixEngine {
         this.emitStats();
 
         activeBinaryMatrixEngine = this;
+        setGlobalActiveEngine(this);
         const started = this.trader.start({
             symbol: this.config.symbol,
             contractType: 'DIGITEVEN',
@@ -128,6 +146,7 @@ export class BinaryMatrixEngine {
         if (!started) {
             this.running = false;
             if (activeBinaryMatrixEngine === this) activeBinaryMatrixEngine = null;
+            if (getGlobalActiveEngine() === this) setGlobalActiveEngine(null);
             this.onStatus('error');
             return false;
         }
@@ -139,6 +158,7 @@ export class BinaryMatrixEngine {
 
     stop(): void {
         if (activeBinaryMatrixEngine === this) activeBinaryMatrixEngine = null;
+        if (getGlobalActiveEngine() === this) setGlobalActiveEngine(null);
         if (!this.running && !this.openContractId) return;
         this.running = false;
         this.pendingDecision = null;

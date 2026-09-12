@@ -13,6 +13,7 @@ import GTM from '@/utils/gtm';
 import { helpers } from '@/utils/store-helpers';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
 import { BinaryMatrixEngine, type BinaryMatrixConfig, type BinaryMatrixStatus } from '@/utils/binary-matrix-engine';
+import { readBlocklyNumberVariable } from '@/utils/binary-matrix-settings';
 import type { DTPosition } from '@/utils/dtrader-engine';
 import { Buy, ProposalOpenContract } from '@deriv/api-types';
 import { TStores } from '@deriv/stores/types';
@@ -844,28 +845,20 @@ export default class RunPanelStore {
         // second engine for the same R_25 stream.
         if (this.native_apollo_engine) return;
 
-        const getVariableNumber = (name: string, fallback: number) => {
-            const setter = workspace
-                .getAllBlocks(true)
-                .find(block => block.type === 'variables_set' && block.getFieldValue('VAR') === name);
-            const valueBlock = setter?.getChildren?.().find(child =>
-                ['math_number', 'math_number_positive'].includes(child.type)
-            );
-            const value = Number(valueBlock?.getFieldValue?.('NUM'));
-            return Number.isFinite(value) ? value : fallback;
-        };
-
         const marketBlock = workspace
             .getAllBlocks(true)
             .find(block => block.type === 'trade_definition_market');
         const config: BinaryMatrixConfig = {
             symbol: marketBlock?.getFieldValue?.('SYMBOL_LIST') || 'R_25',
             currency: this.core.client.currency || 'USD',
-            initialStake: getVariableNumber('Stake', 0.5),
-            takeProfit: getVariableNumber('Take Profit', 10),
-            stopLoss: getVariableNumber('Stop Loss', 50),
-            martingale: getVariableNumber('Martingale', 2),
-            reanalyzeAfterWins: Math.max(1, Math.floor(getVariableNumber('Re Analyse After', 3))),
+            initialStake: readBlocklyNumberVariable(workspace, 'Stake', 0.5),
+            takeProfit: readBlocklyNumberVariable(workspace, 'Take Profit', 10),
+            stopLoss: readBlocklyNumberVariable(workspace, 'Stop Loss', 50),
+            martingale: readBlocklyNumberVariable(workspace, 'Martingale', 2),
+            reanalyzeAfterWins: Math.max(
+                1,
+                Math.floor(readBlocklyNumberVariable(workspace, 'Re Analyse After', 3))
+            ),
         };
 
         this.native_apollo_engine?.stop();
