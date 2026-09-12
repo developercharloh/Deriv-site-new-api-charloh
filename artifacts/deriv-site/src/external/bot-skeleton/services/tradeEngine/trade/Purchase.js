@@ -13,9 +13,23 @@ import {
 let delayIndex = 0;
 let purchase_reference;
 
+export const getPurchaseTradeOptions = (tradeOptions, prediction) => {
+    if (prediction === undefined || prediction === null || prediction === '') {
+        return tradeOptions;
+    }
+
+    const numericPrediction = Number(prediction);
+    if (!Number.isFinite(numericPrediction)) return tradeOptions;
+
+    return {
+        ...tradeOptions,
+        prediction: numericPrediction,
+    };
+};
+
 export default Engine =>
     class Purchase extends Engine {
-        purchase(contract_type) {
+        purchase(contract_type, prediction) {
             // Prevent calling purchase twice
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
                 return Promise.resolve();
@@ -34,6 +48,7 @@ export default Engine =>
             if (!tryAcquireBotContractGate(this, signalKey)) {
                 return Promise.resolve();
             }
+            const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction);
 
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
@@ -134,7 +149,7 @@ export default Engine =>
             }
             let trade_option;
             try {
-                trade_option = tradeOptionToBuy(contract_type, this.tradeOptions);
+                trade_option = tradeOptionToBuy(contract_type, purchaseTradeOptions);
             } catch (error) {
                 releaseBotContractGate(this);
                 throw error;

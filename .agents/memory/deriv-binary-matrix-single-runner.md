@@ -14,3 +14,9 @@ The standard workspace validator must treat `apollo_purchase2` as a valid alias 
 **Why:** The XML can be structurally valid and executable while still failing DBot's hard-coded required-block check if only the custom purchase type is present.
 
 **How to apply:** Keep the alias in required-block presence, disabled-block, and error-message validation whenever the Binary Matrix XML uses `apollo_purchase2`.
+
+Custom XML purchase blocks must forward their prediction argument through the generated Bot interface into the direct buy payload; otherwise Deriv rejects digit Over/Under contracts for missing barriers.
+
+**Why:** The standard purchase interface historically accepted only the contract type, silently dropping the custom block's Over/Under prediction.
+
+**How to apply:** Preserve the two-argument purchase contract (`contract_type`, optional prediction) and verify the resulting buy request contains `barrier` for Over/Under while Even/Odd remain barrier-free.
