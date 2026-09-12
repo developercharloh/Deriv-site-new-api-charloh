@@ -129,6 +129,7 @@ class DBot {
                 }
                 const el_scratch_div = document.getElementById('scratch_div');
                 if (!el_scratch_div) {
+                    reject(new Error('Blockly mount element #scratch_div was not found.'));
                     return;
                 }
 
@@ -189,10 +190,25 @@ class DBot {
 
                 const event_group = `dbot-load${Date.now()}`;
                 window.Blockly.Events.setGroup(event_group);
-                window.Blockly.Xml.domToWorkspace(
-                    window.Blockly.utils.xml.textToDom(window.Blockly.derivWorkspace.strategy_to_load),
-                    this.workspace
-                );
+                try {
+                    window.Blockly.Xml.domToWorkspace(
+                        window.Blockly.utils.xml.textToDom(window.Blockly.derivWorkspace.strategy_to_load),
+                        this.workspace
+                    );
+                } catch (error) {
+                    // A saved workspace can outlive a Blockly definition change. Do not
+                    // strand the whole app behind the loading overlay when that happens:
+                    // keep the saved XML untouched and start from the known-good template.
+                    console.error('[Blockly] Saved workspace could not be restored; loading the default workspace.', error);
+                    this.workspace.clear();
+                    window.Blockly.derivWorkspace.strategy_to_load = main_xml;
+                    window.Blockly.getMainWorkspace().strategy_to_load = main_xml;
+                    window.Blockly.Xml.domToWorkspace(
+                        window.Blockly.utils.xml.textToDom(main_xml),
+                        this.workspace
+                    );
+                    file_name = config().default_file_name;
+                }
                 const { save_modal } = DBotStore.instance;
 
                 save_modal.updateBotName(file_name);

@@ -9,4 +9,39 @@
         background-color: var(--overlay-outside-dialog);
         pointer-events: none;
     }
+
+    &__loading--error {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 1.2rem;
+        padding: 2.4rem;
+        text-align: center;
+        pointer-events: auto;
+    }
+
+    &__loading-title {
+        color: var(--text-general);
+        font-size: 1.6rem;
+        font-weight: 700;
+    }
+
+    &__loading-message {
+        max-width: 28rem;
+        color: var(--text-less-prominent);
+        font-size: 1.3rem;
+        line-height: 1.5;
+    }
+
+    &__loading--error button {
+        border: 0;
+        border-radius: 0.8rem;
+        background: var(--brand-red-coral);
+        color: var(--text-colored-background);
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        padding: 0.9rem 1.4rem;
+    }
 }
