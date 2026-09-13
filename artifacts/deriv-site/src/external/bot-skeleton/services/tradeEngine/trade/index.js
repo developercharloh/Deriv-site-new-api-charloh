@@ -96,6 +96,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             contract: {},
             proposals: [],
         };
+        this.lastSettledContract = null;
         this.subscription_id_for_accumulators = null;
         this.is_proposal_requested_for_accumulators = false;
         this.store = createStore(rootReducer, applyMiddleware(thunk));
@@ -122,6 +123,9 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const validated_trade_options = this.validateTradeOptions(tradeOptions);
 
         this.tradeOptions = { ...validated_trade_options, symbol: this.options.symbol };
+        // A restarted bot must begin from its configured initial stake. Do not
+        // let the previous run's result drive the first after-purchase branch.
+        this.lastSettledContract = null;
         this.store.dispatch(start());
         this.checkLimits(validated_trade_options);
 

@@ -40,6 +40,10 @@ export default Engine =>
 
                     if (isFinalSettlement) {
                         contractState.settled = true;
+                        // Keep result-dependent generated bot logic tied to the
+                        // latest final broker settlement. In FAST, the current
+                        // contract may already be a newer open contract.
+                        this.lastSettledContract = contract;
                         clearTimeout(contractState.recoveryTimeout);
 
                         // Update the authoritative settlement and unlock the

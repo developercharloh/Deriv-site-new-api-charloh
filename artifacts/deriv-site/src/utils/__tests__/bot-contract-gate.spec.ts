@@ -28,6 +28,45 @@ import getBotInterface from '@/external/bot-skeleton/services/tradeEngine/Interf
 import { createDetails } from '@/external/bot-skeleton/services/tradeEngine/utils/helpers';
 import * as tradeConstants from '@/external/bot-skeleton/services/tradeEngine/trade/state/constants';
 
+describe('generated bot settlement results', () => {
+    const contract = (profit: number) => ({
+        buy_price: 0.5,
+        sell_price: profit > 0 ? 1 : 0,
+        profit,
+        currency: 'USD',
+        contract_type: 'DIGITEVEN',
+        transaction_ids: { buy: 'test-buy' },
+        entry_tick_time: 1700000000,
+        exit_tick_time: 1700000001,
+        entry_tick: 1,
+        exit_tick: 2,
+        barrier: '',
+    });
+
+    it('reads the last settled result instead of the currently open contract', () => {
+        const engine: any = {
+            data: { contract: contract(-0.5) },
+            lastSettledContract: null,
+        };
+        const bot = getBotInterface(engine);
+
+        // No settlement yet: keep the initial stake path.
+        expect(bot.isResult('win')).toBe(true);
+        expect(bot.isResult('loss')).toBe(false);
+
+        // An open winning contract must not be mistaken for the result.
+        engine.lastSettledContract = contract(-0.5);
+        engine.data.contract = contract(0.5);
+        expect(bot.isResult('loss')).toBe(true);
+        expect(bot.isResult('win')).toBe(false);
+
+        // A settled win resets the next stake path.
+        engine.lastSettledContract = contract(0.5);
+        expect(bot.isResult('win')).toBe(true);
+        expect(bot.isResult('loss')).toBe(false);
+    });
+});
+
 describe('automated contract gate', () => {
     const binaryMatrixPurchaseTypes = ['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER'] as const;
 

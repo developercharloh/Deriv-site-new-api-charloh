@@ -2,7 +2,15 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { createDetails } from '../utils/helpers';
 
 const getBotInterface = tradeEngine => {
-    const getDetail = i => createDetails(tradeEngine.data.contract)[i];
+    const getDetail = i => {
+        // FAST can begin the next tick while the newly purchased contract is
+        // still open. Result-dependent Blockly blocks must inspect the last
+        // authoritative settlement, not that open contract (which has no
+        // final profit/result yet).
+        const settledContract = tradeEngine.lastSettledContract;
+        if (settledContract) return createDetails(settledContract)[i];
+        return undefined;
+    };
 
     return {
         init: (...args) => tradeEngine.init(...args),
@@ -15,7 +23,10 @@ const getBotInterface = tradeEngine => {
         isSellAvailable: () => tradeEngine.isSellAtMarketAvailable(),
         sellAtMarket: () => tradeEngine.sellAtMarket(),
         getSellPrice: () => getSellPrice(tradeEngine),
-        isResult: result => getDetail(10) === result,
+        // Before the first settlement there is no loss to recover from, so
+        // preserve the configured initial stake by treating the result as a
+        // win for the initial after-purchase evaluation.
+        isResult: result => (getDetail(10) ?? 'win') === result,
         isTradeAgain: result => globalObserver.emit('bot.trade_again', result),
         readDetails: i => getDetail(i - 1),
     };
