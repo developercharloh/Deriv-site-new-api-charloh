@@ -44,3 +44,7 @@ export const sell = () => (dispatch, getState) =>
 export const fastRearm = () => ({ type: constants.FAST_REARM });
 
 export const consumeFastReady = () => ({ type: constants.CONSUME_FAST_READY });
+
+export const pause = () => ({ type: constants.PAUSE });
+
+export const resume = () => ({ type: constants.RESUME });

@@ -482,6 +482,9 @@ describe('automated contract gate', () => {
     it.each(binaryMatrixPurchaseTypes)(
         'allows one generated Binary Matrix %s buy per symbol and tick epoch',
         async purchaseType => {
+            // These assertions exercise the broker-tick gate. FAST is the
+            // runtime default, so make the intended SLOW mode explicit.
+            window.localStorage.setItem('dbot_execution_speed', 'slow');
             const xmlPath = path.resolve(__dirname, '../../../public/bots/Binary_Matrix_AI.xml');
             const xml = fs.readFileSync(xmlPath, 'utf8');
             const document = new DOMParser().parseFromString(xml, 'application/xml');
@@ -636,6 +639,7 @@ describe('automated contract gate', () => {
     );
 
     it('re-enters condition scanning after the configured re-analysis reset', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'slow');
         const xmlPath = path.resolve(__dirname, '../../../public/bots/Binary_Matrix_AI.xml');
         const xml = fs.readFileSync(xmlPath, 'utf8');
         const document = new DOMParser().parseFromString(xml, 'application/xml');

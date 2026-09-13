@@ -4,6 +4,7 @@ const initialState = {
     scope: constants.STOP,
     proposalsReady: false,
     fastSlot: 0,
+    paused: false,
 };
 
 // eslint-disable-next-line default-param-last
@@ -17,6 +18,7 @@ const signal = (state = initialState, action) => {
                 fastReady: Boolean(state.fastReady),
                 fastPending: false,
                 fastSlot: state.fastSlot || 0,
+                paused: Boolean(state.paused),
             };
         case constants.PROPOSALS_READY:
             return {
@@ -37,6 +39,7 @@ const signal = (state = initialState, action) => {
                 fastReady: false,
                 fastPending: false,
                 fastSlot: state.fastSlot || 0,
+                paused: Boolean(state.paused),
             };
         case constants.OPEN_CONTRACT:
             return {
@@ -47,6 +50,7 @@ const signal = (state = initialState, action) => {
                 fastReady: false,
                 fastPending: false,
                 fastSlot: state.fastSlot || 0,
+                paused: Boolean(state.paused),
             };
         case constants.SELL:
             return {
@@ -56,8 +60,10 @@ const signal = (state = initialState, action) => {
                 fastReady: false,
                 fastPending: false,
                 fastSlot: state.fastSlot || 0,
+                paused: Boolean(state.paused),
             };
         case constants.FAST_REARM:
+            if (state.paused) return state;
             return {
                 ...state,
                 scope: constants.BEFORE_PURCHASE,
@@ -68,6 +74,18 @@ const signal = (state = initialState, action) => {
             return {
                 ...state,
                 fastReady: false,
+            };
+        case constants.PAUSE:
+            return {
+                ...state,
+                paused: true,
+                fastReady: false,
+                fastPending: false,
+            };
+        case constants.RESUME:
+            return {
+                ...state,
+                paused: false,
             };
         case constants.NEW_TICK:
             return {

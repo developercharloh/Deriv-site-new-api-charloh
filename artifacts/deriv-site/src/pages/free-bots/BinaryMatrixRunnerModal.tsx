@@ -182,7 +182,10 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
             engineRef.current = null;
             return;
         }
-        run_panel.registerNativeBot(() => engine.stop());
+                run_panel.registerNativeBot(
+                    () => engine.stop(),
+                    paused => (paused ? engine.pause() : engine.resume())
+                );
     };
 
     const stop = () => {

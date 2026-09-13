@@ -111,6 +111,34 @@
     }
 }
 
+.animation__pause-button,
+.animation__hard-stop-button {
+    height: 40px !important;
+    padding: 8px 16px !important;
+    line-height: 24px !important;
+    white-space: nowrap;
+}
+
+.animation__pause-button {
+    border-start-end-radius: 0 !important;
+    border-end-end-radius: 0 !important;
+    background-color: var(--button-primary-default);
+
+    &:hover {
+        background-color: var(--button-primary-default) !important;
+    }
+}
+
+.animation__hard-stop-button {
+    border-start-start-radius: 0 !important;
+    border-end-start-radius: 0 !important;
+    background-color: #e34d59 !important;
+
+    &:hover {
+        background-color: #d43f4b !important;
+    }
+}
+
 // Mobile-specific adjustments
 @media screen and (width <= 1300px) {
     .run__button_wrapper .qs__tooltip.dc-tooltip {

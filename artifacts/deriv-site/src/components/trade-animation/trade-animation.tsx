@@ -34,8 +34,15 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
     const { isMobile } = useDevice();
 
     const { is_contract_completed, profit } = summary_card;
-    const { contract_stage, is_stop_button_visible, is_stop_button_disabled, onRunButtonClick, onStopBotClick } =
-        run_panel;
+    const {
+        contract_stage,
+        is_paused,
+        is_stop_button_visible,
+        is_stop_button_disabled,
+        onPauseButtonClick,
+        onRunButtonClick,
+        onStopBotClick,
+    } = run_panel;
     const [execution_speed, setExecutionSpeed] = React.useState<BotExecutionSpeed>(() => getBotExecutionSpeed());
     const [shouldDisable, setShouldDisable] = React.useState(false);
     const is_unavailable_for_payment_agent = false;
@@ -127,12 +134,12 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
     const should_show_tooltip = !is_stop_button_visible && !is_bot_builder_tab && has_no_bots;
 
     const button_props = React.useMemo(() => {
-        if (is_stop_button_visible && !is_stop_button_disabled) {
+        if (is_stop_button_visible) {
             return {
-                id: 'db-animation__stop-button',
-                class: 'animation__stop-button',
-                text: <Localize i18n_default_text='Stop' />,
-                icon: <LabelPairedSquareLgFillIcon fill='#fff' />,
+                id: 'db-animation__pause-button',
+                class: 'animation__pause-button',
+                text: <Localize i18n_default_text={is_paused ? 'Resume' : 'Pause'} />,
+                icon: is_paused ? <LabelPairedPlayLgFillIcon fill='#fff' /> : undefined,
             };
         }
         return {
@@ -141,7 +148,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
             text: <Localize i18n_default_text='Run' />,
             icon: <LabelPairedPlayLgFillIcon fill='#fff' />,
         };
-    }, [is_stop_button_visible, is_stop_button_disabled]);
+    }, [is_paused, is_stop_button_visible]);
     const show_overlay = should_show_overlay && is_contract_completed;
     const changeExecutionSpeed = (speed: BotExecutionSpeed) => {
         setExecutionSpeed(speed);
@@ -243,14 +250,18 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                     </div>
                 ) : (
                     <Button
-                        is_disabled={(is_disabled && !is_unavailable_for_payment_agent) || contract_stage === 3}
+                        is_disabled={
+                            (is_stop_button_visible
+                                ? is_stop_button_disabled
+                                : is_disabled && !is_unavailable_for_payment_agent) || contract_stage === 3
+                        }
                         className={button_props.class}
                         id={button_props.id}
                         icon={button_props.icon}
                         onClick={() => {
                             setShouldDisable(true);
                             if (is_stop_button_visible) {
-                                onStopBotClick();
+                                onPauseButtonClick();
                                 return;
                             }
                             onRunButtonClick();
@@ -263,6 +274,19 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                             : { green: true })}
                     >
                         {button_props.text}
+                    </Button>
+                )}
+                {is_stop_button_visible && (
+                    <Button
+                        id='db-animation__stop-button'
+                        className='animation__hard-stop-button'
+                        icon={<LabelPairedSquareLgFillIcon fill='#fff' />}
+                        is_disabled={is_stop_button_disabled}
+                        onClick={onStopBotClick}
+                        has_effect
+                        primary
+                    >
+                        <Localize i18n_default_text='Stop' />
                     </Button>
                 )}
                 {execution_speed_control}

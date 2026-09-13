@@ -67,8 +67,11 @@ export default class RunPanelStore {
             setHasOpenContract: action,
             setIsRunning: action,
             onRunButtonClick: action,
+            onPauseButtonClick: action,
             is_contract_buying_in_progress: observable,
+             is_paused: observable,
              native_bot_stop_handler: observable,
+             native_bot_pause_handler: observable,
             SetpurchaseInProgress: action,
             onStopButtonClick: action,
             onClearStatClick: action,
@@ -128,7 +131,9 @@ export default class RunPanelStore {
     is_sell_requested = false;
     show_bot_stop_message = false;
     is_contract_buying_in_progress = false;
+    is_paused = false;
     native_bot_stop_handler: (() => void) | null = null;
+    native_bot_pause_handler: ((paused: boolean) => void) | null = null;
     native_apollo_engine: BinaryMatrixEngine | null = null;
     last_digits_analysis: TLastDigitsAnalysis | null = null;
 
@@ -228,6 +233,7 @@ export default class RunPanelStore {
         );
         runInAction(() => {
             this.setIsRunning(true);
+            this.is_paused = false;
             ui.setPromptHandler(true);
             this.toggleDrawer(true);
             this.run_id = `run-${Date.now()}`;
@@ -255,6 +261,21 @@ export default class RunPanelStore {
         }
     };
 
+    onPauseButtonClick = () => {
+        const nextPaused = !this.is_paused;
+        if (this.native_bot_pause_handler) {
+            this.native_bot_pause_handler(nextPaused);
+            this.is_paused = nextPaused;
+            return;
+        }
+        if (nextPaused) {
+            this.dbot.pauseBot();
+        } else {
+            this.dbot.resumeBot();
+        }
+        this.is_paused = nextPaused;
+    };
+
     onStopBotClick = () => {
         if (this.native_bot_stop_handler) {
             this.native_bot_stop_handler();
@@ -278,6 +299,7 @@ export default class RunPanelStore {
         const { ui } = this.core;
 
         this.dbot.stopBot();
+        this.is_paused = false;
 
         ui.setPromptHandler(false);
 
@@ -318,6 +340,7 @@ export default class RunPanelStore {
         const { summary_card, journal, transactions } = this.root_store;
 
         this.setIsRunning(false);
+        this.is_paused = false;
         this.setHasOpenContract(false);
         this.clear();
         this.clearLastDigitsAnalysis();
@@ -783,8 +806,10 @@ export default class RunPanelStore {
         observer.unregisterAll('bot.setPurchaseInProgress');
     };
 
-    registerNativeBot = (stop_handler: () => void) => {
+    registerNativeBot = (stop_handler: () => void, pause_handler?: (paused: boolean) => void) => {
         this.native_bot_stop_handler = stop_handler;
+        this.native_bot_pause_handler = pause_handler ?? null;
+        this.is_paused = false;
         this.run_id = `native-${Date.now()}`;
         this.setIsRunning(true);
         this.setHasOpenContract(false);
@@ -802,6 +827,8 @@ export default class RunPanelStore {
 
     unregisterNativeBot = () => {
         this.native_bot_stop_handler = null;
+        this.native_bot_pause_handler = null;
+        this.is_paused = false;
         this.setHasOpenContract(false);
         this.setContractStage(contract_stages.NOT_RUNNING);
         this.setIsRunning(false);
@@ -913,7 +940,10 @@ export default class RunPanelStore {
             this.native_apollo_engine = null;
             return;
         }
-        this.registerNativeBot(() => engine.stop());
+        this.registerNativeBot(
+            () => engine.stop(),
+            paused => (paused ? engine.pause() : engine.resume())
+        );
     };
 
     setContractStage = (contract_stage: TContractStage) => {

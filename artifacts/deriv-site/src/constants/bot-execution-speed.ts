@@ -15,12 +15,13 @@ const FAST_DELAY_MULTIPLIER = 0;
 const MINIMUM_FAST_DELAY_MS = 0;
 
 export const getBotExecutionSpeed = (): BotExecutionSpeed => {
-    if (typeof window === 'undefined') return 'slow';
+    if (typeof window === 'undefined') return 'fast';
 
     try {
-        return window.localStorage.getItem(BOT_EXECUTION_SPEED_KEY) === 'fast' ? 'fast' : 'slow';
+        const storedSpeed = window.localStorage.getItem(BOT_EXECUTION_SPEED_KEY);
+        return storedSpeed === 'slow' ? 'slow' : 'fast';
     } catch {
-        return 'slow';
+        return 'fast';
     }
 };
 

@@ -6,7 +6,7 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
 import { expectInitArg } from '../utils/sanitize';
-import { fastRearm, proposalsReady, sell, start } from './state/actions';
+import { fastRearm, pause, proposalsReady, resume, sell, start } from './state/actions';
 import * as constants from './state/constants';
 import rootReducer from './state/reducers';
 import Balance from './Balance';
@@ -55,6 +55,7 @@ export const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) =>
             currentState.scope === passScope &&
             currentState[passFlag] &&
             currentState.fastReady &&
+            !currentState.paused &&
             getBotExecutionSpeed() === 'fast'
         ) {
             // FAST_REARM is a one-shot clock signal. Consume it before
@@ -76,6 +77,14 @@ export const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) =>
             if (newState.scope !== passScope) {
                 unsubscribe();
                 resolve(false);
+                return;
+            }
+
+            if (newState.paused && passScope === constants.BEFORE_PURCHASE) {
+                // Do not allow a tick observed before Pause to release a new
+                // purchase after Resume.
+                hasObservedNextTick = false;
+                prevTick = newState.newTick;
                 return;
             }
 
@@ -127,6 +136,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.is_proposal_requested_for_accumulators = false;
         this.fastClock = null;
         this.fastClockActive = false;
+        this.paused = false;
         this.hasStarted = false;
         this.store = createStore(rootReducer, applyMiddleware(thunk));
         this.binaryMatrixStakeState = null;
@@ -204,6 +214,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             this.store.dispatch(sell());
         }
         this.store.dispatch(start());
+        if (this.paused) return;
         this.checkLimits(validated_trade_options);
         this.fastClockActive = executionSpeed === 'fast';
         // The generated DBot program calls Bot.start again at the beginning
@@ -322,6 +333,23 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.fastClockActive = false;
         this.fastClock?.stop();
         this.fastClock = null;
+    }
+
+    pause() {
+        if (this.paused) return;
+        this.paused = true;
+        this.store.dispatch(pause());
+        this.stopFastClock();
+    }
+
+    resume() {
+        if (!this.paused) return;
+        this.paused = false;
+        this.store.dispatch(resume());
+        if (getBotExecutionSpeed() === 'fast' && this.hasStarted) {
+            this.fastClockActive = true;
+            this.startFastClock();
+        }
     }
 
     loginAndGetBalance(token) {

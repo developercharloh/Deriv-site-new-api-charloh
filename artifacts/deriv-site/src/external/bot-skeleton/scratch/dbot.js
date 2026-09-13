@@ -502,6 +502,16 @@ class DBot {
         forgetAccumulatorsProposalRequest(this);
     }
 
+    pauseBot() {
+        if (!this.is_bot_running || !this.interpreter?.bot?.tradeEngine) return;
+        this.interpreter.bot.tradeEngine.pause();
+    }
+
+    resumeBot() {
+        if (!this.is_bot_running || !this.interpreter?.bot?.tradeEngine) return;
+        this.interpreter.bot.tradeEngine.resume();
+    }
+
     /**
      * Immediately instructs the interpreter to terminate the WS connection and bot.
      */

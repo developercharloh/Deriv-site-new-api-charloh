@@ -81,6 +81,7 @@ export class BinaryMatrixEngine {
     private readonly execution: BinaryMatrixExecutionCore;
     private config: BinaryMatrixConfig;
     private running = false;
+    private paused = false;
     private currentStake: number;
     private totalProfit = 0;
     private wins = 0;
@@ -136,6 +137,7 @@ export class BinaryMatrixEngine {
         }
 
         this.running = true;
+        this.paused = false;
         this.currentStake = this.config.initialStake;
         this.execution.reset(this.config);
         this.totalProfit = 0;
@@ -181,6 +183,7 @@ export class BinaryMatrixEngine {
         if (getGlobalActiveEngine() === this) setGlobalActiveEngine(null);
         if (!this.running && !this.openContractId) return;
         this.running = false;
+        this.paused = false;
         this.activeDecision = null;
         this.pendingDecision = null;
         this.openContractId = null;
@@ -189,6 +192,20 @@ export class BinaryMatrixEngine {
         this.onStatus('stopped');
         this.writeLog('Binary Matrix AI stopped. No new contracts will be placed.', 'system');
         this.emitStats();
+    }
+
+    pause(): void {
+        if (!this.running || this.paused) return;
+        this.paused = true;
+        this.writeLog('Binary Matrix AI paused. The open contract may settle, but no new contracts will be placed.', 'system');
+        this.onStatus(this.openContractId ? 'waiting' : 'scanning');
+    }
+
+    resume(): void {
+        if (!this.running || !this.paused) return;
+        this.paused = false;
+        this.writeLog('Binary Matrix AI resumed.', 'system');
+        this.onStatus(this.openContractId ? 'waiting' : 'scanning');
     }
 
     updateConfig(config: Partial<BinaryMatrixConfig>): void {
@@ -206,6 +223,7 @@ export class BinaryMatrixEngine {
             this.tickSerial += 1;
             this.digits = [...this.digits, digit].slice(-4);
             this.publishAnalysis();
+            if (this.paused) return;
             if (this.openContractId || this.pendingDecision) return;
 
             this.tryPurchaseFromLatestTick();
@@ -226,7 +244,7 @@ export class BinaryMatrixEngine {
     }
 
     private tryPurchaseFromLatestTick(): void {
-        if (!this.running || this.openContractId || this.pendingDecision) return;
+        if (!this.running || this.paused || this.openContractId || this.pendingDecision) return;
 
             const analysis = analyzeBinaryMatrix(this.digits, this.activeDecision);
             if (!analysis?.decision) {

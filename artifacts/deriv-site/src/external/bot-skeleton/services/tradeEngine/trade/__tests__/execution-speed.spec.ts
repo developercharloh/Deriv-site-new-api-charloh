@@ -12,6 +12,14 @@ const watchBefore = store =>
         passFlag: 'proposalsReady',
     });
 
+const watchDuring = store =>
+    watchScope({
+        store,
+        stopScope: constants.STOP,
+        passScope: constants.DURING_PURCHASE,
+        passFlag: 'openContract',
+    });
+
 describe('FAST trade-cycle release', () => {
     afterEach(() => {
         window.localStorage.removeItem('dbot_execution_speed');
@@ -42,6 +50,71 @@ describe('FAST trade-cycle release', () => {
         await expect(secondWatch).resolves.toBe(true);
         expect(store.getState().fastReady).toBe(false);
         expect(store.getState().fastSlot).toBe(2);
+    });
+
+    it('keeps a paused before-purchase watcher blocked until FAST resumes', async () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+        const store = createStore(rootReducer);
+
+        store.dispatch({ type: constants.START });
+        store.dispatch({ type: constants.PROPOSALS_READY });
+        store.dispatch({ type: constants.PAUSE });
+
+        let resolved = false;
+        const pending = watchBefore(store).then(result => {
+            resolved = true;
+            return result;
+        });
+
+        store.dispatch({ type: constants.FAST_REARM });
+        await Promise.resolve();
+        expect(resolved).toBe(false);
+
+        store.dispatch({ type: constants.RESUME });
+        store.dispatch({ type: constants.FAST_REARM });
+        await expect(pending).resolves.toBe(true);
+        expect(store.getState().paused).toBe(false);
+        expect(store.getState().fastReady).toBe(false);
+    });
+
+    it('still lets an already-open contract advance while paused', async () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+        const store = createStore(rootReducer);
+
+        store.dispatch({ type: constants.START });
+        store.dispatch({ type: constants.PURCHASE_SUCCESSFUL });
+        store.dispatch({ type: constants.PAUSE });
+
+        const pending = watchDuring(store);
+        store.dispatch({ type: constants.OPEN_CONTRACT });
+        store.dispatch({ type: constants.NEW_TICK, payload: 1 });
+
+        await expect(pending).resolves.toBe(true);
+        expect(store.getState().paused).toBe(true);
+    });
+
+    it('pauses and resumes the engine without rebuilding its FAST clock', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+        const engine = Object.create(TradeEngine.prototype);
+        engine.store = createStore(rootReducer);
+        engine.hasStarted = true;
+        engine.paused = false;
+        engine.stopFastClock = jest.fn(() => {
+            engine.fastClockActive = false;
+        });
+        engine.startFastClock = jest.fn(() => {
+            engine.fastClockActive = true;
+        });
+
+        engine.pause();
+        expect(engine.paused).toBe(true);
+        expect(engine.store.getState().paused).toBe(true);
+        expect(engine.stopFastClock).toHaveBeenCalledTimes(1);
+
+        engine.resume();
+        expect(engine.paused).toBe(false);
+        expect(engine.store.getState().paused).toBe(false);
+        expect(engine.startFastClock).toHaveBeenCalledTimes(1);
     });
 });
 
