@@ -62,10 +62,15 @@ export default Engine =>
                             executionSpeed === 'fast' && !clockPacedFast,
                         );
                         if (clockPacedFast) {
-                            // The clock owns FAST scheduling. Settlement updates
-                            // totals and Martingale, but it must not pull the
-                            // next purchase forward or wait for this contract
-                            // before allowing the next one-second slot.
+                            // Close the generated cycle as soon as settlement is
+                            // authoritative. The clock still owns the next
+                            // purchase slot, so this does not buy immediately;
+                            // it only releases watch('during') and lets the
+                            // generated trade_again path prepare for the next
+                            // 2-second slot. Leaving Redux in DURING_PURCHASE
+                            // here can make the interpreter wait forever after
+                            // the first FAST contract settles.
+                            if (!hasOtherActiveContracts) this.store.dispatch(sell());
                         } else if (canFastRearm) {
                             this.store.dispatch(fastRearm());
                         } else if (!hasOtherActiveContracts) {
