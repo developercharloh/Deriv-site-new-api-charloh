@@ -10,6 +10,7 @@ type GateState = {
     active: ContractGate[];
     latestTickKey: string | null;
     lastUsedTickKey: string | null;
+    immediateReentryKey: string | null;
 };
 
 const getState = (): GateState => {
@@ -23,6 +24,7 @@ const getState = (): GateState => {
             active: [current],
             latestTickKey: null,
             lastUsedTickKey: null,
+            immediateReentryKey: null,
         };
         globalState[GATE_KEY] = migrated;
         return migrated;
@@ -33,6 +35,7 @@ const getState = (): GateState => {
         active: [],
         latestTickKey: null,
         lastUsedTickKey: null,
+        immediateReentryKey: null,
     };
     globalState[GATE_KEY] = initial;
     return initial;
@@ -50,12 +53,15 @@ export const tryAcquireBotContractGate = (
     const state = getState();
     const effectiveSignalKey = signalKey ?? state.latestTickKey;
     if (effectiveSignalKey && state.lastUsedTickKey === effectiveSignalKey) {
-        return false;
+        // FAST may re-enter once from the broker settlement event on the
+        // current tick. The token is consumed here, preventing duplicate
+        // same-tick purchases while avoiding an artificial next-tick delay.
+        if (state.immediateReentryKey !== effectiveSignalKey) return false;
+        state.immediateReentryKey = null;
     }
 
-    // Every execution mode remains single-lease. A result-dependent strategy
-    // must never commit the next stake while the current contract is open;
-    // otherwise a late loss cannot apply Martingale to the very next buy.
+    // Never acquire while another contract is open. The immediate FAST token
+    // is created only after authoritative settlement releases this lease.
     if (state.active.length > 0) return false;
 
     state.active.push({ owner, contractId: null, signalKey: effectiveSignalKey ?? null });
@@ -81,8 +87,18 @@ export const releaseBotContractGate = (
     owner: object,
     contractId?: string | number,
     signalKey?: string | null,
+    allowImmediateReentry = false,
 ): void => {
     const state = getState();
+    const releasedLease = state.active.find(lease => {
+        if (lease.owner !== owner) return false;
+        if (contractId !== undefined && lease.contractId !== null && lease.contractId !== String(contractId)) {
+            return false;
+        }
+        if (signalKey !== undefined && lease.signalKey !== (signalKey ?? null)) return false;
+        return true;
+    });
+
     state.active = state.active.filter(lease => {
         if (lease.owner !== owner) return true;
         if (contractId !== undefined && lease.contractId !== null && lease.contractId !== String(contractId)) {
@@ -91,4 +107,8 @@ export const releaseBotContractGate = (
         if (signalKey !== undefined && lease.signalKey !== (signalKey ?? null)) return true;
         return false;
     });
+
+    if (allowImmediateReentry && releasedLease?.signalKey) {
+        state.immediateReentryKey = releasedLease.signalKey;
+    }
 };

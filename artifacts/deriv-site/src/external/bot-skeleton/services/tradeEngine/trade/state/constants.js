@@ -9,3 +9,4 @@ export const SELL = 'SELL';
 export const START = 'START';
 export const STOP = 'STOP';
 export const NEW_TICK = 'NEW_TICK';
+export const FAST_REARM = 'FAST_REARM';

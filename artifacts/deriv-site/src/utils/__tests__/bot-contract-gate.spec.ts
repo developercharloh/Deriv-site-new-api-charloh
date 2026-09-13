@@ -122,7 +122,7 @@ describe('automated contract gate', () => {
         releaseBotContractGate(secondRunner);
     });
 
-    it('rejects same-tick re-entry directly after settlement', () => {
+    it('allows exactly one same-tick FAST re-entry after settlement', () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
         const firstRunner = {};
         const secondRunner = {};
@@ -131,9 +131,11 @@ describe('automated contract gate', () => {
         markBotTick('R_25', 150);
         expect(tryAcquireBotContractGate(firstRunner)).toBe(true);
         setBotContractGateContract(firstRunner, 7001);
-        releaseBotContractGate(firstRunner, 7001, signalKey);
+        releaseBotContractGate(firstRunner, 7001, signalKey, true);
 
-        expect(tryAcquireBotContractGate(firstRunner, signalKey)).toBe(false);
+        expect(tryAcquireBotContractGate(firstRunner, signalKey)).toBe(true);
+        releaseBotContractGate(firstRunner, undefined, signalKey);
+        expect(tryAcquireBotContractGate(secondRunner, signalKey)).toBe(false);
     });
 
     it('never allows a new contract while another contract is open', () => {

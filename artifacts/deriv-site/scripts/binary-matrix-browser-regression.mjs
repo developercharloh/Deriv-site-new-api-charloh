@@ -845,11 +845,12 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     const firstSettlement = settlementUpdates.find(update => update.contractId === buyRequests[0]?.contractId);
     const settlementOrder = settlementUpdates.map(update => update.contractId);
     const expectedAmounts = [0.5, 1];
+    const fastReenteredOnSettlementTick = speed === 'fast' && epochs[0] === epochs[1];
+    const slowWaitedForNextTick = speed === 'slow' && epochs[0] !== epochs[1];
     if (
         buyRequests.length !== 2 ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
-        epochs[0] === epochs[1] ||
-        new Set(epochs).size !== epochs.length ||
+        (!fastReenteredOnSettlementTick && !slowWaitedForNextTick) ||
         settledContractIds.length !== 2 ||
         new Set(settledContractIds).size !== 2 ||
         settledContractIds.some(contractId => !boughtContractIds.has(contractId)) ||
@@ -870,7 +871,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
         );
     }
     console.log(
-        `✓ ${speed.toUpperCase()} generated interpreter loop bought once per tick ` +
+        `✓ ${speed.toUpperCase()} generated interpreter loop preserved its cadence ` +
             `(${buyRequests.map(request => `${request.symbol}@${request.epoch}`).join(', ')}) ` +
             `with stakes ${amounts.join(' → ')} and results ${settlementResults.join(' → ')} ` +
             `with ${openContractsAtSecondBuy} open contract(s) at second buy and ` +
