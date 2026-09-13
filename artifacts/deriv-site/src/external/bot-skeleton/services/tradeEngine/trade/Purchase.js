@@ -78,13 +78,18 @@ export default Engine =>
             // when another DBot session owns the shared service. In either
             // case, the Redux tick epoch is the value that released this
             // engine's before-purchase cycle and must be consumed once.
+            const isFast = getBotExecutionSpeed() === 'fast';
             const currentTick = this.store.getState().newTick;
             const symbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
             const signalKey =
-                currentTick === null || currentTick === undefined || currentTick === ''
+                isFast || currentTick === null || currentTick === undefined || currentTick === ''
                     ? undefined
                     : `${symbol ?? 'unknown'}:${String(currentTick)}`;
-            if (!tryAcquireBotContractGate(this, signalKey, getBotExecutionSpeed() === 'fast')) {
+            // FAST is clock-paced, but it deliberately keeps one unresolved
+            // contract at a time so Martingale always sees the latest settled
+            // result before the next stake is committed. A clock slot is
+            // skipped while the previous contract is still open.
+            if (!tryAcquireBotContractGate(this, signalKey, false)) {
                 return Promise.resolve();
             }
             const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction);
