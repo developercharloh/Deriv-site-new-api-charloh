@@ -1,4 +1,4 @@
-export const FAST_EXECUTION_INTERVAL_MS = 1250;
+export const FAST_EXECUTION_INTERVAL_MS = 1750;
 
 export class FastExecutionClock {
     private timer: ReturnType<typeof setTimeout> | null = null;
@@ -25,7 +25,7 @@ export class FastExecutionClock {
         };
 
         // The first slot is immediate. Subsequent slots remain aligned to the
-        // 1.25-second wall-clock schedule rather than drifting after network work.
+        // 1.75-second wall-clock schedule rather than drifting after network work.
         releaseSlot();
     }
 
