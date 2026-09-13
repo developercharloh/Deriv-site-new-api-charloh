@@ -1,5 +1,3 @@
-import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
-
 type ContractGate = {
     owner: object;
     contractId: string | null;
@@ -30,7 +28,7 @@ const getState = (): GateState => {
         return migrated;
     }
 
-    if (current) return current;
+    if (current) return current as GateState;
     const initial: GateState = {
         active: [],
         latestTickKey: null,
@@ -50,14 +48,10 @@ export const tryAcquireBotContractGate = (owner: object, signalKey?: string | nu
     const effectiveSignalKey = signalKey ?? state.latestTickKey;
     if (effectiveSignalKey && state.lastUsedTickKey === effectiveSignalKey) return false;
 
-    const isFast = getBotExecutionSpeed() === 'fast';
-    if (!isFast && state.active.length > 0) return false;
-    if (
-        isFast &&
-        state.active.some(lease => lease.signalKey === (effectiveSignalKey ?? null))
-    ) {
-        return false;
-    }
+    // FAST removes artificial loop delays, but it must still wait for the
+    // current contract to settle before acquiring the next lease. This keeps
+    // martingale/result handling ordered and prevents overlapping contracts.
+    if (state.active.length > 0) return false;
 
     state.active.push({ owner, contractId: null, signalKey: effectiveSignalKey ?? null });
     state.lastUsedTickKey = effectiveSignalKey ?? null;

@@ -6,10 +6,9 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
 import { expectInitArg } from '../utils/sanitize';
-import { fastRearm, proposalsReady, start } from './state/actions';
+import { proposalsReady, start } from './state/actions';
 import * as constants from './state/constants';
 import rootReducer from './state/reducers';
-import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 import Balance from './Balance';
 import OpenContract from './OpenContract';
 import Proposal from './Proposal';
@@ -53,17 +52,18 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
         const unsubscribe = store.subscribe(() => {
             const newState = store.getState();
 
+            if (newState.scope === stopScope) {
+                unsubscribe();
+                resolve(false);
+                return;
+            }
+
             if (newState.newTick === prevTick) return;
             prevTick = newState.newTick;
 
             if (newState.scope === passScope && newState[passFlag]) {
                 unsubscribe();
                 resolve(true);
-            }
-
-            if (newState.scope === stopScope) {
-                unsubscribe();
-                resolve(false);
             }
         });
     });
@@ -161,29 +161,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         if (watchName === 'before') {
             return watchBefore(this.store);
         }
-        if (getBotExecutionSpeed() === 'fast') {
-            return this.watchDuringFast();
-        }
         return watchDuring(this.store);
-    }
-
-    watchDuringFast() {
-        if (this.store.getState().scope !== constants.DURING_PURCHASE) {
-            return Promise.resolve(false);
-        }
-
-        return new Promise(resolve => {
-            this.observer.register(
-                'bot.tick',
-                () => {
-                    if (this.store.getState().scope === constants.DURING_PURCHASE) {
-                        this.store.dispatch(fastRearm());
-                    }
-                    resolve(false);
-                },
-                true
-            );
-        });
     }
 
     makeDirectPurchaseDecision() {

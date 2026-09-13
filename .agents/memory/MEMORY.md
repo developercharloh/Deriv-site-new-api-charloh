@@ -14,3 +14,4 @@
 - [Binary Matrix stake settings](deriv-binary-matrix-stake-settings.md) — Blockly stores variable fields as IDs; resolve the model name before reading the configured numeric stake.
 - [Binary Matrix browser regression](deriv-binary-matrix-browser-regression.md) — Node 20 needs a dependency-free CDP client and mobile Blockly metrics include document offset.
 - [Bot condition analysis status](deriv-bot-analysis-status.md) — shared tick evaluation emits the latest condition, digits, market, and true/false result for robot reporting.
+- [Builder execution speed](deriv-builder-execution-speed.md) — FAST removes artificial waits but remains one-contract settlement-gated so Martingale uses the completed result.

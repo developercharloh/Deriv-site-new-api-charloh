@@ -4,7 +4,6 @@ import { contract as broadcastContract, contractStatus } from '../utils/broadcas
 import { doUntilDone } from '../utils/helpers';
 import { openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
-import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
 export default Engine =>
     class OpenContract extends Engine {
@@ -47,11 +46,11 @@ export default Engine =>
                             resolve();
                         }
 
-                        if (getBotExecutionSpeed() !== 'fast') {
-                            this.store.dispatch(sell());
-                        } else if (String(contract.contract_id) === String(this.contractId)) {
-                            this.selectLatestActiveContract();
-                        }
+                        // FAST removes artificial waits, not settlement. Move
+                        // the engine to STOP for every settled contract so the
+                        // generated after-purchase logic can classify the
+                        // result and update the next stake before re-entry.
+                        this.store.dispatch(sell());
                         releaseBotContractGate(this, contract.contract_id);
                     } else {
                         if (getBotExecutionSpeed() !== 'fast') {

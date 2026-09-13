@@ -53,6 +53,7 @@ const browserApiMock = String.raw`
         requests: [],
          settledContractIds: [],
          settlementUpdates: [],
+         stopRequested: false,
     });
      window.addEventListener('error', event => {
          testState.errors.push({
@@ -230,11 +231,10 @@ const browserApiMock = String.raw`
                 response.proposal = { id: 'binary-matrix-test-proposal', ask_price: 1, payout: 1.96 };
             } else if (request.buy) {
                 const contractId = ++testState.contractCount;
-                    const symbol = request.parameters?.underlying_symbol || 'R_25';
-                    const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
-                    const openContractsAtBuy = testState.buyRequests.filter(
-                        item => !testState.settledContractIds.includes(item.contractId)
-                    ).length;
+                const symbol = request.parameters?.underlying_symbol || 'R_25';
+                const openContractsAtBuy = testState.buyRequests.filter(
+                    item => !testState.settledContractIds.includes(item.contractId)
+                ).length;
                 testState.buyRequests.push({
                     symbol,
                     epoch: testState.latestEpoch,
@@ -244,45 +244,11 @@ const browserApiMock = String.raw`
                     openContractsAtBuy,
                 });
                 response.buy = { contract_id: contractId, buy_price: request.price || 0.5, payout: 1.96 };
-                if (isFast && testState.buyRequests.length === 2) {
-                    setTimeout(() => {
-                        if (testState.settledContractIds.includes(1)) return;
-                        testState.settledContractIds.push(1);
-                        testState.settlementUpdates.push({
-                            contractId: 1,
-                            epoch: testState.latestEpoch,
-                            result: 'loss',
-                            profit: -0.25,
-                        });
-                         this.dispatch('message', {
-                             data: JSON.stringify({
-                                 msg_type: 'proposal_open_contract',
-                                 proposal_open_contract: {
-                                     contract_id: 1,
-                                     contract_type: 'DIGITEVEN',
-                                     is_sold: 1,
-                                     is_expired: 1,
-                                     is_valid_to_sell: 0,
-                                     buy_price: 0.5,
-                                     sell_price: 0.25,
-                                     profit: -0.25,
-                                     currency: 'USD',
-                                     transaction_ids: { buy: 'buy-1', sell: 'sell-1' },
-                                     entry_tick_time: testState.latestEpoch,
-                                     exit_tick_time: testState.latestEpoch,
-                                     entry_tick: 1007,
-                                     exit_tick: 1008,
-                                 },
-                             }),
-                         });
-                    }, 200);
-                }
             } else if (request.proposal_open_contract) {
                 const contractId = Number(request.contract_id);
                 const buy = testState.buyRequests.find(item => item.contractId === contractId);
-                const isSecondContract = testState.buyRequests.length === 2;
-                const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
-                const shouldSettle = !isFast || isSecondContract;
+                const isSecondContract = contractId === 2;
+                const shouldSettle = true;
                 if (shouldSettle && !testState.settledContractIds.includes(contractId)) {
                     testState.settledContractIds.push(contractId);
                     testState.settlementUpdates.push({
@@ -349,6 +315,16 @@ const browserApiMock = String.raw`
                 response.portfolio = { contracts: [] };
             }
             setTimeout(() => this.dispatch('message', { data: JSON.stringify(response) }), 0);
+            if (request.buy && testState.buyRequests.length === 2 && !testState.stopRequested) {
+                // Let the buy and its open-contract subscription response
+                // flush, then stop before the strategy can start its normal
+                // third-contract/re-analysis cycle.
+                setTimeout(() => {
+                    if (testState.stopRequested) return;
+                    testState.stopRequested = true;
+                    document.querySelector('#db-animation__stop-button')?.click();
+                }, 25);
+            }
         }
 
         close() {
@@ -782,6 +758,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
             state.requests = [];
             state.settledContractIds = [];
             state.settlementUpdates = [];
+            state.stopRequested = false;
             const speedSwitch = document.querySelector('.animation__speed-switch');
             const shouldBeFast = ${JSON.stringify(speed)} === 'fast';
             if (Boolean(speedSwitch?.getAttribute('aria-checked') === 'true') !== shouldBeFast) {
@@ -829,10 +806,14 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     );
     await waitFor(
         cdp,
-        `window.__binaryMatrixInterpreterTest?.buyRequests?.length === 2`,
+        `window.__binaryMatrixInterpreterTest?.buyRequests?.length >= 2`,
         'two generated Binary Matrix buy requests',
         30_000
     );
+    // Stop immediately after the second purchase so the regression observes
+    // the requested two-contract loss→win sequence instead of allowing the
+    // XML strategy's normal re-analysis loop to start a third contract.
+    await evaluate(cdp, `document.querySelector('#db-animation__stop-button')?.click()`);
     await waitFor(
         cdp,
         `window.__binaryMatrixInterpreterTest?.settlementUpdates?.length === 2`,
@@ -874,8 +855,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
         amounts[1] !== 1 ||
         settlementResults[0] !== 'loss' ||
         settlementResults[1] !== 'win' ||
-        (speed === 'fast' && openContractsAtSecondBuy < 1) ||
-        (speed === 'slow' && openContractsAtSecondBuy !== 0)
+        openContractsAtSecondBuy !== 0
     ) {
         throw new Error(
             `${speed.toUpperCase()} generated interpreter loop produced unexpected lifecycle: ` +
