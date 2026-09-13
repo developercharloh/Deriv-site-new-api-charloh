@@ -57,4 +57,27 @@ describe('Ticks last-digit analysis events', () => {
 
         emit.mockRestore();
     });
+
+    it('signals the FAST execution loop when a subscribed tick arrives', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.store = { dispatch: jest.fn() };
+        engine.observer = { emit: jest.fn() };
+        engine.$scope = {
+            ticksService: {
+                monitor: jest.fn(async ({ callback }) => {
+                    callback([{ epoch: 1234567890, quote: 12.34 }]);
+                    return 'tick-listener';
+                }),
+            },
+        };
+
+        await engine.watchTicks('R_25');
+
+        expect(engine.store.dispatch).toHaveBeenCalledWith({
+            type: expect.any(String),
+            payload: 1234567890,
+        });
+        expect(engine.observer.emit).toHaveBeenCalledWith('bot.tick', 1234567890);
+    });
 });

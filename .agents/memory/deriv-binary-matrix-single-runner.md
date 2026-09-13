@@ -9,6 +9,12 @@ Binary Matrix must run through the generated XML/DBot path, enforce one automate
 
 **How to apply:** Load Binary Matrix into the normal Builder and let the standard Run flow execute it. Mark every observed market tick, preserve that Redux tick epoch across purchase/settlement scope transitions, derive the generated engine's signal key from it when purchasing, reject a signal key already used on the current tick, hold the gate through settlement, and release it on settlement/errors/stops.
 
+FAST execution means the generated loop advances on the next live tick, not that it polls the same tick with a shorter timer. SLOW remains the legacy delay behavior.
+
+**Why:** A shorter timer can re-evaluate stale ticks repeatedly and does not represent “trade every tick”; tick-driven advancement gives FAST its intended meaning without weakening purchase or settlement guards.
+
+**How to apply:** Emit a per-engine tick event from the live tick callback, wait for that event in the FAST idle loop, and keep the one-contract/one-purchase-per-tick gate unchanged.
+
 The standard workspace validator must treat `apollo_purchase2` as a valid alias for the mandatory `purchase` block; the custom block is required to carry Binary Matrix prediction barriers.
 
 **Why:** The XML can be structurally valid and executable while still failing DBot's hard-coded required-block check if only the custom purchase type is present.

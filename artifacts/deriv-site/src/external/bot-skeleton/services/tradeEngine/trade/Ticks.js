@@ -40,6 +40,7 @@ export default Engine =>
                     const { epoch } = lastTick;
                     markBotTick(symbol, epoch);
                     this.store.dispatch({ type: constants.NEW_TICK, payload: epoch });
+                    this.observer.emit('bot.tick', epoch);
                 };
 
                 const key = await ticksService.monitor({ symbol, callback });

@@ -41,3 +41,11 @@ export const getBotExecutionDelayMs = (
 
     return Math.round(safeSeconds * 1000);
 };
+
+/**
+ * The generated DBot loop calls sleep(1) when it has not produced trade
+ * options for the current cycle. FAST mode should advance from that point on
+ * the next market tick, rather than polling the same tick on a timer.
+ */
+export const shouldWaitForNextTick = (seconds: number | string | undefined, speed: BotExecutionSpeed): boolean =>
+    speed === 'fast' && Number(seconds) === 1;

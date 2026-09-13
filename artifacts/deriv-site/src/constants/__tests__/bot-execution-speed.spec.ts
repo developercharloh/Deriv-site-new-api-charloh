@@ -3,6 +3,7 @@ import {
     getBotExecutionDelayMs,
     getBotExecutionSpeed,
     setBotExecutionSpeed,
+    shouldWaitForNextTick,
 } from '@/constants/bot-execution-speed';
 
 describe('bot execution speed', () => {
@@ -20,6 +21,13 @@ describe('bot execution speed', () => {
     it('uses a safe one-second fallback for invalid delay values', () => {
         expect(getBotExecutionDelayMs(undefined, 'slow')).toBe(1000);
         expect(getBotExecutionDelayMs('not-a-number', 'fast')).toBe(100);
+    });
+
+    it('uses the next market tick as the FAST loop boundary', () => {
+        expect(shouldWaitForNextTick(1, 'fast')).toBe(true);
+        expect(shouldWaitForNextTick('1', 'fast')).toBe(true);
+        expect(shouldWaitForNextTick(5, 'fast')).toBe(false);
+        expect(shouldWaitForNextTick(1, 'slow')).toBe(false);
     });
 
     it('persists the selected side and notifies the existing run panel', () => {

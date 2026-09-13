@@ -2,16 +2,28 @@ import TradeEngine from '../trade';
 import getBotInterface from './BotInterface';
 import getTicksInterface from './TicksInterface';
 import getToolsInterface from './ToolsInterface';
-import { getBotExecutionDelayMs, getBotExecutionSpeed } from '@/constants/bot-execution-speed';
+import {
+    getBotExecutionDelayMs,
+    getBotExecutionSpeed,
+    shouldWaitForNextTick,
+} from '@/constants/bot-execution-speed';
 
 const sleep = (observer, arg = 1) => {
+    const speed = getBotExecutionSpeed();
+
+    if (shouldWaitForNextTick(arg, speed)) {
+        return new Promise(resolve => {
+            observer.register('bot.tick', resolve, true);
+        });
+    }
+
     return new Promise(
         r =>
             // eslint-disable-next-line no-promise-executor-return
             setTimeout(() => {
                 r();
                 setTimeout(() => observer.emit('CONTINUE'), 0);
-            }, getBotExecutionDelayMs(arg, getBotExecutionSpeed())),
+            }, getBotExecutionDelayMs(arg, speed)),
         () => {}
     );
 };
