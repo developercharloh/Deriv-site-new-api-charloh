@@ -232,6 +232,7 @@ const browserApiMock = String.raw`
             } else if (request.buy) {
                 const contractId = ++testState.contractCount;
                 const symbol = request.parameters?.underlying_symbol || 'R_25';
+                const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
                 const openContractsAtBuy = testState.buyRequests.filter(
                     item => !testState.settledContractIds.includes(item.contractId)
                 ).length;
@@ -247,15 +248,16 @@ const browserApiMock = String.raw`
             } else if (request.proposal_open_contract) {
                 const contractId = Number(request.contract_id);
                 const buy = testState.buyRequests.find(item => item.contractId === contractId);
-                const isSecondContract = contractId === 2;
+                const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
+                const isWinningContract = contractId === (isFast ? 3 : 2);
                 const shouldSettle = true;
                 if (shouldSettle && !testState.settledContractIds.includes(contractId)) {
                     testState.settledContractIds.push(contractId);
                     testState.settlementUpdates.push({
                         contractId,
                         epoch: testState.latestEpoch,
-                        result: isSecondContract ? 'win' : 'loss',
-                        profit: isSecondContract ? 10 : -0.25,
+                        result: isWinningContract ? 'win' : 'loss',
+                        profit: isWinningContract ? 10 : -0.25,
                         buyCountAtSettlement: testState.buyRequests.length,
                     });
                 }
@@ -266,8 +268,8 @@ const browserApiMock = String.raw`
                     is_expired: shouldSettle ? 1 : 0,
                     is_valid_to_sell: 0,
                     buy_price: 0.5,
-                    sell_price: shouldSettle && isSecondContract ? 10.5 : 0.25,
-                    profit: shouldSettle && isSecondContract ? 10 : -0.25,
+                    sell_price: shouldSettle && isWinningContract ? 10.5 : 0.25,
+                    profit: shouldSettle && isWinningContract ? 10 : -0.25,
                     currency: 'USD',
                     transaction_ids: {
                         buy: 'buy-' + contractId,
@@ -295,7 +297,7 @@ const browserApiMock = String.raw`
                         }),
                     });
                 }, 60);
-                if (!isSecondContract) {
+                if (contractId !== (isFast ? 4 : 2)) {
                     setTimeout(() => {
                         testState.latestEpoch = settledEpoch + 2;
                         this.dispatch('message', {
@@ -315,11 +317,10 @@ const browserApiMock = String.raw`
                 response.portfolio = { contracts: [] };
             }
             setTimeout(() => this.dispatch('message', { data: JSON.stringify(response) }), 0);
-            if (request.buy && testState.buyRequests.length === 2 && !testState.stopRequested) {
-                // Stop as soon as the second buy acknowledgement is queued.
-                // FAST can settle and re-enter synchronously from the broker
-                // event, so waiting 25ms allows the strategy to buy a third
-                // contract before the regression can stop it.
+            const expectedBuyCount = window.localStorage.getItem('dbot_execution_speed') === 'fast' ? 4 : 2;
+            if (request.buy && testState.buyRequests.length === expectedBuyCount && !testState.stopRequested) {
+                // Stop after the final acknowledgement is queued so the
+                // strategy cannot start another generated cycle.
                 setTimeout(() => {
                     if (testState.stopRequested) return;
                     testState.stopRequested = true;
@@ -805,19 +806,21 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
             return true;
         })()`
     );
+    const expectedBuyCount = speed === 'fast' ? 4 : 2;
     await waitFor(
         cdp,
-        `window.__binaryMatrixInterpreterTest?.buyRequests?.length >= 2`,
-        'two generated Binary Matrix buy requests',
+        `window.__binaryMatrixInterpreterTest?.buyRequests?.length >= ${expectedBuyCount}`,
+        `${expectedBuyCount} generated Binary Matrix buy requests`,
         30_000
     );
-    // Stop immediately after the second purchase so the regression observes
-    // the requested two-contract loss→win sequence instead of allowing the
-    // XML strategy's normal re-analysis loop to start a third contract.
+    // Stop immediately after the final expected purchase so the regression
+    // observes the deterministic sequence instead of the XML strategy's
+    // normal re-analysis loop starting another contract.
     await evaluate(cdp, `document.querySelector('#db-animation__stop-button')?.click()`);
+    const expectedSettlementCount = expectedBuyCount;
     await waitFor(
         cdp,
-        `window.__binaryMatrixInterpreterTest?.settlementUpdates?.length === 2`,
+        `window.__binaryMatrixInterpreterTest?.settlementUpdates?.length >= ${expectedSettlementCount}`,
         `${speed.toUpperCase()} contract settlement updates`,
         10_000
     );
@@ -835,35 +838,39 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     );
     const { buyRequests, settledContractIds, settlementUpdates } = JSON.parse(result);
     const epochs = buyRequests.map(request => request.epoch);
-    const openContractsAtSecondBuy = buyRequests[1]?.openContractsAtBuy;
     const amounts = buyRequests.map(request => request.amount);
     const settlementResultsByContractId = new Map(
         settlementUpdates.map(update => [update.contractId, update.result])
     );
     const settlementResults = buyRequests.map(request => settlementResultsByContractId.get(request.contractId));
     const boughtContractIds = new Set(buyRequests.map(request => request.contractId));
-    const firstSettlement = settlementUpdates.find(update => update.contractId === buyRequests[0]?.contractId);
     const settlementOrder = settlementUpdates.map(update => update.contractId);
-    const expectedAmounts = [0.5, 1];
+    const expectedAmounts = speed === 'fast' ? [0.5, 1, 2, 0.5] : [0.5, 1];
     const fastReenteredOnSettlementTick = speed === 'fast' && epochs[0] === epochs[1];
     const slowWaitedForNextTick = speed === 'slow' && epochs[0] !== epochs[1];
+    const eachPurchaseFollowedSettlement = buyRequests.every((request, index) => {
+        if (index === 0) return true;
+        const previousSettlement = settlementUpdates.find(update => update.contractId === buyRequests[index - 1]?.contractId);
+        return previousSettlement?.buyCountAtSettlement === index;
+    });
     if (
-        buyRequests.length !== 2 ||
+        buyRequests.length !== expectedBuyCount ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
         (!fastReenteredOnSettlementTick && !slowWaitedForNextTick) ||
-        settledContractIds.length !== 2 ||
-        new Set(settledContractIds).size !== 2 ||
+        settledContractIds.length !== expectedSettlementCount ||
+        new Set(settledContractIds).size !== expectedSettlementCount ||
         settledContractIds.some(contractId => !boughtContractIds.has(contractId)) ||
-        settlementUpdates.length !== 2 ||
-        new Set(settlementUpdates.map(update => update.contractId)).size !== 2 ||
+        settlementUpdates.length !== expectedSettlementCount ||
+        new Set(settlementUpdates.map(update => update.contractId)).size !== expectedSettlementCount ||
         settlementUpdates.some(update => !boughtContractIds.has(update.contractId)) ||
-        amounts[0] !== expectedAmounts[0] ||
-        amounts[1] !== expectedAmounts[1] ||
+        amounts.some((amount, index) => amount !== expectedAmounts[index]) ||
         settlementResults[0] !== 'loss' ||
-        settlementResults[1] !== 'win' ||
-        openContractsAtSecondBuy !== 0 ||
-        settlementOrder.join(',') !== '1,2' ||
-        firstSettlement?.buyCountAtSettlement !== 1
+        settlementResults[speed === 'fast' ? 1 : 0] !== 'loss' ||
+        (speed === 'fast' && settlementResults[2] !== 'win') ||
+        (speed === 'slow' && settlementResults[1] !== 'win') ||
+        buyRequests.some(request => request.openContractsAtBuy !== 0) ||
+        settlementOrder.join(',') !== Array.from({ length: expectedSettlementCount }, (_, index) => index + 1).join(',') ||
+        !eachPurchaseFollowedSettlement
     ) {
         throw new Error(
             `${speed.toUpperCase()} generated interpreter loop produced unexpected lifecycle: ` +
@@ -874,7 +881,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
         `✓ ${speed.toUpperCase()} generated interpreter loop preserved its cadence ` +
             `(${buyRequests.map(request => `${request.symbol}@${request.epoch}`).join(', ')}) ` +
             `with stakes ${amounts.join(' → ')} and results ${settlementResults.join(' → ')} ` +
-            `with ${openContractsAtSecondBuy} open contract(s) at second buy and ` +
+            `with ${buyRequests.reduce((total, request) => total + request.openContractsAtBuy, 0)} open contract(s) across buys and ` +
             `${settlementUpdates.length} settlement updates`
     );
     await evaluate(cdp, `document.querySelector('#db-animation__stop-button')?.click()`);
