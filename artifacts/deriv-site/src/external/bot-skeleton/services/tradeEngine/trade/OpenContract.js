@@ -2,7 +2,7 @@ import { getRoundedNumber } from '@/components/shared';
 import { api_base } from '../../api/api-base';
 import { contract as broadcastContract, contractStatus } from '../utils/broadcast';
 import { doUntilDone } from '../utils/helpers';
-import { fastRearm, openContractReceived, sell } from './state/actions';
+import { fastArmNextTick, openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
 import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
@@ -55,13 +55,15 @@ export default Engine =>
                             resolve();
                         }
 
-                        this.store.dispatch(sell());
-                        if (executionSpeed === 'fast') {
-                            // Re-arm immediately after the final profit/loss
-                            // value is available. The gate grants one same-tick
-                            // re-entry, preventing both timer and next-tick lag
-                            // without allowing overlapping contracts.
-                            this.store.dispatch(fastRearm());
+                        const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
+                        if (!hasOtherActiveContracts) {
+                            this.store.dispatch(sell());
+                            if (executionSpeed === 'fast') {
+                                // FAST cadence advances on the next broker tick.
+                                // If the next tick arrives before settlement,
+                                // the gate intentionally permits one overlap.
+                                this.store.dispatch(fastArmNextTick());
+                            }
                         }
                         releaseBotContractGate(
                             this,

@@ -46,7 +46,11 @@ export const markBotTick = (symbol: string | null | undefined, epoch: string | n
     getState().latestTickKey = `${symbol ?? 'unknown'}:${String(epoch)}`;
 };
 
-export const tryAcquireBotContractGate = (owner: object, signalKey?: string | null): boolean => {
+export const tryAcquireBotContractGate = (
+    owner: object,
+    signalKey?: string | null,
+    allowOverlap = false,
+): boolean => {
     const state = getState();
     const effectiveSignalKey = signalKey ?? state.latestTickKey;
     if (effectiveSignalKey && state.lastUsedTickKey === effectiveSignalKey) {
@@ -57,10 +61,10 @@ export const tryAcquireBotContractGate = (owner: object, signalKey?: string | nu
         state.immediateReentryKey = null;
     }
 
-    // FAST removes artificial loop delays, but it must still wait for the
-    // current contract to settle before acquiring the next lease. This keeps
-    // martingale/result handling ordered and prevents overlapping contracts.
-    if (state.active.length > 0) return false;
+    // SLOW remains single-lease. FAST may acquire one lease per new tick,
+    // allowing the one-second cadence requested by the user when a broker
+    // settlement message arrives late.
+    if (state.active.length > 0 && !allowOverlap) return false;
 
     state.active.push({ owner, contractId: null, signalKey: effectiveSignalKey ?? null });
     state.lastUsedTickKey = effectiveSignalKey ?? null;

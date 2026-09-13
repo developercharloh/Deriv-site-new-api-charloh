@@ -14,6 +14,7 @@ const signal = (state = initialState, action) => {
                 proposalsReady: state.proposalsReady,
                 newTick: state.newTick,
                 fastReady: Boolean(state.fastReady),
+                fastPending: false,
             };
         case constants.PROPOSALS_READY:
             return {
@@ -32,6 +33,7 @@ const signal = (state = initialState, action) => {
                 proposalsReady: state.proposalsReady,
                 newTick: state.newTick,
                 fastReady: false,
+                fastPending: false,
             };
         case constants.OPEN_CONTRACT:
             return {
@@ -40,6 +42,7 @@ const signal = (state = initialState, action) => {
                 proposalsReady: state.proposalsReady,
                 newTick: state.newTick,
                 fastReady: false,
+                fastPending: false,
             };
         case constants.SELL:
             return {
@@ -47,14 +50,32 @@ const signal = (state = initialState, action) => {
                 proposalsReady: state.proposalsReady,
                 newTick: state.newTick,
                 fastReady: false,
+                fastPending: false,
             };
         case constants.FAST_REARM:
             return {
                 ...state,
                 scope: constants.BEFORE_PURCHASE,
                 fastReady: true,
+                fastPending: false,
+            };
+        case constants.FAST_ARM_NEXT_TICK:
+            return {
+                ...state,
+                scope: constants.STOP,
+                fastReady: false,
+                fastPending: true,
             };
         case constants.NEW_TICK:
+            if (state.fastPending) {
+                return {
+                    ...state,
+                    scope: constants.BEFORE_PURCHASE,
+                    fastReady: true,
+                    fastPending: false,
+                    newTick: action.payload,
+                };
+            }
             return {
                 ...state,
                 newTick: action.payload,
