@@ -68,4 +68,29 @@ describe('shared trade-cycle restart', () => {
         expect(engine.store.getState().scope).toBe(constants.BEFORE_PURCHASE);
         expect(engine.makeDirectPurchaseDecision).toHaveBeenCalledTimes(1);
     });
+
+    it('preserves a prepared FAST slot when the generated cycle restarts', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+
+        const engine = Object.create(TradeEngine.prototype);
+        engine.options = { symbol: 'R_25' };
+        engine.store = createStore(rootReducer, applyMiddleware(thunk));
+        engine.hasStarted = true;
+        engine.fastClockActive = true;
+        engine.fastClock = { isRunning: () => true };
+        engine.activeContracts = new Map();
+        engine.validateTradeOptions = options => options;
+        engine.checkLimits = jest.fn();
+        engine.makeDirectPurchaseDecision = jest.fn();
+
+        engine.store.dispatch({ type: constants.START });
+        engine.store.dispatch({ type: constants.PROPOSALS_READY });
+        engine.store.dispatch({ type: constants.FAST_REARM });
+
+        engine.start({ amount: 0.5, currency: 'USD', contractTypes: ['DIGITEVEN'] });
+
+        expect(engine.store.getState().scope).toBe(constants.BEFORE_PURCHASE);
+        expect(engine.store.getState().fastReady).toBe(true);
+        expect(engine.makeDirectPurchaseDecision).toHaveBeenCalledTimes(1);
+    });
 });

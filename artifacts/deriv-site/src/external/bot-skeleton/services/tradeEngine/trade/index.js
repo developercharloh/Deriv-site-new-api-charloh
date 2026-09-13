@@ -181,7 +181,23 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         // still DURING_PURCHASE. Normalize that completed cycle before
         // starting the next one; otherwise start() is correctly ignored by
         // the reducer and the following watch('before') waits forever.
-        if (this.getActiveContractIds().length === 0 && this.store.getState().scope !== constants.STOP) {
+        const currentTradeState = this.store.getState();
+        const hasPreparedFastSlot =
+            executionSpeed === 'fast' &&
+            currentTradeState.scope === constants.BEFORE_PURCHASE &&
+            currentTradeState.fastReady;
+
+        // FAST_REARM is a one-shot release that may already have moved the
+        // generated program back to BEFORE_PURCHASE before the next Bot.start
+        // call arrives. Do not normalize that state through SELL: SELL clears
+        // fastReady and loses the slot, leaving the bot running but asleep
+        // until a later clock event (or indefinitely if the clock event was
+        // the one that triggered this cycle).
+        if (
+            this.getActiveContractIds().length === 0 &&
+            currentTradeState.scope !== constants.STOP &&
+            !hasPreparedFastSlot
+        ) {
             this.store.dispatch(sell());
         }
         this.store.dispatch(start());
