@@ -395,6 +395,25 @@ describe('automated contract gate', () => {
         releaseBotContractGate(duplicateRunner);
     });
 
+    it('does not release a FAST slot while the engine still has an active contract', () => {
+        jest.useFakeTimers();
+        const engine: any = Object.create(TradeEngine.prototype);
+        engine.store = { dispatch: jest.fn() };
+        engine.getActiveContractIds = jest.fn(() => ['7001']);
+
+        try {
+            engine.startFastClock();
+            expect(engine.store.dispatch).not.toHaveBeenCalled();
+
+            engine.getActiveContractIds.mockReturnValue([]);
+            jest.advanceTimersByTime(2000);
+            expect(engine.store.dispatch).toHaveBeenCalledWith({ type: tradeConstants.FAST_REARM });
+        } finally {
+            engine.stopFastClock();
+            jest.useRealTimers();
+        }
+    });
+
     it.each(binaryMatrixPurchaseTypes)(
         'allows one generated Binary Matrix %s buy per symbol and tick epoch',
         async purchaseType => {
