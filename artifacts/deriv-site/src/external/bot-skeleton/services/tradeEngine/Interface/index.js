@@ -8,7 +8,7 @@ import {
     shouldWaitForNextTick,
 } from '@/constants/bot-execution-speed';
 
-const sleep = (observer, arg = 1) => {
+export const sleep = (observer, arg = 1) => {
     const speed = getBotExecutionSpeed();
 
     if (shouldWaitForNextTick(arg, speed)) {
