@@ -44,6 +44,7 @@ const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) => {
     }
     return new Promise(resolve => {
         const currentState = store.getState();
+        let hasObservedNextTick = false;
         if (currentState.scope === passScope && currentState[passFlag] && currentState.fastReady) {
             resolve(true);
             return;
@@ -57,9 +58,17 @@ const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) => {
                 resolve(false);
                 return;
             }
+            if (newState.scope !== passScope) {
+                unsubscribe();
+                resolve(false);
+                return;
+            }
 
-            if (newState.newTick === prevTick) return;
-            prevTick = newState.newTick;
+            const hasNewTick = newState.newTick !== prevTick;
+            if (hasNewTick) {
+                prevTick = newState.newTick;
+                hasObservedNextTick = true;
+            }
 
             if (onTick?.()) {
                 unsubscribe();
@@ -67,7 +76,10 @@ const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) => {
                 return;
             }
 
-            if (newState.scope === passScope && newState[passFlag]) {
+            // Proposal/open-contract readiness can arrive after the tick
+            // event. Once this watcher has observed the next tick, accept a
+            // same-tick readiness update instead of waiting an extra tick.
+            if (hasObservedNextTick && newState.scope === passScope && newState[passFlag]) {
                 unsubscribe();
                 resolve(true);
             }

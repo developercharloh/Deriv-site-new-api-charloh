@@ -54,8 +54,6 @@ export const tryAcquireBotContractGate = (
         return false;
     }
 
-    // Never acquire while another contract is open. Settlement releases this
-    // lease before the next broker tick can start the next purchase.
     if (state.active.length > 0) return false;
 
     state.active.push({ owner, contractId: null, signalKey: effectiveSignalKey ?? null });
@@ -81,8 +79,17 @@ export const releaseBotContractGate = (
     owner: object,
     contractId?: string | number,
     signalKey?: string | null,
-): void => {
+    allowFastRearm = false,
+): boolean => {
     const state = getState();
+    const releasedLease = state.active.find(lease => {
+        if (lease.owner !== owner) return false;
+        if (contractId !== undefined && lease.contractId !== null && lease.contractId !== String(contractId)) {
+            return false;
+        }
+        if (signalKey !== undefined && lease.signalKey !== (signalKey ?? null)) return false;
+        return true;
+    });
 
     state.active = state.active.filter(lease => {
         if (lease.owner !== owner) return true;
@@ -92,4 +99,14 @@ export const releaseBotContractGate = (
         if (signalKey !== undefined && lease.signalKey !== (signalKey ?? null)) return true;
         return false;
     });
+
+    // A FAST re-arm is safe only when settlement arrived on a later broker
+    // tick than the purchase. Same-tick settlement still waits for the next
+    // tick, preventing two purchases in one second.
+    return Boolean(
+        allowFastRearm &&
+            releasedLease?.signalKey &&
+            state.latestTickKey &&
+            state.latestTickKey !== releasedLease.signalKey
+    );
 };

@@ -2,7 +2,7 @@ import { getRoundedNumber } from '@/components/shared';
 import { api_base } from '../../api/api-base';
 import { contract as broadcastContract, contractStatus } from '../utils/broadcast';
 import { doUntilDone } from '../utils/helpers';
-import { openContractReceived, sell } from './state/actions';
+import { fastRearm, openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
 import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
@@ -59,12 +59,18 @@ export default Engine =>
                             resolve();
                         }
 
-                        this.store.dispatch(sell());
-                        releaseBotContractGate(
+                        const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
+                        const canFastRearm = releaseBotContractGate(
                             this,
                             contract.contract_id,
                             contractState.signalKey,
+                            executionSpeed === 'fast',
                         );
+                        if (canFastRearm) {
+                            this.store.dispatch(fastRearm());
+                        } else if (!hasOtherActiveContracts) {
+                            this.store.dispatch(sell());
+                        }
 
                         const publishSettlement = () => {
                             if (executionSpeed === 'fast') {

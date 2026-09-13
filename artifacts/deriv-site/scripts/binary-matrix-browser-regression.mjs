@@ -112,6 +112,7 @@ const browserApiMock = String.raw`
             const request = JSON.parse(payload);
             testState.requests.push(Object.keys(request).filter(key => key !== 'req_id'));
             const response = { req_id: request.req_id, msg_type: Object.keys(request).find(key => key !== 'req_id') || 'ping' };
+            let responseDelay = 0;
             if (request.authorize) {
                 response.authorize = {
                     loginid: accountId,
@@ -251,11 +252,12 @@ const browserApiMock = String.raw`
                 const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
                 const isWinningContract = contractId === (isFast ? 3 : 2);
                 const shouldSettle = true;
+                responseDelay = isFast ? 70 : 0;
                 if (shouldSettle && !testState.settledContractIds.includes(contractId)) {
                     testState.settledContractIds.push(contractId);
                     testState.settlementUpdates.push({
                         contractId,
-                        epoch: testState.latestEpoch,
+                        epoch: testState.latestEpoch + (isFast ? 1 : 0),
                         result: isWinningContract ? 'win' : 'loss',
                         profit: isWinningContract ? 10 : -0.25,
                         buyCountAtSettlement: testState.buyRequests.length,
@@ -297,7 +299,7 @@ const browserApiMock = String.raw`
                         }),
                     });
                 }, 60);
-                if (contractId !== (isFast ? 4 : 2)) {
+                if (!isFast && contractId !== 2) {
                     setTimeout(() => {
                         testState.latestEpoch = settledEpoch + 2;
                         this.dispatch('message', {
@@ -316,7 +318,7 @@ const browserApiMock = String.raw`
             } else if (request.portfolio) {
                 response.portfolio = { contracts: [] };
             }
-            setTimeout(() => this.dispatch('message', { data: JSON.stringify(response) }), 0);
+            setTimeout(() => this.dispatch('message', { data: JSON.stringify(response) }), responseDelay);
             const expectedBuyCount = window.localStorage.getItem('dbot_execution_speed') === 'fast' ? 4 : 2;
             if (request.buy && testState.buyRequests.length === expectedBuyCount && !testState.stopRequested) {
                 // Stop after the final acknowledgement is queued so the
@@ -847,6 +849,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     const settlementOrder = settlementUpdates.map(update => update.contractId);
     const expectedAmounts = speed === 'fast' ? [0.5, 1, 2, 0.5] : [0.5, 1];
     const waitedForNextTick = epochs[0] !== epochs[1];
+    const consecutiveTicks = epochs.every((epoch, index) => index === 0 || epoch === epochs[index - 1] + 1);
     const eachPurchaseFollowedSettlement = buyRequests.every((request, index) => {
         if (index === 0) return true;
         const previousSettlement = settlementUpdates.find(update => update.contractId === buyRequests[index - 1]?.contractId);
@@ -856,6 +859,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
         buyRequests.length !== expectedBuyCount ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
         !waitedForNextTick ||
+        !consecutiveTicks ||
         settledContractIds.length !== expectedSettlementCount ||
         new Set(settledContractIds).size !== expectedSettlementCount ||
         settledContractIds.some(contractId => !boughtContractIds.has(contractId)) ||
