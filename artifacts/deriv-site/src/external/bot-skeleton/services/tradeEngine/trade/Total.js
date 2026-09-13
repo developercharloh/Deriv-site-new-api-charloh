@@ -34,7 +34,7 @@ export default Engine =>
             globalStat[accountID] = { ...skeleton };
         }
 
-        updateTotals(contract) {
+        updateTotals(contract, deferNotifications = false) {
             const { sell_price: sellPrice, buy_price: buyPrice, currency } = contract;
 
             const reportedProfit = Number(contract.profit);
@@ -60,18 +60,29 @@ export default Engine =>
 
             accountStat.totalPayout = getRoundedNumber(Number(accountStat.totalPayout) + Number(sellPrice), currency);
 
-            info({
-                profit,
-                contract,
-                accountID: this.accountInfo.loginid,
-                totalProfit: accountStat.totalProfit,
-                totalWins: accountStat.totalWins,
-                totalLosses: accountStat.totalLosses,
-                totalStake: accountStat.totalStake,
-                totalPayout: accountStat.totalPayout,
-            });
+            const publishNotifications = () => {
+                info({
+                    profit,
+                    contract,
+                    accountID: this.accountInfo.loginid,
+                    totalProfit: accountStat.totalProfit,
+                    totalWins: accountStat.totalWins,
+                    totalLosses: accountStat.totalLosses,
+                    totalStake: accountStat.totalStake,
+                    totalPayout: accountStat.totalPayout,
+                });
 
-            log(win ? LogTypes.PROFIT : LogTypes.LOST, { currency, profit });
+                log(win ? LogTypes.PROFIT : LogTypes.LOST, { currency, profit });
+            };
+
+            if (deferNotifications) {
+                // Keep stats and the settlement result synchronous for
+                // Martingale, but keep notification/UI observers out of the
+                // FAST purchase critical path.
+                setTimeout(publishNotifications, 0);
+            } else {
+                publishNotifications();
+            }
         }
 
         updateAndReturnTotalRuns() {

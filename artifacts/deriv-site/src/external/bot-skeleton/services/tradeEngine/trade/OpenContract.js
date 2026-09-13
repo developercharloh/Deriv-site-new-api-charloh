@@ -28,18 +28,25 @@ export default Engine =>
                         this.data.contract = contract;
                     }
 
-                    broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
+                    const executionSpeed = getBotExecutionSpeed();
+                    const isFinalSettlement = Boolean(contractState.isSold && !contractState.settled);
 
-                    if (contractState.isSold && !contractState.settled) {
+                    // FAST must not let a UI subscriber sit in front of the
+                    // next purchase. Publish the final contract snapshot
+                    // after the settlement path has released the gate.
+                    if (!isFinalSettlement || executionSpeed !== 'fast') {
+                        broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
+                    }
+
+                    if (isFinalSettlement) {
                         contractState.settled = true;
                         clearTimeout(contractState.recoveryTimeout);
-                        const executionSpeed = getBotExecutionSpeed();
 
                         // Update the authoritative settlement and unlock the
                         // generated after-purchase path before broadcasting
                         // the UI status. FAST must buy from this broker event,
                         // not from a later rendered win/loss notification.
-                        this.updateTotals(contract);
+                        this.updateTotals(contract, executionSpeed === 'fast');
 
                         if (contractState.afterPromise) {
                             // Clear before calling to prevent double-resolution
@@ -63,13 +70,21 @@ export default Engine =>
                             executionSpeed === 'fast'
                         );
 
-                        // Keep the UI/status stream intact, but do it after the
-                        // FAST execution path has been released.
-                        contractStatus({
-                            id: 'contract.sold',
-                            data: contract.transaction_ids.sell,
-                            contract,
-                        });
+                        const publishSettlement = () => {
+                            if (executionSpeed === 'fast') {
+                                broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
+                            }
+                            contractStatus({
+                                id: 'contract.sold',
+                                data: contract.transaction_ids.sell,
+                                contract,
+                            });
+                        };
+                        if (executionSpeed === 'fast') {
+                            queueMicrotask(publishSettlement);
+                        } else {
+                            publishSettlement();
+                        }
                     } else {
                         if (getBotExecutionSpeed() !== 'fast') {
                             this.store.dispatch(openContractReceived());
