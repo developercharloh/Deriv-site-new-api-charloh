@@ -40,5 +40,3 @@ export const openContractReceived = () => (dispatch, getState) => {
 
 export const sell = () => (dispatch, getState) =>
     dispatchIfScopeIs({ dispatch, getState, data: { type: constants.SELL }, scope: constants.DURING_PURCHASE });
-
-export const fastRearm = () => ({ type: constants.FAST_REARM });

@@ -2,7 +2,7 @@ import { getRoundedNumber } from '@/components/shared';
 import { api_base } from '../../api/api-base';
 import { contract as broadcastContract, contractStatus } from '../utils/broadcast';
 import { doUntilDone } from '../utils/helpers';
-import { fastRearm, openContractReceived, sell } from './state/actions';
+import { openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
 import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
@@ -60,18 +60,10 @@ export default Engine =>
                         }
 
                         this.store.dispatch(sell());
-                        if (executionSpeed === 'fast') {
-                            // The authoritative result is now available.
-                            // Re-arm immediately so FAST does not wait for a
-                            // timer or an extra broker tick before the next
-                            // stake is committed.
-                            this.store.dispatch(fastRearm());
-                        }
                         releaseBotContractGate(
                             this,
                             contract.contract_id,
                             contractState.signalKey,
-                            executionSpeed === 'fast'
                         );
 
                         const publishSettlement = () => {

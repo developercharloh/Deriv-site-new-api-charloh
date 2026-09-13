@@ -52,12 +52,6 @@ const signal = (state = initialState, action) => {
                 fastReady: false,
                 fastPending: false,
             };
-        case constants.FAST_REARM:
-            return {
-                ...state,
-                scope: constants.BEFORE_PURCHASE,
-                fastReady: true,
-            };
         case constants.NEW_TICK:
             return {
                 ...state,

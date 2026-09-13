@@ -846,8 +846,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     const boughtContractIds = new Set(buyRequests.map(request => request.contractId));
     const settlementOrder = settlementUpdates.map(update => update.contractId);
     const expectedAmounts = speed === 'fast' ? [0.5, 1, 2, 0.5] : [0.5, 1];
-    const fastReenteredOnSettlementTick = speed === 'fast' && epochs[0] === epochs[1];
-    const slowWaitedForNextTick = speed === 'slow' && epochs[0] !== epochs[1];
+    const waitedForNextTick = epochs[0] !== epochs[1];
     const eachPurchaseFollowedSettlement = buyRequests.every((request, index) => {
         if (index === 0) return true;
         const previousSettlement = settlementUpdates.find(update => update.contractId === buyRequests[index - 1]?.contractId);
@@ -856,7 +855,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     if (
         buyRequests.length !== expectedBuyCount ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
-        (!fastReenteredOnSettlementTick && !slowWaitedForNextTick) ||
+        !waitedForNextTick ||
         settledContractIds.length !== expectedSettlementCount ||
         new Set(settledContractIds).size !== expectedSettlementCount ||
         settledContractIds.some(contractId => !boughtContractIds.has(contractId)) ||
