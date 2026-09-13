@@ -93,7 +93,25 @@ interface OpenContract {
     triggerDigit: number;
     triggerPrice: string | null;
 }
-interface ReadyProposal { id: string; price: number; }
+interface ReadyProposal { id: string; price: number; stake: number; }
+
+export const isWinningSettlement = (status: unknown, profit: number): boolean =>
+    status === 'won' || (Number.isFinite(profit) && profit > 0);
+
+export const nextMartingaleStake = ({
+    initialStake,
+    currentStake,
+    multiplier,
+    isWin,
+}: {
+    initialStake: number;
+    currentStake: number;
+    multiplier: number;
+    isWin: boolean;
+}): number =>
+    isWin
+        ? initialStake
+        : parseFloat((currentStake * multiplier).toFixed(2));
 
 // ─── Engine ───────────────────────────────────────────────────────────────────
 
@@ -129,6 +147,7 @@ export class DerivV2Engine {
     // ── Proposal pre-fetch pipeline ───────────────────────────────────────────
     private readyProposal:    ReadyProposal | null = null;
     private proposalInflight: boolean              = false;
+    private proposalStake:    number | null       = null;
     private tickWaiting:      boolean              = false;
 
     // ── Buy serialisation ─────────────────────────────────────────────────────
@@ -174,6 +193,7 @@ export class DerivV2Engine {
         this.lastTickQuote     = '';
         this.readyProposal     = null;
         this.proposalInflight  = false;
+        this.proposalStake     = null;
         this.tickWaiting       = false;
         this.buyInflight       = false;
         this.lastBuyMs         = 0;
@@ -215,6 +235,7 @@ export class DerivV2Engine {
         this.isRunning        = false;
         this.chainActive      = false;
         this.proposalInflight = false;
+        this.proposalStake    = null;
         this.buyInflight      = false;
         this.tickWaiting      = false;
         this.readyProposal    = null;
@@ -364,11 +385,13 @@ export class DerivV2Engine {
     private fetchProposal(): void {
         if (!this.isRunning || this.proposalInflight) return;
         this.proposalInflight = true;
+        const requestedStake = this.currentStake;
+        this.proposalStake = requestedStake;
 
         const ct = this.resolveContractType();
         const params: Record<string, unknown> = {
             proposal:      1,
-            amount:        this.currentStake,
+            amount:        requestedStake,
             basis:         'stake',
             contract_type: ct,
             currency:      this.config.currency ?? 'USD',
@@ -392,6 +415,8 @@ export class DerivV2Engine {
 
     private handleProposal(proposal: Record<string, any> | undefined): void {
         this.proposalInflight = false;
+        const proposalStake = this.proposalStake ?? this.currentStake;
+        this.proposalStake = null;
 
         if (!proposal?.id) {
             this.addLog('Empty proposal — retrying', 'error');
@@ -401,7 +426,8 @@ export class DerivV2Engine {
 
         const ready: ReadyProposal = {
             id:    String(proposal.id),
-            price: parseFloat(proposal.ask_price ?? this.currentStake),
+            price: parseFloat(proposal.ask_price ?? proposalStake),
+            stake: proposalStake,
         };
 
         if (this.tickWaiting && !this.buyInflight) {
@@ -416,6 +442,16 @@ export class DerivV2Engine {
 
     private executeBuy(p: ReadyProposal): void {
         if (!this.isRunning || this.buyInflight) return;
+
+        // A settlement may have changed the Martingale stake while this
+        // proposal was prefetched. Never buy a stale amount: discard it and
+        // request a proposal for the authoritative current stake.
+        if (Math.abs(p.stake - this.currentStake) > 0.0000001) {
+            this.readyProposal = null;
+            this.tickWaiting = true;
+            this.fetchProposal();
+            return;
+        }
 
         const now  = Date.now();
         const gap  = this.MIN_BUY_GAP - (now - this.lastBuyMs);
@@ -449,9 +485,10 @@ export class DerivV2Engine {
         }
 
         const contractId = String(buy.contract_id);
+        const purchasedStake = parseFloat(buy.buy_price ?? '');
         this.openContracts.set(contractId, {
             contractId,
-            stake:        this.currentStake,
+            stake:        Number.isFinite(purchasedStake) ? purchasedStake : this.currentStake,
             subId:        null,
             triggerDigit: this.lastTickDigit,
             triggerPrice: this.lastTickQuote || null,
@@ -493,7 +530,7 @@ export class DerivV2Engine {
         this.openContracts.delete(contractId);
 
         const profit = parseFloat(poc.profit ?? '0');
-        const isWin  = poc.status === 'won';
+        const isWin  = isWinningSettlement(poc.status, profit);
         this.totalProfit += profit;
 
         // Extract exit digit + full exit price from the exit tick display value
@@ -546,7 +583,12 @@ export class DerivV2Engine {
                 `✅ WIN  +$${Math.abs(profit).toFixed(2)}${priceMove}  exit:${exitDigit ?? '?'}  stake:$${tradeStake.toFixed(2)}  P&L:${this.pnlStr()}`,
                 'win'
             );
-            this.currentStake = this.config.initialStake;
+            this.currentStake = nextMartingaleStake({
+                initialStake: this.config.initialStake,
+                currentStake: this.currentStake,
+                multiplier: this.config.martingale,
+                isWin,
+            });
             this.lossCount    = 1;
             if (this.totalProfit >= this.config.takeProfit) {
                 this.addLog(`Take Profit $${this.config.takeProfit.toFixed(2)} reached — stopping`, 'system');
@@ -571,7 +613,12 @@ export class DerivV2Engine {
                 this.onProfit(this.totalProfit, this.wins, this.losses, this.currentStake);
                 this.stop(); return;
             }
-            this.currentStake = parseFloat((this.currentStake * this.config.martingale).toFixed(2));
+            this.currentStake = nextMartingaleStake({
+                initialStake: this.config.initialStake,
+                currentStake: this.currentStake,
+                multiplier: this.config.martingale,
+                isWin,
+            });
             this.lossCount++;
         }
 
