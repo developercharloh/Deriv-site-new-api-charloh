@@ -6,7 +6,7 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
 import { expectInitArg } from '../utils/sanitize';
-import { proposalsReady, start } from './state/actions';
+import { fastRearm, proposalsReady, start } from './state/actions';
 import * as constants from './state/constants';
 import rootReducer from './state/reducers';
 import Balance from './Balance';
@@ -16,6 +16,8 @@ import Purchase from './Purchase';
 import Sell from './Sell';
 import Ticks from './Ticks';
 import Total from './Total';
+import { FAST_CONTRACT_DURATION_SECONDS, getBotExecutionSpeed } from '@/constants/bot-execution-speed';
+import { FastExecutionClock } from '@/utils/fast-execution-clock';
 
 const watchBefore = store =>
     watchScope({
@@ -45,7 +47,12 @@ const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) => {
     return new Promise(resolve => {
         const currentState = store.getState();
         let hasObservedNextTick = false;
-        if (currentState.scope === passScope && currentState[passFlag] && currentState.fastReady) {
+        if (
+            currentState.scope === passScope &&
+            currentState[passFlag] &&
+            currentState.fastReady &&
+            getBotExecutionSpeed() === 'fast'
+        ) {
             resolve(true);
             return;
         }
@@ -76,10 +83,15 @@ const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) => {
                 return;
             }
 
-            // Proposal/open-contract readiness can arrive after the tick
-            // event. Once this watcher has observed the next tick, accept a
-            // same-tick readiness update instead of waiting an extra tick.
-            if (hasObservedNextTick && newState.scope === passScope && newState[passFlag]) {
+            // SLOW retains Deriv's normal next-tick behavior. FAST is released
+            // by the one-second clock, never by a broker tick.
+            const fastClockReleased =
+                getBotExecutionSpeed() === 'fast' && newState.fastReady;
+            if (
+                (hasObservedNextTick || fastClockReleased) &&
+                newState.scope === passScope &&
+                newState[passFlag]
+            ) {
                 unsubscribe();
                 resolve(true);
             }
@@ -100,6 +112,8 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.lastSettledContract = null;
         this.subscription_id_for_accumulators = null;
         this.is_proposal_requested_for_accumulators = false;
+        this.fastClock = null;
+        this.fastClockActive = false;
         this.store = createStore(rootReducer, applyMiddleware(thunk));
     }
 
@@ -122,15 +136,45 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         globalObserver.emit('bot.running');
 
         const validated_trade_options = this.validateTradeOptions(tradeOptions);
+        this.stopFastClock();
 
-        this.tradeOptions = { ...validated_trade_options, symbol: this.options.symbol };
+        const executionSpeed = getBotExecutionSpeed();
+        this.tradeOptions = {
+            ...validated_trade_options,
+            ...(executionSpeed === 'fast'
+                ? {
+                    duration: FAST_CONTRACT_DURATION_SECONDS,
+                    duration_unit: 's',
+                }
+                : {}),
+            symbol: this.options.symbol,
+        };
+        this.fastClockActive = executionSpeed === 'fast';
         // A restarted bot must begin from its configured initial stake. Do not
         // let the previous run's result drive the first after-purchase branch.
         this.lastSettledContract = null;
         this.store.dispatch(start());
         this.checkLimits(validated_trade_options);
+        if (this.fastClockActive) this.startFastClock();
 
         this.makeDirectPurchaseDecision();
+    }
+
+    startFastClock() {
+        this.stopFastClock();
+        this.fastClockActive = true;
+        this.fastClock = new FastExecutionClock(() => {
+            // FAST is released by this one-second clock. It does not inspect
+            // ticks or wait for settlement before opening the next slot.
+            this.store.dispatch(fastRearm());
+        });
+        this.fastClock.start();
+    }
+
+    stopFastClock() {
+        this.fastClockActive = false;
+        this.fastClock?.stop();
+        this.fastClock = null;
     }
 
     loginAndGetBalance(token) {

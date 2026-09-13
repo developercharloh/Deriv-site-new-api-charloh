@@ -60,13 +60,19 @@ export default Engine =>
                         }
 
                         const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
+                        const clockPacedFast = executionSpeed === 'fast' && this.fastClockActive;
                         const canFastRearm = releaseBotContractGate(
                             this,
                             contract.contract_id,
                             contractState.signalKey,
-                            executionSpeed === 'fast',
+                            executionSpeed === 'fast' && !clockPacedFast,
                         );
-                        if (canFastRearm) {
+                        if (clockPacedFast) {
+                            // The clock owns FAST scheduling. Settlement updates
+                            // totals and Martingale, but it must not pull the
+                            // next purchase forward or wait for this contract
+                            // before allowing the next one-second slot.
+                        } else if (canFastRearm) {
                             this.store.dispatch(fastRearm());
                         } else if (!hasOtherActiveContracts) {
                             this.store.dispatch(sell());

@@ -1,10 +1,10 @@
 ---
 name: Builder execution speed
-description: The DBot Builder FAST mode contract lifecycle and its settlement requirement.
+description: The DBot Builder FAST wall-clock schedule, one-second contracts, and settlement handling.
 ---
 
-FAST re-arms immediately from the authoritative settlement event with one active contract. A one-shot same-tick token prevents the engine loop from buying twice before the next settlement. SLOW waits for the next subscribed broker tick. Both modes avoid wall-clock delays and tick-history polling in the loop. Generated result checks use the last settled contract, so every loss updates the next stake and every win restores the initial stake.
+FAST uses an engine-owned wall-clock slot every 1000 ms, with the first slot available immediately; its contracts use duration 1 second rather than 1 tick. The clock, not ticks or settlement, releases the next purchase slot, so multiple one-second contracts may be in flight while Deriv reports earlier settlements. SLOW keeps Deriv's normal subscribed-tick entry flow and configured duration. Settlement remains authoritative for totals and Martingale, and generated result checks use the latest settled contract.
 
-**Why:** Overlapping contracts committed the next stake before a late loss was known, causing Martingale to skip a loss. Settlement-first re-entry preserves FAST responsiveness without allowing an open-contract overlap.
+**Why:** The required FAST behavior is uniform one-second execution: a continuously running bot has 60 scheduled purchase slots in a one-minute window. A settlement-gated or tick-gated loop cannot guarantee that cadence. Martingale still must wait for authoritative settlement, even when the next purchase slot has already opened.
 
-**How to apply:** Keep one active contract lease in every mode. On authoritative FAST settlement, update totals and the last-settled contract before granting exactly one re-entry token; consume that token before acquisition and never allow overlap. Keep the last settled contract separate from the current open contract, default the first result check to the initial-stake path, and apply Martingale only after settlement updates that stored result.
+**How to apply:** Keep one shared account owner, but allow that owner to hold multiple clock-paced FAST leases; reject leases from other bot runners. Do not let FAST settlement handlers re-arm or block the clock. Update stake progression only on settlement, keep the last settled contract separate from current open contracts, and preserve the SLOW path unchanged.

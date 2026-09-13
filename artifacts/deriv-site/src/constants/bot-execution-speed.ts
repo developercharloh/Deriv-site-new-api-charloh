@@ -2,6 +2,7 @@ export type BotExecutionSpeed = 'slow' | 'fast';
 
 export const BOT_EXECUTION_SPEED_KEY = 'dbot_execution_speed';
 export const BOT_EXECUTION_SPEED_CHANGED_EVENT = 'dbot-execution-speed-changed';
+export const FAST_CONTRACT_DURATION_SECONDS = 1;
 
 const FAST_DELAY_MULTIPLIER = 0;
 const MINIMUM_FAST_DELAY_MS = 0;
@@ -42,8 +43,8 @@ export const getBotExecutionDelayMs = (
 
 /**
  * SLOW follows the normal event-driven DBot loop: generated sleep calls wait
- * for the next broker tick rather than adding a timer. FAST does not wait
- * inside sleep; its trade engine re-arms on each distinct tick.
+ * for the next broker tick rather than adding a timer. FAST is paced by the
+ * trade engine's one-second wall-clock scheduler.
  */
 export const shouldWaitForNextTick = (seconds: number | string | undefined, speed: BotExecutionSpeed): boolean =>
     speed === 'slow' && Number(seconds) > 0;

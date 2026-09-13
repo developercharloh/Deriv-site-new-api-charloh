@@ -49,10 +49,11 @@ export const markBotTick = (symbol: string | null | undefined, epoch: string | n
 export const tryAcquireBotContractGate = (
     owner: object,
     signalKey?: string | null,
+    allowOverlappingContracts = false,
 ): boolean => {
     const state = getState();
     const effectiveSignalKey = signalKey ?? state.latestTickKey;
-    if (effectiveSignalKey && state.lastUsedTickKey === effectiveSignalKey) {
+    if (!allowOverlappingContracts && effectiveSignalKey && state.lastUsedTickKey === effectiveSignalKey) {
         // FAST may re-enter once from the authoritative settlement event.
         // Consume the token before checking the active lease so a repeated
         // trade_again loop cannot spend it twice.
@@ -60,7 +61,11 @@ export const tryAcquireBotContractGate = (
         state.immediateReentryKey = null;
     }
 
-    if (state.active.length > 0) return false;
+    // A clock-paced FAST engine may have several one-second contracts in
+    // flight while the broker is delivering the previous settlement. Other
+    // bot runners must still be excluded from the shared account stream.
+    if (state.active.some(lease => lease.owner !== owner)) return false;
+    if (!allowOverlappingContracts && state.active.length > 0) return false;
 
     state.active.push({ owner, contractId: null, signalKey: effectiveSignalKey ?? null });
     state.lastUsedTickKey = effectiveSignalKey ?? null;

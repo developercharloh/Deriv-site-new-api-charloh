@@ -203,6 +203,7 @@ const Interpreter = () => {
     async function terminateSession() {
         return new Promise((resolve, reject) => {
             try {
+                bot.tradeEngine.stopFastClock?.();
                 releaseBotContractGate(bot.tradeEngine);
                 $scope.stopped = true;
                 $scope.is_error_triggered = false;
