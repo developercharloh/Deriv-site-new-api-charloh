@@ -10,6 +10,7 @@ type GateState = {
     active: ContractGate[];
     latestTickKey: string | null;
     lastUsedTickKey: string | null;
+    immediateReentryKey: string | null;
 };
 
 const getState = (): GateState => {
@@ -23,6 +24,7 @@ const getState = (): GateState => {
             active: [current],
             latestTickKey: null,
             lastUsedTickKey: null,
+            immediateReentryKey: null,
         };
         globalState[GATE_KEY] = migrated;
         return migrated;
@@ -33,6 +35,7 @@ const getState = (): GateState => {
         active: [],
         latestTickKey: null,
         lastUsedTickKey: null,
+        immediateReentryKey: null,
     };
     globalState[GATE_KEY] = initial;
     return initial;
@@ -50,8 +53,11 @@ export const tryAcquireBotContractGate = (
     const state = getState();
     const effectiveSignalKey = signalKey ?? state.latestTickKey;
     if (effectiveSignalKey && state.lastUsedTickKey === effectiveSignalKey) {
-        // A contract can be purchased only once for each broker tick.
-        return false;
+        // FAST may re-enter once from the authoritative settlement event.
+        // Consume the token before checking the active lease so a repeated
+        // trade_again loop cannot spend it twice.
+        if (state.immediateReentryKey !== effectiveSignalKey) return false;
+        state.immediateReentryKey = null;
     }
 
     if (state.active.length > 0) return false;
@@ -100,13 +106,13 @@ export const releaseBotContractGate = (
         return false;
     });
 
-    // A FAST re-arm is safe only when settlement arrived on a later broker
-    // tick than the purchase. Same-tick settlement still waits for the next
-    // tick, preventing two purchases in one second.
-    return Boolean(
-        allowFastRearm &&
-            releasedLease?.signalKey &&
-            state.latestTickKey &&
-            state.latestTickKey !== releasedLease.signalKey
-    );
+    if (allowFastRearm && releasedLease?.signalKey) {
+        // The contract has already settled and its result has already updated
+        // the next stake. Permit exactly one immediate re-entry, including
+        // same-tick settlement, without permitting overlapping contracts.
+        state.immediateReentryKey = releasedLease.signalKey;
+        return true;
+    }
+
+    return false;
 };

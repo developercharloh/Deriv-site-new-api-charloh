@@ -122,7 +122,7 @@ describe('automated contract gate', () => {
         releaseBotContractGate(secondRunner);
     });
 
-    it('allows FAST re-entry on the settlement tick only when settlement followed purchase', () => {
+    it('allows exactly one FAST re-entry immediately after settlement', () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
         const firstRunner = {};
         const secondRunner = {};
@@ -131,16 +131,13 @@ describe('automated contract gate', () => {
         markBotTick('R_25', 150);
         expect(tryAcquireBotContractGate(firstRunner)).toBe(true);
         setBotContractGateContract(firstRunner, 7001);
-        expect(releaseBotContractGate(firstRunner, 7001, signalKey, true)).toBe(false);
+        expect(releaseBotContractGate(firstRunner, 7001, signalKey, true)).toBe(true);
 
-        expect(tryAcquireBotContractGate(firstRunner, signalKey)).toBe(false);
-        markBotTick('R_25', 151);
-        expect(releaseBotContractGate(firstRunner, 7001, signalKey, true)).toBe(false);
-        expect(tryAcquireBotContractGate(firstRunner, 'R_25:151')).toBe(true);
+        expect(tryAcquireBotContractGate(firstRunner, signalKey)).toBe(true);
         setBotContractGateContract(firstRunner, 7002);
-        markBotTick('R_25', 152);
-        expect(releaseBotContractGate(firstRunner, 7002, 'R_25:151', true)).toBe(true);
-        expect(tryAcquireBotContractGate(secondRunner, 'R_25:152')).toBe(true);
+        expect(tryAcquireBotContractGate(secondRunner, signalKey)).toBe(false);
+        expect(releaseBotContractGate(firstRunner, 7002, signalKey, true)).toBe(true);
+        expect(tryAcquireBotContractGate(secondRunner, signalKey)).toBe(true);
         releaseBotContractGate(secondRunner);
     });
 
