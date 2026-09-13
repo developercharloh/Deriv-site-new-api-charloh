@@ -98,6 +98,208 @@ describe('generated bot settlement results', () => {
 
         (window as any).Blockly = previousBlockly;
     });
+
+    it('does not change ordinary DBot stake options', () => {
+        const previousBlockly = window.Blockly;
+        const tradeOptions = {
+            amount: 0.5,
+            basis: 'stake',
+            currency: 'USD',
+            duration: 1,
+            duration_unit: 't',
+            symbol: 'R_25',
+        };
+        (window as any).Blockly = {
+            derivWorkspace: {
+                getAllBlocks: () => [{ type: 'trade_definition_tradeoptions' }],
+            },
+        };
+
+        const engine: any = Object.create(TradeEngine.prototype);
+        engine.binaryMatrixStakeState = null;
+
+        expect(engine.getBinaryMatrixTradeOptions(tradeOptions)).toEqual(tradeOptions);
+        engine.applyBinaryMatrixSettlement({ buy_price: 0.5, sell_price: 0, profit: -0.5 });
+        expect(engine.binaryMatrixStakeState).toBeNull();
+
+        (window as any).Blockly = previousBlockly;
+    });
+
+    it('carries Binary Matrix Martingale through the generated FAST loop and broker settlements', async () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+        const previousBlockly = window.Blockly;
+        const xmlPath = path.resolve(__dirname, '../../../public/bots/Binary_Matrix_AI.xml');
+        const xml = fs.readFileSync(xmlPath, 'utf8');
+        const document = new DOMParser().parseFromString(xml, 'application/xml');
+        const martingaleVariable = Array.from(document.querySelectorAll('variable')).find(
+            variable => variable.textContent?.trim() === 'Martingale'
+        );
+        const martingaleId = martingaleVariable?.getAttribute('id');
+        const martingaleSetter = Array.from(document.querySelectorAll('block[type="variables_set"]')).find(
+            block => block.querySelector('field[name="VAR"]')?.getAttribute('id') === martingaleId
+        );
+        const martingaleValue = martingaleSetter?.querySelector('value[name="VALUE"] field[name="NUM"]')?.textContent?.trim();
+        const purchaseType =
+            document.querySelector('block[type="apollo_purchase2"] field[name="PURCHASE_LIST"]')?.textContent?.trim() ??
+            'DIGITEVEN';
+
+        expect(martingaleId).toBeTruthy();
+        expect(martingaleValue).toBe('2');
+        expect(document.querySelector('block[type="trade_again"]')).not.toBeNull();
+
+        const blockTypes = Array.from(document.querySelectorAll('block')).map(block => block.getAttribute('type'));
+        const workspace = {
+            getAllBlocks: () => blockTypes.map(type => ({ type })),
+            getVariableById: (id: string) => (id === martingaleId ? { name: 'Martingale' } : null),
+        };
+        (window as any).Blockly = { derivWorkspace: workspace };
+
+        const subscriptions: Array<(message: { data: Record<string, any> }) => void> = [];
+        const sent: Array<Record<string, any>> = [];
+        const buyAmounts: number[] = [];
+        const cycleDoneResolvers: Array<() => void> = [];
+        let nextContractId = 8101;
+        const settlementProfits = [-0.5, 0.85, 0.85];
+        const api = {
+            onMessage: () => ({
+                subscribe: (callback: (message: { data: Record<string, any> }) => void) => {
+                    subscriptions.push(callback);
+                    return {
+                        unsubscribe: () => {
+                            const index = subscriptions.indexOf(callback);
+                            if (index >= 0) subscriptions.splice(index, 1);
+                        },
+                    };
+                },
+            }),
+            send: jest.fn(),
+        };
+
+        api_base.api = api;
+        api_base.account_info = { loginid: 'VRTC-BINARY-MATRIX' };
+        api_base.subscriptions = [];
+        api_base.is_stopping = false;
+        api_base.is_running = true;
+
+        const emit = (data: Record<string, any>) => {
+            [...subscriptions].forEach(subscription => subscription({ data }));
+        };
+
+        (api.send as jest.Mock).mockImplementation((payload: Record<string, any>) => {
+            sent.push(payload);
+            if (payload.buy) {
+                const contractId = nextContractId++;
+                buyAmounts.push(Number(payload.price));
+                return Promise.resolve({
+                    buy: {
+                        transaction_id: `transaction-${contractId}`,
+                        contract_id: contractId,
+                        buy_price: payload.price,
+                        payout: Number(payload.price) + 0.85,
+                    },
+                });
+            }
+
+            if (payload.proposal_open_contract) {
+                const contractId = Number(payload.contract_id);
+                const buyIndex = contractId - 8101;
+                const buyPrice = buyAmounts[buyIndex];
+                const profit = settlementProfits[buyIndex];
+                setTimeout(() => {
+                    emit({
+                        msg_type: 'proposal_open_contract',
+                        proposal_open_contract: {
+                            contract_id: contractId,
+                            is_sold: 1,
+                            is_expired: 1,
+                            is_valid_to_sell: 0,
+                            buy_price: buyPrice,
+                            sell_price: buyPrice + profit,
+                            profit,
+                            currency: 'USD',
+                            contract_type: purchaseType,
+                            transaction_ids: {
+                                buy: `transaction-${contractId}`,
+                                sell: `sell-${contractId}`,
+                            },
+                            entry_tick_time: 1700000000 + buyIndex,
+                            exit_tick_time: 1700000001 + buyIndex,
+                            entry_tick: 1,
+                            exit_tick: 2,
+                            barrier: '',
+                        },
+                    });
+                    setTimeout(() => {
+                        engine.store.dispatch({
+                            type: buyIndex < 2 ? tradeConstants.FAST_REARM : tradeConstants.SELL,
+                        });
+                        cycleDoneResolvers.shift()?.();
+                    }, 0);
+                }, 0);
+            }
+
+            return Promise.resolve({});
+        });
+
+        const engine: any = new TradeEngine({
+            observer: {
+                emit: jest.fn(),
+                register: jest.fn(),
+            },
+            ticksService: {},
+        });
+        engine.options = {
+            symbol: 'R_25',
+            timeMachineEnabled: false,
+            shouldRestartOnError: false,
+        };
+        engine.accountInfo = api_base.account_info;
+        engine.is_proposal_subscription_required = false;
+
+        engine.startFastClock = jest.fn(() => {
+            // The real clock releases the first FAST slot after its interval.
+            // Keep that first release deterministic; settled contracts release
+            // the following slots through the mocked broker cycle below.
+            engine.fastClockActive = true;
+            setTimeout(() => engine.store.dispatch({ type: tradeConstants.FAST_REARM }), 0);
+        });
+
+        const waitForCycle = () =>
+            new Promise<void>(resolve => {
+                cycleDoneResolvers.push(resolve);
+            });
+
+        // This is the control flow emitted by the loaded Binary Matrix
+        // trade-definition, purchase, and trade-again blocks. Native async
+        // calls keep the test boundary deterministic while preserving the
+        // generated before/during scope transitions.
+        const bot = getBotInterface(engine);
+        for (let cycle = 0; cycle < 3; cycle += 1) {
+            bot.start({
+                limitations: {},
+                duration: 1,
+                duration_unit: 't',
+                currency: 'USD',
+                amount: +(Number(0.5).toFixed(2)),
+                basis: 'stake',
+            });
+            const cycleDone = waitForCycle();
+            expect(await engine.watch('before')).toBe(true);
+            await bot.purchase(purchaseType);
+            const during = engine.watch('during');
+            await cycleDone;
+            await expect(during).resolves.toBe(false);
+        }
+        bot.isTradeAgain(false);
+
+        expect(buyAmounts).toEqual([0.5, 1, 0.5]);
+        expect(sent.filter(payload => payload.buy).map(payload => payload.parameters.amount)).toEqual([0.5, 1, 0.5]);
+        expect(engine.lastSettledContract.profit).toBe(0.85);
+        expect(engine.binaryMatrixStakeState.currentStake).toBe(0.5);
+
+        engine.stopFastClock();
+        (window as any).Blockly = previousBlockly;
+    });
 });
 
 describe('automated contract gate', () => {
