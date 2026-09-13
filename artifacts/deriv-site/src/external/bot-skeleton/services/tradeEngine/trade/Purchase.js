@@ -29,6 +29,44 @@ export const getPurchaseTradeOptions = (tradeOptions, prediction) => {
 
 export default Engine =>
     class Purchase extends Engine {
+        getContractState(contractId) {
+            return this.activeContracts?.get(String(contractId));
+        }
+
+        getActiveContractIds() {
+            return [...(this.activeContracts?.values() ?? [])]
+                .filter(contractState => !contractState.settled)
+                .map(contractState => contractState.contractId);
+        }
+
+        setCurrentContract(contractId) {
+            const contractState = this.getContractState(contractId);
+            if (!contractState || contractState.settled) return;
+
+            this.contractId = contractState.contractId;
+            this.data.contract = contractState.contract;
+            this.isSold = contractState.isSold;
+            this.isSellAvailable = contractState.isSellAvailable;
+            this.isExpired = contractState.isExpired;
+            this.hasEntryTick = contractState.hasEntryTick;
+        }
+
+        selectLatestActiveContract() {
+            const latest = [...(this.activeContracts?.values() ?? [])]
+                .reverse()
+                .find(contractState => !contractState.settled);
+
+            if (latest) {
+                this.setCurrentContract(latest.contractId);
+            } else {
+                this.contractId = '';
+                this.data.contract = {};
+                this.isSold = true;
+                this.isSellAvailable = false;
+                this.isExpired = true;
+            }
+        }
+
         purchase(contract_type, prediction) {
             // Prevent calling purchase twice
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
@@ -49,6 +87,8 @@ export default Engine =>
                 return Promise.resolve();
             }
             const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction);
+            const releasePurchaseLease = () =>
+                releaseBotContractGate(this, undefined, signalKey);
 
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
@@ -60,8 +100,24 @@ export default Engine =>
                     buy,
                 });
 
-                this.contractId = buy.contract_id;
-                setBotContractGateContract(this, buy.contract_id);
+                const contractState = {
+                    contractId: String(buy.contract_id),
+                    signalKey: signalKey ?? null,
+                    contract: {},
+                    isSold: false,
+                    isSellAvailable: false,
+                    isExpired: false,
+                    hasEntryTick: false,
+                    settled: false,
+                    afterPromise: null,
+                    afterWatchdog: null,
+                    afterWatchdog2: null,
+                    recoveryTimeout: null,
+                };
+                if (!this.activeContracts) this.activeContracts = new Map();
+                this.activeContracts.set(contractState.contractId, contractState);
+                this.setCurrentContract(contractState.contractId);
+                setBotContractGateContract(this, buy.contract_id, signalKey);
                 this.store.dispatch(purchaseSuccessful());
 
                 if (this.is_proposal_subscription_required) {
@@ -101,7 +157,7 @@ export default Engine =>
                 try {
                     selectedProposal = this.selectProposal(contract_type);
                 } catch (error) {
-                    releaseBotContractGate(this);
+                    releasePurchaseLease();
                     throw error;
                 }
                 const { id, askPrice } = selectedProposal;
@@ -117,7 +173,7 @@ export default Engine =>
 
                 if (!this.options.timeMachineEnabled) {
                     return doUntilDone(action).then(onSuccess).catch(error => {
-                        releaseBotContractGate(this);
+                        releasePurchaseLease();
                         throw error;
                     });
                 }
@@ -143,7 +199,7 @@ export default Engine =>
                     ['PriceMoved', 'InvalidContractProposal'],
                     delayIndex++
                 ).then(onSuccess).catch(error => {
-                    releaseBotContractGate(this);
+                    releasePurchaseLease();
                     throw error;
                 });
             }
@@ -151,7 +207,7 @@ export default Engine =>
             try {
                 trade_option = tradeOptionToBuy(contract_type, purchaseTradeOptions);
             } catch (error) {
-                releaseBotContractGate(this);
+                releasePurchaseLease();
                 throw error;
             }
             const action = () => api_base.api.send(trade_option);
@@ -165,7 +221,7 @@ export default Engine =>
 
             if (!this.options.timeMachineEnabled) {
                 return doUntilDone(action).then(onSuccess).catch(error => {
-                    releaseBotContractGate(this);
+                    releasePurchaseLease();
                     throw error;
                 });
             }
@@ -187,7 +243,7 @@ export default Engine =>
                 ['PriceMoved', 'InvalidContractProposal'],
                 delayIndex++
             ).then(onSuccess).catch(error => {
-                releaseBotContractGate(this);
+                releasePurchaseLease();
                 throw error;
             });
         }

@@ -31,6 +31,7 @@ describe('automated contract gate', () => {
     const binaryMatrixPurchaseTypes = ['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER'] as const;
 
     afterEach(() => {
+        window.localStorage.removeItem('dbot_execution_speed');
         api_base.api = null;
         api_base.subscriptions = [];
     });
@@ -65,6 +66,149 @@ describe('automated contract gate', () => {
         markBotTick('R_25', 101);
         expect(tryAcquireBotContractGate(secondRunner)).toBe(true);
         releaseBotContractGate(secondRunner);
+    });
+
+    it('allows FAST to hold multiple contracts while still rejecting a duplicate signal', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+        const runner = {};
+        const duplicateRunner = {};
+
+        markBotTick('R_25', 200);
+        expect(tryAcquireBotContractGate(runner)).toBe(true);
+        setBotContractGateContract(runner, 6001);
+
+        markBotTick('R_25', 201);
+        expect(tryAcquireBotContractGate(runner)).toBe(true);
+        setBotContractGateContract(runner, 6002);
+
+        expect(tryAcquireBotContractGate(duplicateRunner, 'R_25:201')).toBe(false);
+
+        releaseBotContractGate(runner, 6001);
+        expect(tryAcquireBotContractGate(duplicateRunner, 'R_25:201')).toBe(false);
+
+        releaseBotContractGate(runner, 6002);
+        markBotTick('R_25', 202);
+        expect(tryAcquireBotContractGate(duplicateRunner)).toBe(true);
+        releaseBotContractGate(duplicateRunner);
+    });
+
+    it('re-arms FAST before-purchase on the next tick without waiting for settlement', async () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+        const subscriptions: Array<(message: { data: Record<string, any> }) => void> = [];
+        const tickListeners: Array<(epoch: number) => void> = [];
+        api_base.api = {
+            onMessage: () => ({
+                subscribe: (callback: (message: { data: Record<string, any> }) => void) => {
+                    subscriptions.push(callback);
+                    return { unsubscribe: () => undefined };
+                },
+            }),
+        };
+
+        const engine = new TradeEngine({
+            observer: {
+                emit: jest.fn(),
+                register: jest.fn((event: string, callback: (epoch: number) => void) => {
+                    if (event === 'bot.tick') tickListeners.push(callback);
+                }),
+            },
+            ticksService: {},
+        });
+
+        engine.store.dispatch({ type: tradeConstants.START });
+        engine.store.dispatch({ type: tradeConstants.PROPOSALS_READY });
+        engine.store.dispatch({ type: tradeConstants.PURCHASE_SUCCESSFUL });
+
+        const during = engine.watch('during');
+        expect(tickListeners).toHaveLength(1);
+        tickListeners[0](201);
+        await expect(during).resolves.toBe(false);
+        expect(engine.store.getState().scope).toBe(tradeConstants.BEFORE_PURCHASE);
+
+        engine.store.dispatch({ type: tradeConstants.START });
+        await expect(engine.watch('before')).resolves.toBe(true);
+        expect(subscriptions.length).toBeGreaterThan(0);
+    });
+
+    it('settles multiple FAST contracts independently without stopping the active cycle', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+        const subscriptions: Array<(message: { data: Record<string, any> }) => void> = [];
+        api_base.api = {
+            onMessage: () => ({
+                subscribe: (callback: (message: { data: Record<string, any> }) => void) => {
+                    subscriptions.push(callback);
+                    return { unsubscribe: () => undefined };
+                },
+            }),
+        };
+
+        const engine = new TradeEngine({
+            observer: { emit: jest.fn(), register: jest.fn() },
+            ticksService: {},
+        });
+        engine.accountInfo = api_base.account_info;
+        engine.activeContracts = new Map([
+            [
+                '6101',
+                {
+                    contractId: '6101',
+                    contract: {},
+                    isSold: false,
+                    isSellAvailable: true,
+                    isExpired: false,
+                    hasEntryTick: true,
+                    settled: false,
+                    afterPromise: null,
+                },
+            ],
+            [
+                '6102',
+                {
+                    contractId: '6102',
+                    contract: {},
+                    isSold: false,
+                    isSellAvailable: true,
+                    isExpired: false,
+                    hasEntryTick: true,
+                    settled: false,
+                    afterPromise: null,
+                },
+            ],
+        ]);
+        engine.contractId = '6102';
+        engine.data.contract = engine.activeContracts.get('6102').contract;
+        engine.store.dispatch({ type: tradeConstants.START });
+        engine.store.dispatch({ type: tradeConstants.PROPOSALS_READY });
+        engine.store.dispatch({ type: tradeConstants.PURCHASE_SUCCESSFUL });
+
+        const settle = (contractId: number, sellId: string) => {
+            subscriptions.forEach(subscription =>
+                subscription({
+                    data: {
+                        msg_type: 'proposal_open_contract',
+                        proposal_open_contract: {
+                            contract_id: contractId,
+                            is_sold: 1,
+                            is_expired: 1,
+                            is_valid_to_sell: 0,
+                            buy_price: 0.5,
+                            sell_price: 0,
+                            currency: 'USD',
+                            transaction_ids: { sell: sellId },
+                        },
+                    },
+                })
+            );
+        };
+
+        settle(6101, 'sell-6101');
+        expect(engine.store.getState().scope).toBe(tradeConstants.DURING_PURCHASE);
+        expect(engine.activeContracts.get('6101').contract.transaction_ids.sell).toBe('sell-6101');
+        expect(engine.contractId).toBe('6102');
+
+        settle(6102, 'sell-6102');
+        expect(engine.activeContracts.get('6102').contract.transaction_ids.sell).toBe('sell-6102');
+        expect(engine.contractId).toBe('');
     });
 
     it.each(binaryMatrixPurchaseTypes)(

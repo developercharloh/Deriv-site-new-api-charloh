@@ -6,9 +6,10 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
 import { expectInitArg } from '../utils/sanitize';
-import { proposalsReady, start } from './state/actions';
+import { fastRearm, proposalsReady, start } from './state/actions';
 import * as constants from './state/constants';
 import rootReducer from './state/reducers';
+import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 import Balance from './Balance';
 import OpenContract from './OpenContract';
 import Proposal from './Proposal';
@@ -43,6 +44,12 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
         return Promise.resolve(false);
     }
     return new Promise(resolve => {
+        const currentState = store.getState();
+        if (currentState.scope === passScope && currentState[passFlag] && currentState.fastReady) {
+            resolve(true);
+            return;
+        }
+
         const unsubscribe = store.subscribe(() => {
             const newState = store.getState();
 
@@ -121,15 +128,16 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             // solve the issue. This is a backup!
             const subscription = api_base.api.onMessage().subscribe(({ data }) => {
                 if (data.msg_type === 'transaction' && data.transaction.action === 'sell') {
-                    this.transaction_recovery_timeout = setTimeout(() => {
-                        const { contract } = this.data;
-                        const is_same_contract = contract.contract_id === data.transaction.contract_id;
+                    const contractState = this.getContractState?.(data.transaction.contract_id);
+                    if (!contractState) return;
+                    contractState.recoveryTimeout = setTimeout(() => {
+                        const contract = contractState?.contract ?? {};
                         // contract.status is 'open' for the proposal-subscription path.
                         // For the direct-buy path the contract object may be empty {} if no
                         // proposal_open_contract message was ever received (subscribe:1 was
                         // missing), so status is undefined — treat that as "needs recovery" too.
                         const is_open_contract = contract.status === 'open' || !contract.status;
-                        if (is_same_contract && is_open_contract) {
+                        if (!contractState.settled && is_open_contract) {
                             doUntilDone(() => {
                                 api_base.api.send({ proposal_open_contract: 1, contract_id: data.transaction.contract_id });
                             }, ['PriceMoved']);
@@ -153,7 +161,29 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         if (watchName === 'before') {
             return watchBefore(this.store);
         }
+        if (getBotExecutionSpeed() === 'fast') {
+            return this.watchDuringFast();
+        }
         return watchDuring(this.store);
+    }
+
+    watchDuringFast() {
+        if (this.store.getState().scope !== constants.DURING_PURCHASE) {
+            return Promise.resolve(false);
+        }
+
+        return new Promise(resolve => {
+            this.observer.register(
+                'bot.tick',
+                () => {
+                    if (this.store.getState().scope === constants.DURING_PURCHASE) {
+                        this.store.dispatch(fastRearm());
+                    }
+                    resolve(false);
+                },
+                true
+            );
+        });
     }
 
     makeDirectPurchaseDecision() {

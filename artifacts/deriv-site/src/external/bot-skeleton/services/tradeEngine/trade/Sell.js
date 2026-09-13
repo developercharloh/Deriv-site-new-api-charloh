@@ -9,7 +9,13 @@ import { DURING_PURCHASE } from './state/constants';
 export default Engine =>
     class Sell extends Engine {
         isSellAtMarketAvailable() {
-            return this.contractId && !this.isSold && this.isSellAvailable && !this.isExpired;
+            const contractState = this.getContractState?.(this.contractId);
+            return (
+                contractState?.contractId &&
+                !contractState.isSold &&
+                contractState.isSellAvailable &&
+                !contractState.isExpired
+            );
         }
 
         sellAtMarket() {
@@ -37,7 +43,7 @@ export default Engine =>
                     }
 
                     contractStatus('purchase.sold');
-                    this.waitForAfter();
+                    this.waitForAfter(contract_id);
                     resolve();
                 };
 

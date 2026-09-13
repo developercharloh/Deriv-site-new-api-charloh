@@ -4,6 +4,7 @@ import { contract as broadcastContract, contractStatus } from '../utils/broadcas
 import { doUntilDone } from '../utils/helpers';
 import { openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
+import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
 export default Engine =>
     class OpenContract extends Engine {
@@ -17,15 +18,21 @@ export default Engine =>
                         return;
                     }
 
-                    this.setContractFlags(contract);
+                    const contractState = this.getContractState?.(contract.contract_id);
+                    if (!contractState) return;
 
-                    this.data.contract = contract;
+                    this.setContractFlags(contract, contractState);
+                    contractState.contract = contract;
+
+                    if (String(contract.contract_id) === String(this.contractId)) {
+                        this.data.contract = contract;
+                    }
 
                     broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
 
-                    if (this.isSold) {
-                        this.contractId = '';
-                        clearTimeout(this.transaction_recovery_timeout);
+                    if (contractState.isSold && !contractState.settled) {
+                        contractState.settled = true;
+                        clearTimeout(contractState.recoveryTimeout);
                         this.updateTotals(contract);
                         contractStatus({
                             id: 'contract.sold',
@@ -33,35 +40,44 @@ export default Engine =>
                             contract,
                         });
 
-                        if (this.afterPromise) {
+                        if (contractState.afterPromise) {
                             // Clear before calling to prevent double-resolution
-                            const resolve = this.afterPromise;
-                            this.afterPromise = null;
+                            const resolve = contractState.afterPromise;
+                            contractState.afterPromise = null;
                             resolve();
                         }
 
-                        this.store.dispatch(sell());
+                        if (getBotExecutionSpeed() !== 'fast') {
+                            this.store.dispatch(sell());
+                        } else if (String(contract.contract_id) === String(this.contractId)) {
+                            this.selectLatestActiveContract();
+                        }
                         releaseBotContractGate(this, contract.contract_id);
                     } else {
-                        this.store.dispatch(openContractReceived());
+                        if (getBotExecutionSpeed() !== 'fast') {
+                            this.store.dispatch(openContractReceived());
+                        }
                     }
                 }
             });
             api_base.pushSubscription(subscription);
         }
 
-        waitForAfter() {
+        waitForAfter(contractId = this.contractId) {
+            const contractState = this.getContractState?.(contractId);
+            if (!contractState) return Promise.resolve();
+
             return new Promise(resolve => {
                 // Wrap resolve so watchdogs and the normal path share one clear-and-call pattern
                 const done = () => {
-                    clearTimeout(this._afterWatchdog);
-                    clearTimeout(this._afterWatchdog2);
-                    if (this.afterPromise) {
-                        this.afterPromise = null;
+                    clearTimeout(contractState.afterWatchdog);
+                    clearTimeout(contractState.afterWatchdog2);
+                    if (contractState.afterPromise) {
+                        contractState.afterPromise = null;
                         resolve();
                     }
                 };
-                this.afterPromise = done;
+                contractState.afterPromise = done;
 
                 // ── Watchdog 1 (2 s) ─────────────────────────────────────────
                 // Digit contracts settle in ≈ 1 tick (≈ 1 s on Volatility markets).
@@ -69,10 +85,10 @@ export default Engine =>
                 // proposal_open_contract message with is_sold=1 was lost (mobile
                 // browser backgrounded, transient WebSocket hiccup, etc.).
                 // Explicitly re-request the contract status to trigger the settlement.
-                clearTimeout(this._afterWatchdog);
-                this._afterWatchdog = setTimeout(() => {
-                    if (!this.afterPromise) return; // Already resolved — nothing to do
-                    const { contract } = this.data;
+                clearTimeout(contractState.afterWatchdog);
+                contractState.afterWatchdog = setTimeout(() => {
+                    if (!contractState.afterPromise) return; // Already resolved — nothing to do
+                    const { contract } = contractState;
                     if (contract?.contract_id) {
                         doUntilDone(
                             () => api_base.api.send({
@@ -89,26 +105,35 @@ export default Engine =>
                 // A 1-tick digit contract cannot still be open after 5 s under any
                 // normal circumstances. This prevents the bot from hanging forever
                 // when both the WebSocket message and the recovery poll are lost.
-                clearTimeout(this._afterWatchdog2);
-                this._afterWatchdog2 = setTimeout(() => {
-                    if (this.afterPromise) {
+                clearTimeout(contractState.afterWatchdog2);
+                contractState.afterWatchdog2 = setTimeout(() => {
+                    if (contractState.afterPromise) {
                         done();
                     }
                 }, 5000);
             });
         }
 
-        setContractFlags(contract) {
+        setContractFlags(contract, contractState = this.getContractState?.(contract.contract_id)) {
             const { is_expired, is_valid_to_sell, is_sold, entry_tick } = contract;
 
-            this.isSold = Boolean(is_sold);
-            this.isSellAvailable = !this.isSold && Boolean(is_valid_to_sell);
-            this.isExpired = Boolean(is_expired);
-            this.hasEntryTick = Boolean(entry_tick);
+            if (contractState) {
+                contractState.isSold = Boolean(is_sold);
+                contractState.isSellAvailable = !contractState.isSold && Boolean(is_valid_to_sell);
+                contractState.isExpired = Boolean(is_expired);
+                contractState.hasEntryTick = Boolean(entry_tick);
+            }
+
+            if (String(contract.contract_id) === String(this.contractId)) {
+                this.isSold = Boolean(is_sold);
+                this.isSellAvailable = !this.isSold && Boolean(is_valid_to_sell);
+                this.isExpired = Boolean(is_expired);
+                this.hasEntryTick = Boolean(entry_tick);
+            }
         }
 
         expectedContractId(contractId) {
-            return this.contractId && contractId === this.contractId;
+            return Boolean(this.getContractState?.(contractId));
         }
 
         getSellPrice() {

@@ -13,6 +13,7 @@ const signal = (state = initialState, action) => {
                 scope: constants.BEFORE_PURCHASE,
                 proposalsReady: state.proposalsReady,
                 newTick: state.newTick,
+                fastReady: Boolean(state.fastReady),
             };
         case constants.PROPOSALS_READY:
             return {
@@ -30,6 +31,7 @@ const signal = (state = initialState, action) => {
                 openContract: false,
                 proposalsReady: state.proposalsReady,
                 newTick: state.newTick,
+                fastReady: false,
             };
         case constants.OPEN_CONTRACT:
             return {
@@ -37,12 +39,20 @@ const signal = (state = initialState, action) => {
                 openContract: true,
                 proposalsReady: state.proposalsReady,
                 newTick: state.newTick,
+                fastReady: false,
             };
         case constants.SELL:
             return {
                 scope: constants.STOP,
                 proposalsReady: state.proposalsReady,
                 newTick: state.newTick,
+                fastReady: false,
+            };
+        case constants.FAST_REARM:
+            return {
+                ...state,
+                scope: constants.BEFORE_PURCHASE,
+                fastReady: true,
             };
         case constants.NEW_TICK:
             return {

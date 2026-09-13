@@ -168,7 +168,7 @@ const Interpreter = () => {
                     timeout => global_timeouts[timeout].is_cancellable
                 );
 
-                if (!bot.tradeEngine.contractId && is_timeouts_cancellable) {
+                if (!bot.tradeEngine.getActiveContractIds?.().length && is_timeouts_cancellable) {
                     api_base.is_stopping = true;
                     // When user is rate limited, allow them to stop the bot immediately
                     // granted there is no active contract.

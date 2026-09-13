@@ -1,3 +1,5 @@
+import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
+
 type ContractGate = {
     owner: object;
     contractId: string | null;
@@ -7,7 +9,7 @@ type ContractGate = {
 const GATE_KEY = '__DERIV_AUTOMATED_CONTRACT_GATE__';
 
 type GateState = {
-    active: ContractGate | null;
+    active: ContractGate[];
     latestTickKey: string | null;
     lastUsedTickKey: string | null;
 };
@@ -20,7 +22,7 @@ const getState = (): GateState => {
     // so a hot-reloaded browser cannot retain an incompatible lease.
     if (current && 'owner' in current) {
         const migrated: GateState = {
-            active: current,
+            active: [current],
             latestTickKey: null,
             lastUsedTickKey: null,
         };
@@ -30,7 +32,7 @@ const getState = (): GateState => {
 
     if (current) return current;
     const initial: GateState = {
-        active: null,
+        active: [],
         latestTickKey: null,
         lastUsedTickKey: null,
     };
@@ -45,25 +47,49 @@ export const markBotTick = (symbol: string | null | undefined, epoch: string | n
 
 export const tryAcquireBotContractGate = (owner: object, signalKey?: string | null): boolean => {
     const state = getState();
-    if (state.active) return false;
-
     const effectiveSignalKey = signalKey ?? state.latestTickKey;
     if (effectiveSignalKey && state.lastUsedTickKey === effectiveSignalKey) return false;
 
-    state.active = { owner, contractId: null, signalKey: effectiveSignalKey ?? null };
+    const isFast = getBotExecutionSpeed() === 'fast';
+    if (!isFast && state.active.length > 0) return false;
+    if (
+        isFast &&
+        state.active.some(lease => lease.signalKey === (effectiveSignalKey ?? null))
+    ) {
+        return false;
+    }
+
+    state.active.push({ owner, contractId: null, signalKey: effectiveSignalKey ?? null });
     state.lastUsedTickKey = effectiveSignalKey ?? null;
     return true;
 };
 
-export const setBotContractGateContract = (owner: object, contractId: string | number): void => {
-    const gate = getState().active;
-    if (gate?.owner === owner) gate.contractId = String(contractId);
+export const setBotContractGateContract = (
+    owner: object,
+    contractId: string | number,
+    signalKey?: string | null
+): void => {
+    const gate = getState().active.find(
+        lease =>
+            lease.owner === owner &&
+            lease.contractId === null &&
+            (signalKey === undefined || lease.signalKey === (signalKey ?? null))
+    );
+    if (gate) gate.contractId = String(contractId);
 };
 
-export const releaseBotContractGate = (owner: object, contractId?: string | number): void => {
+export const releaseBotContractGate = (
+    owner: object,
+    contractId?: string | number,
+    signalKey?: string | null
+): void => {
     const state = getState();
-    const gate = state.active;
-    if (!gate || gate.owner !== owner) return;
-    if (contractId !== undefined && gate.contractId !== null && gate.contractId !== String(contractId)) return;
-    state.active = null;
+    state.active = state.active.filter(lease => {
+        if (lease.owner !== owner) return true;
+        if (contractId !== undefined && lease.contractId !== null && lease.contractId !== String(contractId)) {
+            return true;
+        }
+        if (signalKey !== undefined && lease.signalKey !== (signalKey ?? null)) return true;
+        return false;
+    });
 };
