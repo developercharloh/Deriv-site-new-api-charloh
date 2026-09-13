@@ -65,6 +65,39 @@ describe('generated bot settlement results', () => {
         expect(bot.isResult('win')).toBe(true);
         expect(bot.isResult('loss')).toBe(false);
     });
+
+    it('keeps Binary Matrix stake progression authoritative in FAST', () => {
+        const previousBlockly = window.Blockly;
+        const workspace = {
+            getAllBlocks: () => [
+                { type: 'last_digits_condition' },
+                {
+                    type: 'variables_set',
+                    getFieldValue: () => 'martingale-id',
+                    getInputTargetBlock: (name: string) =>
+                        name === 'VALUE'
+                            ? {
+                                type: 'math_number_positive',
+                                getFieldValue: () => '2',
+                            }
+                            : null,
+                },
+            ],
+            getVariableById: (id: string) => id === 'martingale-id' ? { name: 'Martingale' } : null,
+        };
+        (window as any).Blockly = { derivWorkspace: workspace };
+
+        const engine: any = Object.create(TradeEngine.prototype);
+        engine.binaryMatrixStakeState = null;
+
+        expect(engine.getBinaryMatrixTradeOptions({ amount: 0.5 }).amount).toBe(0.5);
+        engine.applyBinaryMatrixSettlement({ buy_price: 0.5, sell_price: 0, profit: -0.5 });
+        expect(engine.getBinaryMatrixTradeOptions({ amount: 0.5 }).amount).toBe(1);
+        engine.applyBinaryMatrixSettlement({ buy_price: 1, sell_price: 1.85, profit: 0.85 });
+        expect(engine.getBinaryMatrixTradeOptions({ amount: 1 }).amount).toBe(0.5);
+
+        (window as any).Blockly = previousBlockly;
+    });
 });
 
 describe('automated contract gate', () => {

@@ -26,3 +26,9 @@ Custom XML purchase blocks must forward their prediction argument through the ge
 **Why:** The standard purchase interface historically accepted only the contract type, silently dropping the custom block's Over/Under prediction.
 
 **How to apply:** Preserve the two-argument purchase contract (`contract_type`, optional prediction) and verify the resulting buy request contains `barrier` for Over/Under while Even/Odd remain barrier-free.
+
+The generated XML remains the execution path, but Binary Matrix stake progression must also be enforced in the trade engine from authoritative settlement profit. The Blockly `Stake` variable alone can lag the next FAST purchase.
+
+**Why:** FAST can resume the generated loop on a settlement event before a variable update is reflected in the next broker request, producing a base-stake buy after a loss or a multiplied buy after a win.
+
+**How to apply:** Capture the first requested stake and configured Martingale factor, update the engine state on final settlement, and override only Binary Matrix trade-option amounts for the next buy; leave ordinary DBot strategies unchanged.

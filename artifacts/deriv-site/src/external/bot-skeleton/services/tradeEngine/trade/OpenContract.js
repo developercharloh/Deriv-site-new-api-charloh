@@ -51,6 +51,7 @@ export default Engine =>
                         // the UI status. FAST must buy from this broker event,
                         // not from a later rendered win/loss notification.
                         this.updateTotals(contract, executionSpeed === 'fast');
+                        this.applyBinaryMatrixSettlement(contract);
 
                         const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
                         const clockPacedFast = executionSpeed === 'fast' && this.fastClockActive;

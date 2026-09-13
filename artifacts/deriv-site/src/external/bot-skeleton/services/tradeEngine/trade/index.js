@@ -129,6 +129,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.fastClockActive = false;
         this.hasStarted = false;
         this.store = createStore(rootReducer, applyMiddleware(thunk));
+        this.binaryMatrixStakeState = null;
     }
 
     init(...args) {
@@ -158,7 +159,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             this.stopFastClock();
         }
         this.tradeOptions = {
-            ...validated_trade_options,
+            ...this.getBinaryMatrixTradeOptions(validated_trade_options),
             ...(executionSpeed === 'fast'
                 ? {
                     duration: FAST_CONTRACT_DURATION_VALUE,
@@ -193,6 +194,74 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         if (this.fastClockActive && !fastClockAlreadyRunning) this.startFastClock();
 
         this.makeDirectPurchaseDecision();
+    }
+
+    isBinaryMatrixWorkspace() {
+        const blocks = window.Blockly?.derivWorkspace?.getAllBlocks?.(true) ?? [];
+        return blocks.some(block => ['last_digits_condition', 'apollo_purchase2'].includes(block.type));
+    }
+
+    readBinaryMatrixNumberVariable(name, fallback) {
+        const workspace = window.Blockly?.derivWorkspace;
+        if (!workspace) return fallback;
+
+        const setter = workspace.getAllBlocks?.(true)?.find(block => {
+            if (block.type !== 'variables_set') return false;
+            const variableId = block.getFieldValue?.('VAR');
+            const variableModel = workspace.getVariableById?.(variableId)
+                ?? workspace.getVariableMap?.()?.getVariableById?.(variableId);
+            const variableName = variableModel?.name
+                ?? block.getField?.('VAR')?.getText?.()
+                ?? block.getField?.('VAR')?.getValue?.();
+            return variableName === name;
+        });
+        const valueBlock = setter?.getInputTargetBlock?.('VALUE')
+            ?? setter?.getChildren?.()?.find(child =>
+                ['math_number', 'math_number_positive'].includes(child.type)
+            );
+        const value = Number(valueBlock?.getFieldValue?.('NUM'));
+        return Number.isFinite(value) ? value : fallback;
+    }
+
+    getBinaryMatrixTradeOptions(tradeOptions) {
+        if (!this.isBinaryMatrixWorkspace()) {
+            this.binaryMatrixStakeState = null;
+            return tradeOptions;
+        }
+
+        const suppliedStake = Number(tradeOptions.amount);
+        if (!Number.isFinite(suppliedStake) || suppliedStake <= 0) return tradeOptions;
+
+        if (!this.binaryMatrixStakeState) {
+            this.binaryMatrixStakeState = {
+                initialStake: suppliedStake,
+                currentStake: suppliedStake,
+                multiplier: Math.max(1, this.readBinaryMatrixNumberVariable('Martingale', 2)),
+            };
+        }
+
+        return {
+            ...tradeOptions,
+            amount: this.binaryMatrixStakeState.currentStake,
+        };
+    }
+
+    applyBinaryMatrixSettlement(contract) {
+        if (!this.binaryMatrixStakeState) return;
+
+        const reportedProfit = Number(contract?.profit);
+        const sellPrice = Number(contract?.sell_price);
+        const buyPrice = Number(contract?.buy_price);
+        const profit = Number.isFinite(reportedProfit)
+            ? reportedProfit
+            : sellPrice - buyPrice;
+        const isWin = Number.isFinite(profit) && profit > 0;
+
+        this.binaryMatrixStakeState.currentStake = isWin
+            ? this.binaryMatrixStakeState.initialStake
+            : Number(
+                (this.binaryMatrixStakeState.currentStake * this.binaryMatrixStakeState.multiplier).toFixed(2)
+            );
     }
 
     startFastClock() {
