@@ -8,3 +8,9 @@ The Binary Matrix browser regression runs dependency-free against Node 20 with a
 **Why:** Chromium is available but the project has no browser-test dependency, and a real account credential is not appropriate for a repeatable repository check. Scrolling the Free Bots card into view also makes Blockly’s `viewTop` negative even after the vertical scrollbar is reset. Checking only root blocks can produce a false pass against the default `main.xml`.
 
 **How to apply:** Keep the test focused on real rendered Free Bots and standard XML-loader UI, stub only the external WebSocket API before navigation, scroll the clicked controls into view, verify `#bot_builder`, all required root types, the compatibility block counts, and the first root’s topmost ordering on mobile. Also cover an existing empty saved workspace so startup cannot silently render a blank canvas. Custom Blockly message placeholders must match the number of `args0` entries or nested imports can fail while leaving the roots visible. For interpreter proof, return a real `history` response and emit more than one delayed live tick: startup can consume the first tick before the generated `watch('before')` loop is waiting.
+
+The full browser regression is reliable against a production static build. The Rsbuild development server can leave Blockly initialization pending at its lazy-compilation endpoint even when the page and API stub appear healthy.
+
+**Why:** This produced a false-looking `Loading Blockly...` state with no browser exception, so a failed dev-server run could not distinguish app behavior from the development compiler.
+
+**How to apply:** Build first, serve `dist` with SPA fallback, and point `BINARY_MATRIX_BASE_URL` at that static server when validating the rendered XML/import/interpreter flow.

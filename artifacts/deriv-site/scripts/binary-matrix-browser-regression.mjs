@@ -29,6 +29,21 @@ const emptySavedWorkspaceValue =
 const browserApiMock = String.raw`
 (() => {
     const accountId = 'VRTC-BINARY-MATRIX';
+    window.__binaryMatrixBrowserErrors ||= [];
+    window.addEventListener('error', event => {
+        window.__binaryMatrixBrowserErrors.push({
+            type: 'error',
+            message: event.message || event.error?.message || 'Unknown browser error',
+            source: event.filename || null,
+            line: event.lineno || null,
+        });
+    });
+    window.addEventListener('unhandledrejection', event => {
+        window.__binaryMatrixBrowserErrors.push({
+            type: 'unhandledrejection',
+            message: event.reason?.stack || event.reason?.message || String(event.reason),
+        });
+    });
     const testState = (window.__binaryMatrixInterpreterTest ||= {
         buyRequests: [],
         contractCount: 0,
@@ -425,6 +440,11 @@ class CdpClient {
                 console.error(`Browser exception: ${message.params.exceptionDetails?.exception?.description || 'unknown'}`);
             } else if (message.method === 'Log.entryAdded') {
                 console.error(`Browser log: ${message.params.entry?.text || 'unknown'}`);
+            } else if (message.method === 'Runtime.consoleAPICalled') {
+                const text = message.params.args
+                    ?.map(argument => argument.value ?? argument.description ?? '')
+                    .join(' ');
+                if (text) console.error(`Browser console.${message.params.type}: ${text}`);
             }
             const pending = this.pending.get(message.id);
             if (!pending) return;
@@ -508,6 +528,8 @@ const waitFor = async (cdp, expression, label, timeout = 30_000) => {
                 testEpoch: window.__binaryMatrixInterpreterTest?.latestEpoch,
                 buyRequests: window.__binaryMatrixInterpreterTest?.buyRequests,
                 generatedCode: window.__binaryMatrixInterpreterTest?.generatedCode?.slice(0, 5000),
+                browserErrors: window.__binaryMatrixBrowserErrors,
+                recentResources: performance.getEntriesByType('resource').map(entry => entry.name).slice(-30),
                 buttons: Array.from(document.querySelectorAll('button')).map(button => ({
                     text: button.textContent.trim(),
                     visible: Boolean(button.getClientRects().length),
