@@ -1,4 +1,4 @@
-export const FAST_EXECUTION_INTERVAL_MS = 1500;
+export const FAST_EXECUTION_INTERVAL_MS = 1000;
 
 export class FastExecutionClock {
     private timer: ReturnType<typeof setTimeout> | null = null;

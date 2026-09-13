@@ -85,11 +85,12 @@ export default Engine =>
                 isFast || currentTick === null || currentTick === undefined || currentTick === ''
                     ? undefined
                     : `${symbol ?? 'unknown'}:${String(currentTick)}`;
-            // FAST is clock-paced, but it deliberately keeps one unresolved
-            // contract at a time so Martingale always sees the latest settled
-            // result before the next stake is committed. A clock slot is
-            // skipped while the previous contract is still open.
-            if (!tryAcquireBotContractGate(this, signalKey, false)) {
+            // FAST is clock-paced and must be able to place one contract per
+            // clock slot. SLOW keeps the single-contract gate so its normal
+            // broker-tick flow cannot duplicate a purchase. FAST settlement
+            // remains authoritative for result reporting and stake updates,
+            // while the clock owns the purchase cadence.
+            if (!tryAcquireBotContractGate(this, signalKey, isFast)) {
                 return Promise.resolve();
             }
             const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction);
