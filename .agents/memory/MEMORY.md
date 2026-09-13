@@ -16,3 +16,4 @@
 - [Bot condition analysis status](deriv-bot-analysis-status.md) — shared tick evaluation emits the latest condition, digits, market, and true/false result for robot reporting.
 - [Builder execution speed](deriv-builder-execution-speed.md) — FAST buys once per broker tick, may overlap late settlements, and applies Martingale after authoritative results.
 - [Builder FAST regression harness](builder-fast-regression-harness.md) — Jest should drive generated Builder scopes through TradeEngine directly when interpreter completion is not a stable async boundary.
+- [FAST slot state preservation](deriv-fast-slot-state.md) — every terminal FAST cycle transition must preserve the monotonic slot counter or the gate rejects the next purchase as a duplicate.

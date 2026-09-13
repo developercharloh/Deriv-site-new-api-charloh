@@ -55,6 +55,7 @@ const signal = (state = initialState, action) => {
                 newTick: state.newTick,
                 fastReady: false,
                 fastPending: false,
+                fastSlot: state.fastSlot || 0,
             };
         case constants.FAST_REARM:
             return {
