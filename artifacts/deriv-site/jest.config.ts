@@ -194,7 +194,10 @@ const config: Config = {
     },
 
     // An array of regexp pattern strings that are matched against all source file paths, matched files will skip transformation
-    transformIgnorePatterns: ['/node_modules/(?!@deriv-com/ui).+\\.js$'],
+    // pnpm resolves the package through `.pnpm/@deriv-com+ui@...` before the
+    // package's nested `node_modules/@deriv-com/ui` path. Allow both forms so
+    // Babel can convert the package's ESM build for Jest.
+    transformIgnorePatterns: ['/node_modules/(?!\\.pnpm/@deriv-com\\+ui@|@deriv-com/ui).+\\.js$'],
 
     // An array of regexp pattern strings that are matched against all modules before the module loader will automatically return a mock for them
     // unmockedModulePathPatterns: undefined,
