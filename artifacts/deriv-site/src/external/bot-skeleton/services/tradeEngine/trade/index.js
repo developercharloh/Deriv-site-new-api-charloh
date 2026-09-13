@@ -268,8 +268,10 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.stopFastClock();
         this.fastClockActive = true;
         this.fastClock = new FastExecutionClock(() => {
-            // FAST is released by this 1.5-second clock. It does not inspect
-            // ticks or wait for settlement before opening the next slot.
+            // FAST is clock-paced, but never starts another contract while the
+            // previous one is still open. This keeps Martingale progression
+            // tied to the immediately preceding authoritative settlement.
+            if (this.getActiveContractIds().length > 0) return;
             this.store.dispatch(fastRearm());
         });
         this.fastClock.start();

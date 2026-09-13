@@ -90,7 +90,11 @@ export default Engine =>
             // broker-tick flow cannot duplicate a purchase. FAST settlement
             // remains authoritative for result reporting and stake updates,
             // while the clock owns the purchase cadence.
-            if (!tryAcquireBotContractGate(this, signalKey, isFast)) {
+            // A FAST clock slot must not create a second in-flight contract.
+            // Waiting for settlement is required for deterministic Martingale
+            // progression; the next clock slot will re-arm after this one is
+            // settled.
+            if (!tryAcquireBotContractGate(this, signalKey, false)) {
                 return Promise.resolve();
             }
             const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction);
