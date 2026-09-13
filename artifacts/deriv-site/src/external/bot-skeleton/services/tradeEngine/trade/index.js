@@ -118,6 +118,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.is_proposal_requested_for_accumulators = false;
         this.fastClock = null;
         this.fastClockActive = false;
+        this.hasStarted = false;
         this.store = createStore(rootReducer, applyMiddleware(thunk));
     }
 
@@ -140,9 +141,13 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         globalObserver.emit('bot.running');
 
         const validated_trade_options = this.validateTradeOptions(tradeOptions);
-        this.stopFastClock();
-
         const executionSpeed = getBotExecutionSpeed();
+        const fastClockAlreadyRunning = this.fastClock?.isRunning() === true;
+        const isNewBotSession = !this.hasStarted;
+        this.hasStarted = true;
+        if (executionSpeed !== 'fast') {
+            this.stopFastClock();
+        }
         this.tradeOptions = {
             ...validated_trade_options,
             ...(executionSpeed === 'fast'
@@ -154,12 +159,19 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             symbol: this.options.symbol,
         };
         this.fastClockActive = executionSpeed === 'fast';
-        // A restarted bot must begin from its configured initial stake. Do not
-        // let the previous run's result drive the first after-purchase branch.
-        this.lastSettledContract = null;
+        // Bot.start is called again at the beginning of each generated trade
+        // cycle. Only clear the previous result for a genuinely new session;
+        // clearing it on every cycle makes Martingale look like a first-trade
+        // win and skips the authoritative loss result.
+        if (isNewBotSession) this.lastSettledContract = null;
         this.store.dispatch(start());
         this.checkLimits(validated_trade_options);
-        if (this.fastClockActive) this.startFastClock();
+        this.fastClockActive = executionSpeed === 'fast';
+        // The generated DBot program calls Bot.start again at the beginning
+        // of each trade cycle. Do not restart the FAST clock there: its
+        // immediate first slot would recursively restart the cycle and lock
+        // the browser after the first settlement.
+        if (this.fastClockActive && !fastClockAlreadyRunning) this.startFastClock();
 
         this.makeDirectPurchaseDecision();
     }
@@ -168,7 +180,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.stopFastClock();
         this.fastClockActive = true;
         this.fastClock = new FastExecutionClock(() => {
-            // FAST is released by this one-second clock. It does not inspect
+            // FAST is released by this 1.5-second clock. It does not inspect
             // ticks or wait for settlement before opening the next slot.
             this.store.dispatch(fastRearm());
         });
