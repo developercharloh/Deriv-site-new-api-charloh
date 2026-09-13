@@ -58,6 +58,11 @@ const signal = (state = initialState, action) => {
                 scope: constants.BEFORE_PURCHASE,
                 fastReady: true,
             };
+        case constants.CONSUME_FAST_READY:
+            return {
+                ...state,
+                fastReady: false,
+            };
         case constants.NEW_TICK:
             return {
                 ...state,

@@ -43,7 +43,7 @@ const watchDuring = store =>
  * which leads to the same problem we try to solve. So prevTick is isolated
  */
 let prevTick;
-const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) => {
+export const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) => {
     // in case watch is called after stop is fired
     if (store.getState().scope === stopScope) {
         return Promise.resolve(false);
@@ -57,6 +57,10 @@ const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) => {
             currentState.fastReady &&
             getBotExecutionSpeed() === 'fast'
         ) {
+            // FAST_REARM is a one-shot clock signal. Consume it before
+            // resolving so the generated `while (watch('before'))` loop
+            // cannot resolve synchronously forever on the same slot.
+            store.dispatch({ type: constants.CONSUME_FAST_READY });
             resolve(true);
             return;
         }
@@ -96,6 +100,11 @@ const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) => {
                 newState.scope === passScope &&
                 newState[passFlag]
             ) {
+                if (fastClockReleased) {
+                    // Consume the release before resolving the watcher. The
+                    // next watch call must wait for the next wall-clock slot.
+                    store.dispatch({ type: constants.CONSUME_FAST_READY });
+                }
                 unsubscribe();
                 resolve(true);
             }
