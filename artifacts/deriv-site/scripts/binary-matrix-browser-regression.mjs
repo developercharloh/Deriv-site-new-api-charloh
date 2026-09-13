@@ -232,7 +232,6 @@ const browserApiMock = String.raw`
             } else if (request.buy) {
                 const contractId = ++testState.contractCount;
                 const symbol = request.parameters?.underlying_symbol || 'R_25';
-                const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
                 const openContractsAtBuy = testState.buyRequests.filter(
                     item => !testState.settledContractIds.includes(item.contractId)
                 ).length;
@@ -245,50 +244,11 @@ const browserApiMock = String.raw`
                     openContractsAtBuy,
                 });
                 response.buy = { contract_id: contractId, buy_price: request.price || 0.5, payout: 1.96 };
-                if (isFast && testState.buyRequests.length === 2) {
-                    // Keep the first contract open through the next broker tick
-                    // and settle it after the overlapping purchase is accepted.
-                    setTimeout(() => {
-                        if (testState.settledContractIds.includes(1)) return;
-                        testState.settledContractIds.push(1);
-                        testState.settlementUpdates.push({
-                            contractId: 1,
-                            epoch: testState.latestEpoch,
-                            result: 'loss',
-                            profit: -0.25,
-                            buyCountAtSettlement: testState.buyRequests.length,
-                        });
-                        this.dispatch('message', {
-                            data: JSON.stringify({
-                                msg_type: 'proposal_open_contract',
-                                proposal_open_contract: {
-                                    contract_id: 1,
-                                    contract_type: 'DIGITEVEN',
-                                    is_sold: 1,
-                                    is_expired: 1,
-                                    is_valid_to_sell: 0,
-                                    buy_price: 0.5,
-                                    sell_price: 0.25,
-                                    profit: -0.25,
-                                    currency: 'USD',
-                                    transaction_ids: { buy: 'buy-1', sell: 'sell-1' },
-                                    entry_tick_time: testState.latestEpoch,
-                                    exit_tick_time: testState.latestEpoch,
-                                    entry_tick: 1007,
-                                    exit_tick: 1008,
-                                },
-                            }),
-                        });
-                    }, 200);
-                }
             } else if (request.proposal_open_contract) {
                 const contractId = Number(request.contract_id);
                 const buy = testState.buyRequests.find(item => item.contractId === contractId);
                 const isSecondContract = contractId === 2;
-                const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
-                // FAST deliberately leaves contract 1 open until after the
-                // next tick. SLOW remains settlement-gated.
-                const shouldSettle = !isFast || isSecondContract;
+                const shouldSettle = true;
                 if (shouldSettle && !testState.settledContractIds.includes(contractId)) {
                     testState.settledContractIds.push(contractId);
                     testState.settlementUpdates.push({
@@ -318,9 +278,8 @@ const browserApiMock = String.raw`
                     entry_tick: 1007,
                     exit_tick: 1008,
                 };
-                // Settlement is delivered before the next tick for SLOW. FAST
-                // gets the next tick while the first contract is still open,
-                // then receives that delayed loss independently.
+                // Settlement is delivered before the next purchase in both
+                // modes so result-dependent stake logic is deterministic.
                 const settledEpoch = testState.latestEpoch;
                 setTimeout(() => {
                     testState.latestEpoch = settledEpoch + 1;
@@ -885,7 +844,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     const boughtContractIds = new Set(buyRequests.map(request => request.contractId));
     const firstSettlement = settlementUpdates.find(update => update.contractId === buyRequests[0]?.contractId);
     const settlementOrder = settlementUpdates.map(update => update.contractId);
-    const expectedAmounts = speed === 'fast' ? [0.5, 0.5] : [0.5, 1];
+    const expectedAmounts = [0.5, 1];
     if (
         buyRequests.length !== 2 ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
@@ -901,14 +860,9 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
         amounts[1] !== expectedAmounts[1] ||
         settlementResults[0] !== 'loss' ||
         settlementResults[1] !== 'win' ||
-        (speed === 'fast' &&
-            (openContractsAtSecondBuy !== 1 ||
-                settlementOrder.join(',') !== '2,1' ||
-                firstSettlement?.buyCountAtSettlement !== 2)) ||
-        (speed === 'slow' &&
-            (openContractsAtSecondBuy !== 0 ||
-                settlementOrder.join(',') !== '1,2' ||
-                firstSettlement?.buyCountAtSettlement !== 1))
+        openContractsAtSecondBuy !== 0 ||
+        settlementOrder.join(',') !== '1,2' ||
+        firstSettlement?.buyCountAtSettlement !== 1
     ) {
         throw new Error(
             `${speed.toUpperCase()} generated interpreter loop produced unexpected lifecycle: ` +

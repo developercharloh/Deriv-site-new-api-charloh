@@ -122,7 +122,7 @@ describe('automated contract gate', () => {
         releaseBotContractGate(secondRunner);
     });
 
-    it('allows one FAST same-tick re-entry directly after settlement', () => {
+    it('rejects same-tick re-entry directly after settlement', () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
         const firstRunner = {};
         const secondRunner = {};
@@ -131,17 +131,12 @@ describe('automated contract gate', () => {
         markBotTick('R_25', 150);
         expect(tryAcquireBotContractGate(firstRunner)).toBe(true);
         setBotContractGateContract(firstRunner, 7001);
-        releaseBotContractGate(firstRunner, 7001, signalKey, true);
+        releaseBotContractGate(firstRunner, 7001, signalKey);
 
-        expect(tryAcquireBotContractGate(secondRunner, signalKey)).toBe(true);
-        setBotContractGateContract(secondRunner, 7002, signalKey);
-        releaseBotContractGate(secondRunner, 7002, signalKey);
-
-        // A repeated trade_again path cannot create a third same-tick contract.
         expect(tryAcquireBotContractGate(firstRunner, signalKey)).toBe(false);
     });
 
-    it('allows FAST one-contract-per-tick overlap while rejecting same-tick duplicates', () => {
+    it('never allows a new contract while another contract is open', () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
         const runner = {};
         const duplicateRunner = {};
@@ -151,41 +146,13 @@ describe('automated contract gate', () => {
         setBotContractGateContract(runner, 6001);
 
         markBotTick('R_25', 201);
-        expect(tryAcquireBotContractGate(runner, undefined, true)).toBe(true);
+        expect(tryAcquireBotContractGate(runner)).toBe(false);
 
-        expect(tryAcquireBotContractGate(duplicateRunner, 'R_25:201', true)).toBe(false);
+        expect(tryAcquireBotContractGate(duplicateRunner, 'R_25:201')).toBe(false);
 
         releaseBotContractGate(runner, 6001);
-        // Releasing the older contract must not release the newer overlapping
-        // lease or let a SLOW-style acquisition bypass settlement gating.
-        expect(tryAcquireBotContractGate(duplicateRunner)).toBe(false);
-        releaseBotContractGate(runner, undefined, 'R_25:201');
-
-        markBotTick('R_25', 202);
         expect(tryAcquireBotContractGate(duplicateRunner)).toBe(true);
         releaseBotContractGate(duplicateRunner);
-    });
-
-    it('waits for FAST settlement, then re-enters before-purchase on the next tick', async () => {
-        window.localStorage.setItem('dbot_execution_speed', 'fast');
-        const engine = new TradeEngine({
-            observer: { emit: jest.fn(), register: jest.fn() },
-            ticksService: {},
-        });
-
-        engine.store.dispatch({ type: tradeConstants.START });
-        engine.store.dispatch({ type: tradeConstants.PROPOSALS_READY });
-        engine.store.dispatch({ type: tradeConstants.PURCHASE_SUCCESSFUL });
-
-        const during = engine.watch('during');
-        engine.store.dispatch({ type: tradeConstants.SELL });
-        await expect(during).resolves.toBe(false);
-        expect(engine.store.getState().scope).toBe(tradeConstants.STOP);
-
-        engine.store.dispatch({ type: tradeConstants.FAST_ARM_NEXT_TICK });
-        const before = engine.watch('before');
-        engine.store.dispatch({ type: tradeConstants.NEW_TICK, payload: 201 });
-        await expect(before).resolves.toBe(true);
     });
 
     it.each(binaryMatrixPurchaseTypes)(

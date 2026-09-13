@@ -6,8 +6,7 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
 import { expectInitArg } from '../utils/sanitize';
-import { fastRearm, proposalsReady, start } from './state/actions';
-import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
+import { proposalsReady, start } from './state/actions';
 import * as constants from './state/constants';
 import rootReducer from './state/reducers';
 import Balance from './Balance';
@@ -32,16 +31,6 @@ const watchDuring = store =>
         stopScope: constants.STOP,
         passScope: constants.DURING_PURCHASE,
         passFlag: 'openContract',
-        onTick: () => {
-            if (getBotExecutionSpeed() !== 'fast') return false;
-            if (store.getState().scope !== constants.DURING_PURCHASE) return false;
-
-            // FAST is cadence-driven: leave the current during-purchase
-            // interpreter section on the next tick so after_purchase can
-            // calculate the next stake and submit the next contract.
-            store.dispatch(fastRearm());
-            return true;
-        },
     });
 
 /* The watchScope function is called randomly and resets the prevTick

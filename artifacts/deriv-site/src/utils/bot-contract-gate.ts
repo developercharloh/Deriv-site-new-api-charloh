@@ -10,7 +10,6 @@ type GateState = {
     active: ContractGate[];
     latestTickKey: string | null;
     lastUsedTickKey: string | null;
-    immediateReentryKey: string | null;
 };
 
 const getState = (): GateState => {
@@ -24,7 +23,6 @@ const getState = (): GateState => {
             active: [current],
             latestTickKey: null,
             lastUsedTickKey: null,
-            immediateReentryKey: null,
         };
         globalState[GATE_KEY] = migrated;
         return migrated;
@@ -35,7 +33,6 @@ const getState = (): GateState => {
         active: [],
         latestTickKey: null,
         lastUsedTickKey: null,
-        immediateReentryKey: null,
     };
     globalState[GATE_KEY] = initial;
     return initial;
@@ -49,22 +46,17 @@ export const markBotTick = (symbol: string | null | undefined, epoch: string | n
 export const tryAcquireBotContractGate = (
     owner: object,
     signalKey?: string | null,
-    allowOverlap = false,
 ): boolean => {
     const state = getState();
     const effectiveSignalKey = signalKey ?? state.latestTickKey;
     if (effectiveSignalKey && state.lastUsedTickKey === effectiveSignalKey) {
-        // FAST may re-enter exactly once from the broker's settlement message,
-        // without waiting for another tick. The token is consumed here so a
-        // repeated trade_again loop still cannot buy twice on that tick.
-        if (state.immediateReentryKey !== effectiveSignalKey) return false;
-        state.immediateReentryKey = null;
+        return false;
     }
 
-    // SLOW remains single-lease. FAST may acquire one lease per new tick,
-    // allowing the one-second cadence requested by the user when a broker
-    // settlement message arrives late.
-    if (state.active.length > 0 && !allowOverlap) return false;
+    // Every execution mode remains single-lease. A result-dependent strategy
+    // must never commit the next stake while the current contract is open;
+    // otherwise a late loss cannot apply Martingale to the very next buy.
+    if (state.active.length > 0) return false;
 
     state.active.push({ owner, contractId: null, signalKey: effectiveSignalKey ?? null });
     state.lastUsedTickKey = effectiveSignalKey ?? null;
@@ -89,18 +81,8 @@ export const releaseBotContractGate = (
     owner: object,
     contractId?: string | number,
     signalKey?: string | null,
-    allowImmediateReentry = false
 ): void => {
     const state = getState();
-    const releasedLease = state.active.find(lease => {
-        if (lease.owner !== owner) return false;
-        if (contractId !== undefined && lease.contractId !== null && lease.contractId !== String(contractId)) {
-            return false;
-        }
-        if (signalKey !== undefined && lease.signalKey !== (signalKey ?? null)) return false;
-        return true;
-    });
-
     state.active = state.active.filter(lease => {
         if (lease.owner !== owner) return true;
         if (contractId !== undefined && lease.contractId !== null && lease.contractId !== String(contractId)) {
@@ -109,8 +91,4 @@ export const releaseBotContractGate = (
         if (signalKey !== undefined && lease.signalKey !== (signalKey ?? null)) return true;
         return false;
     });
-
-    if (allowImmediateReentry && releasedLease?.signalKey) {
-        state.immediateReentryKey = releasedLease.signalKey;
-    }
 };

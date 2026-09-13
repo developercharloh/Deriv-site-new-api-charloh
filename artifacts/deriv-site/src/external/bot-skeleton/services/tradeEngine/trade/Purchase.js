@@ -9,7 +9,6 @@ import {
     setBotContractGateContract,
     tryAcquireBotContractGate,
 } from '@/utils/bot-contract-gate';
-import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
 let delayIndex = 0;
 let purchase_reference;
@@ -84,7 +83,7 @@ export default Engine =>
                 currentTick === null || currentTick === undefined || currentTick === ''
                     ? undefined
                     : `${symbol ?? 'unknown'}:${String(currentTick)}`;
-            if (!tryAcquireBotContractGate(this, signalKey, getBotExecutionSpeed() === 'fast')) {
+            if (!tryAcquireBotContractGate(this, signalKey)) {
                 return Promise.resolve();
             }
             const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction);

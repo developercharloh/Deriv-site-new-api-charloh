@@ -2,7 +2,7 @@ import { getRoundedNumber } from '@/components/shared';
 import { api_base } from '../../api/api-base';
 import { contract as broadcastContract, contractStatus } from '../utils/broadcast';
 import { doUntilDone } from '../utils/helpers';
-import { fastArmNextTick, openContractReceived, sell } from './state/actions';
+import { openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
 import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
@@ -62,12 +62,6 @@ export default Engine =>
                         const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
                         if (!hasOtherActiveContracts) {
                             this.store.dispatch(sell());
-                            if (executionSpeed === 'fast') {
-                                // FAST cadence advances on the next broker tick.
-                                // If the next tick arrives before settlement,
-                                // the gate intentionally permits one overlap.
-                                this.store.dispatch(fastArmNextTick());
-                            }
                         }
                         releaseBotContractGate(
                             this,
