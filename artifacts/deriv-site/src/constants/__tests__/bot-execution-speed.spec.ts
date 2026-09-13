@@ -12,20 +12,20 @@ describe('bot execution speed', () => {
         expect(getBotExecutionDelayMs(5, 'slow')).toBe(5000);
     });
 
-    it('reduces artificial waits in FAST mode without creating a busy loop', () => {
-        expect(getBotExecutionDelayMs(1, 'fast')).toBe(100);
-        expect(getBotExecutionDelayMs(5, 'fast')).toBe(500);
-        expect(getBotExecutionDelayMs(0, 'fast')).toBe(50);
+    it('removes artificial waits in FAST mode', () => {
+        expect(getBotExecutionDelayMs(1, 'fast')).toBe(0);
+        expect(getBotExecutionDelayMs(5, 'fast')).toBe(0);
+        expect(getBotExecutionDelayMs(0, 'fast')).toBe(0);
     });
 
     it('uses a safe one-second fallback for invalid delay values', () => {
         expect(getBotExecutionDelayMs(undefined, 'slow')).toBe(1000);
-        expect(getBotExecutionDelayMs('not-a-number', 'fast')).toBe(100);
+        expect(getBotExecutionDelayMs('not-a-number', 'fast')).toBe(0);
     });
 
-    it('uses the next market tick as the FAST loop boundary', () => {
-        expect(shouldWaitForNextTick(1, 'fast')).toBe(true);
-        expect(shouldWaitForNextTick('1', 'fast')).toBe(true);
+    it('does not impose a market-tick boundary on FAST', () => {
+        expect(shouldWaitForNextTick(1, 'fast')).toBe(false);
+        expect(shouldWaitForNextTick('1', 'fast')).toBe(false);
         expect(shouldWaitForNextTick(5, 'fast')).toBe(false);
         expect(shouldWaitForNextTick(1, 'slow')).toBe(false);
     });

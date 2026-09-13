@@ -7,7 +7,8 @@ describe('DBot execution speed at the interpreter boundary', () => {
         jest.useRealTimers();
     });
 
-    it('FAST resumes from the next live tick instead of polling on a timer', async () => {
+    it('FAST yields without waiting for another market tick', async () => {
+        jest.useFakeTimers();
         window.localStorage.setItem('dbot_execution_speed', 'fast');
         const observer = new Observer();
         let resolved = false;
@@ -16,10 +17,7 @@ describe('DBot execution speed at the interpreter boundary', () => {
             resolved = true;
         });
 
-        await Promise.resolve();
-        expect(resolved).toBe(false);
-
-        observer.emit('bot.tick', 1234567890);
+        jest.runOnlyPendingTimers();
         await pending;
         expect(resolved).toBe(true);
     });

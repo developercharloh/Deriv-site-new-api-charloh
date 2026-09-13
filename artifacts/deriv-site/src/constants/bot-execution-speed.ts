@@ -3,8 +3,8 @@ export type BotExecutionSpeed = 'slow' | 'fast';
 export const BOT_EXECUTION_SPEED_KEY = 'dbot_execution_speed';
 export const BOT_EXECUTION_SPEED_CHANGED_EVENT = 'dbot-execution-speed-changed';
 
-const FAST_DELAY_MULTIPLIER = 0.1;
-const MINIMUM_FAST_DELAY_MS = 50;
+const FAST_DELAY_MULTIPLIER = 0;
+const MINIMUM_FAST_DELAY_MS = 0;
 
 export const getBotExecutionSpeed = (): BotExecutionSpeed => {
     if (typeof window === 'undefined') return 'slow';
@@ -43,9 +43,10 @@ export const getBotExecutionDelayMs = (
 };
 
 /**
- * The generated DBot loop calls sleep(1) when it has not produced trade
- * options for the current cycle. FAST mode should advance from that point on
- * the next market tick, rather than polling the same tick on a timer.
+ * FAST must not add a market-tick boundary to the generated engine loop.
+ * The contract gate still prevents duplicate purchases for the current tick;
+ * sleep(1) only yields to the event loop so settlement and WebSocket events
+ * can be processed before the next engine pass.
  */
-export const shouldWaitForNextTick = (seconds: number | string | undefined, speed: BotExecutionSpeed): boolean =>
-    speed === 'fast' && Number(seconds) === 1;
+export const shouldWaitForNextTick = (_seconds: number | string | undefined, _speed: BotExecutionSpeed): boolean =>
+    false;
