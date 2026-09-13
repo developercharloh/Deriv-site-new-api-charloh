@@ -45,30 +45,77 @@ const browserApiMock = String.raw`
         });
     });
     const testState = (window.__binaryMatrixInterpreterTest ||= {
+        analysisEvidence: [],
         buyRequests: [],
         contractCount: 0,
-         errors: [],
+        conditionWindowIndex: 0,
+        conditionEvaluations: [],
+        conditionWindows: [
+            [1001, 1003, 1005, 1007],
+            [1003, 1005, 1007, 1009],
+            [1005, 1007, 1009, 1011],
+        ],
+        errors: [],
+        expectedBuyCount: 0,
         historyRequests: 0,
         latestEpoch: 910000,
+        journalEvidence: [],
+        outcomePlan: [],
+        pendingConditionWindowIndex: null,
+        reanalysisIntervals: [],
+        reanalysisResets: [],
         requests: [],
-         settledContractIds: [],
-         settlementUpdates: [],
-         stopRequested: false,
+        settledContractIds: [],
+        settlementUpdates: [],
+        stopRequested: false,
+        winCount: 0,
     });
-     window.addEventListener('error', event => {
-         testState.errors.push({
-             type: 'error',
-             message: event.message,
-             source: event.filename,
-             line: event.lineno,
-         });
-     });
-     window.addEventListener('unhandledrejection', event => {
-         testState.errors.push({
-             type: 'unhandledrejection',
-             message: String(event.reason?.stack || event.reason || 'unknown rejection'),
-         });
-     });
+    window.addEventListener('error', event => {
+        testState.errors.push({
+            type: 'error',
+            message: event.message,
+            source: event.filename,
+            line: event.lineno,
+        });
+    });
+    window.addEventListener('unhandledrejection', event => {
+        testState.errors.push({
+            type: 'unhandledrejection',
+            message: String(event.reason?.stack || event.reason || 'unknown rejection'),
+        });
+    });
+
+    const captureUiEvidence = () => {
+        const analysis = document.querySelector('.last-digits-analysis')?.textContent?.trim();
+        if (analysis) {
+            const key =
+                String(testState.latestEpoch) +
+                ':' +
+                String(testState.conditionWindowIndex) +
+                ':' +
+                analysis;
+            if (!testState.analysisEvidence.some(item => item.key === key)) {
+                testState.analysisEvidence.push({
+                    key,
+                    epoch: testState.latestEpoch,
+                    windowIndex: testState.conditionWindowIndex,
+                    text: analysis,
+                });
+            }
+        }
+        const journal = document.querySelector('[data-testid="dt_mock_journal"]')?.innerText?.trim();
+        if (journal && testState.journalEvidence.at(-1)?.text !== journal) {
+            testState.journalEvidence.push({
+                epoch: testState.latestEpoch,
+                text: journal,
+            });
+        }
+    };
+    new MutationObserver(captureUiEvidence).observe(document, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+    });
     localStorage.setItem('active_loginid', accountId);
     localStorage.setItem('account_type', 'demo');
     sessionStorage.setItem('deriv_accounts', JSON.stringify([{
@@ -183,13 +230,37 @@ const browserApiMock = String.raw`
                 };
             } else if (request.time) {
                 response.time = Math.floor(Date.now() / 1000);
+                if (testState.pendingConditionWindowIndex !== null) {
+                    testState.latestEpoch += 1;
+                    testState.conditionWindowIndex = testState.pendingConditionWindowIndex;
+                    testState.pendingConditionWindowIndex = null;
+                    testState.conditionEvaluations.push({
+                        epoch: testState.latestEpoch,
+                        windowIndex: testState.conditionWindowIndex,
+                        source: 'fresh-tick',
+                    });
+                    setTimeout(() => {
+                        this.dispatch('message', {
+                            data: JSON.stringify({
+                                msg_type: 'tick',
+                                subscription: { id: 'binary-matrix-test-ticks-0' },
+                                tick: {
+                                    id: 'binary-matrix-test-time-tick-' + testState.latestEpoch,
+                                    symbol: 'R_25',
+                                    quote: 1000 + testState.latestEpoch,
+                                    epoch: testState.latestEpoch,
+                                },
+                            }),
+                        });
+                    }, 0);
+                }
             } else if (request.ticks_history) {
                 const symbol = request.ticks_history === 'na' ? 'R_100' : request.ticks_history;
                 const initialEpoch = testState.latestEpoch;
                 response.msg_type = 'history';
                 response.history = {
                     times: [initialEpoch - 3, initialEpoch - 2, initialEpoch - 1, initialEpoch],
-                    prices: [1001, 1003, 1005, 1007],
+                    prices: testState.conditionWindows[testState.conditionWindowIndex],
                 };
                 response.subscription = {
                     id: 'binary-matrix-test-ticks-' + testState.historyRequests,
@@ -201,6 +272,15 @@ const browserApiMock = String.raw`
                 if (testState.historyRequests === 1) {
                     setTimeout(() => {
                         testState.latestEpoch = initialEpoch + 1;
+                        if (testState.pendingConditionWindowIndex !== null) {
+                            testState.conditionWindowIndex = testState.pendingConditionWindowIndex;
+                            testState.pendingConditionWindowIndex = null;
+                            testState.conditionEvaluations.push({
+                                epoch: testState.latestEpoch,
+                                windowIndex: testState.conditionWindowIndex,
+                                source: 'fresh-tick',
+                            });
+                        }
                         this.dispatch('message', {
                             data: JSON.stringify({
                                 msg_type: 'tick',
@@ -215,6 +295,15 @@ const browserApiMock = String.raw`
                     }, 500);
                     setTimeout(() => {
                         testState.latestEpoch = initialEpoch + 2;
+                        if (testState.pendingConditionWindowIndex !== null) {
+                            testState.conditionWindowIndex = testState.pendingConditionWindowIndex;
+                            testState.pendingConditionWindowIndex = null;
+                            testState.conditionEvaluations.push({
+                                epoch: testState.latestEpoch,
+                                windowIndex: testState.conditionWindowIndex,
+                                source: 'fresh-tick',
+                            });
+                        }
                         this.dispatch('message', {
                             data: JSON.stringify({
                                 msg_type: 'tick',
@@ -231,9 +320,21 @@ const browserApiMock = String.raw`
             } else if (request.proposal) {
                 response.proposal = { id: 'binary-matrix-test-proposal', ask_price: 1, payout: 1.96 };
             } else if (request.buy) {
+                if (
+                    testState.expectedBuyCount > 0 &&
+                    testState.buyRequests.length >= testState.expectedBuyCount
+                ) {
+                    // Let the final settlement drive one fresh post-reset
+                    // condition scan, but never open an unplanned contract.
+                    testState.extraBuyAttempts = (testState.extraBuyAttempts || 0) + 1;
+                    setTimeout(() => {
+                        testState.stopRequested = true;
+                        document.querySelector('#db-animation__stop-button')?.click();
+                    }, 0);
+                    return;
+                }
                 const contractId = ++testState.contractCount;
                 const symbol = request.parameters?.underlying_symbol || 'R_25';
-                const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
                 const openContractsAtBuy = testState.buyRequests.filter(
                     item => !testState.settledContractIds.includes(item.contractId)
                 ).length;
@@ -243,6 +344,7 @@ const browserApiMock = String.raw`
                     contractId,
                     contractType: request.parameters?.contract_type || null,
                     amount: Number(request.parameters?.amount ?? request.price ?? 0),
+                    conditionWindowIndex: testState.conditionWindowIndex,
                     openContractsAtBuy,
                 });
                 response.buy = { contract_id: contractId, buy_price: request.price || 0.5, payout: 1.96 };
@@ -250,18 +352,33 @@ const browserApiMock = String.raw`
                 const contractId = Number(request.contract_id);
                 const buy = testState.buyRequests.find(item => item.contractId === contractId);
                 const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
-                const isWinningContract = contractId === (isFast ? 3 : 2);
+                const result = testState.outcomePlan[contractId - 1] || 'loss';
+                const isWinningContract = result === 'win';
                 const shouldSettle = true;
                 responseDelay = isFast ? 70 : 0;
                 if (shouldSettle && !testState.settledContractIds.includes(contractId)) {
                     testState.settledContractIds.push(contractId);
+                    if (isWinningContract) testState.winCount += 1;
                     testState.settlementUpdates.push({
                         contractId,
                         epoch: testState.latestEpoch + (isFast ? 1 : 0),
-                        result: isWinningContract ? 'win' : 'loss',
-                        profit: isWinningContract ? 10 : -0.25,
+                        result,
+                        profit: isWinningContract ? 1 : -0.25,
                         buyCountAtSettlement: testState.buyRequests.length,
                     });
+                    if (isWinningContract && testState.winCount % 3 === 0) {
+                        const nextWindowIndex = Math.min(
+                            testState.conditionWindowIndex + 1,
+                            testState.conditionWindows.length - 1
+                        );
+                        testState.reanalysisResets.push({
+                            afterContractId: contractId,
+                            settlementEpoch: testState.latestEpoch,
+                            preResetWindowIndex: testState.conditionWindowIndex,
+                            nextWindowIndex,
+                        });
+                        testState.pendingConditionWindowIndex = nextWindowIndex;
+                    }
                 }
                 response.proposal_open_contract = {
                     contract_id: contractId,
@@ -270,8 +387,9 @@ const browserApiMock = String.raw`
                     is_expired: shouldSettle ? 1 : 0,
                     is_valid_to_sell: 0,
                     buy_price: 0.5,
-                    sell_price: shouldSettle && isWinningContract ? 10.5 : 0.25,
-                    profit: shouldSettle && isWinningContract ? 10 : -0.25,
+                    sell_price: shouldSettle && isWinningContract ? 1.5 : 0.25,
+                    profit: shouldSettle && isWinningContract ? 1 : -0.25,
+                    status: isWinningContract ? 'won' : 'lost',
                     currency: 'USD',
                     transaction_ids: {
                         buy: 'buy-' + contractId,
@@ -285,8 +403,18 @@ const browserApiMock = String.raw`
                 // Settlement is delivered before the next purchase in both
                 // modes so result-dependent stake logic is deterministic.
                 const settledEpoch = testState.latestEpoch;
+                const hasPendingReanalysis = testState.pendingConditionWindowIndex !== null;
                 setTimeout(() => {
                     testState.latestEpoch = settledEpoch + 1;
+                    if (testState.pendingConditionWindowIndex !== null) {
+                        testState.conditionWindowIndex = testState.pendingConditionWindowIndex;
+                        testState.pendingConditionWindowIndex = null;
+                        testState.conditionEvaluations.push({
+                            epoch: testState.latestEpoch,
+                            windowIndex: testState.conditionWindowIndex,
+                            source: 'fresh-tick',
+                        });
+                    }
                     this.dispatch('message', {
                         data: JSON.stringify({
                             msg_type: 'tick',
@@ -298,10 +426,19 @@ const browserApiMock = String.raw`
                             },
                         }),
                     });
-                }, 60);
+                }, hasPendingReanalysis ? 1_500 : 60);
                 if (!isFast && contractId !== 2) {
                     setTimeout(() => {
                         testState.latestEpoch = settledEpoch + 2;
+                        if (testState.pendingConditionWindowIndex !== null) {
+                            testState.conditionWindowIndex = testState.pendingConditionWindowIndex;
+                            testState.pendingConditionWindowIndex = null;
+                            testState.conditionEvaluations.push({
+                                epoch: testState.latestEpoch,
+                                windowIndex: testState.conditionWindowIndex,
+                                source: 'fresh-tick',
+                            });
+                        }
                         this.dispatch('message', {
                             data: JSON.stringify({
                                 msg_type: 'tick',
@@ -313,22 +450,36 @@ const browserApiMock = String.raw`
                                 },
                             }),
                         });
-                    }, 120);
+                    }, hasPendingReanalysis ? 2_500 : 120);
+                }
+                if (hasPendingReanalysis) {
+                    const reanalysisInterval = setInterval(() => {
+                        if (
+                            testState.stopRequested ||
+                            testState.buyRequests.length > contractId
+                        ) {
+                            clearInterval(reanalysisInterval);
+                            return;
+                        }
+                            testState.latestEpoch += 1;
+                            this.dispatch('message', {
+                                data: JSON.stringify({
+                                    msg_type: 'tick',
+                                    tick: {
+                                        id: 'binary-matrix-test-reanalysis-tick-' + testState.latestEpoch,
+                                        symbol: buy?.symbol || 'R_25',
+                                        quote: 1000 + testState.latestEpoch,
+                                        epoch: testState.latestEpoch,
+                                    },
+                                }),
+                            });
+                    }, 100);
+                    testState.reanalysisIntervals.push(reanalysisInterval);
                 }
             } else if (request.portfolio) {
                 response.portfolio = { contracts: [] };
             }
             setTimeout(() => this.dispatch('message', { data: JSON.stringify(response) }), responseDelay);
-            const expectedBuyCount = window.localStorage.getItem('dbot_execution_speed') === 'fast' ? 4 : 2;
-            if (request.buy && testState.buyRequests.length === expectedBuyCount && !testState.stopRequested) {
-                // Stop after the final acknowledgement is queued so the
-                // strategy cannot start another generated cycle.
-                setTimeout(() => {
-                    if (testState.stopRequested) return;
-                    testState.stopRequested = true;
-                    document.querySelector('#db-animation__stop-button')?.click();
-                }, 0);
-            }
         }
 
         close() {
@@ -575,6 +726,9 @@ const waitFor = async (cdp, expression, label, timeout = 30_000) => {
                 apiRequests: window.__binaryMatrixInterpreterTest?.requests,
                 testEpoch: window.__binaryMatrixInterpreterTest?.latestEpoch,
                 buyRequests: window.__binaryMatrixInterpreterTest?.buyRequests,
+                analysisEvidence: window.__binaryMatrixInterpreterTest?.analysisEvidence,
+                reanalysisResets: window.__binaryMatrixInterpreterTest?.reanalysisResets,
+                conditionWindowIndex: window.__binaryMatrixInterpreterTest?.conditionWindowIndex,
                 generatedCode: window.__binaryMatrixInterpreterTest?.generatedCode?.slice(0, 5000),
                 browserErrors: window.__binaryMatrixBrowserErrors,
                 recentResources: performance.getEntriesByType('resource').map(entry => entry.name).slice(-30),
@@ -755,16 +909,30 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
         cdp,
         `(() => {
             const state = window.__binaryMatrixInterpreterTest;
+            const isFast = ${JSON.stringify(speed)} === 'fast';
             state.buyRequests = [];
             state.contractCount = 0;
+            state.analysisEvidence = [];
+            state.conditionWindowIndex = 0;
+            state.conditionEvaluations = [];
             state.historyRequests = 0;
             state.latestEpoch = 910000;
+            state.journalEvidence = [];
+            state.outcomePlan = isFast
+                ? ['loss', 'loss', 'win', 'loss']
+                : ['loss', 'win', 'loss', 'win', 'loss', 'win', 'loss', 'win', 'loss', 'win', 'loss', 'win'];
+            state.expectedBuyCount = state.outcomePlan.length;
+            state.pendingConditionWindowIndex = null;
+            state.reanalysisIntervals?.forEach(clearInterval);
+            state.reanalysisIntervals = [];
+            state.reanalysisResets = [];
             state.requests = [];
             state.settledContractIds = [];
             state.settlementUpdates = [];
             state.stopRequested = false;
+            state.winCount = 0;
             const speedSwitch = document.querySelector('.animation__speed-switch');
-            const shouldBeFast = ${JSON.stringify(speed)} === 'fast';
+            const shouldBeFast = isFast;
             if (Boolean(speedSwitch?.getAttribute('aria-checked') === 'true') !== shouldBeFast) {
                 speedSwitch?.click();
             }
@@ -808,24 +976,34 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
             return true;
         })()`
     );
-    const expectedBuyCount = speed === 'fast' ? 4 : 2;
+    const scenarioBuyCount = speed === 'fast' ? 4 : 12;
     await waitFor(
         cdp,
-        `window.__binaryMatrixInterpreterTest?.buyRequests?.length >= ${expectedBuyCount}`,
-        `${expectedBuyCount} generated Binary Matrix buy requests`,
-        30_000
+        `window.__binaryMatrixInterpreterTest?.buyRequests?.length >= ${scenarioBuyCount}`,
+        `${scenarioBuyCount} generated Binary Matrix buy requests`,
+        speed === 'slow' ? 90_000 : 30_000
     );
-    // Stop immediately after the final expected purchase so the regression
-    // observes the deterministic sequence instead of the XML strategy's
-    // normal re-analysis loop starting another contract.
-    await evaluate(cdp, `document.querySelector('#db-animation__stop-button')?.click()`);
-    const expectedSettlementCount = expectedBuyCount;
     await waitFor(
         cdp,
-        `window.__binaryMatrixInterpreterTest?.settlementUpdates?.length >= ${expectedSettlementCount}`,
+        `window.__binaryMatrixInterpreterTest?.settlementUpdates?.length >= ${scenarioBuyCount}`,
         `${speed.toUpperCase()} contract settlement updates`,
         10_000
     );
+    if (speed === 'slow') {
+        await waitFor(
+            cdp,
+            `window.__binaryMatrixInterpreterTest?.conditionEvaluations?.some(
+                evaluation => evaluation.windowIndex === 2 &&
+                    evaluation.epoch > window.__binaryMatrixInterpreterTest.reanalysisResets[1]?.settlementEpoch
+            )`,
+            'SLOW final fresh condition evaluation',
+            10_000
+        );
+    }
+    await evaluate(cdp, `document.querySelector('#db-animation__stop-button')?.click()`);
+    await evaluate(cdp, `document.querySelector('#db-run-panel-tab__journal')?.click()`);
+    await waitFor(cdp, `Boolean(document.querySelector('[data-testid="dt_mock_journal"]'))`, `${speed.toUpperCase()} Journal`);
+    await sleep(250);
 
     const result = await evaluate(
         cdp,
@@ -834,11 +1012,25 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
             buyRequests: window.__binaryMatrixInterpreterTest.buyRequests,
             settledContractIds: window.__binaryMatrixInterpreterTest.settledContractIds,
             settlementUpdates: window.__binaryMatrixInterpreterTest.settlementUpdates,
+            analysisEvidence: window.__binaryMatrixInterpreterTest.analysisEvidence,
+            conditionEvaluations: window.__binaryMatrixInterpreterTest.conditionEvaluations,
+            journalEvidence: window.__binaryMatrixInterpreterTest.journalEvidence,
+            reanalysisResets: window.__binaryMatrixInterpreterTest.reanalysisResets,
             generatedCode: window.__binaryMatrixInterpreterTest.generatedCode,
+            journalText: document.querySelector('[data-testid="dt_mock_journal"]')?.innerText || '',
             running: Boolean(document.querySelector('#db-animation__stop-button'))
         })`
     );
-    const { buyRequests, settledContractIds, settlementUpdates } = JSON.parse(result);
+    const {
+        analysisEvidence,
+        conditionEvaluations,
+        buyRequests,
+        journalEvidence,
+        journalText,
+        reanalysisResets,
+        settledContractIds,
+        settlementUpdates,
+    } = JSON.parse(result);
     const epochs = buyRequests.map(request => request.epoch);
     const amounts = buyRequests.map(request => request.amount);
     const settlementResultsByContractId = new Map(
@@ -847,37 +1039,84 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     const settlementResults = buyRequests.map(request => settlementResultsByContractId.get(request.contractId));
     const boughtContractIds = new Set(buyRequests.map(request => request.contractId));
     const settlementOrder = settlementUpdates.map(update => update.contractId);
-    const expectedAmounts = speed === 'fast' ? [0.5, 1, 2, 0.5] : [0.5, 1];
+    const expectedAmounts = speed === 'fast'
+        ? [0.5, 1, 2, 0.5]
+        : Array.from({ length: scenarioBuyCount }, (_, index) => (index % 2 === 0 ? 0.5 : 1));
+    const expectedResults = speed === 'fast'
+        ? ['loss', 'loss', 'win', 'loss']
+        : ['loss', 'win', 'loss', 'win', 'loss', 'win', 'loss', 'win', 'loss', 'win', 'loss', 'win'];
     const waitedForNextTick = epochs[0] !== epochs[1];
-    const consecutiveTicks = epochs.every((epoch, index) => index === 0 || epoch === epochs[index - 1] + 1);
+    const advancedTicks = epochs.every((epoch, index) => index === 0 || epoch > epochs[index - 1]);
     const eachPurchaseFollowedSettlement = buyRequests.every((request, index) => {
         if (index === 0) return true;
         const previousSettlement = settlementUpdates.find(update => update.contractId === buyRequests[index - 1]?.contractId);
         return previousSettlement?.buyCountAtSettlement === index;
     });
+    const expectedResetCount = speed === 'fast' ? 0 : 2;
+    const postResetPurchases = reanalysisResets.map(reset =>
+        buyRequests.find(request => request.contractId > reset.afterContractId)
+    );
+    const postResetAnalyses = reanalysisResets.map(reset =>
+        conditionEvaluations.find(
+            evaluation =>
+                evaluation.epoch > reset.settlementEpoch &&
+                evaluation.windowIndex === reset.nextWindowIndex
+        )
+    );
+    const postResetPurchasesUseFreshWindows = reanalysisResets.every((reset, index) => {
+        const purchase = postResetPurchases[index];
+        return Boolean(
+            purchase &&
+            purchase.epoch > reset.settlementEpoch &&
+            purchase.conditionWindowIndex === reset.nextWindowIndex
+        );
+    });
+    const postResetAnalysesAreFresh = reanalysisResets.every((reset, index) => {
+        const analysis = postResetAnalyses[index];
+        return Boolean(analysis && analysis.epoch > reset.settlementEpoch);
+    });
+    const hasJournalAnalysisEvidence =
+        journalText.includes('Last Digits Analysis Market:') ||
+        journalEvidence.some(entry => entry.text.includes('Last Digits Analysis Market:'));
+    const hasJournalTradeEvidence =
+        (journalText.includes('WIN') && journalText.includes('LOSS')) ||
+        journalEvidence.some(entry => entry.text.includes('WIN') && entry.text.includes('LOSS'));
     if (
-        buyRequests.length !== expectedBuyCount ||
+        buyRequests.length !== scenarioBuyCount ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
         !waitedForNextTick ||
-        !consecutiveTicks ||
-        settledContractIds.length !== expectedSettlementCount ||
-        new Set(settledContractIds).size !== expectedSettlementCount ||
+        !advancedTicks ||
+        settledContractIds.length !== scenarioBuyCount ||
+        new Set(settledContractIds).size !== scenarioBuyCount ||
         settledContractIds.some(contractId => !boughtContractIds.has(contractId)) ||
-        settlementUpdates.length !== expectedSettlementCount ||
-        new Set(settlementUpdates.map(update => update.contractId)).size !== expectedSettlementCount ||
+        settlementUpdates.length !== scenarioBuyCount ||
+        new Set(settlementUpdates.map(update => update.contractId)).size !== scenarioBuyCount ||
         settlementUpdates.some(update => !boughtContractIds.has(update.contractId)) ||
         amounts.some((amount, index) => amount !== expectedAmounts[index]) ||
-        settlementResults[0] !== 'loss' ||
-        settlementResults[speed === 'fast' ? 1 : 0] !== 'loss' ||
-        (speed === 'fast' && settlementResults[2] !== 'win') ||
-        (speed === 'slow' && settlementResults[1] !== 'win') ||
+        settlementResults.some((result, index) => result !== expectedResults[index]) ||
         buyRequests.some(request => request.openContractsAtBuy !== 0) ||
-        settlementOrder.join(',') !== Array.from({ length: expectedSettlementCount }, (_, index) => index + 1).join(',') ||
-        !eachPurchaseFollowedSettlement
+        settlementOrder.join(',') !== Array.from({ length: scenarioBuyCount }, (_, index) => index + 1).join(',') ||
+        !eachPurchaseFollowedSettlement ||
+        reanalysisResets.length !== expectedResetCount ||
+        (speed === 'slow' && reanalysisResets.some((reset, index) =>
+            reset.afterContractId !== [6, 12][index]
+        )) ||
+        (speed === 'slow' && (!postResetPurchasesUseFreshWindows || !postResetAnalysesAreFresh)) ||
+        (speed === 'slow' && (!hasJournalAnalysisEvidence || !hasJournalTradeEvidence))
     ) {
         throw new Error(
             `${speed.toUpperCase()} generated interpreter loop produced unexpected lifecycle: ` +
-                `${JSON.stringify({ buyRequests, settledContractIds, settlementUpdates })}`
+                `${JSON.stringify({
+                    buyRequests,
+                    settledContractIds,
+                    settlementUpdates,
+                    analysisEvidence,
+                    journalEvidence,
+                    journalText,
+                    reanalysisResets,
+                    postResetPurchases,
+                    postResetAnalyses,
+                })}`
         );
     }
     console.log(
@@ -887,6 +1126,12 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
             `with ${buyRequests.reduce((total, request) => total + request.openContractsAtBuy, 0)} open contract(s) across buys and ` +
             `${settlementUpdates.length} settlement updates`
     );
+    if (speed === 'slow') {
+        console.log(
+            `✓ SLOW re-analysis proof captured ${reanalysisResets.length} resets ` +
+                `and fresh windows ${postResetPurchases.map(request => request.conditionWindowIndex).join(' → ')}`
+        );
+    }
     await evaluate(cdp, `document.querySelector('#db-animation__stop-button')?.click()`);
     await waitFor(
         cdp,
