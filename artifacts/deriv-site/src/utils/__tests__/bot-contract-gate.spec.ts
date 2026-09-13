@@ -102,7 +102,7 @@ describe('automated contract gate', () => {
         expect(tryAcquireBotContractGate(firstRunner, signalKey)).toBe(false);
     });
 
-    it('keeps FAST settlement-gated while still rejecting a duplicate signal', () => {
+    it('allows FAST one-contract-per-tick overlap while rejecting same-tick duplicates', () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
         const runner = {};
         const duplicateRunner = {};
@@ -112,13 +112,12 @@ describe('automated contract gate', () => {
         setBotContractGateContract(runner, 6001);
 
         markBotTick('R_25', 201);
-        expect(tryAcquireBotContractGate(runner)).toBe(false);
+        expect(tryAcquireBotContractGate(runner, undefined, true)).toBe(true);
 
-        expect(tryAcquireBotContractGate(duplicateRunner, 'R_25:201')).toBe(false);
+        expect(tryAcquireBotContractGate(duplicateRunner, 'R_25:201', true)).toBe(false);
 
         releaseBotContractGate(runner, 6001);
-        expect(tryAcquireBotContractGate(duplicateRunner, 'R_25:201')).toBe(true);
-        releaseBotContractGate(duplicateRunner, undefined, 'R_25:201');
+        releaseBotContractGate(runner, undefined, 'R_25:201');
 
         markBotTick('R_25', 202);
         expect(tryAcquireBotContractGate(duplicateRunner)).toBe(true);
@@ -141,7 +140,7 @@ describe('automated contract gate', () => {
         await expect(during).resolves.toBe(false);
         expect(engine.store.getState().scope).toBe(tradeConstants.STOP);
 
-        engine.store.dispatch({ type: tradeConstants.START });
+        engine.store.dispatch({ type: tradeConstants.FAST_ARM_NEXT_TICK });
         const before = engine.watch('before');
         engine.store.dispatch({ type: tradeConstants.NEW_TICK, payload: 201 });
         await expect(before).resolves.toBe(true);

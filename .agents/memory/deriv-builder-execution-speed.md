@@ -3,8 +3,8 @@ name: Builder execution speed
 description: The DBot Builder FAST mode contract lifecycle and its settlement requirement.
 ---
 
-FAST mode must not overlap contracts. It removes timer-based/artificial waits and extra continuation handoffs, and does not impose an extra market-tick boundary in the interpreter loop, but the current contract must emit its final positive/negative settlement before the engine can acquire the next contract lease. The next purchase may re-enter immediately on that same settled tick after the result has updated the stake.
+FAST mode uses a one-second broker-tick cadence and may overlap contracts when settlement is late. It still applies Martingale only from authoritative broker-reported results, so a loss updates the next available stake after settlement.
 
-**Why:** Martingale and win/loss branching require an authoritative settled result. Overlapping contracts let the next purchase use stale stake state and make the Builder appear to ignore losses.
+**Why:** The user requires a buy every second without waiting for UI, timer, or settlement delays. Settlement-gating caused missed ticks and made FAST observably slow.
 
-**How to apply:** Keep the automated contract gate single-lease in every execution speed, dispatch the settled/sold transition for FAST as well as SLOW, do not add a tick wait to FAST sleep/re-entry, grant only one same-tick FAST re-entry from the settlement event, and test loss → win stake progression with zero open contracts at the second purchase.
+**How to apply:** Keep SLOW single-lease. In FAST, permit one lease per distinct tick and reject same-tick duplicates; re-arm on the next tick while a prior contract is open, and only apply Martingale after each settlement event updates the result.

@@ -845,7 +845,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     if (
         buyRequests.length !== 2 ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
-        (speed === 'slow' ? epochs[0] === epochs[1] : epochs[0] !== epochs[1]) ||
+        epochs[0] === epochs[1] ||
         settledContractIds.length !== 2 ||
         new Set(settledContractIds).size !== 2 ||
         settledContractIds.some(contractId => !boughtContractIds.has(contractId)) ||
