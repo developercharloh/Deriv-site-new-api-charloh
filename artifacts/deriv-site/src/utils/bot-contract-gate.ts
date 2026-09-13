@@ -98,7 +98,10 @@ export const releaseBotContractGate = (
         if (contractId !== undefined && lease.contractId !== null && lease.contractId !== String(contractId)) {
             return false;
         }
-        if (signalKey !== undefined && lease.signalKey !== (signalKey ?? null)) return false;
+        // SLOW can settle a contract whose Redux tick key was unavailable at
+        // purchase time. In that case OpenContract passes null; the contract
+        // id and owner are still authoritative, so null must not block release.
+        if (signalKey !== undefined && signalKey !== null && lease.signalKey !== signalKey) return false;
         return true;
     });
 
@@ -107,7 +110,7 @@ export const releaseBotContractGate = (
         if (contractId !== undefined && lease.contractId !== null && lease.contractId !== String(contractId)) {
             return true;
         }
-        if (signalKey !== undefined && lease.signalKey !== (signalKey ?? null)) return true;
+        if (signalKey !== undefined && signalKey !== null && lease.signalKey !== signalKey) return true;
         return false;
     });
 

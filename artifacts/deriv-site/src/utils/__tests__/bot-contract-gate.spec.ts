@@ -390,6 +390,22 @@ describe('automated contract gate', () => {
         releaseBotContractGate(secondRunner);
     });
 
+    it('releases a SLOW lease when settlement has no Redux signal key', () => {
+        const owner = {};
+
+        markBotTick('R_25', 9101);
+        expect(tryAcquireBotContractGate(owner, undefined, false)).toBe(true);
+        setBotContractGateContract(owner, 'slow-contract');
+
+        // SLOW settlement can have a null signal key even though the lease
+        // was acquired against the live broker tick key.
+        releaseBotContractGate(owner, 'slow-contract', null);
+
+        markBotTick('R_25', 9102);
+        expect(tryAcquireBotContractGate(owner, 'R_25:9102', false)).toBe(true);
+        releaseBotContractGate(owner, undefined, 'R_25:9102');
+    });
+
     it('does not allow a second purchase on the same tick after settlement', () => {
         const firstRunner = {};
         const secondRunner = {};
