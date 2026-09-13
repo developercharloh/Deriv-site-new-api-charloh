@@ -35,18 +35,15 @@ export const getBotExecutionDelayMs = (
     const numericSeconds = Number(seconds);
     const safeSeconds = Number.isFinite(numericSeconds) ? Math.max(0, numericSeconds) : 1;
 
-    if (speed === 'fast') {
-        return Math.max(MINIMUM_FAST_DELAY_MS, Math.round(safeSeconds * 1000 * FAST_DELAY_MULTIPLIER));
-    }
-
-    return Math.round(safeSeconds * 1000);
+    // Neither mode adds a wall-clock pause. SLOW yields on the broker tick
+    // below, while FAST yields to the event loop and re-arms on its tick path.
+    return Math.max(MINIMUM_FAST_DELAY_MS, Math.round(safeSeconds * 1000 * FAST_DELAY_MULTIPLIER));
 };
 
 /**
- * FAST must not add a market-tick boundary to the generated engine loop.
- * The contract gate still prevents duplicate purchases for the current tick;
- * sleep(1) only yields to the event loop so settlement and WebSocket events
- * can be processed before the next engine pass.
+ * SLOW follows the normal event-driven DBot loop: generated sleep calls wait
+ * for the next broker tick rather than adding a timer. FAST does not wait
+ * inside sleep; its trade engine re-arms on each distinct tick.
  */
-export const shouldWaitForNextTick = (_seconds: number | string | undefined, _speed: BotExecutionSpeed): boolean =>
-    false;
+export const shouldWaitForNextTick = (seconds: number | string | undefined, speed: BotExecutionSpeed): boolean =>
+    speed === 'slow' && Number(seconds) > 0;

@@ -7,9 +7,10 @@ import {
 } from '@/constants/bot-execution-speed';
 
 describe('bot execution speed', () => {
-    it('preserves the original delay in SLOW mode', () => {
-        expect(getBotExecutionDelayMs(1, 'slow')).toBe(1000);
-        expect(getBotExecutionDelayMs(5, 'slow')).toBe(5000);
+    it('does not add a wall-clock delay in either execution mode', () => {
+        expect(getBotExecutionDelayMs(1, 'slow')).toBe(0);
+        expect(getBotExecutionDelayMs(5, 'slow')).toBe(0);
+        expect(getBotExecutionDelayMs(1, 'fast')).toBe(0);
     });
 
     it('removes artificial waits in FAST mode', () => {
@@ -18,16 +19,17 @@ describe('bot execution speed', () => {
         expect(getBotExecutionDelayMs(0, 'fast')).toBe(0);
     });
 
-    it('uses a safe one-second fallback for invalid delay values', () => {
-        expect(getBotExecutionDelayMs(undefined, 'slow')).toBe(1000);
+    it('uses a safe zero-delay fallback for invalid values', () => {
+        expect(getBotExecutionDelayMs(undefined, 'slow')).toBe(0);
         expect(getBotExecutionDelayMs('not-a-number', 'fast')).toBe(0);
     });
 
-    it('does not impose a market-tick boundary on FAST', () => {
+    it('uses the broker tick only for SLOW generated sleep calls', () => {
         expect(shouldWaitForNextTick(1, 'fast')).toBe(false);
         expect(shouldWaitForNextTick('1', 'fast')).toBe(false);
         expect(shouldWaitForNextTick(5, 'fast')).toBe(false);
-        expect(shouldWaitForNextTick(1, 'slow')).toBe(false);
+        expect(shouldWaitForNextTick(1, 'slow')).toBe(true);
+        expect(shouldWaitForNextTick(5, 'slow')).toBe(true);
     });
 
     it('persists the selected side and notifies the existing run panel', () => {

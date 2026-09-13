@@ -22,7 +22,7 @@ describe('DBot execution speed at the interpreter boundary', () => {
         expect(resolved).toBe(true);
     });
 
-    it('SLOW preserves the original one-second delay', async () => {
+    it('SLOW yields to the next broker tick without a wall-clock delay', async () => {
         jest.useFakeTimers();
         window.localStorage.setItem('dbot_execution_speed', 'slow');
         const observer = new Observer();
@@ -32,12 +32,10 @@ describe('DBot execution speed at the interpreter boundary', () => {
             resolved = true;
         });
 
-        jest.advanceTimersByTime(999);
         await Promise.resolve();
         expect(resolved).toBe(false);
 
-        jest.advanceTimersByTime(1);
-        jest.advanceTimersByTime(0);
+        observer.emit('bot.tick');
         await pending;
         expect(resolved).toBe(true);
     });
