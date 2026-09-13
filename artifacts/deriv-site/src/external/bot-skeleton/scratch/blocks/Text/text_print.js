@@ -48,6 +48,11 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.text_print = block => {
             'TEXT',
             window.Blockly.JavaScript.javascriptGenerator.ORDER_NONE
         ) || "''";
-    const code = `window.alert(${msg});\n`;
+    // A native alert blocks the browser's main thread. In a bot's
+    // after-purchase branch that prevents the interpreter from reaching
+    // trade_again (or its normal stop path), especially on mobile where the
+    // dialog may not be visible in the page capture. Use the interpreter's
+    // non-blocking console channel instead.
+    const code = `console.log(${msg});\n`;
     return code;
 };
