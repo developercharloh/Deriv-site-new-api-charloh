@@ -659,9 +659,19 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                 const rootXmlBlocks = Array.from(dom.children).filter(
                     (node: any) => node.localName === 'block' || node.tagName?.toLowerCase() === 'block'
                 );
-                if (rootXmlBlocks.length !== 3) {
-                    throw new Error(`Binary Matrix XML must contain 3 root blocks; found ${rootXmlBlocks.length}.`);
+                const mandatoryRootTypes = ['trade_definition', 'before_purchase', 'after_purchase'];
+                const rootTypes = new Set(rootXmlBlocks.map((node: any) => node.getAttribute('type')));
+                const missingRootTypes = mandatoryRootTypes.filter(type => !rootTypes.has(type));
+                if (missingRootTypes.length > 0) {
+                    throw new Error(
+                        `Bot XML is missing mandatory root block(s): ${missingRootTypes.join(', ')}.`
+                    );
                 }
+
+                // Do not assume every bot has exactly three roots. Valid DBot
+                // strategies can also contain during_purchase, tick_analysis,
+                // variables, and procedure roots. Binary Matrix happens to
+                // have three, which previously hid this loader restriction.
                 rootXmlBlocks.forEach((rootXmlBlock: any) => {
                     Blockly.Xml.domToBlock(rootXmlBlock, Blockly.derivWorkspace);
                 });
@@ -677,9 +687,14 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
 
             const loadedBlocks = Blockly.derivWorkspace.getAllBlocks(true);
             const loadedTopBlocks = Blockly.derivWorkspace.getTopBlocks(true);
-            if (loadedTopBlocks.length < 3 || loadedBlocks.length < 10) {
+            const loadedTopTypes = new Set(loadedTopBlocks.map((block: any) => block.type));
+            const missingLoadedTypes = ['trade_definition', 'before_purchase', 'after_purchase'].filter(
+                type => !loadedTopTypes.has(type)
+            );
+            if (missingLoadedTypes.length > 0 || loadedBlocks.length === 0) {
                 throw new Error(
-                    `Binary Matrix XML loaded incompletely (${loadedTopBlocks.length} root blocks, ${loadedBlocks.length} total blocks).`
+                    `Bot XML loaded incompletely (missing ${missingLoadedTypes.join(', ') || 'all blocks'}; ` +
+                        `${loadedTopBlocks.length} root blocks, ${loadedBlocks.length} total blocks).`
                 );
             }
             DBot.scheduleLoadedWorkspaceReveal();
