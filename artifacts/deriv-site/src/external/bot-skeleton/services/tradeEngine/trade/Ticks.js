@@ -9,12 +9,14 @@ import { getDirection, getLastDigit } from '../utils/helpers';
 import { expectPositiveInteger } from '../utils/sanitize';
 import * as constants from './state/constants';
 import { markBotTick } from '@/utils/bot-contract-gate';
+import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
 export default Engine =>
     class Ticks extends Engine {
         constructor(...args) {
             super(...args);
             this.tickListenerKey = null;
+            this.latestTick = null;
         }
 
         async watchTicks(symbol) {
@@ -37,6 +39,7 @@ export default Engine =>
                         this.checkProposalReady();
                     }
                     const lastTick = ticks.slice(-1)[0];
+                    this.latestTick = lastTick;
                     const { epoch } = lastTick;
                     markBotTick(symbol, epoch);
                     this.store.dispatch({ type: constants.NEW_TICK, payload: epoch });
@@ -68,6 +71,14 @@ export default Engine =>
         }
 
         getLastTick(raw, toString = false) {
+            if (getBotExecutionSpeed() === 'fast' && this.latestTick) {
+                let last_tick = raw ? this.latestTick : this.latestTick.quote;
+                if (!raw && toString) {
+                    last_tick = last_tick.toFixed(this.getPipSize());
+                }
+                return Promise.resolve(last_tick);
+            }
+
             return new Promise((resolve, reject) =>
                 this.$scope.ticksService
                     .request({ symbol: this.symbol })

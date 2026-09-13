@@ -80,4 +80,25 @@ describe('Ticks last-digit analysis events', () => {
         });
         expect(engine.observer.emit).toHaveBeenCalledWith('bot.tick', 1234567890);
     });
+
+    it('uses the cached live tick in FAST without requesting tick history again', async () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.getPipSize = () => 2;
+        engine.latestTick = { epoch: 1234567890, quote: 12.34 };
+        engine.$scope = {
+            ticksService: {
+                request: jest.fn(),
+            },
+        };
+
+        await expect(engine.getLastTick(true)).resolves.toEqual({
+            epoch: 1234567890,
+            quote: 12.34,
+        });
+
+        expect(engine.$scope.ticksService.request).not.toHaveBeenCalled();
+        window.localStorage.removeItem('dbot_execution_speed');
+    });
 });
