@@ -117,6 +117,9 @@ describe('automated contract gate', () => {
         expect(tryAcquireBotContractGate(duplicateRunner, 'R_25:201', true)).toBe(false);
 
         releaseBotContractGate(runner, 6001);
+        // Releasing the older contract must not release the newer overlapping
+        // lease or let a SLOW-style acquisition bypass settlement gating.
+        expect(tryAcquireBotContractGate(duplicateRunner)).toBe(false);
         releaseBotContractGate(runner, undefined, 'R_25:201');
 
         markBotTick('R_25', 202);
