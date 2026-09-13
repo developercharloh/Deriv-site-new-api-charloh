@@ -27,6 +27,7 @@ describe('FAST trade-cycle release', () => {
 
         await expect(watchBefore(store)).resolves.toBe(true);
         expect(store.getState().fastReady).toBe(false);
+        expect(store.getState().fastSlot).toBe(1);
 
         let secondWatchResolved = false;
         const secondWatch = watchBefore(store).then(result => {
@@ -40,6 +41,7 @@ describe('FAST trade-cycle release', () => {
         store.dispatch({ type: constants.FAST_REARM });
         await expect(secondWatch).resolves.toBe(true);
         expect(store.getState().fastReady).toBe(false);
+        expect(store.getState().fastSlot).toBe(2);
     });
 });
 

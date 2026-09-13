@@ -79,12 +79,15 @@ export default Engine =>
             // case, the Redux tick epoch is the value that released this
             // engine's before-purchase cycle and must be consumed once.
             const isFast = getBotExecutionSpeed() === 'fast';
-            const currentTick = this.store.getState().newTick;
+            const currentTradeState = this.store.getState();
+            const currentTick = currentTradeState.newTick;
             const symbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
             const signalKey =
-                isFast || currentTick === null || currentTick === undefined || currentTick === ''
-                    ? undefined
-                    : `${symbol ?? 'unknown'}:${String(currentTick)}`;
+                isFast
+                    ? `fast:${String(currentTradeState.fastSlot || 0)}`
+                    : currentTick === null || currentTick === undefined || currentTick === ''
+                      ? undefined
+                      : `${symbol ?? 'unknown'}:${String(currentTick)}`;
             // FAST is clock-paced and must be able to place one contract per
             // clock slot. SLOW keeps the single-contract gate so its normal
             // broker-tick flow cannot duplicate a purchase. FAST settlement
