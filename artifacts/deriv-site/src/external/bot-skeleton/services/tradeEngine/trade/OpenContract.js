@@ -52,13 +52,6 @@ export default Engine =>
                         // not from a later rendered win/loss notification.
                         this.updateTotals(contract, executionSpeed === 'fast');
 
-                        if (contractState.afterPromise) {
-                            // Clear before calling to prevent double-resolution
-                            const resolve = contractState.afterPromise;
-                            contractState.afterPromise = null;
-                            resolve();
-                        }
-
                         const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
                         const clockPacedFast = executionSpeed === 'fast' && this.fastClockActive;
                         const canFastRearm = releaseBotContractGate(
@@ -76,6 +69,18 @@ export default Engine =>
                             this.store.dispatch(fastRearm());
                         } else if (!hasOtherActiveContracts) {
                             this.store.dispatch(sell());
+                        }
+
+                        // Complete the engine state transition before resuming
+                        // any interpreter continuation waiting on a manual sell.
+                        // Resolving first lets the generated cycle re-enter
+                        // while the store is still DURING_PURCHASE and the
+                        // contract gate is still owned by the settled trade.
+                        if (contractState.afterPromise) {
+                            // Clear before calling to prevent double-resolution
+                            const resolve = contractState.afterPromise;
+                            contractState.afterPromise = null;
+                            resolve();
                         }
 
                         const publishSettlement = () => {

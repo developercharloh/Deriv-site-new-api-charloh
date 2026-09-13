@@ -6,7 +6,7 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
 import { expectInitArg } from '../utils/sanitize';
-import { fastRearm, proposalsReady, start } from './state/actions';
+import { fastRearm, proposalsReady, sell, start } from './state/actions';
 import * as constants from './state/constants';
 import rootReducer from './state/reducers';
 import Balance from './Balance';
@@ -173,6 +173,16 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         // clearing it on every cycle makes Martingale look like a first-trade
         // win and skips the authoritative loss result.
         if (isNewBotSession) this.lastSettledContract = null;
+
+        // The generated program calls Bot.start at the beginning of every
+        // trade cycle. A settlement can mark the active contract complete
+        // just before the interpreter resumes, while the Redux scope is
+        // still DURING_PURCHASE. Normalize that completed cycle before
+        // starting the next one; otherwise start() is correctly ignored by
+        // the reducer and the following watch('before') waits forever.
+        if (this.getActiveContractIds().length === 0 && this.store.getState().scope !== constants.STOP) {
+            this.store.dispatch(sell());
+        }
         this.store.dispatch(start());
         this.checkLimits(validated_trade_options);
         this.fastClockActive = executionSpeed === 'fast';
