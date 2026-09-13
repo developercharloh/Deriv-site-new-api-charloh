@@ -12,6 +12,7 @@ import {
 } from './dtrader-engine';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { evaluateBinaryMatrix, type BinaryMatrixDecision } from './binary-matrix-strategy';
+import { BinaryMatrixExecutionCore } from './binary-matrix-execution-core';
 import {
     releaseBotContractGate,
     setBotContractGateContract,
@@ -72,6 +73,7 @@ const setGlobalActiveEngine = (engine: BinaryMatrixEngine | null): void => {
 
 export class BinaryMatrixEngine {
     private readonly trader = new DTraderEngine();
+    private readonly execution: BinaryMatrixExecutionCore;
     private config: BinaryMatrixConfig;
     private running = false;
     private currentStake: number;
@@ -83,6 +85,8 @@ export class BinaryMatrixEngine {
     private pendingDecision: BinaryMatrixDecision | null = null;
     private openContractId: string | null = null;
     private settledContracts = new Set<string>();
+    private tickSerial = 0;
+    private purchaseTickSerial = 0;
 
     public onLog: (log: DTLog) => void = () => {};
     public onStatus: (status: BinaryMatrixStatus) => void = () => {};
@@ -93,7 +97,8 @@ export class BinaryMatrixEngine {
 
     constructor(config: BinaryMatrixConfig) {
         this.config = config;
-        this.currentStake = config.initialStake;
+        this.execution = new BinaryMatrixExecutionCore(config);
+        this.currentStake = this.execution.snapshot().currentStake;
         this.bindTrader();
     }
 
@@ -126,6 +131,7 @@ export class BinaryMatrixEngine {
 
         this.running = true;
         this.currentStake = this.config.initialStake;
+        this.execution.reset(this.config);
         this.totalProfit = 0;
         this.wins = 0;
         this.losses = 0;
@@ -134,6 +140,8 @@ export class BinaryMatrixEngine {
         this.pendingDecision = null;
         this.openContractId = null;
         this.settledContracts.clear();
+        this.tickSerial = 0;
+        this.purchaseTickSerial = 0;
         this.emitStats();
 
         activeBinaryMatrixEngine = this;
@@ -177,17 +185,40 @@ export class BinaryMatrixEngine {
 
     updateConfig(config: Partial<BinaryMatrixConfig>): void {
         this.config = { ...this.config, ...config };
+        this.execution.updateConfig(config);
         if (!this.openContractId && !this.pendingDecision) {
-            this.currentStake = this.config.initialStake;
+            this.currentStake = this.execution.snapshot().currentStake;
             this.emitStats();
         }
     }
 
     private bindTrader(): void {
         this.trader.onTick = (_spot, digit) => {
-            if (!this.running || this.openContractId || this.pendingDecision) return;
-
+            if (!this.running) return;
+            this.tickSerial += 1;
             this.digits = [...this.digits, digit].slice(-4);
+            if (this.openContractId || this.pendingDecision) return;
+
+            this.tryPurchaseFromLatestTick();
+        };
+
+        this.trader.onPosition = position => this.handlePosition(position);
+        this.trader.onStatus = status => this.handleTraderStatus(status);
+        this.trader.onLog = log => this.log(log);
+        this.trader.onBuyFeedback = feedback => {
+            if (feedback.kind !== 'error') return;
+            this.execution.rejectPurchase();
+            releaseBotContractGate(this);
+            this.pendingDecision = null;
+            this.onStatus('error');
+            this.writeLog(feedback.message, 'error');
+            this.emitStats();
+        };
+    }
+
+    private tryPurchaseFromLatestTick(): void {
+        if (!this.running || this.openContractId || this.pendingDecision) return;
+
             const decision = evaluateBinaryMatrix(this.digits);
             if (!decision) {
                 this.onStatus('scanning');
@@ -199,34 +230,28 @@ export class BinaryMatrixEngine {
                 return;
             }
 
-            this.pendingDecision = decision;
+            const purchase = this.execution.beginPurchase(decision);
+            if (!purchase) {
+                releaseBotContractGate(this);
+                return;
+            }
+
+            this.pendingDecision = purchase.decision;
+            this.purchaseTickSerial = this.tickSerial;
             this.onStatus('buying');
             this.writeLog(
-                `${decision.reason} · ${decision.label} · stake $${this.currentStake.toFixed(2)}`,
+                `${purchase.decision.reason} · ${purchase.decision.label} · stake $${purchase.stake.toFixed(2)}`,
                 'info',
             );
-            this.emitStats(decision);
+            this.emitStats(purchase.decision);
 
             this.trader.placeBuyNow({
-                contractType: decision.contractType,
-                barrier: decision.barrier,
-                stake: this.currentStake,
+                contractType: purchase.decision.contractType,
+                barrier: purchase.decision.barrier,
+                stake: purchase.stake,
                 durationValue: 1,
                 durationUnit: 't',
             });
-        };
-
-        this.trader.onPosition = position => this.handlePosition(position);
-        this.trader.onStatus = status => this.handleTraderStatus(status);
-        this.trader.onLog = log => this.log(log);
-        this.trader.onBuyFeedback = feedback => {
-            if (feedback.kind !== 'error') return;
-            releaseBotContractGate(this);
-            this.pendingDecision = null;
-            this.onStatus('error');
-            this.writeLog(feedback.message, 'error');
-            this.emitStats();
-        };
     }
 
     private handleTraderStatus(status: DTStatus): void {
@@ -239,6 +264,11 @@ export class BinaryMatrixEngine {
         if (!this.running && !position.isOpen) return;
         if (position.isOpen) {
             if (this.openContractId === null) {
+                if (!this.execution.acceptPurchase(position.contractId)) {
+                    this.onStatus('error');
+                    this.writeLog(`Rejected unexpected contract #${position.contractId}.`, 'error');
+                    return;
+                }
                 this.openContractId = position.contractId;
                 setBotContractGateContract(this, position.contractId);
                 this.pendingDecision = null;
@@ -257,22 +287,29 @@ export class BinaryMatrixEngine {
         if (this.openContractId !== position.contractId) return;
 
         this.settledContracts.add(position.contractId);
+        const settlement = this.execution.settle({
+            contractId: position.contractId,
+            profit: position.profit ?? 0,
+            isWin: position.isWin === true,
+        });
+        if (!settlement.accepted) return;
+
         releaseBotContractGate(this, position.contractId);
         this.openContractId = null;
         this.pendingDecision = null;
 
         const profit = position.profit ?? 0;
         const isWin = position.isWin === true;
-        this.totalProfit += profit;
+        const snapshot = this.execution.snapshot();
+        this.totalProfit = snapshot.totalProfit;
+        this.currentStake = snapshot.currentStake;
+        this.wins = snapshot.wins;
+        this.losses = snapshot.losses;
 
         if (isWin) {
-            this.wins += 1;
             this.qualifyingWins += 1;
-            this.currentStake = this.config.initialStake;
             this.writeLog(`WIN #${position.contractId} · ${this.signedMoney(profit)} · stake reset.`, 'win');
         } else {
-            this.losses += 1;
-            this.currentStake *= this.config.martingale;
             this.writeLog(
                 `LOSS #${position.contractId} · ${this.signedMoney(profit)} · next stake $${this.currentStake.toFixed(2)}.`,
                 'loss',
@@ -296,7 +333,7 @@ export class BinaryMatrixEngine {
             totalProfit: this.totalProfit,
         });
 
-        if (this.totalProfit >= this.config.takeProfit) {
+        if (settlement.shouldStop && this.totalProfit >= this.config.takeProfit) {
             this.running = false;
             this.trader.stop();
             this.onAlert({ kind: 'tp', profit: this.totalProfit });
@@ -304,7 +341,7 @@ export class BinaryMatrixEngine {
             this.writeLog(`Take Profit reached at ${this.signedMoney(this.totalProfit)}.`, 'win');
             return;
         }
-        if (this.totalProfit <= -this.config.stopLoss) {
+        if (settlement.shouldStop && this.totalProfit <= -this.config.stopLoss) {
             this.running = false;
             this.trader.stop();
             this.onAlert({ kind: 'sl', profit: this.totalProfit });
@@ -313,7 +350,15 @@ export class BinaryMatrixEngine {
             return;
         }
 
-        if (this.running) this.onStatus('scanning');
+        if (this.running) {
+            this.onStatus('scanning');
+            // A settlement is authoritative before this call. If a fresh
+            // broker tick was observed while the contract was open, process
+            // it immediately instead of waiting for another UI/browser turn.
+            if (this.tickSerial > this.purchaseTickSerial) {
+                this.tryPurchaseFromLatestTick();
+            }
+        }
     }
 
     private lastDecision(position: DTPosition): BinaryMatrixDecision {
