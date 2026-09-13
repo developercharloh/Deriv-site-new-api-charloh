@@ -230,24 +230,30 @@ const browserApiMock = String.raw`
                 response.proposal = { id: 'binary-matrix-test-proposal', ask_price: 1, payout: 1.96 };
             } else if (request.buy) {
                 const contractId = ++testState.contractCount;
-                const symbol = request.parameters?.underlying_symbol || 'R_25';
-                 const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
-                 const openContractsAtBuy = testState.buyRequests.filter(
-                     item => !testState.settledContractIds.includes(item.contractId)
-                 ).length;
+                    const symbol = request.parameters?.underlying_symbol || 'R_25';
+                    const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
+                    const openContractsAtBuy = testState.buyRequests.filter(
+                        item => !testState.settledContractIds.includes(item.contractId)
+                    ).length;
                 testState.buyRequests.push({
                     symbol,
                     epoch: testState.latestEpoch,
                     contractId,
                     contractType: request.parameters?.contract_type || null,
-                     openContractsAtBuy,
+                    amount: Number(request.parameters?.amount ?? request.price ?? 0),
+                    openContractsAtBuy,
                 });
                 response.buy = { contract_id: contractId, buy_price: request.price || 0.5, payout: 1.96 };
-                 if (isFast && testState.buyRequests.length === 2) {
-                     setTimeout(() => {
-                         if (testState.settledContractIds.includes(1)) return;
-                         testState.settledContractIds.push(1);
-                         testState.settlementUpdates.push({ contractId: 1, epoch: testState.latestEpoch });
+                if (isFast && testState.buyRequests.length === 2) {
+                    setTimeout(() => {
+                        if (testState.settledContractIds.includes(1)) return;
+                        testState.settledContractIds.push(1);
+                        testState.settlementUpdates.push({
+                            contractId: 1,
+                            epoch: testState.latestEpoch,
+                            result: 'loss',
+                            profit: -0.25,
+                        });
                          this.dispatch('message', {
                              data: JSON.stringify({
                                  msg_type: 'proposal_open_contract',
@@ -269,27 +275,32 @@ const browserApiMock = String.raw`
                                  },
                              }),
                          });
-                     }, 200);
-                 }
+                    }, 200);
+                }
             } else if (request.proposal_open_contract) {
                 const contractId = Number(request.contract_id);
                 const buy = testState.buyRequests.find(item => item.contractId === contractId);
                 const isSecondContract = testState.buyRequests.length === 2;
-                 const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
-                 const shouldSettle = !isFast || isSecondContract;
-                 if (shouldSettle && !testState.settledContractIds.includes(contractId)) {
-                     testState.settledContractIds.push(contractId);
-                     testState.settlementUpdates.push({ contractId, epoch: testState.latestEpoch });
-                 }
+                const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
+                const shouldSettle = !isFast || isSecondContract;
+                if (shouldSettle && !testState.settledContractIds.includes(contractId)) {
+                    testState.settledContractIds.push(contractId);
+                    testState.settlementUpdates.push({
+                        contractId,
+                        epoch: testState.latestEpoch,
+                        result: isSecondContract ? 'win' : 'loss',
+                        profit: isSecondContract ? 10 : -0.25,
+                    });
+                }
                 response.proposal_open_contract = {
                     contract_id: contractId,
                     contract_type: buy?.contractType || 'DIGITEVEN',
-                     is_sold: shouldSettle ? 1 : 0,
-                     is_expired: shouldSettle ? 1 : 0,
+                    is_sold: shouldSettle ? 1 : 0,
+                    is_expired: shouldSettle ? 1 : 0,
                     is_valid_to_sell: 0,
                     buy_price: 0.5,
-                     sell_price: shouldSettle && isSecondContract ? 10.5 : 0.25,
-                     profit: shouldSettle && isSecondContract ? 10 : -0.25,
+                    sell_price: shouldSettle && isSecondContract ? 10.5 : 0.25,
+                    profit: shouldSettle && isSecondContract ? 10 : -0.25,
                     currency: 'USD',
                     transaction_ids: {
                         buy: 'buy-' + contractId,
@@ -843,6 +854,11 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     const { buyRequests, settledContractIds, settlementUpdates } = JSON.parse(result);
     const epochs = buyRequests.map(request => request.epoch);
     const openContractsAtSecondBuy = buyRequests[1]?.openContractsAtBuy;
+    const amounts = buyRequests.map(request => request.amount);
+    const settlementResultsByContractId = new Map(
+        settlementUpdates.map(update => [update.contractId, update.result])
+    );
+    const settlementResults = buyRequests.map(request => settlementResultsByContractId.get(request.contractId));
     const boughtContractIds = new Set(buyRequests.map(request => request.contractId));
     if (
         buyRequests.length !== 2 ||
@@ -854,6 +870,10 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
         settlementUpdates.length !== 2 ||
         new Set(settlementUpdates.map(update => update.contractId)).size !== 2 ||
         settlementUpdates.some(update => !boughtContractIds.has(update.contractId)) ||
+        amounts[0] !== 0.5 ||
+        amounts[1] !== 1 ||
+        settlementResults[0] !== 'loss' ||
+        settlementResults[1] !== 'win' ||
         (speed === 'fast' && openContractsAtSecondBuy < 1) ||
         (speed === 'slow' && openContractsAtSecondBuy !== 0)
     ) {
@@ -865,6 +885,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     console.log(
         `✓ ${speed.toUpperCase()} generated interpreter loop bought once per tick ` +
             `(${buyRequests.map(request => `${request.symbol}@${request.epoch}`).join(', ')}) ` +
+            `with stakes ${amounts.join(' → ')} and results ${settlementResults.join(' → ')} ` +
             `with ${openContractsAtSecondBuy} open contract(s) at second buy and ` +
             `${settlementUpdates.length} settlement updates`
     );

@@ -308,8 +308,14 @@ export const doUntilDone = (promiseFn, errors_to_ignore, api_base) => {
 
 export const createDetails = contract => {
     const { sell_price: sellPrice, buy_price: buyPrice, currency } = contract;
-    const profit = getRoundedNumber(sellPrice - buyPrice, currency);
-    const result = profit < 0 ? 'loss' : 'win';
+    const reportedProfit = Number(contract.profit);
+    const priceProfit = Number(sellPrice) - Number(buyPrice);
+    const rawProfit = Number.isFinite(reportedProfit) ? reportedProfit : priceProfit;
+    const profit = getRoundedNumber(rawProfit, currency);
+    // A missing, zero, or invalid settlement value must never enter the win
+    // branch. Binary Matrix relies on this result to apply martingale after a
+    // loss and to count only actual wins toward re-analysis.
+    const result = Number.isFinite(profit) && profit > 0 ? 'win' : 'loss';
 
     return [
         contract.transaction_ids.buy,

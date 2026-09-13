@@ -25,10 +25,25 @@ import {
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import TradeEngine from '@/external/bot-skeleton/services/tradeEngine/trade';
 import getBotInterface from '@/external/bot-skeleton/services/tradeEngine/Interface/BotInterface';
+import { createDetails } from '@/external/bot-skeleton/services/tradeEngine/utils/helpers';
 import * as tradeConstants from '@/external/bot-skeleton/services/tradeEngine/trade/state/constants';
 
 describe('automated contract gate', () => {
     const binaryMatrixPurchaseTypes = ['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER'] as const;
+
+    it.each([
+        [{ buy_price: 0.5, sell_price: 0.5, profit: -0.5 }, 'loss'],
+        [{ buy_price: 0.5, sell_price: 0.5, profit: 0 }, 'loss'],
+        [{ buy_price: 0.5, sell_price: 1.5, profit: 1 }, 'win'],
+    ])('classifies the reported settlement profit correctly: %j', (contract, expectedResult) => {
+        const details = createDetails({
+            ...contract,
+            currency: 'USD',
+            transaction_ids: { buy: 'buy-test' },
+        });
+
+        expect(details[10]).toBe(expectedResult);
+    });
 
     afterEach(() => {
         window.localStorage.removeItem('dbot_execution_speed');
