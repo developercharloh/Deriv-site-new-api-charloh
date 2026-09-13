@@ -81,8 +81,7 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.observer.emit).toHaveBeenCalledWith('bot.tick', 1234567890);
     });
 
-    it('uses the cached live tick in FAST without requesting tick history again', async () => {
-        window.localStorage.setItem('dbot_execution_speed', 'fast');
+    it('uses the cached live tick in either mode without requesting history again', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         engine.getPipSize = () => 2;
@@ -99,6 +98,5 @@ describe('Ticks last-digit analysis events', () => {
         });
 
         expect(engine.$scope.ticksService.request).not.toHaveBeenCalled();
-        window.localStorage.removeItem('dbot_execution_speed');
     });
 });

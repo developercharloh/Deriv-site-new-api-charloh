@@ -9,7 +9,6 @@ import { getDirection, getLastDigit } from '../utils/helpers';
 import { expectPositiveInteger } from '../utils/sanitize';
 import * as constants from './state/constants';
 import { markBotTick } from '@/utils/bot-contract-gate';
-import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
 export default Engine =>
     class Ticks extends Engine {
@@ -71,7 +70,10 @@ export default Engine =>
         }
 
         getLastTick(raw, toString = false) {
-            if (getBotExecutionSpeed() === 'fast' && this.latestTick) {
+            // Both execution modes must consume the subscribed broker tick.
+            // Requesting tick history on every SLOW loop adds an avoidable
+            // network round trip and can stall the next one-tick purchase.
+            if (this.latestTick) {
                 let last_tick = raw ? this.latestTick : this.latestTick.quote;
                 if (!raw && toString) {
                     last_tick = last_tick.toFixed(this.getPipSize());
