@@ -11,7 +11,12 @@ import {
     type DTStatus,
 } from './dtrader-engine';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
-import { evaluateBinaryMatrix, type BinaryMatrixDecision } from './binary-matrix-strategy';
+import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
+import {
+    analyzeBinaryMatrix,
+    type BinaryMatrixAnalysis,
+    type BinaryMatrixDecision,
+} from './binary-matrix-strategy';
 import { BinaryMatrixExecutionCore } from './binary-matrix-execution-core';
 import {
     releaseBotContractGate,
@@ -82,6 +87,7 @@ export class BinaryMatrixEngine {
     private losses = 0;
     private qualifyingWins = 0;
     private digits: number[] = [];
+    private activeDecision: BinaryMatrixDecision | null = null;
     private pendingDecision: BinaryMatrixDecision | null = null;
     private openContractId: string | null = null;
     private settledContracts = new Set<string>();
@@ -137,6 +143,7 @@ export class BinaryMatrixEngine {
         this.losses = 0;
         this.qualifyingWins = 0;
         this.digits = [];
+        this.activeDecision = null;
         this.pendingDecision = null;
         this.openContractId = null;
         this.settledContracts.clear();
@@ -174,6 +181,7 @@ export class BinaryMatrixEngine {
         if (getGlobalActiveEngine() === this) setGlobalActiveEngine(null);
         if (!this.running && !this.openContractId) return;
         this.running = false;
+        this.activeDecision = null;
         this.pendingDecision = null;
         this.openContractId = null;
         releaseBotContractGate(this);
@@ -197,6 +205,7 @@ export class BinaryMatrixEngine {
             if (!this.running) return;
             this.tickSerial += 1;
             this.digits = [...this.digits, digit].slice(-4);
+            this.publishAnalysis();
             if (this.openContractId || this.pendingDecision) return;
 
             this.tryPurchaseFromLatestTick();
@@ -219,11 +228,13 @@ export class BinaryMatrixEngine {
     private tryPurchaseFromLatestTick(): void {
         if (!this.running || this.openContractId || this.pendingDecision) return;
 
-            const decision = evaluateBinaryMatrix(this.digits);
-            if (!decision) {
+            const analysis = analyzeBinaryMatrix(this.digits, this.activeDecision);
+            if (!analysis?.decision) {
                 this.onStatus('scanning');
                 return;
             }
+            const decision = this.activeDecision ?? analysis.decision;
+            this.activeDecision = decision;
 
             if (!tryAcquireBotContractGate(this)) {
                 this.writeLog('A contract is already being handled by another bot runner; signal skipped.', 'system');
@@ -318,6 +329,7 @@ export class BinaryMatrixEngine {
 
         if (this.qualifyingWins >= this.config.reanalyzeAfterWins) {
             this.qualifyingWins = 0;
+            this.activeDecision = null;
             this.digits = [];
             this.writeLog(`Re-analysis threshold reached after ${this.config.reanalyzeAfterWins} wins.`, 'system');
         }
@@ -428,6 +440,43 @@ export class BinaryMatrixEngine {
             lastDecision: lastDecision ?? null,
             openContractId: this.openContractId,
         });
+    }
+
+    private publishAnalysis(): void {
+        const analysis = analyzeBinaryMatrix(this.digits, this.activeDecision);
+        if (!analysis) return;
+
+        const payload = {
+            market: this.config.symbol,
+            condition: analysis.condition,
+            count: analysis.count,
+            compareValue: analysis.compareValue,
+            digits: analysis.digits,
+            result: analysis.result,
+        };
+        globalObserver.emit('bot.analysis.condition', payload);
+        this.writeLog(
+            `Last Digits Analysis Market: ${this.config.symbol} ` +
+            `Condition: ${this.conditionLabel(analysis)} ` +
+            `Digits: [${analysis.digits.join(', ')}] ` +
+            `Result: ${analysis.result ? '✅ TRUE' : '❌ FALSE'}`,
+            'info',
+        );
+    }
+
+    private conditionLabel(analysis: BinaryMatrixAnalysis): string {
+        switch (analysis.condition) {
+            case 'ALL_EVEN':
+                return 'all even';
+            case 'ALL_ODD':
+                return 'all odd';
+            case 'LESS_OR_EQUAL':
+                return `less than or equal to ${analysis.compareValue}`;
+            case 'GREATER_OR_EQUAL':
+                return `greater than or equal to ${analysis.compareValue}`;
+            default:
+                return analysis.condition;
+        }
     }
 
     private log(log: DTLog): void {

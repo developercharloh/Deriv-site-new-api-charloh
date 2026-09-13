@@ -3,7 +3,7 @@ import {
     isRegisteredApolloBlock,
     resolveApolloPurchase,
 } from '../apollo-block-registry';
-import { evaluateBinaryMatrix } from '../binary-matrix-strategy';
+import { analyzeBinaryMatrix, evaluateBinaryMatrix } from '../binary-matrix-strategy';
 
 describe('Binary Matrix AI Apollo adapters', () => {
     it('registers both custom Apollo block types', () => {
@@ -35,5 +35,29 @@ describe('Binary Matrix AI Apollo adapters', () => {
             label: 'UNDER 5',
         });
         expect(resolveApolloPurchase('UNSUPPORTED')).toBeNull();
+    });
+
+    it('keeps the active condition stable through losses', () => {
+        const initial = evaluateBinaryMatrix([1, 3, 5, 7]);
+        expect(initial?.label).toBe('EVEN');
+
+        const analysis = analyzeBinaryMatrix([1, 3, 5, 2], initial);
+        expect(analysis).toMatchObject({
+            condition: 'ALL_ODD',
+            count: 4,
+            result: false,
+            decision: null,
+            digits: [1, 3, 5, 2],
+        });
+    });
+
+    it('publishes a false analysis for a complete window with no signal', () => {
+        expect(analyzeBinaryMatrix([1, 3, 5, 2])).toMatchObject({
+            condition: 'ALL_ODD',
+            count: 4,
+            result: false,
+            digits: [1, 3, 5, 2],
+            decision: null,
+        });
     });
 });

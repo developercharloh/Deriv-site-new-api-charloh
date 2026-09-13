@@ -8,3 +8,9 @@ Last-digit robot conditions should publish the latest evaluated condition, digit
 **Why:** Binary Matrix and other XML robots evaluate conditions asynchronously inside the shared tick engine, so a UI-only calculation can display stale or different digits from the condition that actually controlled the robot.
 
 **How to apply:** Emit one status event after each `last_digits_condition` evaluation. Preserve the final false evaluation in an elseif chain, because it explains why no purchase occurred; do not write these messages only to Journal text or only to the native Binary Matrix runner. When a threshold resets the signal, re-evaluate all conditions before the next purchase rather than reusing the prior direction.
+
+Native Binary Matrix AI must lock the selected matrix condition after its initial analysis and keep that condition through losses. A false window logs and publishes the same condition but does not buy; only a true window can buy. Clear the lock only after the configured number of wins, then collect a fresh digit window. Publish the market, condition, configured count, digits, and TRUE/FALSE result to both the shared analysis event and the Journal on each complete live tick window.
+
+**Why:** Re-evaluating the rolling matrix after every loss changes the bot's logic and makes a loss look like an unintended reanalysis. The operator needs the per-tick FALSE results to distinguish waiting from a broken runner.
+
+**How to apply:** Keep decision selection separate from settlement stake progression. Losses update only Martingale; wins increment the reanalysis counter. The Journal message should use the same payload as the visible Last Digits Analysis status.
