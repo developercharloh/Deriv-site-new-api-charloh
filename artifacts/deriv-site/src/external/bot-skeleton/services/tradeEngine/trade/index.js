@@ -16,7 +16,11 @@ import Purchase from './Purchase';
 import Sell from './Sell';
 import Ticks from './Ticks';
 import Total from './Total';
-import { FAST_CONTRACT_DURATION_SECONDS, getBotExecutionSpeed } from '@/constants/bot-execution-speed';
+import {
+    FAST_CONTRACT_DURATION_UNIT,
+    FAST_CONTRACT_DURATION_VALUE,
+    getBotExecutionSpeed,
+} from '@/constants/bot-execution-speed';
 import { FastExecutionClock } from '@/utils/fast-execution-clock';
 
 const watchBefore = store =>
@@ -143,8 +147,8 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             ...validated_trade_options,
             ...(executionSpeed === 'fast'
                 ? {
-                    duration: FAST_CONTRACT_DURATION_SECONDS,
-                    duration_unit: 's',
+                    duration: FAST_CONTRACT_DURATION_VALUE,
+                    duration_unit: FAST_CONTRACT_DURATION_UNIT,
                 }
                 : {}),
             symbol: this.options.symbol,

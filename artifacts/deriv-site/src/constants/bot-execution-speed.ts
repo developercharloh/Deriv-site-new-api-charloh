@@ -2,7 +2,13 @@ export type BotExecutionSpeed = 'slow' | 'fast';
 
 export const BOT_EXECUTION_SPEED_KEY = 'dbot_execution_speed';
 export const BOT_EXECUTION_SPEED_CHANGED_EVENT = 'dbot-execution-speed-changed';
-export const FAST_CONTRACT_DURATION_SECONDS = 1;
+/**
+ * Deriv does not offer a 1-second duration for this synthetic digit market;
+ * its supported one-second-equivalent is one broker tick. The FAST scheduler
+ * remains wall-clock based and opens one slot every 1000 ms.
+ */
+export const FAST_CONTRACT_DURATION_VALUE = 1;
+export const FAST_CONTRACT_DURATION_UNIT = 't';
 
 const FAST_DELAY_MULTIPLIER = 0;
 const MINIMUM_FAST_DELAY_MS = 0;
