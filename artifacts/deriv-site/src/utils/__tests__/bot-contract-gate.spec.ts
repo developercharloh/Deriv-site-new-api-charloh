@@ -83,6 +83,25 @@ describe('automated contract gate', () => {
         releaseBotContractGate(secondRunner);
     });
 
+    it('allows one FAST same-tick re-entry directly after settlement', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+        const firstRunner = {};
+        const secondRunner = {};
+        const signalKey = 'R_25:150';
+
+        markBotTick('R_25', 150);
+        expect(tryAcquireBotContractGate(firstRunner)).toBe(true);
+        setBotContractGateContract(firstRunner, 7001);
+        releaseBotContractGate(firstRunner, 7001, signalKey, true);
+
+        expect(tryAcquireBotContractGate(secondRunner, signalKey)).toBe(true);
+        setBotContractGateContract(secondRunner, 7002, signalKey);
+        releaseBotContractGate(secondRunner, 7002, signalKey);
+
+        // A repeated trade_again path cannot create a third same-tick contract.
+        expect(tryAcquireBotContractGate(firstRunner, signalKey)).toBe(false);
+    });
+
     it('keeps FAST settlement-gated while still rejecting a duplicate signal', () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
         const runner = {};

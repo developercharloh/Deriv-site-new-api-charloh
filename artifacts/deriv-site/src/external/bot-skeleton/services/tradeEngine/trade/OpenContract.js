@@ -2,8 +2,9 @@ import { getRoundedNumber } from '@/components/shared';
 import { api_base } from '../../api/api-base';
 import { contract as broadcastContract, contractStatus } from '../utils/broadcast';
 import { doUntilDone } from '../utils/helpers';
-import { openContractReceived, sell } from './state/actions';
+import { fastRearm, openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
+import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 
 export default Engine =>
     class OpenContract extends Engine {
@@ -32,12 +33,13 @@ export default Engine =>
                     if (contractState.isSold && !contractState.settled) {
                         contractState.settled = true;
                         clearTimeout(contractState.recoveryTimeout);
+                        const executionSpeed = getBotExecutionSpeed();
+
+                        // Update the authoritative settlement and unlock the
+                        // generated after-purchase path before broadcasting
+                        // the UI status. FAST must buy from this broker event,
+                        // not from a later rendered win/loss notification.
                         this.updateTotals(contract);
-                        contractStatus({
-                            id: 'contract.sold',
-                            data: contract.transaction_ids.sell,
-                            contract,
-                        });
 
                         if (contractState.afterPromise) {
                             // Clear before calling to prevent double-resolution
@@ -46,12 +48,28 @@ export default Engine =>
                             resolve();
                         }
 
-                        // FAST removes artificial waits, not settlement. Move
-                        // the engine to STOP for every settled contract so the
-                        // generated after-purchase logic can classify the
-                        // result and update the next stake before re-entry.
                         this.store.dispatch(sell());
-                        releaseBotContractGate(this, contract.contract_id);
+                        if (executionSpeed === 'fast') {
+                            // Re-arm immediately after the final profit/loss
+                            // value is available. The gate grants one same-tick
+                            // re-entry, preventing both timer and next-tick lag
+                            // without allowing overlapping contracts.
+                            this.store.dispatch(fastRearm());
+                        }
+                        releaseBotContractGate(
+                            this,
+                            contract.contract_id,
+                            contractState.signalKey,
+                            executionSpeed === 'fast'
+                        );
+
+                        // Keep the UI/status stream intact, but do it after the
+                        // FAST execution path has been released.
+                        contractStatus({
+                            id: 'contract.sold',
+                            data: contract.transaction_ids.sell,
+                            contract,
+                        });
                     } else {
                         if (getBotExecutionSpeed() !== 'fast') {
                             this.store.dispatch(openContractReceived());

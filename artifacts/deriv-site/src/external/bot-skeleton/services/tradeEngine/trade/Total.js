@@ -37,7 +37,12 @@ export default Engine =>
         updateTotals(contract) {
             const { sell_price: sellPrice, buy_price: buyPrice, currency } = contract;
 
-            const profit = getRoundedNumber(Number(sellPrice) - Number(buyPrice), currency);
+            const reportedProfit = Number(contract.profit);
+            const priceProfit = Number(sellPrice) - Number(buyPrice);
+            const profit = getRoundedNumber(
+                Number.isFinite(reportedProfit) ? reportedProfit : priceProfit,
+                currency
+            );
 
             const win = profit > 0;
 

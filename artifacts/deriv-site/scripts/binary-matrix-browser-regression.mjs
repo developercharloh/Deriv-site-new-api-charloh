@@ -277,9 +277,9 @@ const browserApiMock = String.raw`
                     entry_tick: 1007,
                     exit_tick: 1008,
                 };
-                // Settlement is delivered before the next tick. The first next
-                // tick lets watch('during') finish; the following tick is the
-                // only tick available to the next watch('before') cycle.
+                // Settlement is delivered before the next tick. SLOW uses the
+                // later tick boundary; FAST is expected to re-enter directly
+                // from this settled P/L event.
                 const settledEpoch = testState.latestEpoch;
                 setTimeout(() => {
                     testState.latestEpoch = settledEpoch + 1;
@@ -316,14 +316,15 @@ const browserApiMock = String.raw`
             }
             setTimeout(() => this.dispatch('message', { data: JSON.stringify(response) }), 0);
             if (request.buy && testState.buyRequests.length === 2 && !testState.stopRequested) {
-                // Let the buy and its open-contract subscription response
-                // flush, then stop before the strategy can start its normal
-                // third-contract/re-analysis cycle.
+                // Stop as soon as the second buy acknowledgement is queued.
+                // FAST can settle and re-enter synchronously from the broker
+                // event, so waiting 25ms allows the strategy to buy a third
+                // contract before the regression can stop it.
                 setTimeout(() => {
                     if (testState.stopRequested) return;
                     testState.stopRequested = true;
                     document.querySelector('#db-animation__stop-button')?.click();
-                }, 25);
+                }, 0);
             }
         }
 
@@ -844,7 +845,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     if (
         buyRequests.length !== 2 ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
-        epochs[0] === epochs[1] ||
+        (speed === 'slow' ? epochs[0] === epochs[1] : epochs[0] !== epochs[1]) ||
         settledContractIds.length !== 2 ||
         new Set(settledContractIds).size !== 2 ||
         settledContractIds.some(contractId => !boughtContractIds.has(contractId)) ||
