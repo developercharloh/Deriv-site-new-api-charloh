@@ -155,6 +155,9 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const fastClockAlreadyRunning = this.fastClock?.isRunning() === true;
         const isNewBotSession = !this.hasStarted;
         this.hasStarted = true;
+        if (isNewBotSession && this.isBinaryMatrixWorkspace()) {
+            this.binaryMatrixStakeState = null;
+        }
         if (executionSpeed !== 'fast') {
             this.stopFastClock();
         }
@@ -253,6 +256,9 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                 initialStake: suppliedStake,
                 currentStake: suppliedStake,
                 multiplier: Math.max(1, this.readBinaryMatrixNumberVariable('Martingale', 2)),
+                winsSinceAnalysis: 0,
+                reanalysisPending: false,
+                reanalysisBlockedEpoch: null,
             };
         }
 
@@ -278,6 +284,25 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             : Number(
                 (this.binaryMatrixStakeState.currentStake * this.binaryMatrixStakeState.multiplier).toFixed(2)
             );
+
+        if (isWin) {
+            this.binaryMatrixStakeState.winsSinceAnalysis =
+                Number(this.binaryMatrixStakeState.winsSinceAnalysis ?? 0) + 1;
+            const reanalyzeAfterWins = Math.max(
+                1,
+                Math.floor(this.readBinaryMatrixNumberVariable('Re Analyse After', 3))
+            );
+            if (this.binaryMatrixStakeState.winsSinceAnalysis >= reanalyzeAfterWins) {
+                this.binaryMatrixStakeState.winsSinceAnalysis = 0;
+                this.binaryMatrixStakeState.reanalysisPending = true;
+                this.binaryMatrixStakeState.reanalysisBlockedEpoch = this.latestTick?.epoch ?? null;
+                globalObserver.emit('bot.analysis.reanalysis', {
+                    market: this.options?.symbol ?? this.symbol,
+                    wins: reanalyzeAfterWins,
+                    epoch: this.binaryMatrixStakeState.reanalysisBlockedEpoch,
+                });
+            }
+        }
     }
 
     startFastClock() {

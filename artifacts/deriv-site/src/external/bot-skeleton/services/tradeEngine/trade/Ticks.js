@@ -121,6 +121,38 @@ export default Engine =>
                 const recent = digits.slice(-size).map(Number);
                 let result = false;
 
+                // A Binary Matrix re-analysis is settlement-driven. Do not let
+                // the first condition check after the threshold reuse the same
+                // broker tick that produced the final winning contract. The
+                // XML runner will keep scanning until this gate sees a newer
+                // subscribed tick, then all conditions in the chain evaluate
+                // against that fresh window.
+                const matrixState = this.binaryMatrixStakeState;
+                const isBinaryMatrixWorkspace = this.isBinaryMatrixWorkspace?.() === true;
+                if (
+                    isBinaryMatrixWorkspace &&
+                    matrixState?.reanalysisPending &&
+                    (
+                        matrixState.reanalysisBlockedEpoch === null ||
+                        this.latestTick?.epoch === matrixState.reanalysisBlockedEpoch
+                    )
+                ) {
+                    globalObserver.emit('bot.analysis.condition', {
+                        market: this.symbol || 'N/A',
+                        condition,
+                        count: size,
+                        compareValue: Number(compareValue),
+                        digits: recent,
+                        result: false,
+                    });
+                    return false;
+                }
+
+                if (isBinaryMatrixWorkspace && matrixState?.reanalysisPending) {
+                    matrixState.reanalysisPending = false;
+                    matrixState.reanalysisBlockedEpoch = null;
+                }
+
                 if (recent.length >= size) {
                     switch (condition) {
                     case 'ALL_EVEN':

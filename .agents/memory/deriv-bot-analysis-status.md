@@ -14,3 +14,9 @@ Native Binary Matrix AI must lock the selected matrix condition after its initia
 **Why:** Re-evaluating the rolling matrix after every loss changes the bot's logic and makes a loss look like an unintended reanalysis. The operator needs the per-tick FALSE results to distinguish waiting from a broken runner.
 
 **How to apply:** Keep decision selection separate from settlement stake progression. Losses update only Martingale; wins increment the reanalysis counter. The Journal message should use the same payload as the visible Last Digits Analysis status.
+
+Generated DBot Builder runs also need a settlement-authoritative re-analysis barrier. When the configured win count is reached, block every condition check on the settlement tick and clear the barrier only after a newer subscribed tick arrives.
+
+**Why:** The repeated Blockly scan can otherwise reuse the final winning tick and appear not to re-analyse, especially in FAST mode where the outer loop is clock-driven.
+
+**How to apply:** Set the barrier from authoritative settlement handling, preserve it across generated cycle restarts, and let the existing repeated before-purchase scan evaluate the full condition chain only on the fresh tick.

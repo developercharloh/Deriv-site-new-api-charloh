@@ -58,6 +58,27 @@ describe('Ticks last-digit analysis events', () => {
         emit.mockRestore();
     });
 
+    it('waits for a new broker tick before evaluating a requested re-analysis', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.symbol = 'R_25';
+        engine.latestTick = { epoch: 123 };
+        engine.getLastDigitList = jest.fn().mockResolvedValue([1, 3, 5, 7]);
+        engine.isBinaryMatrixWorkspace = () => true;
+        engine.binaryMatrixStakeState = {
+            reanalysisPending: true,
+            reanalysisBlockedEpoch: 123,
+        };
+
+        await expect(engine.checkLastDigitsCondition('ALL_ODD', 4)).resolves.toBe(false);
+        expect(engine.binaryMatrixStakeState.reanalysisPending).toBe(true);
+
+        engine.latestTick = { epoch: 124 };
+        await expect(engine.checkLastDigitsCondition('ALL_ODD', 4)).resolves.toBe(true);
+        expect(engine.binaryMatrixStakeState.reanalysisPending).toBe(false);
+        expect(engine.binaryMatrixStakeState.reanalysisBlockedEpoch).toBeNull();
+    });
+
     it('signals the FAST execution loop when a subscribed tick arrives', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

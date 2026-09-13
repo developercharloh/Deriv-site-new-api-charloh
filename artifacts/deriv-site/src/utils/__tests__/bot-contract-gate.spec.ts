@@ -99,6 +99,55 @@ describe('generated bot settlement results', () => {
         (window as any).Blockly = previousBlockly;
     });
 
+    it('counts only settled Binary Matrix wins and requests repeated re-analysis', () => {
+        const previousBlockly = window.Blockly;
+        const workspace = {
+            getAllBlocks: () => [
+                { type: 'last_digits_condition' },
+                {
+                    type: 'variables_set',
+                    getFieldValue: () => 'reanalysis-id',
+                    getInputTargetBlock: (name: string) =>
+                        name === 'VALUE'
+                            ? {
+                                type: 'math_number',
+                                getFieldValue: () => '2',
+                            }
+                            : null,
+                },
+            ],
+            getVariableById: (id: string) => id === 'reanalysis-id' ? { name: 'Re Analyse After' } : null,
+        };
+        (window as any).Blockly = { derivWorkspace: workspace };
+
+        const engine: any = Object.create(TradeEngine.prototype);
+        engine.options = { symbol: 'R_25' };
+        engine.symbol = 'R_25';
+        engine.latestTick = { epoch: 101 };
+        engine.binaryMatrixStakeState = {
+            initialStake: 0.5,
+            currentStake: 0.5,
+            multiplier: 2,
+            winsSinceAnalysis: 0,
+            reanalysisPending: false,
+            reanalysisBlockedEpoch: null,
+        };
+        engine.isBinaryMatrixWorkspace = TradeEngine.prototype.isBinaryMatrixWorkspace;
+        engine.readBinaryMatrixNumberVariable = TradeEngine.prototype.readBinaryMatrixNumberVariable;
+
+        engine.applyBinaryMatrixSettlement({ buy_price: 0.5, sell_price: 1, profit: 0.5 });
+        expect(engine.binaryMatrixStakeState.winsSinceAnalysis).toBe(1);
+        expect(engine.binaryMatrixStakeState.reanalysisPending).toBe(false);
+
+        engine.latestTick = { epoch: 102 };
+        engine.applyBinaryMatrixSettlement({ buy_price: 0.5, sell_price: 1, profit: 0.5 });
+        expect(engine.binaryMatrixStakeState.winsSinceAnalysis).toBe(0);
+        expect(engine.binaryMatrixStakeState.reanalysisPending).toBe(true);
+        expect(engine.binaryMatrixStakeState.reanalysisBlockedEpoch).toBe(102);
+
+        (window as any).Blockly = previousBlockly;
+    });
+
     it('does not change ordinary DBot stake options', () => {
         const previousBlockly = window.Blockly;
         const tradeOptions = {
