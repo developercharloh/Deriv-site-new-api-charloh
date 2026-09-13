@@ -47,10 +47,27 @@ const browserApiMock = String.raw`
     const testState = (window.__binaryMatrixInterpreterTest ||= {
         buyRequests: [],
         contractCount: 0,
+         errors: [],
         historyRequests: 0,
         latestEpoch: 910000,
         requests: [],
+         settledContractIds: [],
+         settlementUpdates: [],
     });
+     window.addEventListener('error', event => {
+         testState.errors.push({
+             type: 'error',
+             message: event.message,
+             source: event.filename,
+             line: event.lineno,
+         });
+     });
+     window.addEventListener('unhandledrejection', event => {
+         testState.errors.push({
+             type: 'unhandledrejection',
+             message: String(event.reason?.stack || event.reason || 'unknown rejection'),
+         });
+     });
     localStorage.setItem('active_loginid', accountId);
     localStorage.setItem('account_type', 'demo');
     sessionStorage.setItem('deriv_accounts', JSON.stringify([{
@@ -214,26 +231,65 @@ const browserApiMock = String.raw`
             } else if (request.buy) {
                 const contractId = ++testState.contractCount;
                 const symbol = request.parameters?.underlying_symbol || 'R_25';
+                 const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
+                 const openContractsAtBuy = testState.buyRequests.filter(
+                     item => !testState.settledContractIds.includes(item.contractId)
+                 ).length;
                 testState.buyRequests.push({
                     symbol,
                     epoch: testState.latestEpoch,
                     contractId,
                     contractType: request.parameters?.contract_type || null,
+                     openContractsAtBuy,
                 });
                 response.buy = { contract_id: contractId, buy_price: request.price || 0.5, payout: 1.96 };
+                 if (isFast && testState.buyRequests.length === 2) {
+                     setTimeout(() => {
+                         if (testState.settledContractIds.includes(1)) return;
+                         testState.settledContractIds.push(1);
+                         testState.settlementUpdates.push({ contractId: 1, epoch: testState.latestEpoch });
+                         this.dispatch('message', {
+                             data: JSON.stringify({
+                                 msg_type: 'proposal_open_contract',
+                                 proposal_open_contract: {
+                                     contract_id: 1,
+                                     contract_type: 'DIGITEVEN',
+                                     is_sold: 1,
+                                     is_expired: 1,
+                                     is_valid_to_sell: 0,
+                                     buy_price: 0.5,
+                                     sell_price: 0.25,
+                                     profit: -0.25,
+                                     currency: 'USD',
+                                     transaction_ids: { buy: 'buy-1', sell: 'sell-1' },
+                                     entry_tick_time: testState.latestEpoch,
+                                     exit_tick_time: testState.latestEpoch,
+                                     entry_tick: 1007,
+                                     exit_tick: 1008,
+                                 },
+                             }),
+                         });
+                     }, 200);
+                 }
             } else if (request.proposal_open_contract) {
                 const contractId = Number(request.contract_id);
                 const buy = testState.buyRequests.find(item => item.contractId === contractId);
                 const isSecondContract = testState.buyRequests.length === 2;
+                 const isFast = window.localStorage.getItem('dbot_execution_speed') === 'fast';
+                 const shouldSettle = !isFast || isSecondContract;
+                 if (shouldSettle && !testState.settledContractIds.includes(contractId)) {
+                     testState.settledContractIds.push(contractId);
+                     testState.settlementUpdates.push({ contractId, epoch: testState.latestEpoch });
+                 }
                 response.proposal_open_contract = {
                     contract_id: contractId,
                     contract_type: buy?.contractType || 'DIGITEVEN',
-                    is_sold: 1,
-                    is_expired: 1,
+                     is_sold: shouldSettle ? 1 : 0,
+                     is_expired: shouldSettle ? 1 : 0,
                     is_valid_to_sell: 0,
                     buy_price: 0.5,
-                    sell_price: isSecondContract ? 10.5 : 0.25,
-                    profit: isSecondContract ? 10 : -0.25,
+                     sell_price: shouldSettle && isSecondContract ? 10.5 : 0.25,
+                     profit: shouldSettle && isSecondContract ? 10 : -0.25,
                     currency: 'USD',
                     transaction_ids: {
                         buy: 'buy-' + contractId,
@@ -524,12 +580,17 @@ const waitFor = async (cdp, expression, label, timeout = 30_000) => {
                 readyState: document.readyState,
                 title: document.title,
                 body: document.body?.innerText?.slice(0, 1600),
+                 errors: window.__binaryMatrixInterpreterTest?.errors,
                 apiRequests: window.__binaryMatrixInterpreterTest?.requests,
                 testEpoch: window.__binaryMatrixInterpreterTest?.latestEpoch,
                 buyRequests: window.__binaryMatrixInterpreterTest?.buyRequests,
                 generatedCode: window.__binaryMatrixInterpreterTest?.generatedCode?.slice(0, 5000),
                 browserErrors: window.__binaryMatrixBrowserErrors,
                 recentResources: performance.getEntriesByType('resource').map(entry => entry.name).slice(-30),
+                 resources: performance.getEntriesByType('resource')
+                     .map(entry => entry.name)
+                     .filter(name => name.includes('.js') || name.includes('.css'))
+                     .slice(-30),
                 buttons: Array.from(document.querySelectorAll('button')).map(button => ({
                     text: button.textContent.trim(),
                     visible: Boolean(button.getClientRects().length),
@@ -698,7 +759,35 @@ const assertBinaryMatrixWorkspace = async (cdp, flowName) => {
     );
 };
 
-const runGeneratedBinaryMatrixBot = async cdp => {
+const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
+    await evaluate(
+        cdp,
+        `(() => {
+            const state = window.__binaryMatrixInterpreterTest;
+            state.buyRequests = [];
+            state.contractCount = 0;
+            state.historyRequests = 0;
+            state.latestEpoch = 910000;
+            state.requests = [];
+            state.settledContractIds = [];
+            state.settlementUpdates = [];
+            const speedSwitch = document.querySelector('.animation__speed-switch');
+            const shouldBeFast = ${JSON.stringify(speed)} === 'fast';
+            if (Boolean(speedSwitch?.getAttribute('aria-checked') === 'true') !== shouldBeFast) {
+                speedSwitch?.click();
+            }
+            return true;
+        })()`
+    );
+    await waitFor(
+        cdp,
+        `document.querySelector('.animation__speed-switch')?.getAttribute('aria-checked') === ${JSON.stringify(
+            speed === 'fast' ? 'true' : 'false'
+        )} &&
+         window.localStorage.getItem('dbot_execution_speed') === ${JSON.stringify(speed)}`,
+        `${speed.toUpperCase()} execution switch state`
+    );
+
     const generatedCode = await evaluate(
         cdp,
         `(() => {
@@ -716,7 +805,7 @@ const runGeneratedBinaryMatrixBot = async cdp => {
     if (!generatedCode.includes('Bot.isTradeAgain(true)')) {
         throw new Error('workspaceToCode did not generate the trade_again callback.');
     }
-    console.log('✓ Binary Matrix XML converted through Blockly workspaceToCode');
+    console.log(`✓ Binary Matrix XML converted through Blockly workspaceToCode (${speed.toUpperCase()})`);
 
     await evaluate(
         cdp,
@@ -733,33 +822,59 @@ const runGeneratedBinaryMatrixBot = async cdp => {
         'two generated Binary Matrix buy requests',
         30_000
     );
-    await sleep(500);
+    await waitFor(
+        cdp,
+        `window.__binaryMatrixInterpreterTest?.settlementUpdates?.length === 2`,
+        `${speed.toUpperCase()} contract settlement updates`,
+        10_000
+    );
 
     const result = await evaluate(
         cdp,
         `JSON.stringify({
+            speed: window.localStorage.getItem('dbot_execution_speed'),
             buyRequests: window.__binaryMatrixInterpreterTest.buyRequests,
+            settledContractIds: window.__binaryMatrixInterpreterTest.settledContractIds,
+            settlementUpdates: window.__binaryMatrixInterpreterTest.settlementUpdates,
             generatedCode: window.__binaryMatrixInterpreterTest.generatedCode,
             running: Boolean(document.querySelector('#db-animation__stop-button'))
         })`
     );
-    const { buyRequests } = JSON.parse(result);
+    const { buyRequests, settledContractIds, settlementUpdates } = JSON.parse(result);
     const epochs = buyRequests.map(request => request.epoch);
+    const openContractsAtSecondBuy = buyRequests[1]?.openContractsAtBuy;
+    const boughtContractIds = new Set(buyRequests.map(request => request.contractId));
     if (
         buyRequests.length !== 2 ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
         epochs[0] === epochs[1] ||
-        epochs[1] !== epochs[0] + 2
+        settledContractIds.length !== 2 ||
+        new Set(settledContractIds).size !== 2 ||
+        settledContractIds.some(contractId => !boughtContractIds.has(contractId)) ||
+        settlementUpdates.length !== 2 ||
+        new Set(settlementUpdates.map(update => update.contractId)).size !== 2 ||
+        settlementUpdates.some(update => !boughtContractIds.has(update.contractId)) ||
+        (speed === 'fast' && openContractsAtSecondBuy < 1) ||
+        (speed === 'slow' && openContractsAtSecondBuy !== 0)
     ) {
         throw new Error(
-            `Generated interpreter loop produced unexpected buys: ${JSON.stringify(buyRequests)}`
+            `${speed.toUpperCase()} generated interpreter loop produced unexpected lifecycle: ` +
+                `${JSON.stringify({ buyRequests, settledContractIds, settlementUpdates })}`
         );
     }
     console.log(
-        `✓ Generated interpreter loop bought once per epoch after settlement: ` +
-            `${buyRequests.map(request => `${request.symbol}@${request.epoch}`).join(', ')}`
+        `✓ ${speed.toUpperCase()} generated interpreter loop bought once per tick ` +
+            `(${buyRequests.map(request => `${request.symbol}@${request.epoch}`).join(', ')}) ` +
+            `with ${openContractsAtSecondBuy} open contract(s) at second buy and ` +
+            `${settlementUpdates.length} settlement updates`
     );
     await evaluate(cdp, `document.querySelector('#db-animation__stop-button')?.click()`);
+    await waitFor(
+        cdp,
+        `Boolean(document.querySelector('#db-animation__run-button')) &&
+         !document.querySelector('#db-animation__run-button').disabled`,
+        `${speed.toUpperCase()} bot stop`
+    );
 };
 
 const setFileInput = async (cdp, file) => {
@@ -981,7 +1096,8 @@ const run = async () => {
         await waitFor(cdp, `Boolean(window.Blockly?.xmlValues?.convertedDom)`, 'parsed XML preview');
         await clickButtonContaining(cdp, 'Open');
         await assertBinaryMatrixWorkspace(cdp, 'standard XML loader');
-        await runGeneratedBinaryMatrixBot(cdp);
+        await runGeneratedBinaryMatrixBot(cdp, 'slow');
+        await runGeneratedBinaryMatrixBot(cdp, 'fast');
     } finally {
         cdp?.socket.close();
         browser.kill('SIGTERM');

@@ -97,7 +97,11 @@ export default defineConfig({
     port: Number(process.env.PORT) || 3000,
     host: '0.0.0.0',
   },
-  dev: { hmr: true },
+  // Browser regressions and manual preview sessions must be able to traverse
+  // the app's lazy routes without compiling one chunk at a time on first use.
+  // Keep production code splitting, but make the development server compile
+  // all async routes up front so a clean browser profile is deterministic.
+  dev: { hmr: true, lazyCompilation: false },
   tools: {
     rspack: {
       // Disable persistent filesystem cache in CI/Vercel so every production
