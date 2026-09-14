@@ -67,7 +67,7 @@ export default Engine =>
                             // purchase slot, so this does not buy immediately;
                             // it only releases watch('during') and lets the
                             // generated trade_again path prepare for the next
-                            // 1.75-second slot. Leaving Redux in DURING_PURCHASE
+                            // 500 ms slot. Leaving Redux in DURING_PURCHASE
                             // here can make the interpreter wait forever after
                             // the first FAST contract settles.
                             if (!hasOtherActiveContracts) this.store.dispatch(sell());
