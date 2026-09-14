@@ -135,7 +135,7 @@ const Toolbox = observer(() => {
 
     const renderMenu = (mobile = false) => (
         <div id={mobile ? 'gtm-toolbox-mobile' : 'gtm-toolbox'} className='db-toolbox__content'>
-            {renderHeader(mobile)}
+            <div className='db-toolbox__header'>{renderHeader(mobile)}</div>
             <div
                 className={classNames('db-toolbox__content-wrapper', { active: is_open })}
                 data-testid='db-toolbox__content-wrapper'
