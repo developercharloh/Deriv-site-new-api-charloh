@@ -19,7 +19,7 @@ export default Engine =>
         }
 
         async watchTicks(symbol) {
-            if (symbol && this.symbol !== symbol) {
+            if (symbol && (this.symbol !== symbol || !this.tickListenerKey)) {
                 const previousSymbol = this.symbol;
                 const previousListenerKey = this.tickListenerKey;
 
@@ -31,6 +31,7 @@ export default Engine =>
                 }
 
                 this.symbol = symbol;
+                this.tickListenerKey = null;
                 const { ticksService } = this.$scope;
 
                 const callback = ticks => {

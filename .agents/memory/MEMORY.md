@@ -18,5 +18,6 @@
 - [Builder FAST regression harness](builder-fast-regression-harness.md) — Jest should drive generated Builder scopes through TradeEngine directly when interpreter completion is not a stable async boundary.
 - [FAST slot state preservation](deriv-fast-slot-state.md) — every terminal FAST cycle transition must preserve the monotonic slot counter or the gate rejects the next purchase as a duplicate.
 - [SLOW contract lease release](deriv-slow-contract-release.md) — null settlement signal keys must still release the owner’s contract lease by identity.
+- [SLOW live tick monitor](deriv-slow-live-tick-monitor.md) — warm tick history is not proof of a live listener; restore same-symbol monitors when the listener key is missing.
 - [DBot pause and resume](deriv-bot-pause-resume.md) — pause only blocks new purchases; keep the interpreter and let open contracts settle.
 - [Deriv browser regression gate timing](deriv-browser-regression-gate.md) — splash-triggered social popup can appear after the harness's initial gate check.

@@ -150,7 +150,11 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.options = options;
         this.startPromise = this.loginAndGetBalance(token);
 
-        if (!this.checkTicksPromiseExists()) this.watchTicks(symbol);
+        // A cached history request does not mean this engine has a live
+        // listener. Reused interpreters can inherit a warm ticks promise while
+        // their own monitor has never been registered, which leaves SLOW
+        // waiting forever for the next broker tick.
+        if (this.symbol !== symbol || !this.tickListenerKey) this.watchTicks(symbol);
     }
 
     start(tradeOptions) {

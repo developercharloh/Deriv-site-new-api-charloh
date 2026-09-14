@@ -118,6 +118,53 @@ describe('FAST trade-cycle release', () => {
     });
 });
 
+describe('SLOW broker-tick release', () => {
+    afterEach(() => {
+        window.localStorage.removeItem('dbot_execution_speed');
+    });
+
+    it('attaches the engine monitor even when tick history is already warm', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'slow');
+        const engine = Object.create(TradeEngine.prototype);
+        engine.checkTicksPromiseExists = jest.fn(() => ({ promise: Promise.resolve() }));
+        engine.loginAndGetBalance = jest.fn(() => Promise.resolve());
+        engine.watchTicks = jest.fn();
+
+        engine.init('token', { symbol: 'R_25', contractTypes: ['DIGITEVEN'] });
+
+        expect(engine.checkTicksPromiseExists).not.toHaveBeenCalled();
+        expect(engine.watchTicks).toHaveBeenCalledWith('R_25');
+    });
+
+    it('waits for a fresh broker tick on every repeated purchase cycle', async () => {
+        window.localStorage.setItem('dbot_execution_speed', 'slow');
+        const store = createStore(rootReducer);
+
+        store.dispatch({ type: constants.START });
+        store.dispatch({ type: constants.PROPOSALS_READY });
+
+        const firstWatch = watchBefore(store);
+        store.dispatch({ type: constants.NEW_TICK, payload: 101 });
+        await expect(firstWatch).resolves.toBe(true);
+
+        store.dispatch({ type: constants.PURCHASE_SUCCESSFUL });
+        store.dispatch({ type: constants.SELL });
+        store.dispatch({ type: constants.START });
+
+        let secondResolved = false;
+        const secondWatch = watchBefore(store).then(result => {
+            secondResolved = true;
+            return result;
+        });
+
+        await Promise.resolve();
+        expect(secondResolved).toBe(false);
+
+        store.dispatch({ type: constants.NEW_TICK, payload: 102 });
+        await expect(secondWatch).resolves.toBe(true);
+    });
+});
+
 describe('shared trade-cycle restart', () => {
     afterEach(() => {
         window.localStorage.removeItem('dbot_execution_speed');

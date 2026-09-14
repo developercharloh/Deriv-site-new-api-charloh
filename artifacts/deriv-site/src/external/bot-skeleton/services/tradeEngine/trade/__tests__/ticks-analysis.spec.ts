@@ -102,6 +102,32 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.observer.emit).toHaveBeenCalledWith('bot.tick', 1234567890);
     });
 
+    it('restores a missing same-symbol monitor when history is already cached', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.symbol = 'R_25';
+        engine.tickListenerKey = null;
+        engine.store = { dispatch: jest.fn() };
+        engine.observer = { emit: jest.fn() };
+        engine.$scope = {
+            ticksService: {
+                monitor: jest.fn(async ({ callback }) => {
+                    callback([{ epoch: 1234567891, quote: 12.35 }]);
+                    return 'restored-tick-listener';
+                }),
+            },
+        };
+
+        await engine.watchTicks('R_25');
+
+        expect(engine.$scope.ticksService.monitor).toHaveBeenCalledTimes(1);
+        expect(engine.tickListenerKey).toBe('restored-tick-listener');
+        expect(engine.store.dispatch).toHaveBeenCalledWith({
+            type: expect.any(String),
+            payload: 1234567891,
+        });
+    });
+
     it('uses the cached live tick in either mode without requesting history again', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
