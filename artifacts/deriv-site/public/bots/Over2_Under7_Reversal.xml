@@ -133,7 +133,6 @@
       <block type="trade_definition_tradeoptions" id="ZX}~CNjTLNB`G}x2}_$8">
         <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
         <field name="DURATIONTYPE_LIST">t</field>
-        <field name="TRADE_EACH_TICK">FALSE</field>
         <value name="DURATION">
           <shadow type="math_number_positive" id="cIkks,]*FLjcfZb2crUZ">
             <field name="NUM">1</field>
@@ -280,7 +279,7 @@
                       <block type="text_statement" id="`d;D:_3?FWg|Z2p[~I~0">
                         <value name="TEXT">
                           <shadow type="text" id="/9[PfJ)Li7(`@l`%r1Mp">
-                            <field name="TEXT">🎯 Target Profit hit! </field>
+                            <field name="TEXT">You have successfully hit the </field>
                           </shadow>
                         </value>
                         <next>
@@ -297,7 +296,7 @@
                               <block type="text_statement" id="1Eb047ggmL-tB:4%VU!e">
                                 <value name="TEXT">
                                   <shadow type="text" id="~oh_9DP9tz~={[9y+4#p">
-                                    <field name="TEXT"> USD printed 💲💲 — bot stopped.</field>
+                                    <field name="TEXT"> Winning Runs.                               Total Profit Accumulated: </field>
                                   </shadow>
                                 </value>
                                 <next>
@@ -352,33 +351,12 @@
                   </block>
                 </value>
                 <statement name="DO1">
-                  <block type="text_join" id="rev_sl_tj">
-                    <field name="VARIABLE" id="rev_sl_var">rev_sl_text</field>
-                    <statement name="STACK">
-                      <block type="text_statement" id="rev_sl_s1">
-                        <value name="TEXT"><shadow type="text"><field name="TEXT">🛑 Stop Loss hit! </field></shadow></value>
-                        <next>
-                          <block type="text_statement" id="rev_sl_s2">
-                            <value name="TEXT"><shadow type="text"><field name="TEXT"></field></shadow><block type="total_profit" id="rev_sl_tp"></block></value>
-                            <next>
-                              <block type="text_statement" id="rev_sl_s3">
-                                <value name="TEXT"><shadow type="text"><field name="TEXT"> USD — bot stopped.</field></shadow></value>
-                              </block>
-                            </next>
-                          </block>
-                        </next>
-                      </block>
-                    </statement>
-                    <next>
-                      <block type="notify" id="rev_sl_notify">
-                        <field name="NOTIFICATION_TYPE">error</field>
-                        <field name="NOTIFICATION_SOUND">error</field>
-                        <value name="MESSAGE">
-                          <shadow type="text"><field name="TEXT">abc</field></shadow>
-                          <block type="variables_get" id="rev_sl_vg"><field name="VAR" id="rev_sl_var">rev_sl_text</field></block>
-                        </value>
-                      </block>
-                    </next>
+                  <block type="text_print" id="nH_3y8aG(M{[aX3=I[3w">
+                    <value name="TEXT">
+                      <shadow type="text" id="CrUgTBg!%^X,A[dN-U.g">
+                        <field name="TEXT">Sorry!!! Stop Loss Hit</field>
+                      </shadow>
+                    </value>
                   </block>
                 </statement>
                 <statement name="ELSE">

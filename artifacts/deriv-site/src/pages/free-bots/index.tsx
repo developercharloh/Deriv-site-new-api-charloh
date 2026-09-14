@@ -726,9 +726,16 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                 await Blockly.derivWorkspace.asyncClear();
                 const dom = Blockly.utils.xml.textToDom(xmlText);
                 Blockly.Xml.domToVariables(dom, Blockly.derivWorkspace);
-                const rootXmlBlocks = Array.from(dom.children).filter(
-                    (node: any) => node.localName === 'block' || node.tagName?.toLowerCase() === 'block'
-                );
+                 // Some browser XML DOM implementations expose the Blockly
+                 // namespace inconsistently through localName/tagName. Root
+                 // Blockly elements all carry a type attribute, while the
+                 // variables container does not; use that stable marker so
+                 // uploaded XML keeps every root block.
+                 const rootXmlBlocks = Array.from(dom.children).filter(
+                     (node: any) =>
+                         (node.localName === 'block' || node.tagName?.toLowerCase() === 'block') &&
+                         Boolean(node.getAttribute?.('type'))
+                 );
                 const mandatoryRootTypes = ['trade_definition', 'before_purchase', 'after_purchase'];
                 const rootTypes = new Set(rootXmlBlocks.map((node: any) => node.getAttribute('type')));
                 const missingRootTypes = mandatoryRootTypes.filter(type => !rootTypes.has(type));
@@ -771,14 +778,16 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
             // Blockly's option fields can finish validating asynchronously after
             // domToBlock returns. Keep the root-block lifecycle guard alive until
             // those callbacks have settled, otherwise Trade Parameters can dispose
-            // itself when its statement stack is briefly observed as empty.
+             // itself when its statement stack is briefly observed as empty.
+             // Deriv's market/duration cascades can answer several seconds
+             // after import, so one second is not enough for uploaded bots.
             window.setTimeout(() => {
                 (window as any).__DBOT_LOADING_XML = false;
                 // Async dropdown validation can recalculate Blockly metrics
                 // after the first reveal and restore the previous bottom
                 // scroll position. Reveal again after the settling window.
                 DBot.revealLoadedWorkspace();
-            }, 1000);
+             }, 6000);
 
             setStatus('loaded');
 

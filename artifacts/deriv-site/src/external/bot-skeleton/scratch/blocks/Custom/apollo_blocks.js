@@ -6,6 +6,84 @@ const generator = () => window.Blockly.JavaScript.javascriptGenerator;
 const numberInput = (block, name, fallback) =>
     generator().valueToCode(block, name, generator().ORDER_ATOMIC) || fallback;
 
+const decodeOptionPairs = encodedOptions => {
+    try {
+        const parsed = JSON.parse(decodeURIComponent(encodedOptions || ''));
+        const options = parsed
+            .filter(option => Array.isArray(option) && option.length >= 2)
+            .map(option => [String(option[0]), String(option[1])]);
+        return options.length ? options : [['', '']];
+    } catch {
+        return [['', '']];
+    }
+};
+
+const optionMutation = (block, options) => {
+    const mutation = document.createElementNS('http://www.w3.org/1999/xhtml', 'mutation');
+    mutation.setAttribute('options', encodeURIComponent(JSON.stringify(options)));
+    return mutation;
+};
+
+const applyOptionPairs = (block, options) => {
+    const field = block.getField('OPTION');
+    if (!field) return;
+    field.menuGenerator_ = options;
+    if (!options.some(option => option[1] === field.getValue())) {
+        field.setValue(options[0][1]);
+    }
+};
+
+const optionBlockDefinition = (isCondition = false) => ({
+    init() {
+        this.appendDummyInput()
+            .appendField(isCondition ? localize('is') : localize('set'))
+            .appendField(new window.Blockly.FieldVariable(localize('item')), 'VAR')
+            .appendField(isCondition ? localize('equal to') : localize('to'))
+            .appendField(new window.Blockly.FieldDropdown([['', '']]), 'OPTION');
+        if (isCondition) {
+            this.setOutput(true, 'Boolean');
+            this.setOutputShape(window.Blockly.OUTPUT_SHAPE_ROUND);
+        } else {
+            this.setPreviousStatement(true);
+            this.setNextStatement(true);
+        }
+        this.setColour(window.Blockly.Colours.Special2.colour);
+        this.setTooltip(localize('Selects and compares a strategy option.'));
+    },
+    mutationToDom() {
+        return optionMutation(this, this.optionPairs || [['', '']]);
+    },
+    domToMutation(xmlElement) {
+        this.optionPairs = decodeOptionPairs(xmlElement.getAttribute('options'));
+        applyOptionPairs(this, this.optionPairs);
+    },
+});
+
+// These two blocks are serialized by the uploaded pattern-strategy XML. They
+// are ordinary Blockly variable assignment/comparison blocks with a dynamic
+// dropdown, so the uploaded strategy can be loaded without rewriting it.
+window.Blockly.Blocks.variables_set_option = optionBlockDefinition(false);
+window.Blockly.Blocks.variables_is_option = optionBlockDefinition(true);
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_set_option = block => {
+    const varName = window.Blockly.JavaScript.variableDB_.getName(
+        block.getFieldValue('VAR'),
+        window.Blockly.Variables.CATEGORY_NAME
+    );
+    return `${varName} = ${JSON.stringify(block.getFieldValue('OPTION') || '')};\n`;
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_is_option = block => {
+    const varName = window.Blockly.JavaScript.variableDB_.getName(
+        block.getFieldValue('VAR'),
+        window.Blockly.Variables.CATEGORY_NAME
+    );
+    return [
+        `${varName} === ${JSON.stringify(block.getFieldValue('OPTION') || '')}`,
+        generator().ORDER_EQUALITY,
+    ];
+};
+
 window.Blockly.Blocks.last_digits_condition = {
     init() {
         this.jsonInit(this.definition());
