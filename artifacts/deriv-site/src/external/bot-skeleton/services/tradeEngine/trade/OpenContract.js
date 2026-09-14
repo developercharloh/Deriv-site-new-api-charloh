@@ -67,10 +67,14 @@ export default Engine =>
                             // purchase slot, so this does not buy immediately;
                             // it only releases watch('during') and lets the
                             // generated trade_again path prepare for the next
-                            // 500 ms slot. Leaving Redux in DURING_PURCHASE
+                            // The settlement path releases the generated cycle,
+                            // then the clock schedules the next purchase after
+                            // the explicit 500 ms rest. Leaving Redux in
+                            // DURING_PURCHASE
                             // here can make the interpreter wait forever after
                             // the first FAST contract settles.
                             if (!hasOtherActiveContracts) this.store.dispatch(sell());
+                            if (!hasOtherActiveContracts) this.scheduleFastSlotAfterSettlement?.();
                         } else if (canFastRearm) {
                             this.store.dispatch(fastRearm());
                         } else if (!hasOtherActiveContracts) {

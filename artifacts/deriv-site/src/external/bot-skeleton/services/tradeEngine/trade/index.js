@@ -101,7 +101,7 @@ export const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) =>
             }
 
             // SLOW retains Deriv's normal next-tick behavior. FAST is released
-            // by the one-second clock, never by a broker tick.
+            // by the wall-clock scheduler, never by a broker tick.
             const fastClockReleased =
                 getBotExecutionSpeed() === 'fast' && newState.fastReady;
             if (
@@ -331,6 +331,10 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             this.store.dispatch(fastRearm());
         });
         this.fastClock.start();
+    }
+
+    scheduleFastSlotAfterSettlement() {
+        this.fastClock?.scheduleAfterSettlement();
     }
 
     stopFastClock() {

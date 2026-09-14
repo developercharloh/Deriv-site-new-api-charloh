@@ -1,9 +1,11 @@
-export const FAST_EXECUTION_INTERVAL_MS = 500;
+export const FAST_EXECUTION_INTERVAL_MS = 1750;
+export const FAST_SETTLEMENT_REST_MS = 500;
 
 export class FastExecutionClock {
     private timer: ReturnType<typeof setTimeout> | null = null;
     private nextSlotAt = 0;
     private running = false;
+    private releaseSlot: (() => void) | null = null;
 
     constructor(
         private readonly onSlot: () => void,
@@ -15,18 +17,25 @@ export class FastExecutionClock {
         this.running = true;
         this.nextSlotAt = this.now();
 
-        const releaseSlot = () => {
+        this.releaseSlot = () => {
             if (!this.running) return;
 
             this.onSlot();
             this.nextSlotAt += FAST_EXECUTION_INTERVAL_MS;
-            const delay = Math.max(0, this.nextSlotAt - this.now());
-            this.timer = setTimeout(releaseSlot, delay);
+            this.scheduleNextSlot(Math.max(0, this.nextSlotAt - this.now()));
         };
 
         // The first slot is immediate. Subsequent slots remain aligned to the
-        // 500 ms wall-clock schedule rather than drifting after network work.
-        releaseSlot();
+        // 1.75-second wall-clock schedule rather than drifting after network
+        // work, unless settlement explicitly resets the next slot.
+        this.releaseSlot();
+    }
+
+    scheduleAfterSettlement(): void {
+        if (!this.running || !this.releaseSlot) return;
+
+        this.nextSlotAt = this.now() + FAST_SETTLEMENT_REST_MS;
+        this.scheduleNextSlot(FAST_SETTLEMENT_REST_MS);
     }
 
     stop(): void {
@@ -35,9 +44,17 @@ export class FastExecutionClock {
             clearTimeout(this.timer);
             this.timer = null;
         }
+        this.releaseSlot = null;
     }
 
     isRunning(): boolean {
         return this.running;
+    }
+
+    private scheduleNextSlot(delay: number): void {
+        if (!this.running || !this.releaseSlot) return;
+
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(this.releaseSlot, delay);
     }
 }
