@@ -428,7 +428,7 @@ describe('generated bot settlement results', () => {
         (window as any).Blockly = previousBlockly;
     });
 
-    it('carries Binary Matrix Martingale through the generated FAST loop and broker settlements', async () => {
+    it('carries alternating Binary Matrix wins and losses through the generated FAST loop', async () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
         const previousBlockly = window.Blockly;
         const xmlPath = path.resolve(__dirname, '../../../public/bots/Binary_Matrix_AI.xml');
@@ -460,9 +460,10 @@ describe('generated bot settlement results', () => {
         const subscriptions: Array<(message: { data: Record<string, any> }) => void> = [];
         const sent: Array<Record<string, any>> = [];
         const buyAmounts: number[] = [];
+        const settlementProfits: number[] = [];
         const cycleDoneResolvers: Array<() => void> = [];
         let nextContractId = 8101;
-        const settlementProfits = [-0.5, 0.85, 0.85];
+        const brokerSettlementProfits = [-0.5, 0.85, -0.5, 0.85];
         const api = {
             onMessage: () => ({
                 subscribe: (callback: (message: { data: Record<string, any> }) => void) => {
@@ -507,7 +508,8 @@ describe('generated bot settlement results', () => {
                 const contractId = Number(payload.contract_id);
                 const buyIndex = contractId - 8101;
                 const buyPrice = buyAmounts[buyIndex];
-                const profit = settlementProfits[buyIndex];
+                const profit = brokerSettlementProfits[buyIndex];
+                settlementProfits.push(profit);
                 setTimeout(() => {
                     emit({
                         msg_type: 'proposal_open_contract',
@@ -577,7 +579,7 @@ describe('generated bot settlement results', () => {
         // calls keep the test boundary deterministic while preserving the
         // generated before/during scope transitions.
         const bot = getBotInterface(engine);
-        for (let cycle = 0; cycle < 3; cycle += 1) {
+        for (let cycle = 0; cycle < brokerSettlementProfits.length; cycle += 1) {
             bot.start({
                 limitations: {},
                 duration: 1,
@@ -595,8 +597,9 @@ describe('generated bot settlement results', () => {
         }
         bot.isTradeAgain(false);
 
-        expect(buyAmounts).toEqual([0.5, 1, 0.5]);
-        expect(sent.filter(payload => payload.buy).map(payload => payload.parameters.amount)).toEqual([0.5, 1, 0.5]);
+        expect(settlementProfits).toEqual(brokerSettlementProfits);
+        expect(buyAmounts).toEqual([0.5, 1, 0.5, 1]);
+        expect(sent.filter(payload => payload.buy).map(payload => payload.price)).toEqual([0.5, 1, 0.5, 1]);
         expect(engine.lastSettledContract.profit).toBe(0.85);
         expect(engine.binaryMatrixStakeState.currentStake).toBe(0.5);
 
