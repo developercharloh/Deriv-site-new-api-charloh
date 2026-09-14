@@ -537,17 +537,66 @@ const SignalBadge: React.FC<{ signal: LiveSignal; onClick: () => void }> = ({ si
 // later sets its own defaults (often wrong). This function waits for the API to
 // populate the options, then force-applies the correct XML values.
 async function postLoadReapplyFields(botId: string, ws: any): Promise<void> {
-    if (botId !== 'rise-fall-master') return;
-
     const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
     const getDurBlock = (): any =>
         ws.getAllBlocks(true).find((b: any) => b.type === 'trade_definition_tradeoptions');
+    const getMarketBlock = (): any =>
+        ws.getAllBlocks(true).find((b: any) => b.type === 'trade_definition_market');
+    const getTradeTypeBlock = (): any =>
+        ws.getAllBlocks(true).find((b: any) => b.type === 'trade_definition_tradetype');
+
+    const tradeTypeBlock = getTradeTypeBlock();
+    const desiredCategory = tradeTypeBlock?.getFieldValue('TRADETYPECAT_LIST');
+    const desiredTradeType = tradeTypeBlock?.getFieldValue('TRADETYPE_LIST');
 
     const durOptionsReady = (): boolean => {
         const opts: any[][] = getDurBlock()?.getField('DURATIONTYPE_LIST')?.menuGenerator_ ?? [];
         return opts.length > 0 && opts[0][1] !== '';
     };
+
+    const triggerTradeTypeCascade = (name: string, blockId: string): void => {
+        const block = getTradeTypeBlock();
+        if (!block?.onchange) return;
+        block.onchange({
+            type: (window as any).Blockly.Events.BLOCK_CHANGE,
+            blockId,
+            name,
+            group: 'dbot-post-load',
+        });
+    };
+
+    // Dynamic contract-type fields are empty during XML import because their
+    // options come from contracts_for. Re-run the same API cascade after the
+    // import guard is released, then restore the bot's saved selections.
+    await delay(1100);
+    const marketBlock = getMarketBlock();
+    if (marketBlock && tradeTypeBlock) {
+        triggerTradeTypeCascade('SYMBOL_LIST', marketBlock.id);
+
+        for (let i = 0; i < 50; i++) {
+            const categoryOptions: any[][] =
+                tradeTypeBlock.getField('TRADETYPECAT_LIST')?.menuGenerator_ ?? [];
+            if (categoryOptions.length > 0 && categoryOptions[0][1] !== '') break;
+            await delay(300);
+        }
+
+        if (desiredCategory) {
+            tradeTypeBlock.getField('TRADETYPECAT_LIST')?.setValue?.(desiredCategory);
+            triggerTradeTypeCascade('TRADETYPECAT_LIST', tradeTypeBlock.id);
+        }
+
+        for (let i = 0; i < 50; i++) {
+            const tradeOptions: any[][] =
+                tradeTypeBlock.getField('TRADETYPE_LIST')?.menuGenerator_ ?? [];
+            if (tradeOptions.length > 0 && tradeOptions[0][1] !== '') break;
+            await delay(300);
+        }
+
+        if (desiredTradeType) {
+            tradeTypeBlock.getField('TRADETYPE_LIST')?.setValue?.(desiredTradeType);
+        }
+    }
 
     // Helper: apply all the critical field values
     const applyFields = () => {
@@ -566,7 +615,7 @@ async function postLoadReapplyFields(botId: string, ws: any): Promise<void> {
         ws.getBlockById('bp_put')?.setFieldValue('PUT',  'PURCHASE_LIST');
     };
 
-    // Phase 1 — wait for Deriv API to populate DURATIONTYPE_LIST (up to 15 s).
+    // Wait for Deriv API to populate DURATIONTYPE_LIST (up to 15 s).
     // Nudge updateDurationInput on each poll in case the API is ready but hasn't
     // been triggered yet (e.g. the initial load event bailed out because
     // ApiHelpers.instance was null at that moment).
@@ -608,6 +657,9 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
             const res = await fetch(bot.xmlPath);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const xmlText = await res.text();
+            if (!xmlText.trim()) {
+                throw new Error('This bot file is empty and cannot be loaded.');
+            }
 
             if (engineMode === 'v2') {
                 // Fix #2 & #5: V2 path — parse config, persist, fire autostart.

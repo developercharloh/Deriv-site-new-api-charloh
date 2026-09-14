@@ -1,6 +1,7 @@
 /* eslint-disable no-confusing-arrow */
 import { MARKET_OPTIONS, SUBMARKET_OPTIONS, SYMBOL_OPTIONS } from '../../../../components/shared/utils/common-data';
 import { activeSymbolCategorizationService } from '../../../../services/active-symbol-categorization.service';
+import { DERIV_VOLATILITIES } from '../../../../utils/deriv-volatilities';
 import { config } from '../../constants/config';
 import PendingPromise from '../../utils/pending-promise';
 import { api_base } from './api-base';
@@ -224,6 +225,23 @@ export default class ActiveSymbols {
             submarket,
             this.isSymbolClosed.bind(this)
         );
+
+        // Deriv's active_symbols response has not always included every
+        // volatility family member, especially the newer 1-second indices.
+        // Keep the complete canonical volatility list selectable in DBot so a
+        // valid bot does not load with an empty/invalid symbol field.
+        if (submarket === 'random_index') {
+            const options_by_code = new Map(symbol_options.map(option => [option[1], option]));
+            DERIV_VOLATILITIES.forEach(({ code, label }) => {
+                if (!options_by_code.has(code)) {
+                    options_by_code.set(code, [label, code]);
+                }
+            });
+            return activeSymbolCategorizationService.sortDropdownOptions(
+                Array.from(options_by_code.values()),
+                this.isSymbolClosed.bind(this)
+            );
+        }
 
         // Fallback symbols based on submarket
         if (symbol_options.length === 0) {

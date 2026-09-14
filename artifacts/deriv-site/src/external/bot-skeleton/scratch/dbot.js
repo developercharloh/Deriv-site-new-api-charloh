@@ -10,7 +10,12 @@ import main_xml from './xml/main.xml';
 import { forgetAccumulatorsProposalRequest } from './accumulators-proposal-handler';
 import { loadBlockly } from './blockly';
 import DBotStore from './dbot-store';
-import { isAllRequiredBlocksEnabled, updateDisabledBlocks, validateErrorOnBlockDelete } from './utils';
+import {
+    isAllRequiredBlocksEnabled,
+    revealWorkspaceFromTop,
+    updateDisabledBlocks,
+    validateErrorOnBlockDelete,
+} from './utils';
 
 class DBot {
     constructor() {
@@ -29,17 +34,11 @@ class DBot {
         const reveal = () => {
             if (!this.workspace || !this.workspace.getTopBlocks(true).length) return;
 
-            window.Blockly.svgResize(this.workspace);
             // Do not fit the full strategy height into the viewport. A long
             // strategy should remain readable and scroll vertically, like the
             // normal DBot builder. Fitting height here reduced the blocks to
             // the 0.25 minimum and made the other roots appear missing.
-            // ScrollbarPair.setY(0) is the supported Blockly 10 API for
-            // returning to the first root block on mobile. Calling only the
-            // horizontal/combined helper leaves the viewport at the previous
-            // bottom position after a long XML import.
-            this.workspace.scrollbar?.setY?.(0);
-            this.workspace.scrollbar?.set?.(0, 0, true);
+            revealWorkspaceFromTop(this.workspace);
         };
 
         window.requestAnimationFrame(() => {

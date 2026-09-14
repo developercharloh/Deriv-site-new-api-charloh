@@ -2,6 +2,8 @@
 // Used by both Free Bots and Signal Engine pages so both always load and patch
 // the same real XML files.
 
+import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
+
 export interface BotSignal {
     symbol:           string;
     symbolLabel:      string;
@@ -564,6 +566,17 @@ export function loadPatchedBotIntoWorkspace(xmlText: string, workspace: any): vo
     if (!blockElements.length) {
         throw new Error('The selected bot does not contain any Blockly blocks.');
     }
+    const rootTypes = new Set(
+        Array.from(dom.children)
+            .filter(element => element.tagName?.toLowerCase() === 'block')
+            .map(element => element.getAttribute('type'))
+    );
+    const missingRootTypes = ['trade_definition', 'before_purchase', 'after_purchase'].filter(
+        type => !rootTypes.has(type)
+    );
+    if (missingRootTypes.length) {
+        throw new Error(`The selected bot is incomplete: missing ${missingRootTypes.join(', ')}.`);
+    }
 
     const unsupportedTypes = [...new Set(
         blockElements
@@ -582,6 +595,7 @@ export function loadPatchedBotIntoWorkspace(xmlText: string, workspace: any): vo
         Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, workspace);
         workspace.cleanUp?.();
         workspace.clearUndo?.();
+        scheduleWorkspaceReveal(workspace);
         imported = true;
     } finally {
         Blockly.Events.setGroup(false);

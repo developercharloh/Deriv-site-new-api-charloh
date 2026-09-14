@@ -9,7 +9,7 @@ import {
     save_types,
     saveWorkspaceToRecent,
 } from '@/external/bot-skeleton';
-import { inject_workspace_options, updateXmlValues } from '@/external/bot-skeleton/scratch/utils';
+import { inject_workspace_options, revealWorkspaceFromTop, scheduleWorkspaceReveal, updateXmlValues } from '@/external/bot-skeleton/scratch/utils';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { TStores } from '@deriv/stores/types';
 import { localize } from '@deriv-com/translations';
@@ -285,6 +285,7 @@ export default class LoadModalStore {
             window.Blockly.derivWorkspace.asyncClear();
             window.Blockly.Xml.domToWorkspace(window.Blockly.utils.xml.textToDom(workspace.cached_xml.main), workspace);
             window.Blockly.derivWorkspace.strategy_to_load = workspace.cached_xml.main;
+            scheduleWorkspaceReveal(workspace);
         }
     };
 
@@ -328,6 +329,7 @@ export default class LoadModalStore {
                 window.Blockly.utils.xml.textToDom(window.Blockly.derivWorkspace.strategy_to_load),
                 window.Blockly.derivWorkspace
             );
+            scheduleWorkspaceReveal(window.Blockly.derivWorkspace);
             this.is_open_button_loading = false;
             return;
         }
@@ -533,6 +535,8 @@ export default class LoadModalStore {
             const mainWorkspace = window.Blockly?.getMainWorkspace();
 
             window.Blockly?.Xml?.clearWorkspaceAndLoadFromXml(convertedDom, mainWorkspace);
+            revealWorkspaceFromTop(this.recent_workspace);
+            scheduleWorkspaceReveal(this.recent_workspace);
         }
         setLoading(false);
         this.setOpenButtonDisabled(false);

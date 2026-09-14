@@ -28,6 +28,35 @@ export const inject_workspace_options = {
     renderer: 'zelos',
 };
 
+const workspace_reveal_timers = new WeakMap();
+
+/**
+ * Blockly can recalculate its metrics after an XML import when dynamic
+ * dropdowns finish loading. On mobile that calculation may restore the old
+ * bottom scroll position, making a freshly loaded bot look empty or partially
+ * loaded. Keep the first roots at the top until the import has settled.
+ */
+export const revealWorkspaceFromTop = workspace => {
+    if (!workspace || !workspace.getTopBlocks?.(true).length) return;
+
+    window.Blockly?.svgResize?.(workspace);
+    workspace.scrollbar?.resize?.();
+    workspace.scrollbar?.setY?.(0);
+    workspace.scrollbar?.set?.(0, 0);
+};
+
+export const scheduleWorkspaceReveal = workspace => {
+    if (!workspace) return;
+
+    const previous_timers = workspace_reveal_timers.get(workspace);
+    previous_timers?.forEach(timer => window.clearTimeout(timer));
+
+    const reveal_timers = [0, 250, 750, 1500, 3000].map(delay =>
+        window.setTimeout(() => revealWorkspaceFromTop(workspace), delay)
+    );
+    workspace_reveal_timers.set(workspace, reveal_timers);
+};
+
 export const updateXmlValues = blockly_options => {
     if (!window.Blockly) return;
     const { strategy_id, convertedDom, file_name, from } = blockly_options;
@@ -264,6 +293,7 @@ export const loadBlocks = (xml, drop_event, event_group, workspace) => {
             workspace.cleanUp();
         }
         workspace.scrollbar?.setY?.(0);
+        scheduleWorkspaceReveal(workspace);
         import_completed = true;
     } finally {
         window.Blockly.Events.setGroup(false);
@@ -286,6 +316,7 @@ export const loadWorkspace = async (xml, event_group, workspace) => {
         window.Blockly.Xml.clearWorkspaceAndLoadFromXml(xml, workspace);
         workspace.cleanUp();
         workspace.scrollbar?.setY?.(0);
+        scheduleWorkspaceReveal(workspace);
         import_completed = true;
     } finally {
         window.Blockly.Events.setGroup(false);
