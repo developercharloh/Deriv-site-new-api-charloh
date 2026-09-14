@@ -30,4 +30,16 @@ describe('bot builder toolbox structure', () => {
         expect(toolboxSource).toContain("type='multiplier_take_profit'");
         expect(toolboxSource).toContain("type='multiplier_stop_loss'");
     });
+
+    it('limits Virtual Hook Switcher to the three screenshot blocks', () => {
+        const virtualHookSection = toolboxSource.match(/<Category id='virtual_hook_switcher'[\s\S]*?<\/Category>/)?.[0];
+
+        expect(virtualHookSection).toBeDefined();
+        expect(virtualHookSection).toContain("type='vh_settings'");
+        expect(virtualHookSection).toContain("type='enable_virtual_hook'");
+        expect(virtualHookSection).toContain("type='virtual_hook_status'");
+        expect(virtualHookSection).not.toContain("type='variables_get'");
+        expect(virtualHookSection).not.toContain("type='variables_set'");
+        expect(virtualHookSection).not.toContain("type='logic_boolean'");
+    });
 });

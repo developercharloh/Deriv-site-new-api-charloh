@@ -25,6 +25,10 @@ const getBotInterface = tradeEngine => {
         isSellAvailable: () => tradeEngine.isSellAtMarketAvailable(),
         sellAtMarket: () => tradeEngine.sellAtMarket(),
         getSellPrice: () => getSellPrice(tradeEngine),
+        setVirtualHookSettings: (maxVirtualLosses, minRealWins) =>
+            tradeEngine.setVirtualHookSettings(maxVirtualLosses, minRealWins),
+        enableVirtualHook: enabled => tradeEngine.enableVirtualHook(enabled),
+        isVirtualHookEnabled: () => tradeEngine.isVirtualHookEnabled(),
         // Before the first settlement there is no loss to recover from, so
         // preserve the configured initial stake by treating the result as a
         // win for the initial after-purchase evaluation.

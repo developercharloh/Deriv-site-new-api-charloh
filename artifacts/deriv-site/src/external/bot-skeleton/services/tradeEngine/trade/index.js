@@ -102,13 +102,8 @@ export const watchScope = ({ store, stopScope, passScope, passFlag, onTick }) =>
 
             // SLOW retains Deriv's normal next-tick behavior. FAST is released
             // by the wall-clock scheduler, never by a broker tick.
-            const fastClockReleased =
-                getBotExecutionSpeed() === 'fast' && newState.fastReady;
-            if (
-                (hasObservedNextTick || fastClockReleased) &&
-                newState.scope === passScope &&
-                newState[passFlag]
-            ) {
+            const fastClockReleased = getBotExecutionSpeed() === 'fast' && newState.fastReady;
+            if ((hasObservedNextTick || fastClockReleased) && newState.scope === passScope && newState[passFlag]) {
                 if (fastClockReleased) {
                     // Consume the release before resolving the watcher. The
                     // next watch call must wait for the next wall-clock slot.
@@ -140,6 +135,28 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.hasStarted = false;
         this.store = createStore(rootReducer, applyMiddleware(thunk));
         this.binaryMatrixStakeState = null;
+        this.virtualHook = {
+            enabled: false,
+            maxVirtualLosses: 3,
+            minRealWins: 1,
+        };
+    }
+
+    setVirtualHookSettings(maxVirtualLosses, minRealWins) {
+        const losses = Number(maxVirtualLosses);
+        const wins = Number(minRealWins);
+        this.virtualHook.maxVirtualLosses =
+            Number.isFinite(losses) && losses >= 0 ? Math.floor(losses) : this.virtualHook.maxVirtualLosses;
+        this.virtualHook.minRealWins =
+            Number.isFinite(wins) && wins >= 0 ? Math.floor(wins) : this.virtualHook.minRealWins;
+    }
+
+    enableVirtualHook(enabled) {
+        this.virtualHook.enabled = Boolean(enabled);
+    }
+
+    isVirtualHookEnabled() {
+        return this.virtualHook.enabled;
     }
 
     init(...args) {
@@ -180,9 +197,9 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             ...this.getBinaryMatrixTradeOptions(validated_trade_options),
             ...(executionSpeed === 'fast'
                 ? {
-                    duration: FAST_CONTRACT_DURATION_VALUE,
-                    duration_unit: FAST_CONTRACT_DURATION_UNIT,
-                }
+                      duration: FAST_CONTRACT_DURATION_VALUE,
+                      duration_unit: FAST_CONTRACT_DURATION_UNIT,
+                  }
                 : {}),
             symbol: this.options.symbol,
         };
@@ -243,17 +260,15 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const setter = workspace.getAllBlocks?.(true)?.find(block => {
             if (block.type !== 'variables_set') return false;
             const variableId = block.getFieldValue?.('VAR');
-            const variableModel = workspace.getVariableById?.(variableId)
-                ?? workspace.getVariableMap?.()?.getVariableById?.(variableId);
-            const variableName = variableModel?.name
-                ?? block.getField?.('VAR')?.getText?.()
-                ?? block.getField?.('VAR')?.getValue?.();
+            const variableModel =
+                workspace.getVariableById?.(variableId) ?? workspace.getVariableMap?.()?.getVariableById?.(variableId);
+            const variableName =
+                variableModel?.name ?? block.getField?.('VAR')?.getText?.() ?? block.getField?.('VAR')?.getValue?.();
             return variableName === name;
         });
-        const valueBlock = setter?.getInputTargetBlock?.('VALUE')
-            ?? setter?.getChildren?.()?.find(child =>
-                ['math_number', 'math_number_positive'].includes(child.type)
-            );
+        const valueBlock =
+            setter?.getInputTargetBlock?.('VALUE') ??
+            setter?.getChildren?.()?.find(child => ['math_number', 'math_number_positive'].includes(child.type));
         const value = Number(valueBlock?.getFieldValue?.('NUM'));
         return Number.isFinite(value) ? value : fallback;
     }
@@ -290,16 +305,12 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const reportedProfit = Number(contract?.profit);
         const sellPrice = Number(contract?.sell_price);
         const buyPrice = Number(contract?.buy_price);
-        const profit = Number.isFinite(reportedProfit)
-            ? reportedProfit
-            : sellPrice - buyPrice;
+        const profit = Number.isFinite(reportedProfit) ? reportedProfit : sellPrice - buyPrice;
         const isWin = Number.isFinite(profit) && profit > 0;
 
         this.binaryMatrixStakeState.currentStake = isWin
             ? this.binaryMatrixStakeState.initialStake
-            : Number(
-                (this.binaryMatrixStakeState.currentStake * this.binaryMatrixStakeState.multiplier).toFixed(2)
-            );
+            : Number((this.binaryMatrixStakeState.currentStake * this.binaryMatrixStakeState.multiplier).toFixed(2));
 
         if (isWin) {
             this.binaryMatrixStakeState.winsSinceAnalysis =
@@ -407,10 +418,13 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                         const is_open_contract = contract.status === 'open' || !contract.status;
                         if (!contractState.settled && is_open_contract) {
                             doUntilDone(() => {
-                                api_base.api.send({ proposal_open_contract: 1, contract_id: data.transaction.contract_id });
+                                api_base.api.send({
+                                    proposal_open_contract: 1,
+                                    contract_id: data.transaction.contract_id,
+                                });
                             }, ['PriceMoved']);
                         }
-                    // Reduced from 1500 → 300 ms: digit contracts settle in ≈ 1 tick (≈ 1 s).
+                        // Reduced from 1500 → 300 ms: digit contracts settle in ≈ 1 tick (≈ 1 s).
                     }, 300);
                 }
                 resolve();

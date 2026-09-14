@@ -12,6 +12,7 @@ import './Binary/Tools/Misc';
 import './Binary/Tools/Time';
 import './Binary/Trade Definition';
 import './Custom/apollo_blocks';
+import './Custom/virtual_hook_blocks';
 import './Logic';
 import './Math';
 import './Text';

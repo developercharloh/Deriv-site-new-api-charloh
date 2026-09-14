@@ -867,26 +867,23 @@ export const ToolboxItems = () =>
                 </Category>
             </Category>
 
-            {/*
-             * These groups mirror the additional sections in the reference
-             * toolbox. They intentionally reuse registered Blockly blocks
-             * instead of introducing visual-only block types. The custom
-             * engine controls shown in the reference images are not part of
-             * the DBot interpreter contract, so exposing them here would
-             * create blocks that look runnable but cannot execute safely.
-             */}
             <Category id='virtual_hook_switcher' name={localize('Virtual Hook Switcher')}>
-                <Block type='variables_get' />
-                <Block type='variables_set'>
-                    <Value name='VALUE'>
-                        <Shadow type='logic_boolean'>
-                            <Field name='BOOL'>TRUE</Field>
+                <Block type='vh_settings'>
+                    <Value name='MAX_STEPS'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>3</Field>
+                        </Shadow>
+                    </Value>
+                    <Value name='MIN_TRADES'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>1</Field>
                         </Shadow>
                     </Value>
                 </Block>
-                <Block type='logic_boolean'>
-                    <Field name='BOOL'>TRUE</Field>
+                <Block type='enable_virtual_hook'>
+                    <Field name='ENABLE_VIRTUAL_HOOK'>disable</Field>
                 </Block>
+                <Block type='virtual_hook_status' />
             </Category>
 
             <Category id='custom_notification' name={localize('Custom Notification')}>
