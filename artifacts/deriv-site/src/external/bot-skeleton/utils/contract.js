@@ -29,5 +29,18 @@ export const getContractTypeName = contract => {
         });
     });
 
+    // Digit contracts are only fully identified when the barrier is shown.
+    // Without it, an uploaded strategy such as Digit Pro can look like a
+    // generic Over/Under trade even though it deliberately mapped Over 2 and
+    // Under 7.
+    if (
+        ['DIGITOVER', 'DIGITUNDER'].includes(contract?.contract_type) &&
+        contract?.barrier !== undefined &&
+        contract?.barrier !== null &&
+        contract?.barrier !== ''
+    ) {
+        name = `${name} ${contract.barrier}`;
+    }
+
     return name;
 };

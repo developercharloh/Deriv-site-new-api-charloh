@@ -20,3 +20,9 @@ Generated DBot Builder runs also need a settlement-authoritative re-analysis bar
 **Why:** The repeated Blockly scan can otherwise reuse the final winning tick and appear not to re-analyse, especially in FAST mode where the outer loop is clock-driven.
 
 **How to apply:** Set the barrier from authoritative settlement handling, preserve it across generated cycle restarts, and let the existing repeated before-purchase scan evaluate the full condition chain only on the fresh tick.
+
+Generated Blockly purchases must also publish their resolved contract mapping. The uploaded Digit Pro strategy maps `DIGITOVER` to Over 2 and `DIGITUNDER` to Under 7; reporting only the generic condition or an older native-matrix label makes Journal and transactions appear to disagree with the bot.
+
+**Why:** Strategy conditions and purchase mappings are separate Blockly blocks, so a correct condition result alone does not tell the operator which contract type and barrier were actually sent.
+
+**How to apply:** Emit the mapping from the shared purchase path, attach it to the live analysis banner and Journal, and include digit-contract barriers in transaction names.

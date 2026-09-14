@@ -11,6 +11,7 @@ import {
     tryAcquireBotContractGate,
 } from '@/utils/bot-contract-gate';
 import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
+import { observer as globalObserver } from '../../../utils/observer';
 
 let delayIndex = 0;
 let purchase_reference;
@@ -27,6 +28,14 @@ export const getPurchaseTradeOptions = (tradeOptions, prediction) => {
         ...tradeOptions,
         prediction: numericPrediction,
     };
+};
+
+const getPurchaseMappingLabel = (contractType, prediction) => {
+    if (contractType === 'DIGITOVER') return `Over ${prediction}`;
+    if (contractType === 'DIGITUNDER') return `Under ${prediction}`;
+    if (contractType === 'DIGITEVEN') return 'Even';
+    if (contractType === 'DIGITODD') return 'Odd';
+    return contractType;
 };
 
 export default Engine =>
@@ -101,6 +110,11 @@ export default Engine =>
             if (!tryAcquireBotContractGate(this, signalKey, false)) {
                 return Promise.resolve();
             }
+            globalObserver.emit('bot.purchase.mapping', {
+                contractType: contract_type,
+                prediction: prediction ?? null,
+                label: getPurchaseMappingLabel(contract_type, prediction),
+            });
             const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction);
             const releasePurchaseLease = () =>
                 releaseBotContractGate(this, undefined, signalKey);

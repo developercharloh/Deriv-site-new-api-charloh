@@ -28,6 +28,13 @@ export type TLastDigitsAnalysis = {
     compareValue: number;
     digits: number[];
     result: boolean;
+    purchaseMapping?: string | null;
+};
+
+type TPurchaseMapping = {
+    contractType: string;
+    prediction: number | string | null;
+    label: string;
 };
 
 export type TContractState = {
@@ -100,6 +107,7 @@ export default class RunPanelStore {
             onBotContractEvent: action,
             onError: action,
             onLastDigitsAnalysis: action.bound,
+             onPurchaseMapping: action.bound,
             clearLastDigitsAnalysis: action,
             showErrorMessage: action,
             switchToJournal: action,
@@ -956,7 +964,7 @@ export default class RunPanelStore {
         // evaluates several conditions asynchronously; keeping these writes in
         // one observer callback prevents the Journal from drifting behind the
         // banner when the next condition arrives.
-        this.last_digits_analysis = analysis;
+        this.last_digits_analysis = { ...analysis };
 
         const conditionLabel = (() => {
             switch (analysis.condition) {
@@ -979,6 +987,22 @@ export default class RunPanelStore {
                 `Digits: [${analysis.digits.join(', ')}] ` +
                 `Entry point: ${analysis.result ? 'HIT' : 'NOT HIT'} · ` +
                 `Result: ${analysis.result ? '✅ CONDITIONS MET' : '❌ CONDITIONS NOT MET'}`,
+            MessageTypes.NOTIFY,
+            'journal__text'
+        );
+    };
+
+    onPurchaseMapping = (mapping: TPurchaseMapping) => {
+        if (this.last_digits_analysis) {
+            this.last_digits_analysis = {
+                ...this.last_digits_analysis,
+                purchaseMapping: mapping.label,
+            };
+        }
+
+        this.root_store.journal.pushMessage(
+            `Purchase mapping: ${mapping.label} ` +
+                `(contract ${mapping.contractType}${mapping.prediction !== null ? `, prediction ${mapping.prediction}` : ''})`,
             MessageTypes.NOTIFY,
             'journal__text'
         );
@@ -1093,6 +1117,7 @@ export default class RunPanelStore {
         observer.register('ui.log.notify', journal.onNotify);
         observer.register('ui.log.success', journal.onLogSuccess);
         observer.register('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.register('bot.purchase.mapping', this.onPurchaseMapping);
         observer.register('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.register('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.register('client.invalid_token', this.handleInvalidToken);
@@ -1113,6 +1138,7 @@ export default class RunPanelStore {
         observer.unregisterAll('ui.log.notify');
         observer.unregisterAll('ui.log.success');
         observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.unregister('bot.purchase.mapping', this.onPurchaseMapping);
         observer.unregister('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.unregister('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.unregisterAll('client.invalid_token');

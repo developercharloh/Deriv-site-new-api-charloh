@@ -35,6 +35,9 @@ const LastDigitsAnalysis = ({ analysis }: TLastDigitsAnalysisProps) => (
         <span className='last-digits-analysis__result' aria-label={analysis.result ? 'true' : 'false'}>
             {analysis.result ? '✅ TRUE' : '❌ FALSE'}
         </span>
+        {analysis.purchaseMapping && (
+            <span className='last-digits-analysis__mapping'> · Trading: {analysis.purchaseMapping}</span>
+        )}
     </div>
 );
 

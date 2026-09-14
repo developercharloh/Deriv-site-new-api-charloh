@@ -261,4 +261,42 @@ describe('Binary Matrix analysis observer integration', () => {
         expect(journal.pushMessage).toHaveBeenCalledTimes(3);
         dispose();
     });
+
+    it('keeps the uploaded purchase mapping visible in the banner and Journal', () => {
+        const journal = {
+            pushMessage: jest.fn(),
+        };
+        const rootStore = {
+            dbot: {},
+            journal,
+        };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+        runPanel.onMount();
+
+        observer.emit('bot.analysis.condition', {
+            market: '1HZ10V',
+            condition: 'ALL_ODD',
+            count: 3,
+            compareValue: 0,
+            digits: [1, 3, 5],
+            result: true,
+        });
+        observer.emit('bot.purchase.mapping', {
+            contractType: 'DIGITOVER',
+            prediction: 2,
+            label: 'Over 2',
+        });
+
+        expect(runPanel.last_digits_analysis).toEqual(expect.objectContaining({ purchaseMapping: 'Over 2' }));
+        expect(journal.pushMessage).toHaveBeenLastCalledWith(
+            'Purchase mapping: Over 2 (contract DIGITOVER, prediction 2)',
+            MessageTypes.NOTIFY,
+            'journal__text'
+        );
+    });
 });
