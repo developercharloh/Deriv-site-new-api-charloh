@@ -21,3 +21,4 @@
 - [SLOW live tick monitor](deriv-slow-live-tick-monitor.md) — warm tick history is not proof of a live listener; restore same-symbol monitors when the listener key is missing.
 - [DBot pause and resume](deriv-bot-pause-resume.md) — pause only blocks new purchases; keep the interpreter and let open contracts settle.
 - [Deriv browser regression gate timing](deriv-browser-regression-gate.md) — splash-triggered social popup can appear after the harness's initial gate check.
+- [FAST gate test isolation](fast-gate-test-isolation.md) — releasing a lease preserves the last-used FAST key, so focused tests need isolated synthetic slots.

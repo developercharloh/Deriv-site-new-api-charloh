@@ -99,6 +99,147 @@ describe('generated bot settlement results', () => {
         (window as any).Blockly = previousBlockly;
     });
 
+    it('prewarms the next proposal before the generated cycle resumes after settlement', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+
+        const subscriptions: Array<(message: { data: Record<string, any> }) => void> = [];
+        const api = {
+            onMessage: () => ({
+                subscribe: (callback: (message: { data: Record<string, any> }) => void) => {
+                    subscriptions.push(callback);
+                    return {
+                        unsubscribe: () => {
+                            const index = subscriptions.indexOf(callback);
+                            if (index >= 0) subscriptions.splice(index, 1);
+                        },
+                    };
+                },
+            }),
+            send: jest.fn(),
+        };
+
+        api_base.api = api;
+        api_base.account_info = { loginid: 'VRTC-BINARY-MATRIX' };
+        api_base.subscriptions = [];
+
+        const engine: any = new TradeEngine({
+            observer: {
+                emit: jest.fn(),
+                register: jest.fn(),
+            },
+            ticksService: {},
+        });
+        const signalKey = 'fast:prewarm-regression';
+        const events: string[] = [];
+        const otherRunner = {};
+        const contractState = {
+            contractId: '9101',
+            signalKey,
+            contract: {},
+            isSold: false,
+            isSellAvailable: false,
+            isExpired: false,
+            hasEntryTick: false,
+            settled: false,
+            afterPromise: null as null | (() => void),
+            afterWatchdog: null,
+            afterWatchdog2: null,
+            recoveryTimeout: null,
+        };
+
+        engine.options = { symbol: 'R_25' };
+        engine.tradeOptions = {
+            amount: 0.5,
+            basis: 'stake',
+            currency: 'USD',
+            duration: 1,
+            duration_unit: 't',
+            symbol: 'R_25',
+        };
+        engine.activeContracts = new Map([[contractState.contractId, contractState]]);
+        engine.contractId = contractState.contractId;
+        engine.binaryMatrixStakeState = {
+            initialStake: 0.5,
+            currentStake: 0.5,
+            multiplier: 2,
+            winsSinceAnalysis: 0,
+            reanalysisPending: false,
+            reanalysisBlockedEpoch: null,
+        };
+        engine.is_proposal_subscription_required = true;
+        engine.updateTotals = jest.fn(() => events.push('authoritative-totals'));
+        engine.getBinaryMatrixTradeOptions = jest.fn(options => {
+            events.push('next-options');
+            expect(engine.binaryMatrixStakeState.currentStake).toBe(1);
+            return {
+                ...options,
+                amount: engine.binaryMatrixStakeState.currentStake,
+            };
+        });
+        engine.makeProposals = jest.fn(options => {
+            events.push(`proposal:${options.amount}`);
+        });
+
+        expect(tryAcquireBotContractGate(engine, signalKey)).toBe(true);
+        setBotContractGateContract(engine, contractState.contractId, signalKey);
+        expect(tryAcquireBotContractGate(otherRunner, signalKey)).toBe(false);
+
+        contractState.afterPromise = () => {
+            events.push('interpreter-resumed');
+            expect(tryAcquireBotContractGate(engine, signalKey)).toBe(true);
+            events.push('next-purchase-allowed');
+        };
+
+        const settlement = {
+            contract_id: Number(contractState.contractId),
+            is_sold: 1,
+            is_expired: 1,
+            is_valid_to_sell: 0,
+            buy_price: 0.5,
+            sell_price: 0,
+            profit: -0.5,
+            currency: 'USD',
+            contract_type: 'DIGITEVEN',
+            transaction_ids: {
+                buy: 'buy-9101',
+                sell: 'sell-9101',
+            },
+            entry_tick_time: 1700000000,
+            exit_tick_time: 1700000001,
+            entry_tick: 1,
+            exit_tick: 2,
+            barrier: '',
+        };
+        [...subscriptions].forEach(subscription =>
+            subscription({
+                data: {
+                    msg_type: 'proposal_open_contract',
+                    proposal_open_contract: settlement,
+                },
+            })
+        );
+
+        expect(contractState.settled).toBe(true);
+        expect(engine.lastSettledContract).toBe(settlement);
+        expect(engine.binaryMatrixStakeState.currentStake).toBe(1);
+        expect(engine.updateTotals).toHaveBeenCalledWith(settlement, true);
+        expect(engine.makeProposals).toHaveBeenCalledWith(
+            expect.objectContaining({
+                symbol: 'R_25',
+                amount: 1,
+            })
+        );
+        expect(events).toEqual([
+            'authoritative-totals',
+            'next-options',
+            'proposal:1',
+            'interpreter-resumed',
+            'next-purchase-allowed',
+        ]);
+
+        releaseBotContractGate(engine);
+    });
+
     it('counts only settled Binary Matrix wins and requests repeated re-analysis', () => {
         const previousBlockly = window.Blockly;
         const workspace = {
