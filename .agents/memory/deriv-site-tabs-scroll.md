@@ -1,20 +1,15 @@
 ---
-name: Deriv-site custom Tabs content id is stripped
-description: Why id-based mobile scroll/height CSS on custom Tabs panes silently no-ops in this repo
+name: Deriv-site Tabs content panel scrolling
+description: How the shared Tabs component exposes active pane IDs for mobile scroll layouts
 ---
 
-The shared `Tabs` component (`src/components/shared_ui/tabs/tabs.tsx`) renders each pane
-by extracting `child.props.children` from the tab's wrapper `<div id="..." label="...">`.
-The wrapper div itself (and its `id`) is discarded — only its children land in the DOM,
-inside an unstyled `.dc-tabs__content` div.
+The shared `Tabs` component (`src/components/shared_ui/tabs/tabs.tsx`) renders the active
+tab inside `.dc-tabs__content-panel` and preserves `child.props.id` on that panel.
 
-**Why:** Any CSS written to target a tab pane by the `id` you passed on that wrapper div
-(e.g. `#id-ai-analysis { overflow-y: auto }`) will never match anything, because that id
-never reaches the DOM. This caused a real bug: a mobile scroll-fix for 4 full-page custom
-tabs (Free Bots, AI Analysis, D-Circles, Advanced D-Trader) was dead CSS.
+**Why:** The active pane ID is available for layout CSS, but the parent tab content region
+and the pane must still be constrained with `min-height: 0` so a nested mobile scroll area
+can expand and scroll instead of being clipped by the fixed main layout.
 
-**How to apply:** Fixed by having `Tabs` re-wrap the active pane's children in a real
-`<div id={child.props.id} className="dc-tabs__content-panel">` when `child.props.id` is
-set. If you add new full-page tabs relying on an `id`/`className` selector from the
-wrapper div passed into `Tabs`, verify the id actually appears in the rendered DOM first —
-don't assume it does just because it's a prop on the JSX you wrote in the parent.
+**How to apply:** For full-page mobile tabs, target the preserved pane ID, set the pane to
+`display: flex`, `flex-direction: column`, `min-height: 0`, and put `overflow-y: auto`
+on the child content that owns the list. Keep bottom padding for any fixed controls.

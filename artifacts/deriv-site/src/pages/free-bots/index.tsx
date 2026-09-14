@@ -381,6 +381,24 @@ const CARD_ART: Record<string, string> = {
     'elite-entry-scanner': '/assets/free-bots/blueprint.jpg',
 };
 
+const CARD_CATEGORY: Record<string, string> = {
+    'binary-matrix-ai': 'MATRIX BOT',
+    'rise-fall-master': 'RISE / FALL',
+    'matches-signal': 'MATCHES',
+    'differ-v2': 'DIFFERS',
+    'even-odd-scanner': 'EVEN / ODD',
+    'over-under-signal': 'MULTI-MARKET BOT',
+    'over2-under7-reversal': 'OVER / UNDER',
+    'digit-pro-v1': 'OVER / UNDER · EVEN / ODD',
+    'over-destroyer': 'OVER / UNDER',
+    'under-destroyer': 'OVER / UNDER',
+    'elite-default-speed': 'UNDER',
+    'even-odd-manual': 'EVEN / ODD',
+    'over-under-manual': 'OVER / UNDER',
+    'over-under-ai-signals': 'MULTI-MARKET BOT',
+    'elite-entry-scanner': 'UNDER',
+};
+
 const CARD_ACCENT: Record<string, string> = {
     'binary-matrix-ai': '#178da8',
     'rise-fall-master': '#0d9959',
@@ -864,7 +882,11 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                     style={{
                         backgroundImage: `url(${CARD_ART[bot.id] || '/assets/free-bots/digit-ticker.jpg'})`,
                     }}
-                />
+                >
+                    <span className='free-bots__card-category'>
+                        {bot.category || CARD_CATEGORY[bot.id] || 'BOT'}
+                    </span>
+                </div>
 
                 <div
                     className='free-bots__card-body'
@@ -939,11 +961,6 @@ const FreeBots = observer(() => {
 
     return (
         <div className='free-bots'>
-            <div className='free-bots__intro'>
-                <h1>Osam Trading Hub</h1>
-                <strong>Free bots</strong>
-                <p>Load a bot and start trading — no setup, no noise.</p>
-            </div>
             <div className='free-bots__grid'>
                 {BOTS.map(bot => (
                     <BotCard key={bot.id} bot={bot} engineMode={engineMode} />
