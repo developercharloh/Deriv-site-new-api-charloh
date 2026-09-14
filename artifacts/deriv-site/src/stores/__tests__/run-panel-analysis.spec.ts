@@ -8,8 +8,10 @@ jest.mock('@/utils/store-helpers', () => ({
 
 import { MessageTypes } from '@/external/bot-skeleton';
 import { observer } from '@/external/bot-skeleton/utils/observer';
+import Ticks from '@/external/bot-skeleton/services/tradeEngine/trade/Ticks';
 import RunPanelStore from '@/stores/run-panel-store';
 import { BinaryMatrixEngine } from '@/utils/binary-matrix-engine';
+import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 
 describe('Binary Matrix analysis observer integration', () => {
@@ -76,6 +78,144 @@ describe('Binary Matrix analysis observer integration', () => {
             [expect.stringContaining('Result: ❌ CONDITIONS NOT MET'), MessageTypes.NOTIFY],
             [expect.stringContaining('Result: ❌ CONDITIONS NOT MET'), MessageTypes.NOTIFY],
             [expect.stringContaining('Result: ✅ CONDITIONS MET'), MessageTypes.NOTIFY],
+        ]);
+    });
+
+    it('keeps generated condition banners and Journal rows ordered within each configured tick cadence', async () => {
+        const journal = {
+            pushMessage: jest.fn(),
+        };
+        const rootStore = {
+            dbot: {},
+            journal,
+        };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+        runPanel.onMount();
+
+        const Engine = Ticks(class {} as any);
+        const engine: any = new Engine();
+        engine.getPipSize = () => 2;
+        engine.store = { dispatch: jest.fn() };
+        engine.observer = { emit: jest.fn() };
+
+        let currentWindow: Array<{ quote: number }> = [];
+        let tickCallback: ((ticks: Array<{ epoch: number; quote: number }>) => void) | undefined;
+        engine.$scope = {
+            ticksService: {
+                monitor: jest.fn(async ({ callback }) => {
+                    tickCallback = callback;
+                    return 'generated-analysis-tick-listener';
+                }),
+                request: jest.fn(async () => currentWindow),
+            },
+        };
+
+        const visibleEvents: Array<{
+            epoch: number;
+            analysis: Record<string, unknown> | null;
+        }> = [];
+        observer.register('bot.analysis.condition', () => {
+            visibleEvents.push({
+                epoch: engine.latestTick.epoch,
+                analysis: runPanel.last_digits_analysis
+                    ? { ...runPanel.last_digits_analysis }
+                    : null,
+            });
+        });
+
+        const configuredCadenceSeconds =
+            DERIV_VOLATILITIES.find(({ code }) => code === 'R_25')?.tickEvery ?? 2;
+        const firstEpoch = 1_700_000_000;
+        const tickWindows = [
+            {
+                epoch: firstEpoch,
+                ticks: [{ quote: 1.44 }],
+                conditions: [
+                    { condition: 'ALL_EVEN', count: 1, compareValue: 0, result: true },
+                    { condition: 'ALL_ODD', count: 1, compareValue: 0, result: false },
+                    { condition: 'ALL_EVEN', count: 1, compareValue: 0, result: true },
+                ],
+            },
+            {
+                epoch: firstEpoch + configuredCadenceSeconds,
+                ticks: [{ quote: 1.44 }, { quote: 1.46 }],
+                conditions: [
+                    { condition: 'GREATER_OR_EQUAL', count: 2, compareValue: 6, result: false },
+                    { condition: 'LESS_OR_EQUAL', count: 2, compareValue: 6, result: true },
+                    { condition: 'GREATER_OR_EQUAL', count: 2, compareValue: 6, result: false },
+                ],
+            },
+        ];
+
+        await engine.watchTicks('R_25');
+        expect(tickCallback).toBeDefined();
+
+        for (const tick of tickWindows) {
+            currentWindow = tick.ticks;
+            tickCallback?.([{ epoch: tick.epoch, quote: tick.ticks.at(-1)?.quote ?? 0 }]);
+
+            for (const expected of tick.conditions) {
+                await expect(
+                    engine.checkLastDigitsCondition(expected.condition, expected.count, expected.compareValue)
+                ).resolves.toBe(expected.result);
+            }
+        }
+
+        const expectedAnalyses = tickWindows.flatMap(tick =>
+            tick.conditions.map(condition => ({
+                epoch: tick.epoch,
+                analysis: {
+                    market: 'R_25',
+                    condition: condition.condition,
+                    count: condition.count,
+                    compareValue: condition.compareValue,
+                    digits: tick.ticks.map(({ quote }) => Number(quote.toFixed(2).slice(-1))),
+                    result: condition.result,
+                },
+            }))
+        );
+
+        expect(visibleEvents).toEqual(expectedAnalyses);
+
+        const expectedJournalMessages = expectedAnalyses.map(({ analysis }) => {
+            const conditionLabel = (() => {
+                switch (analysis.condition) {
+                    case 'ALL_EVEN':
+                        return 'all even';
+                    case 'ALL_ODD':
+                        return 'all odd';
+                    case 'LESS_OR_EQUAL':
+                        return `less than or equal to ${analysis.compareValue}`;
+                    case 'GREATER_OR_EQUAL':
+                        return `greater than or equal to ${analysis.compareValue}`;
+                    default:
+                        return analysis.condition;
+                }
+            })();
+
+            return (
+                `Last Digits Analysis Market: ${analysis.market} ` +
+                `Condition: ${conditionLabel} ` +
+                `Digits: [${analysis.digits.join(', ')}] ` +
+                `Entry point: ${analysis.result ? 'HIT' : 'NOT HIT'} · ` +
+                `Result: ${analysis.result ? '✅ CONDITIONS MET' : '❌ CONDITIONS NOT MET'}`
+            );
+        });
+
+        expect(journal.pushMessage.mock.calls.map(([message]) => message)).toEqual(expectedJournalMessages);
+        expect(journal.pushMessage.mock.calls.map(([, messageType]) => messageType)).toEqual(
+            expectedAnalyses.map(() => MessageTypes.NOTIFY)
+        );
+
+        const distinctEpochs = [...new Set(visibleEvents.map(({ epoch }) => epoch))];
+        expect(distinctEpochs).toEqual(tickWindows.map(({ epoch }) => epoch));
+        expect(distinctEpochs.slice(1).map((epoch, index) => epoch - distinctEpochs[index])).toEqual([
+            configuredCadenceSeconds,
         ]);
     });
 });
