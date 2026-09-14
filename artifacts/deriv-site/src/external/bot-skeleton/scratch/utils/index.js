@@ -30,6 +30,26 @@ export const inject_workspace_options = {
 
 const workspace_reveal_timers = new WeakMap();
 
+const normalizeMobileWorkspaceOrigin = workspace => {
+    const top_blocks = workspace?.getTopBlocks?.(true) ?? [];
+    if (!top_blocks.length || window.innerWidth >= 768) return;
+
+    const positions = top_blocks
+        .map(block => block.getRelativeToSurfaceXY?.())
+        .filter(position => position && Number.isFinite(position.x) && Number.isFinite(position.y));
+    if (!positions.length) return;
+
+    const min_x = Math.min(...positions.map(position => position.x));
+    const min_y = Math.min(...positions.map(position => position.y));
+    const target_x = 24;
+    const target_y = 24;
+    const delta_x = target_x - min_x;
+    const delta_y = target_y - min_y;
+
+    if (Math.abs(delta_x) < 1 && Math.abs(delta_y) < 1) return;
+    top_blocks.forEach(block => block.moveBy?.(delta_x, delta_y));
+};
+
 /**
  * Blockly can recalculate its metrics after an XML import when dynamic
  * dropdowns finish loading. On mobile that calculation may restore the old
@@ -39,6 +59,7 @@ const workspace_reveal_timers = new WeakMap();
 export const revealWorkspaceFromTop = workspace => {
     if (!workspace || !workspace.getTopBlocks?.(true).length) return;
 
+    normalizeMobileWorkspaceOrigin(workspace);
     window.Blockly?.svgResize?.(workspace);
     workspace.scrollbar?.resize?.();
     workspace.scrollbar?.setY?.(0);
