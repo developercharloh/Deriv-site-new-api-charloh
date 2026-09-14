@@ -100,10 +100,14 @@ describe('generated bot settlement results', () => {
         (window as any).Blockly = previousBlockly;
     });
 
-    it('prewarms the next proposal before the generated cycle resumes after settlement', () => {
+    it('prewarms and accepts the next proposal before the generated cycle resumes after settlement', async () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
 
         const subscriptions: Array<(message: { data: Record<string, any> }) => void> = [];
+        const proposalRequests: Array<Record<string, any>> = [];
+        const buyRequests: Array<Record<string, any>> = [];
+        const events: string[] = [];
+        let nextProposalId = 1;
         const api = {
             onMessage: () => ({
                 subscribe: (callback: (message: { data: Record<string, any> }) => void) => {
@@ -116,7 +120,43 @@ describe('generated bot settlement results', () => {
                     };
                 },
             }),
-            send: jest.fn(),
+            send: jest.fn((payload: Record<string, any>) => {
+                if (payload.proposal) {
+                    proposalRequests.push(payload);
+                    events.push(`proposal:${payload.amount}`);
+                    const proposal = {
+                        id: `proposal-${nextProposalId++}`,
+                        ask_price: Number(payload.amount),
+                        contract_type: payload.contract_type,
+                    };
+                    [...subscriptions].forEach(subscription =>
+                        subscription({
+                            data: {
+                                msg_type: 'proposal',
+                                proposal,
+                                passthrough: payload.passthrough,
+                            },
+                        })
+                    );
+                }
+
+                if (payload.buy) {
+                    buyRequests.push(payload);
+                }
+
+                return Promise.resolve(
+                    payload.buy
+                        ? {
+                              buy: {
+                                  transaction_id: 'transaction-9102',
+                                  contract_id: 9102,
+                                  buy_price: payload.price,
+                                  payout: Number(payload.price) + 0.85,
+                              },
+                          }
+                        : {}
+                );
+            }),
         };
 
         api_base.api = api;
@@ -131,7 +171,6 @@ describe('generated bot settlement results', () => {
             ticksService: {},
         });
         const signalKey = 'fast:prewarm-regression';
-        const events: string[] = [];
         const otherRunner = {};
         const contractState = {
             contractId: '9101',
@@ -156,9 +195,12 @@ describe('generated bot settlement results', () => {
             duration: 1,
             duration_unit: 't',
             symbol: 'R_25',
+            contractTypes: ['DIGITEVEN'],
         };
         engine.activeContracts = new Map([[contractState.contractId, contractState]]);
         engine.contractId = contractState.contractId;
+        engine.accountInfo = api_base.account_info;
+        engine.startPromise = Promise.resolve();
         engine.binaryMatrixStakeState = {
             initialStake: 0.5,
             currentStake: 0.5,
@@ -177,9 +219,9 @@ describe('generated bot settlement results', () => {
                 amount: engine.binaryMatrixStakeState.currentStake,
             };
         });
-        engine.makeProposals = jest.fn(options => {
-            events.push(`proposal:${options.amount}`);
-        });
+        engine.trade_option = { ...engine.options, ...engine.tradeOptions };
+        engine.regeneratePurchaseReference();
+        engine.store.dispatch({ type: tradeConstants.START });
 
         expect(tryAcquireBotContractGate(engine, signalKey)).toBe(true);
         setBotContractGateContract(engine, contractState.contractId, signalKey);
@@ -188,6 +230,7 @@ describe('generated bot settlement results', () => {
         contractState.afterPromise = () => {
             events.push('interpreter-resumed');
             expect(tryAcquireBotContractGate(engine, signalKey)).toBe(true);
+            releaseBotContractGate(engine, undefined, signalKey);
             events.push('next-purchase-allowed');
         };
 
@@ -224,21 +267,38 @@ describe('generated bot settlement results', () => {
         expect(engine.lastSettledContract).toBe(settlement);
         expect(engine.binaryMatrixStakeState.currentStake).toBe(1);
         expect(engine.updateTotals).toHaveBeenCalledWith(settlement, true);
-        expect(engine.makeProposals).toHaveBeenCalledWith(
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(proposalRequests).toEqual([
             expect.objectContaining({
-                symbol: 'R_25',
                 amount: 1,
-            })
-        );
+                contract_type: 'DIGITEVEN',
+                underlying_symbol: 'R_25',
+            }),
+        ]);
+        expect(engine.data.proposals).toEqual([
+            expect.objectContaining({
+                id: 'proposal-1',
+                ask_price: 1,
+                contract_type: 'DIGITEVEN',
+            }),
+        ]);
+
+        const bot = getBotInterface(engine);
+        await expect(engine.watch('before')).resolves.toBe(true);
+        await bot.purchase('DIGITEVEN');
+
+        expect(buyRequests).toEqual([{ buy: 'proposal-1', price: 1 }]);
+        releaseBotContractGate(engine, 9102);
         expect(events).toEqual([
             'authoritative-totals',
             'next-options',
             'proposal:1',
             'interpreter-resumed',
             'next-purchase-allowed',
+            'proposal:1',
         ]);
-
-        releaseBotContractGate(engine);
     });
 
     it('counts only settled Binary Matrix wins and requests repeated re-analysis', () => {
