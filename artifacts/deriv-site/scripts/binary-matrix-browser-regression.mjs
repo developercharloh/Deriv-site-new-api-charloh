@@ -13,6 +13,7 @@ import { spawn } from 'node:child_process';
 const appUrl = process.env.BINARY_MATRIX_BASE_URL || `http://127.0.0.1:${process.env.PORT || 22438}`;
 const projectDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const xmlPath = join(projectDir, 'public', 'bots', 'Binary_Matrix_AI.xml');
+const freeBotXmlPath = join(projectDir, 'public', 'bots', 'Over2_Under7_Reversal.xml');
 const chromiumPath = process.env.CHROMIUM_PATH || 'chromium';
 const rootLabels = {
     trade_definition: 'Trade Parameters',
@@ -22,6 +23,10 @@ const rootLabels = {
 const requiredBlockTypes = {
     last_digits_condition: 4,
     apollo_purchase2: 4,
+};
+const requiredFreeBotBlockTypes = {
+    variables_set_option: 1,
+    variables_is_option: 1,
 };
 const emptySavedWorkspaceValue =
     '\u3686\uf044\u0960\u2660\u5c60\u5302\ud801\uc02e\u04f0\u2d01\u9c08\u601b\u8251\u603b\u80f6\u0138\u0d63\u8a78\u0c60\u9800\ud180\u1d9e\u4b3f\u0042\u00d9\ue76d\u5598\u001e\u49f9\uc306\u002f\u805d\u2000';
@@ -798,6 +803,47 @@ const clickButtonContaining = async (cdp, text) => {
     );
 };
 
+const clickButtonInCard = async (cdp, cardTitle, buttonText) => {
+    await waitFor(
+        cdp,
+        `Array.from(document.querySelectorAll('.free-bots__card')).some(card => {
+            const title = card.querySelector('.free-bots__card-name')?.textContent || '';
+            return title.includes(${JSON.stringify(cardTitle)}) &&
+                Array.from(card.querySelectorAll('button')).some(button =>
+                    button.getClientRects().length > 0 && button.textContent.includes(${JSON.stringify(buttonText)})
+                );
+        })`,
+        `${cardTitle} card`
+    );
+    await evaluate(
+        cdp,
+        `(() => {
+            const card = Array.from(document.querySelectorAll('.free-bots__card')).find(candidate =>
+                (candidate.querySelector('.free-bots__card-name')?.textContent || '').includes(${JSON.stringify(cardTitle)})
+            );
+            const button = Array.from(card?.querySelectorAll('button') || []).find(candidate =>
+                candidate.getClientRects().length > 0 && candidate.textContent.includes(${JSON.stringify(buttonText)})
+            );
+            if (!card || !button) throw new Error(${JSON.stringify(`Could not locate ${buttonText} for ${cardTitle}.`)});
+            card.scrollIntoView({ block: 'center', inline: 'nearest' });
+            button.click();
+            return true;
+        })()`
+    );
+};
+
+const dismissSocialPopup = async cdp => {
+    const dismissed = await evaluate(
+        cdp,
+        `(() => {
+            const dismiss = document.querySelector('.slx-popup__dismiss');
+            dismiss?.click();
+            return Boolean(dismiss);
+        })()`
+    );
+    if (dismissed) await sleep(500);
+};
+
 const workspaceSnapshot = async cdp => {
     return evaluate(
         cdp,
@@ -914,6 +960,80 @@ const assertBinaryMatrixWorkspace = async (cdp, flowName) => {
     console.log(
         `✓ ${flowName}: ${expectedTypes.map(type => rootLabels[type]).join(', ')}; ` +
             `mobile scrollX=${snapshot.scrollX}, scrollY=${snapshot.scrollY}, firstRootY=${firstRoot.y}`
+    );
+};
+
+const assertFreeBotWorkspace = async (cdp, flowName) => {
+    try {
+        await waitFor(
+            cdp,
+            `(() => {
+                const roots = window.Blockly?.derivWorkspace?.getTopBlocks?.(true) || [];
+                return ['trade_definition', 'before_purchase', 'after_purchase'].every(type =>
+                    roots.some(block => block.type === type)
+                );
+            })()`,
+            `${flowName} root blocks`
+        );
+    } catch (error) {
+        const snapshot = await workspaceSnapshot(cdp);
+        const pageState = await evaluate(
+            cdp,
+            `JSON.stringify({
+                url: location.href,
+                hash: location.hash,
+                activeTab: document.querySelector('[aria-selected="true"]')?.textContent?.trim() || null,
+                errors: Array.from(document.querySelectorAll('[class*="error"], [role="alert"]'))
+                    .map(element => element.textContent?.trim())
+                    .filter(Boolean)
+                    .slice(0, 10),
+                body: document.body?.innerText?.slice(-1200),
+            })`
+        );
+        throw new Error(`${error.message}; ${flowName} snapshot=${JSON.stringify(snapshot)}; page=${pageState}`);
+    }
+
+    // Option dropdown validation and the Deriv API cascade can mutate the
+    // workspace several seconds after domToBlock returns. Verify the selected
+    // Free Bot after that settling window, not only the initial import.
+    await sleep(6_800);
+
+    const snapshot = await workspaceSnapshot(cdp);
+    if (!snapshot) throw new Error(`${flowName}: Blockly workspace is unavailable.`);
+
+    const actualTypes = snapshot.roots.map(root => root.type);
+    for (const type of Object.keys(rootLabels)) {
+        if (!actualTypes.includes(type)) {
+            throw new Error(`${flowName}: missing ${rootLabels[type]} (${type}); roots were ${actualTypes.join(', ')}`);
+        }
+    }
+
+    for (const [type, minimum] of Object.entries(requiredFreeBotBlockTypes)) {
+        const actualCount = snapshot.allBlockTypes?.[type] || 0;
+        if (actualCount < minimum) {
+            throw new Error(
+                `${flowName}: expected serialized ${type} blocks, found ${actualCount}; ` +
+                    `inventory=${JSON.stringify(snapshot.allBlockTypes)}`
+            );
+        }
+    }
+
+    const totalBlockCount = Object.values(snapshot.allBlockTypes || {}).reduce(
+        (total, count) => total + count,
+        0
+    );
+    if (totalBlockCount <= 7) {
+        throw new Error(
+            `${flowName}: workspace reverted to the seven-block default (${totalBlockCount} blocks); ` +
+                `inventory=${JSON.stringify(snapshot.allBlockTypes)}`
+        );
+    }
+
+    console.log(
+        `✓ ${flowName}: ${Object.keys(rootLabels).map(type => rootLabels[type]).join(', ')}; ` +
+            `option blocks=${Object.entries(requiredFreeBotBlockTypes)
+                .map(([type]) => `${type}:${snapshot.allBlockTypes[type]}`)
+                .join(', ')}; total blocks=${totalBlockCount}`
     );
 };
 
@@ -1205,7 +1325,15 @@ const seedEmptySavedWorkspace = async cdp => {
 
 const run = async () => {
     const xml = await readFile(xmlPath, 'utf8');
+    const freeBotXml = await readFile(freeBotXmlPath, 'utf8');
     if ((xml.match(/<block\b/g) || []).length < 3) throw new Error(`Binary Matrix XML is unexpectedly small: ${xmlPath}`);
+    if (
+        (freeBotXml.match(/<block\b/g) || []).length < 3 ||
+        !freeBotXml.includes('type="variables_set_option"') ||
+        !freeBotXml.includes('type="variables_is_option"')
+    ) {
+        throw new Error(`Over2 / Under7 Reversal XML is missing its serialized option blocks: ${freeBotXmlPath}`);
+    }
 
     const debugPort = await getFreePort();
     const userDataDir = await mkdtemp(join(tmpdir(), 'binary-matrix-browser-'));
@@ -1298,13 +1426,14 @@ const run = async () => {
             90_000
         );
         await seedEmptySavedWorkspace(cdp);
-        await clickButtonContaining(cdp, 'Load in DBot Builder');
-        await waitFor(cdp, `location.hash === '#bot_builder'`, 'Bot Builder navigation');
+        await clickButtonInCard(cdp, 'Over2 / Under7 Reversal', 'Load in DBot Builder');
+        await waitFor(cdp, `location.hash === '#bot_builder'`, 'Over2 / Under7 Bot Builder navigation');
         await waitFor(
             cdp,
             `Boolean(document.querySelector('#id-bot-builder')?.getClientRects().length)`,
             'visible Bot Builder'
         );
+        await assertFreeBotWorkspace(cdp, 'Over2 / Under7 Reversal Free Bot');
         const hasBuilderGuide = await evaluate(
             cdp,
             `Array.from(document.querySelectorAll('button')).some(
@@ -1319,21 +1448,16 @@ const run = async () => {
             )`
         );
         if (hasBuilderSocialPopup) {
-            await evaluate(
-                cdp,
-                `(() => {
-                    document.querySelector('.slx-popup__dismiss')?.click();
-                    document.querySelector('.slx-popup-overlay')?.remove();
-                    document.querySelector('.slx-popup')?.parentElement?.remove();
-                    return true;
-                })()`
-            );
+            await dismissSocialPopup(cdp);
         }
         await waitFor(
             cdp,
             `Boolean(document.querySelector('.animation__speed-switch')?.getClientRects().length)`,
             'execution speed switch'
         );
+        // The social popup can be mounted after the builder is ready. Dismiss
+        // it at the last possible point so it cannot intercept the toggle.
+        await dismissSocialPopup(cdp);
         await evaluate(
             cdp,
             `(() => {
@@ -1358,7 +1482,6 @@ const run = async () => {
             'SLOW execution switch state'
         );
         console.log('✓ Existing run-panel execution switch toggles FAST ↔ SLOW');
-        await assertBinaryMatrixWorkspace(cdp, 'Free Bots loader');
 
         await evaluate(cdp, `document.querySelector('#db-toolbar__import-button')?.click()`);
         await waitFor(cdp, `document.querySelector('input[data-testid="dt-load-strategy-file-input"]')`, 'standard XML loader');
