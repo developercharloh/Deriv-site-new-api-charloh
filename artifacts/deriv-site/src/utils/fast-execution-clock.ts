@@ -1,5 +1,5 @@
-export const FAST_EXECUTION_INTERVAL_MS = 1000;
-export const FAST_SETTLEMENT_REST_MS = 500;
+export const FAST_EXECUTION_INTERVAL_MS = 800;
+export const FAST_SETTLEMENT_REST_MS = 400;
 
 export class FastExecutionClock {
     private timer: ReturnType<typeof setTimeout> | null = null;
@@ -26,7 +26,7 @@ export class FastExecutionClock {
         };
 
         // The first slot is immediate. Subsequent slots remain aligned to the
-        // 1-second wall-clock schedule rather than drifting after network
+        // 800 ms wall-clock schedule rather than drifting after network
         // work, unless settlement explicitly resets the next slot.
         this.releaseSlot();
     }
