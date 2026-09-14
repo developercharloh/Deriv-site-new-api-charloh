@@ -815,12 +815,36 @@ const workspaceSnapshot = async cdp => {
                     counts[block.type] = (counts[block.type] || 0) + 1;
                     return counts;
                 }, {}),
-                scrollY: workspace.scrollbar?.getY?.() ?? null,
+                scrollX: Number.isFinite(workspace.scrollX) ? workspace.scrollX : null,
+                scrollY: Number.isFinite(workspace.scrollY) ? workspace.scrollY : null,
+                scrollbarY: workspace.scrollbar?.getY?.() ?? null,
                 viewTop: metrics.viewTop ?? null,
                 contentTop: metrics.contentTop ?? null,
             };
         })()`
     );
+};
+
+const assertMobileWorkspaceOrigin = (snapshot, flowName, phase) => {
+    if (!snapshot) throw new Error(`${flowName} ${phase}: Blockly workspace is unavailable.`);
+
+    const firstRoot = snapshot.roots.find(root => root.type === 'trade_definition');
+    const topmostRootY = Math.min(...snapshot.roots.map(root => root.y));
+    if (
+        snapshot.scrollX === null ||
+        snapshot.scrollY === null ||
+        snapshot.scrollX > 1 ||
+        snapshot.scrollY > 1 ||
+        !firstRoot ||
+        firstRoot.y !== topmostRootY
+    ) {
+        throw new Error(
+            `${flowName} ${phase}: mobile workspace did not keep the first root visible ` +
+                `(scrollX=${snapshot.scrollX}, scrollY=${snapshot.scrollY}, scrollbarY=${snapshot.scrollbarY}, ` +
+                `viewTop=${snapshot.viewTop}, contentTop=${snapshot.contentTop}, ` +
+                `firstRootY=${firstRoot?.y ?? 'missing'}, roots=${JSON.stringify(snapshot.roots)})`
+        );
+    }
 };
 
 const assertBinaryMatrixWorkspace = async (cdp, flowName) => {
@@ -857,6 +881,8 @@ const assertBinaryMatrixWorkspace = async (cdp, flowName) => {
         cdp,
         `document.querySelector('#scratch_div')?.scrollIntoView({ block: 'start', inline: 'nearest' })`
     );
+    assertMobileWorkspaceOrigin(await workspaceSnapshot(cdp), flowName, 'after import');
+
     // The real Deriv API can finish dropdown validation several seconds after
     // Blockly imports the XML. Verify the settled mobile viewport, not only
     // the first post-import layout.
@@ -882,25 +908,12 @@ const assertBinaryMatrixWorkspace = async (cdp, flowName) => {
         }
     }
 
-    const mobileScroll = snapshot.scrollY ?? snapshot.viewTop;
     const firstRoot = snapshot.roots.find(root => root.type === 'trade_definition');
-    const topmostRootY = Math.min(...snapshot.roots.map(root => root.y));
-    if (
-        mobileScroll === null ||
-        mobileScroll > 1 ||
-        !firstRoot ||
-        firstRoot.y !== topmostRootY
-    ) {
-        throw new Error(
-            `${flowName}: mobile workspace did not start at the first root ` +
-                `(scrollY=${mobileScroll}, viewTop=${snapshot.viewTop}, contentTop=${snapshot.contentTop}, ` +
-                `firstRootY=${firstRoot?.y ?? 'missing'}, roots=${JSON.stringify(snapshot.roots)})`
-        );
-    }
+    assertMobileWorkspaceOrigin(snapshot, flowName, 'after delayed dropdown settling');
 
     console.log(
         `✓ ${flowName}: ${expectedTypes.map(type => rootLabels[type]).join(', ')}; ` +
-            `mobile scrollY=${mobileScroll}, firstRootY=${firstRoot.y}`
+            `mobile scrollX=${snapshot.scrollX}, scrollY=${snapshot.scrollY}, firstRootY=${firstRoot.y}`
     );
 };
 

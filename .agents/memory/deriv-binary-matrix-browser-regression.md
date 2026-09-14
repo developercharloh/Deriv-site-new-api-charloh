@@ -9,6 +9,12 @@ The Binary Matrix browser regression runs dependency-free against Node 20 with a
 
 **How to apply:** Keep the test focused on real rendered Free Bots and standard XML-loader UI, stub only the external WebSocket API before navigation, scroll the clicked controls into view, verify `#bot_builder`, all required root types, the compatibility block counts, and the first root’s topmost ordering on mobile. Also cover an existing empty saved workspace so startup cannot silently render a blank canvas. Custom Blockly message placeholders must match the number of `args0` entries or nested imports can fail while leaving the roots visible. For interpreter proof, return a real `history` response and emit more than one delayed live tick: startup can consume the first tick before the generated `watch('before')` loop is waiting. When stopping after a deterministic buy count, queue the stop after the mock buy acknowledgement; stopping before that acknowledgement can be ignored and allow an extra generated cycle.
 
+For mobile canvas regressions, capture Blockly's absolute `workspace.scrollX` and `workspace.scrollY` both immediately after import and after delayed dropdown settling. Scrollbar handles are ratios and can report a reset while the workspace translation is still wrong; allow the small negative bounds Blockly uses for content edges, but reject positive translation that pushes the first root below the visible origin.
+
+**Why:** A valid multi-root inventory can coexist with an off-screen first root when a resize restores stale absolute translation. Checking only the scrollbar handle or only the final settled layout misses that transition.
+
+**How to apply:** Keep the workspace-origin assertion separate from execution-speed assertions, and run it for both the default Free Bots load and the standard XML import.
+
 The full browser regression is reliable against a production static build. The Rsbuild development server can leave Blockly initialization pending at its lazy-compilation endpoint even when the page and API stub appear healthy.
 
 **Why:** This produced a false-looking `Loading Blockly...` state with no browser exception, so a failed dev-server run could not distinguish app behavior from the development compiler.
