@@ -11,6 +11,13 @@ const getTicksInterface = tradeEngine => {
         getOhlc: (...args) => tradeEngine.getOhlc(...args),
         getLastDigitList: (...args) => tradeEngine.getLastDigitList(...args),
         checkLastDigitsCondition: (...args) => tradeEngine.checkLastDigitsCondition(...args),
+        getMostFrequentDigit: (...args) => tradeEngine.getMostFrequentDigit(...args),
+        getDigitPercentage: (...args) => tradeEngine.getDigitPercentage(...args),
+        getParityPercentage: (...args) => tradeEngine.getParityPercentage(...args),
+        getBarrierPercentage: (...args) => tradeEngine.getBarrierPercentage(...args),
+        getDirectionPercentage: (...args) => tradeEngine.getDirectionPercentage(...args),
+        checkLastNTicksDirection: (...args) => tradeEngine.checkLastNTicksDirection(...args),
+        getNthLastDigit: (...args) => tradeEngine.getNthLastDigit(...args),
     };
 };
 

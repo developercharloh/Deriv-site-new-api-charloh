@@ -146,4 +146,25 @@ describe('Ticks last-digit analysis events', () => {
 
         expect(engine.$scope.ticksService.request).not.toHaveBeenCalled();
     });
+
+    it('supports the Analysis Logics frequency, percentage, direction, and nth-digit methods', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.getPipSize = () => 2;
+        engine.$scope = {
+            ticksService: {
+                request: jest
+                    .fn()
+                    .mockResolvedValue([{ quote: 12.64 }, { quote: 12.76 }, { quote: 12.86 }, { quote: 12.95 }]),
+            },
+        };
+
+        await expect(engine.getMostFrequentDigit(1000, 'most')).resolves.toBe(6);
+        await expect(engine.getParityPercentage('even', 1000)).resolves.toBe(75);
+        await expect(engine.getBarrierPercentage('over', 5, 1000)).resolves.toBe(50);
+        await expect(engine.getDigitPercentage(6, 1000, 'match')).resolves.toBe(50);
+        await expect(engine.getDirectionPercentage('rise', 1000)).resolves.toBe(100);
+        await expect(engine.checkLastNTicksDirection('rise', 3)).resolves.toBe(true);
+        await expect(engine.getNthLastDigit(2)).resolves.toBe(6);
+    });
 });

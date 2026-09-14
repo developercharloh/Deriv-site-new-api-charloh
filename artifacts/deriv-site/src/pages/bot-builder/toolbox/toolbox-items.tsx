@@ -54,92 +54,173 @@ export const ToolboxItems = () =>
     ReactDomServer.renderToStaticMarkup(
         <Xml xmlns='http://www.w3.org/1999/xhtml' id='toolbox'>
             <Category id='analysis_logics' name={localize('Analysis Logics 🔥')}>
-                <Category id='binary_matrix_ai' name={localize('Binary Matrix AI')}>
-                    <Block type='last_digits_condition'>
-                        <Value name='N'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>4</Field>
-                            </Shadow>
-                        </Value>
-                        <Field name='CONDITION'>ALL_ODD</Field>
-                        <Value name='COMPARE_VALUE'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>0</Field>
-                            </Shadow>
-                        </Value>
-                    </Block>
-                    <Block type='last_digits_condition'>
-                        <Value name='N'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>4</Field>
-                            </Shadow>
-                        </Value>
-                        <Field name='CONDITION'>ALL_EVEN</Field>
-                        <Value name='COMPARE_VALUE'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>0</Field>
-                            </Shadow>
-                        </Value>
-                    </Block>
-                    <Block type='last_digits_condition'>
-                        <Value name='N'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>3</Field>
-                            </Shadow>
-                        </Value>
-                        <Field name='CONDITION'>LESS_OR_EQUAL</Field>
-                        <Value name='COMPARE_VALUE'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>3</Field>
-                            </Shadow>
-                        </Value>
-                    </Block>
-                    <Block type='last_digits_condition'>
-                        <Value name='N'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>3</Field>
-                            </Shadow>
-                        </Value>
-                        <Field name='CONDITION'>GREATER_OR_EQUAL</Field>
-                        <Value name='COMPARE_VALUE'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>6</Field>
-                            </Shadow>
-                        </Value>
-                    </Block>
-                    <Block type='apollo_purchase2'>
-                        <Field name='PURCHASE_LIST'>DIGITEVEN</Field>
-                        <Value name='PREDICTION'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>0</Field>
-                            </Shadow>
-                        </Value>
-                    </Block>
-                    <Block type='apollo_purchase2'>
-                        <Field name='PURCHASE_LIST'>DIGITODD</Field>
-                        <Value name='PREDICTION'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>0</Field>
-                            </Shadow>
-                        </Value>
-                    </Block>
-                    <Block type='apollo_purchase2'>
-                        <Field name='PURCHASE_LIST'>DIGITOVER</Field>
-                        <Value name='PREDICTION'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>4</Field>
-                            </Shadow>
-                        </Value>
-                    </Block>
-                    <Block type='apollo_purchase2'>
-                        <Field name='PURCHASE_LIST'>DIGITUNDER</Field>
-                        <Value name='PREDICTION'>
-                            <Shadow type='math_number'>
-                                <Field name='NUM'>5</Field>
-                            </Shadow>
-                        </Value>
-                    </Block>
-                </Category>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>ALL_ODD</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='digit_frequency_analysis'>
+                    <Field name='FREQUENCY_MODE'>most</Field>
+                    <Value name='COUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>1000</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='even_odd_percentage'>
+                    <Field name='PARITY'>even</Field>
+                    <Value name='COUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>1000</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='over_under_analysis'>
+                    <Field name='BARRIER_DIRECTION'>over</Field>
+                    <Value name='BARRIER'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                    <Value name='COUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>1000</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='match_differ_analysis'>
+                    <Field name='MATCH_MODE'>match</Field>
+                    <Value name='DIGIT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>5</Field>
+                        </Shadow>
+                    </Value>
+                    <Value name='COUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>1000</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='last_n_ticks_direction'>
+                    <Value name='COUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>5</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='DIRECTION'>rise</Field>
+                </Block>
+                <Block type='rise_fall_percentage'>
+                    <Field name='DIRECTION'>rise</Field>
+                    <Value name='COUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>1000</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='tick' />
+                <Block type='last_digit' />
+                <Block type='second_last_digit' />
+                <Block type='nth_last_digit'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>3</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+            </Category>
+            <Category id='binary_matrix_ai' name={localize('Binary Matrix AI')}>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>ALL_ODD</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>ALL_EVEN</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>3</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>LESS_OR_EQUAL</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>3</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>3</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>GREATER_OR_EQUAL</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>6</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_purchase2'>
+                    <Field name='PURCHASE_LIST'>DIGITEVEN</Field>
+                    <Value name='PREDICTION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_purchase2'>
+                    <Field name='PURCHASE_LIST'>DIGITODD</Field>
+                    <Value name='PREDICTION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_purchase2'>
+                    <Field name='PURCHASE_LIST'>DIGITOVER</Field>
+                    <Value name='PREDICTION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_purchase2'>
+                    <Field name='PURCHASE_LIST'>DIGITUNDER</Field>
+                    <Value name='PREDICTION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>5</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
             </Category>
             <Category id='trade_parameters' name={localize('Trade parameters')}>
                 <Block type='trade_definition'>

@@ -31,6 +31,25 @@ describe('bot builder toolbox structure', () => {
         expect(toolboxSource).toContain("type='multiplier_stop_loss'");
     });
 
+    it('puts the live digit and tick analysis blocks in Analysis Logics', () => {
+        const analysisLogicsSection = toolboxSource.match(/<Category id='analysis_logics'[\s\S]*?<\/Category>/)?.[0];
+
+        expect(analysisLogicsSection).toBeDefined();
+        [
+            'last_digits_condition',
+            'digit_frequency_analysis',
+            'even_odd_percentage',
+            'over_under_analysis',
+            'match_differ_analysis',
+            'last_n_ticks_direction',
+            'rise_fall_percentage',
+            'tick',
+            'last_digit',
+            'second_last_digit',
+            'nth_last_digit',
+        ].forEach(type => expect(analysisLogicsSection).toContain(`type='${type}'`));
+    });
+
     it('limits Virtual Hook Switcher to the three screenshot blocks', () => {
         const virtualHookSection = toolboxSource.match(/<Category id='virtual_hook_switcher'[\s\S]*?<\/Category>/)?.[0];
 

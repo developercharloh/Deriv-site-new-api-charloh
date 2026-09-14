@@ -133,10 +133,8 @@ export default Engine =>
                 if (
                     isBinaryMatrixWorkspace &&
                     matrixState?.reanalysisPending &&
-                    (
-                        matrixState.reanalysisBlockedEpoch === null ||
-                        this.latestTick?.epoch === matrixState.reanalysisBlockedEpoch
-                    )
+                    (matrixState.reanalysisBlockedEpoch === null ||
+                        this.latestTick?.epoch === matrixState.reanalysisBlockedEpoch)
                 ) {
                     globalObserver.emit('bot.analysis.condition', {
                         market: this.symbol || 'N/A',
@@ -156,19 +154,19 @@ export default Engine =>
 
                 if (recent.length >= size) {
                     switch (condition) {
-                    case 'ALL_EVEN':
-                        result = recent.every(digit => digit % 2 === 0);
-                        break;
-                    case 'LESS_OR_EQUAL':
-                        result = recent.every(digit => digit <= Number(compareValue));
-                        break;
-                    case 'GREATER_OR_EQUAL':
-                        result = recent.every(digit => digit >= Number(compareValue));
-                        break;
-                    case 'ALL_ODD':
-                    default:
-                        result = recent.every(digit => digit % 2 !== 0);
-                        break;
+                        case 'ALL_EVEN':
+                            result = recent.every(digit => digit % 2 === 0);
+                            break;
+                        case 'LESS_OR_EQUAL':
+                            result = recent.every(digit => digit <= Number(compareValue));
+                            break;
+                        case 'GREATER_OR_EQUAL':
+                            result = recent.every(digit => digit >= Number(compareValue));
+                            break;
+                        case 'ALL_ODD':
+                        default:
+                            result = recent.every(digit => digit % 2 !== 0);
+                            break;
                     }
                 }
 
@@ -183,6 +181,82 @@ export default Engine =>
 
                 return result;
             });
+        }
+        getAnalysisDigits(count = 1000) {
+            const size = Math.max(1, Math.floor(Number(count) || 1000));
+            return this.getLastDigitList().then(digits => digits.slice(-size));
+        }
+        getMostFrequentDigit(count = 1000, mode = 'most') {
+            return this.getAnalysisDigits(count).then(digits => {
+                const frequencies = Array.from({ length: 10 }, (_, digit) => ({
+                    digit,
+                    count: digits.filter(value => Number(value) === digit).length,
+                }));
+                frequencies.sort((a, b) =>
+                    mode === 'least' ? a.count - b.count || a.digit - b.digit : b.count - a.count || a.digit - b.digit
+                );
+                return frequencies[0]?.digit ?? 0;
+            });
+        }
+        getDigitPercentage(digit, count = 1000, mode = 'match') {
+            return this.getAnalysisDigits(count).then(digits => {
+                const target = Number(digit);
+                const matches = digits.filter(value => {
+                    const isMatch = Number(value) === target;
+                    return mode === 'differ' ? !isMatch : isMatch;
+                }).length;
+                return digits.length ? (matches / digits.length) * 100 : 0;
+            });
+        }
+        getParityPercentage(parity, count = 1000) {
+            return this.getAnalysisDigits(count).then(digits => {
+                const isEven = String(parity).toLowerCase() === 'even';
+                const matches = digits.filter(value => (Number(value) % 2 === 0) === isEven).length;
+                return digits.length ? (matches / digits.length) * 100 : 0;
+            });
+        }
+        getBarrierPercentage(direction, barrier, count = 1000) {
+            return this.getAnalysisDigits(count).then(digits => {
+                const threshold = Number(barrier);
+                const isOver = String(direction).toLowerCase() === 'over';
+                const matches = digits.filter(value =>
+                    isOver ? Number(value) > threshold : Number(value) < threshold
+                ).length;
+                return digits.length ? (matches / digits.length) * 100 : 0;
+            });
+        }
+        getDirectionPercentage(direction, count = 1000) {
+            const size = Math.max(2, Math.floor(Number(count) || 1000));
+            return this.getTicks().then(ticks => {
+                const recent = ticks.slice(-(size + 1));
+                const isRise = String(direction).toLowerCase() === 'rise';
+                const matches = recent.slice(1).filter((tick, index) => {
+                    const previous = Number(recent[index]);
+                    const current = Number(tick);
+                    return isRise ? current > previous : current < previous;
+                }).length;
+                const comparisons = Math.max(0, recent.length - 1);
+                return comparisons ? (matches / comparisons) * 100 : 0;
+            });
+        }
+        checkLastNTicksDirection(direction, count = 5) {
+            const size = Math.max(1, Math.floor(Number(count) || 5));
+            return this.getTicks().then(ticks => {
+                const recent = ticks.slice(-(size + 1));
+                const isRise = String(direction).toLowerCase() === 'rise';
+                return (
+                    recent.length >= size + 1 &&
+                    recent.slice(1).every((tick, index) => {
+                        const previous = Number(recent[index]);
+                        const current = Number(tick);
+                        return isRise ? current > previous : current < previous;
+                    })
+                );
+            });
+        }
+        getNthLastDigit(n = 1) {
+            const index = Math.max(1, Math.floor(Number(n) || 1));
+            return this.getLastDigitList().then(digits => digits[digits.length - index] ?? 0);
         }
         getLastDigitsFromList(ticks) {
             const digits = ticks.map(tick => {
