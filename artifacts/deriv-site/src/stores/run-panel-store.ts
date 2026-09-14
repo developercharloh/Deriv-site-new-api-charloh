@@ -951,10 +951,12 @@ export default class RunPanelStore {
     };
 
     onLastDigitsAnalysis = (analysis: TLastDigitsAnalysis) => {
+        // Update the live banner and Journal from the same event. Binary Matrix
+        // evaluates several conditions asynchronously; keeping these writes in
+        // one observer callback prevents the Journal from drifting behind the
+        // banner when the next condition arrives.
         this.last_digits_analysis = analysis;
-    };
 
-    onLastDigitsAnalysisJournal = (analysis: TLastDigitsAnalysis) => {
         const conditionLabel = (() => {
             switch (analysis.condition) {
                 case 'ALL_EVEN':
@@ -1090,7 +1092,6 @@ export default class RunPanelStore {
         observer.register('ui.log.notify', journal.onNotify);
         observer.register('ui.log.success', journal.onLogSuccess);
         observer.register('bot.analysis.condition', this.onLastDigitsAnalysis);
-        observer.register('bot.analysis.condition', this.onLastDigitsAnalysisJournal);
         observer.register('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.register('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.register('client.invalid_token', this.handleInvalidToken);
@@ -1111,7 +1112,6 @@ export default class RunPanelStore {
         observer.unregisterAll('ui.log.notify');
         observer.unregisterAll('ui.log.success');
         observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysis);
-        observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysisJournal);
         observer.unregister('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.unregister('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.unregisterAll('client.invalid_token');
