@@ -363,6 +363,42 @@ const BOTS: BotConfig[] = [
     },
 ];
 
+const CARD_ART: Record<string, string> = {
+    'binary-matrix-ai': '/assets/free-bots/mega-mind.jpg',
+    'rise-fall-master': '/assets/free-bots/hitnrun.jpg',
+    'matches-signal': '/assets/free-bots/super-bot.jpg',
+    'differ-v2': '/assets/free-bots/mentorship.jpg',
+    'even-odd-scanner': '/assets/free-bots/odd-autobot.jpg',
+    'over-under-signal': '/assets/free-bots/under-autobot.jpg',
+    'over2-under7-reversal': '/assets/free-bots/hitnrun.jpg',
+    'digit-pro-v1': '/assets/free-bots/digit-ticker.jpg',
+    'over-destroyer': '/assets/free-bots/destroyer.jpg',
+    'under-destroyer': '/assets/free-bots/mega-mind.jpg',
+    'elite-default-speed': '/assets/free-bots/osam-hmr.jpg',
+    'even-odd-manual': '/assets/free-bots/odd-myth.jpg',
+    'over-under-manual': '/assets/free-bots/digit-switcher.jpg',
+    'over-under-ai-signals': '/assets/free-bots/concept-ai.jpg',
+    'elite-entry-scanner': '/assets/free-bots/blueprint.jpg',
+};
+
+const CARD_ACCENT: Record<string, string> = {
+    'binary-matrix-ai': '#178da8',
+    'rise-fall-master': '#0d9959',
+    'matches-signal': '#7027d0',
+    'differ-v2': '#1e6bd0',
+    'even-odd-scanner': '#bd8300',
+    'over-under-signal': '#d9274c',
+    'over2-under7-reversal': '#eb741d',
+    'digit-pro-v1': '#1766d5',
+    'over-destroyer': '#b21c28',
+    'under-destroyer': '#4939a3',
+    'elite-default-speed': '#126dbd',
+    'even-odd-manual': '#15955e',
+    'over-under-manual': '#e6315b',
+    'over-under-ai-signals': '#8330c3',
+    'elite-entry-scanner': '#ed7439',
+};
+
 // ─── Engine selector dropdown ─────────────────────────────────────────────────
 
 const ENGINE_KEY = 'free_bots_engine_mode';
@@ -823,16 +859,19 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
     return (
         <>
             <div className='free-bots__card'>
-                <div className='free-bots__card-header' style={{ background: bot.gradient }}>
-                    <span className='free-bots__card-emoji'>{bot.emoji}</span>
-                    <div className='free-bots__card-header-text'>
-                        <h2 className='free-bots__card-name'>{bot.name}</h2>
-                        <span className='free-bots__card-strategy'>{bot.strategy}</span>
-                    </div>
-                </div>
+                <div
+                    className='free-bots__card-art'
+                    style={{
+                        backgroundImage: `url(${CARD_ART[bot.id] || '/assets/free-bots/digit-ticker.jpg'})`,
+                    }}
+                />
 
-                <div className='free-bots__card-body'>
-                    <p className='free-bots__card-desc'>{bot.description}</p>
+                <div
+                    className='free-bots__card-body'
+                    style={{ '--fb-accent': CARD_ACCENT[bot.id] || '#2779bd' } as React.CSSProperties}
+                >
+                    <span className='free-bots__card-access'>OPEN ACCESS</span>
+                    <h2 className='free-bots__card-name'>{bot.name}</h2>
 
                     {signal && (
                         <SignalBadge signal={signal} onClick={() => setShowSignal(true)} />
@@ -861,7 +900,8 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                                 onClick={loadBot}
                                 disabled={status === 'loading'}
                             >
-                                {status === 'loading' ? '⏳ Loading…' : status === 'loaded' ? '✅ Loaded in DBot Builder' : '📂 Load in DBot Builder'}
+                                <span aria-hidden='true'>⇩</span>
+                                {status === 'loading' ? 'Loading…' : status === 'loaded' ? 'Loaded' : 'Load bot'}
                             </button>
                         )}
 
@@ -899,6 +939,11 @@ const FreeBots = observer(() => {
 
     return (
         <div className='free-bots'>
+            <div className='free-bots__intro'>
+                <h1>Osam Trading Hub</h1>
+                <strong>Free bots</strong>
+                <p>Load a bot and start trading — no setup, no noise.</p>
+            </div>
             <div className='free-bots__grid'>
                 {BOTS.map(bot => (
                     <BotCard key={bot.id} bot={bot} engineMode={engineMode} />
