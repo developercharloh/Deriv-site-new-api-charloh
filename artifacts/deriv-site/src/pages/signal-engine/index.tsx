@@ -10,7 +10,13 @@ import {
 } from './signal-brain';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
-import { botIdFromSignal, fetchAndPatchBot, parseDigitFrom, prefetchBotXml } from '@/utils/bot-patch';
+import {
+    botIdFromSignal,
+    fetchAndPatchBot,
+    loadPatchedBotIntoWorkspace,
+    parseDigitFrom,
+    prefetchBotXml,
+} from '@/utils/bot-patch';
 
 const ENGINE_KEY    = 'free_bots_engine_mode';
 const V2_CONFIG_KEY = 'free_bots_v2_config';
@@ -524,10 +530,7 @@ function SignalSettingsModal({ signal, rank, onClose }: {
                     return;
                 }
 
-                const dom = Blockly.utils.xml.textToDom(xmlStr);
-                Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
-                Blockly.derivWorkspace.cleanUp();
-                Blockly.derivWorkspace.clearUndo();
+                loadPatchedBotIntoWorkspace(xmlStr, Blockly.derivWorkspace);
 
                 dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
                 onClose();

@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { DBot } from '@/external/bot-skeleton';
-import { parseDigitFrom, fetchAndPatchBot, type BotSignal } from '@/utils/bot-patch';
+import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import type { BotConfig } from './types';
 import './free-bots.scss';
@@ -431,10 +431,7 @@ const SignalTradeModal: React.FC<{
             const Blockly = (window as any).Blockly;
             if (!Blockly?.derivWorkspace) { setState('no-ws'); return; }
 
-            const dom = Blockly.utils.xml.textToDom(xmlStr);
-            Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
-            Blockly.derivWorkspace.cleanUp();
-            Blockly.derivWorkspace.clearUndo();
+            loadPatchedBotIntoWorkspace(xmlStr, Blockly.derivWorkspace);
 
             openBotBuilderTab(store.dashboard);
             onClose();

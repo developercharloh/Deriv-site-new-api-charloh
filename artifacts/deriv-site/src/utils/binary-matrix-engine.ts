@@ -346,10 +346,18 @@ export class BinaryMatrixEngine {
         }
 
         if (this.qualifyingWins >= this.config.reanalyzeAfterWins) {
+            const winsToReanalyze = this.config.reanalyzeAfterWins;
             this.qualifyingWins = 0;
             this.activeDecision = null;
             this.digits = [];
-            this.writeLog(`Re-analysis threshold reached after ${this.config.reanalyzeAfterWins} wins.`, 'system');
+            globalObserver.emit('bot.analysis.reanalysis', {
+                market: this.config.symbol,
+                wins: winsToReanalyze,
+            });
+            this.writeLog(
+                `Re-analysis threshold reached after ${winsToReanalyze} wins — re-analysing until Take Profit is hit.`,
+                'system'
+            );
         }
 
         this.emitStats();
@@ -502,12 +510,14 @@ export class BinaryMatrixEngine {
     }
 
     private writeLog(message: string, type: DTLog['type']): void {
-        this.log({
+        const log = {
             seq: Date.now(),
             time: this.nowTime(),
             message,
             type,
-        });
+        };
+        globalObserver.emit('bot.binary_matrix.log', log);
+        this.log(log);
     }
 
     private signedMoney(value: number): string {

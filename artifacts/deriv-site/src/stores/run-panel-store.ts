@@ -919,19 +919,11 @@ export default class RunPanelStore {
         };
 
         engine.onStatus = syncStatus;
-        engine.onLog = log => {
-            const messageType = log.type === 'error' ? MessageTypes.ERROR : MessageTypes.NOTIFY;
-            this.root_store.journal.pushMessage(`[Binary Matrix] ${log.message}`, messageType, 'journal__text');
-        };
-        engine.onTrade = trade => {
-            const resultType = trade.isWin ? MessageTypes.SUCCESS : MessageTypes.ERROR;
-            this.root_store.journal.pushMessage(
-                `[Binary Matrix] ${trade.isWin ? 'WIN' : 'LOSS'} #${trade.contractId} ${trade.profit >= 0 ? '+' : ''}${trade.profit.toFixed(2)}`,
-                resultType,
-                'journal__text',
-                { profit: trade.profit, currency: this.core.client.currency }
-            );
-        };
+        // Binary Matrix log and settlement events are routed through the
+        // shared observer so native Builder runs and the standalone runner
+        // produce the same single Journal entry.
+        engine.onLog = () => {};
+        engine.onTrade = () => {};
         engine.onPosition = position => {
             this.root_store.transactions.onBotContractEvent(this.nativePositionToContractInfo(position));
         };
@@ -960,6 +952,61 @@ export default class RunPanelStore {
 
     onLastDigitsAnalysis = (analysis: TLastDigitsAnalysis) => {
         this.last_digits_analysis = analysis;
+    };
+
+    onLastDigitsAnalysisJournal = (analysis: TLastDigitsAnalysis) => {
+        const conditionLabel = (() => {
+            switch (analysis.condition) {
+                case 'ALL_EVEN':
+                    return 'all even';
+                case 'ALL_ODD':
+                    return 'all odd';
+                case 'LESS_OR_EQUAL':
+                    return `less than or equal to ${analysis.compareValue}`;
+                case 'GREATER_OR_EQUAL':
+                    return `greater than or equal to ${analysis.compareValue}`;
+                default:
+                    return analysis.condition;
+            }
+        })();
+
+        this.root_store.journal.pushMessage(
+            `Last Digits Analysis Market: ${analysis.market || 'N/A'} ` +
+                `Condition: ${conditionLabel} ` +
+                `Digits: [${analysis.digits.join(', ')}] ` +
+                `Entry point: ${analysis.result ? 'HIT' : 'NOT HIT'} · ` +
+                `Result: ${analysis.result ? '✅ CONDITIONS MET' : '❌ CONDITIONS NOT MET'}`,
+            MessageTypes.NOTIFY,
+            'journal__text'
+        );
+    };
+
+    onBinaryMatrixJournalLog = (log: { message?: string; type?: string }) => {
+        const message = String(log?.message || '');
+
+        // Analysis events have their own shared journal handler so generated
+        // Builder runs and native Matrix runs produce one identical row.
+        if (
+            message.startsWith('Last Digits Analysis Market:') ||
+            message.startsWith('Re-analysis threshold reached')
+        ) {
+            return;
+        }
+
+        this.root_store.journal.pushMessage(
+            `[Binary Matrix] ${message}`,
+            log?.type === 'error' ? MessageTypes.ERROR : MessageTypes.NOTIFY,
+            'journal__text'
+        );
+    };
+
+    onBinaryMatrixReanalysis = (data: { wins?: number }) => {
+        const wins = Math.max(1, Number(data?.wins) || 1);
+        this.root_store.journal.pushMessage(
+            `[Binary Matrix] ${wins} wins reached — now re-analysing until Take Profit is hit.`,
+            MessageTypes.NOTIFY,
+            'journal__text'
+        );
     };
 
     clearLastDigitsAnalysis = () => {
@@ -1043,6 +1090,9 @@ export default class RunPanelStore {
         observer.register('ui.log.notify', journal.onNotify);
         observer.register('ui.log.success', journal.onLogSuccess);
         observer.register('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.register('bot.analysis.condition', this.onLastDigitsAnalysisJournal);
+        observer.register('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
+        observer.register('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.register('client.invalid_token', this.handleInvalidToken);
     };
 
@@ -1061,6 +1111,9 @@ export default class RunPanelStore {
         observer.unregisterAll('ui.log.notify');
         observer.unregisterAll('ui.log.success');
         observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysisJournal);
+        observer.unregister('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
+        observer.unregister('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.unregisterAll('client.invalid_token');
     };
 

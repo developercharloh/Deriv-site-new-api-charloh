@@ -3,7 +3,7 @@ import { Loader2, X, Zap, RefreshCw, PlayCircle } from '@/utils/lucide-shim';
 import { DERIV_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatilities';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
-import { destroyerBotIdFromDirection, fetchAndPatchBot, type BotSignal } from '@/utils/bot-patch';
+import { destroyerBotIdFromDirection, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
 import './ai-signal-orb.scss';
 
@@ -1023,10 +1023,7 @@ const AiSignalOrb: React.FC = () => {
                 const Blockly = (window as any).Blockly;
                 if (!Blockly?.derivWorkspace) throw new Error('Blockly workspace not ready');
 
-                const dom = Blockly.utils.xml.textToDom(xmlStr);
-                Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
-                Blockly.derivWorkspace.cleanUp();
-                Blockly.derivWorkspace.clearUndo();
+                loadPatchedBotIntoWorkspace(xmlStr, Blockly.derivWorkspace);
 
                 await new Promise(r => setTimeout(r, 500));
                 if (destroyed || smlAbortRef.current) return;
@@ -1224,10 +1221,7 @@ const AiSignalOrb: React.FC = () => {
             const Blockly = (window as any).Blockly;
             if (!Blockly?.derivWorkspace) { setRunState('no-ws'); return; }
 
-            const dom = Blockly.utils.xml.textToDom(xmlStr);
-            Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
-            Blockly.derivWorkspace.cleanUp();
-            Blockly.derivWorkspace.clearUndo();
+            loadPatchedBotIntoWorkspace(xmlStr, Blockly.derivWorkspace);
 
             store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
 

@@ -545,3 +545,52 @@ export async function fetchAndPatchBot(
     if (doc.querySelector('parsererror')) throw new Error('Bot XML parse error — check the bot file.');
     return doc;
 }
+
+/**
+ * Import fetched bot XML through one guarded path.
+ *
+ * Dynamic dropdowns and custom blocks can run validation callbacks after
+ * clearWorkspaceAndLoadFromXml returns. Without the guard, those callbacks
+ * can dispose a root block while a bot launcher is switching tabs.
+ */
+export function loadPatchedBotIntoWorkspace(xmlText: string, workspace: any): void {
+    const Blockly = (window as any).Blockly;
+    if (!Blockly?.utils?.xml || !Blockly?.Xml || !workspace) {
+        throw new Error('Blockly workspace is not ready.');
+    }
+
+    const dom = Blockly.utils.xml.textToDom(xmlText);
+    const blockElements = Array.from(dom.querySelectorAll('block')) as Element[];
+    if (!blockElements.length) {
+        throw new Error('The selected bot does not contain any Blockly blocks.');
+    }
+
+    const unsupportedTypes = [...new Set(
+        blockElements
+            .map(block => block.getAttribute('type'))
+            .filter(type => type && !Object.prototype.hasOwnProperty.call(Blockly.Blocks, type))
+    )];
+    if (unsupportedTypes.length) {
+        throw new Error(`This bot uses unsupported blocks: ${unsupportedTypes.slice(0, 4).join(', ')}`);
+    }
+
+    const eventGroup = `patched-bot-load-${Date.now()}`;
+    (window as any).__DBOT_LOADING_XML = true;
+    Blockly.Events.setGroup(eventGroup);
+    let imported = false;
+    try {
+        Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, workspace);
+        workspace.cleanUp?.();
+        workspace.clearUndo?.();
+        imported = true;
+    } finally {
+        Blockly.Events.setGroup(false);
+        if (imported) {
+            window.setTimeout(() => {
+                (window as any).__DBOT_LOADING_XML = false;
+            }, 1000);
+        } else {
+            (window as any).__DBOT_LOADING_XML = false;
+        }
+    }
+}

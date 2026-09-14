@@ -4,7 +4,7 @@ import { Loader2, X, Zap, RefreshCw, PlayCircle } from '@/utils/lucide-shim';
 import { DERIV_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatilities';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
-import { destroyerBotIdFromDirection, fetchAndPatchBot, type BotSignal } from '@/utils/bot-patch';
+import { destroyerBotIdFromDirection, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
 import '@/components/ai-signal-orb/ai-signal-orb.scss';
 import './ai-signals-page.scss';
@@ -1209,9 +1209,7 @@ const AiSignalsPage: React.FC = () => {
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
             const Blockly = (window as any).Blockly;
             if (!Blockly?.derivWorkspace) { setRunState('no-ws'); return; }
-            const dom = Blockly.utils.xml.textToDom(xmlStr);
-            Blockly.Xml.clearWorkspaceAndLoadFromXml(dom, Blockly.derivWorkspace);
-            Blockly.derivWorkspace.cleanUp(); Blockly.derivWorkspace.clearUndo();
+            loadPatchedBotIntoWorkspace(xmlStr, Blockly.derivWorkspace);
             // Always switch to Bot Builder so the user can watch trades in real-time.
             store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
             setTimeout(() => {
