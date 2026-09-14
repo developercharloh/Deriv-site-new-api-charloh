@@ -192,10 +192,13 @@ export default Engine =>
                     digit,
                     count: digits.filter(value => Number(value) === digit).length,
                 }));
+                const rankingMode = String(mode).toLowerCase();
+                const isLeast = rankingMode === 'least' || rankingMode === 'second_least';
                 frequencies.sort((a, b) =>
-                    mode === 'least' ? a.count - b.count || a.digit - b.digit : b.count - a.count || a.digit - b.digit
+                    isLeast ? a.count - b.count || a.digit - b.digit : b.count - a.count || a.digit - b.digit
                 );
-                return frequencies[0]?.digit ?? 0;
+                const rank = rankingMode === 'second_most' || rankingMode === 'second_least' ? 1 : 0;
+                return frequencies[rank]?.digit ?? frequencies[0]?.digit ?? 0;
             });
         }
         getDigitPercentage(digit, count = 1000, mode = 'match') {

@@ -7,6 +7,10 @@ jest.mock('@deriv-com/translations', () => ({
 
 describe('bot builder toolbox structure', () => {
     const toolboxSource = fs.readFileSync(path.resolve(__dirname, '../toolbox-items.tsx'), 'utf8');
+    const analysisBlocksSource = fs.readFileSync(
+        path.resolve(__dirname, '../../../../external/bot-skeleton/scratch/blocks/Custom/analysis_blocks.js'),
+        'utf8'
+    );
 
     it('keeps the screenshot menu order and exposes Binary Matrix AI', () => {
         const categoryIds = [...toolboxSource.matchAll(/<Category id='([^']+)'/g)].map(match => match[1]);
@@ -48,6 +52,13 @@ describe('bot builder toolbox structure', () => {
             'second_last_digit',
             'nth_last_digit',
         ].forEach(type => expect(analysisLogicsSection).toContain(`type='${type}'`));
+    });
+
+    it('offers all four digit-frequency rankings', () => {
+        expect(analysisBlocksSource).toContain("[localize('Most'), 'most']");
+        expect(analysisBlocksSource).toContain("[localize('Second most'), 'second_most']");
+        expect(analysisBlocksSource).toContain("[localize('Least'), 'least']");
+        expect(analysisBlocksSource).toContain("[localize('Second least'), 'second_least']");
     });
 
     it('limits Virtual Hook Switcher to the three screenshot blocks', () => {

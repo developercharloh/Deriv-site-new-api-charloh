@@ -160,6 +160,9 @@ describe('Ticks last-digit analysis events', () => {
         };
 
         await expect(engine.getMostFrequentDigit(1000, 'most')).resolves.toBe(6);
+        await expect(engine.getMostFrequentDigit(1000, 'second_most')).resolves.toBe(4);
+        await expect(engine.getMostFrequentDigit(1000, 'least')).resolves.toBe(0);
+        await expect(engine.getMostFrequentDigit(1000, 'second_least')).resolves.toBe(1);
         await expect(engine.getParityPercentage('even', 1000)).resolves.toBe(75);
         await expect(engine.getBarrierPercentage('over', 5, 1000)).resolves.toBe(50);
         await expect(engine.getDigitPercentage(6, 1000, 'match')).resolves.toBe(50);

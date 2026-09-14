@@ -55,12 +55,14 @@ registerOutputBlock({
             name: 'FREQUENCY_MODE',
             options: [
                 [localize('Most'), 'most'],
+                [localize('Second most'), 'second_most'],
                 [localize('Least'), 'least'],
+                [localize('Second least'), 'second_least'],
             ],
         },
         countInput(),
     ],
-    tooltip: 'Finds the most or least frequent digit in the selected tick window.',
+    tooltip: 'Finds the most, second most, least, or second least frequent digit in the selected tick window.',
     meta: 'Digit Frequency Analysis',
     generatorCode: block => [
         `Bot.getMostFrequentDigit(${numberInput(block, 'COUNT', '1000')}, '${block.getFieldValue('FREQUENCY_MODE') || 'most'}')`,
