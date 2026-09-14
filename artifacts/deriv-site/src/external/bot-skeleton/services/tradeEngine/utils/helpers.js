@@ -7,6 +7,7 @@ import { error as logError } from './broadcast';
 
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
+        const supportsPrediction = !['DIGITEVEN', 'DIGITODD'].includes(type);
         const proposal = {
             amount: trade_option.amount,
             basis: trade_option.basis,
@@ -22,10 +23,14 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
             proposal: 1,
             underlying_symbol: trade_option.symbol,
         };
-        if (trade_option.prediction !== undefined) {
+        if (supportsPrediction && trade_option.prediction !== undefined) {
             proposal.selected_tick = trade_option.prediction;
         }
-        if (!['TICKLOW', 'TICKHIGH'].includes(type) && trade_option.prediction !== undefined) {
+        if (
+            supportsPrediction &&
+            !['TICKLOW', 'TICKHIGH'].includes(type) &&
+            trade_option.prediction !== undefined
+        ) {
             proposal.barrier = trade_option.prediction;
         } else if (trade_option.barrierOffset !== undefined) {
             proposal.barrier = trade_option.barrierOffset;
@@ -44,6 +49,7 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     });
 
 export const tradeOptionToBuy = (contract_type, trade_option) => {
+    const supportsPrediction = !['DIGITEVEN', 'DIGITODD'].includes(contract_type);
     const buy = {
         buy: '1',
         price: trade_option.amount,
@@ -66,10 +72,14 @@ export const tradeOptionToBuy = (contract_type, trade_option) => {
             underlying_symbol: trade_option.symbol,
         },
     };
-    if (trade_option.prediction !== undefined) {
+    if (supportsPrediction && trade_option.prediction !== undefined) {
         buy.parameters.selected_tick = trade_option.prediction;
     }
-    if (!['TICKLOW', 'TICKHIGH'].includes(contract_type) && trade_option.prediction !== undefined) {
+    if (
+        supportsPrediction &&
+        !['TICKLOW', 'TICKHIGH'].includes(contract_type) &&
+        trade_option.prediction !== undefined
+    ) {
         buy.parameters.barrier = trade_option.prediction;
     } else if (trade_option.barrierOffset !== undefined) {
         buy.parameters.barrier = trade_option.barrierOffset;

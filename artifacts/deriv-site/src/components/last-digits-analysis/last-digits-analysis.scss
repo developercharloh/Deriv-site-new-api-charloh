@@ -21,4 +21,14 @@
         font-weight: bold;
         white-space: nowrap;
     }
+
+    &__mapping,
+    &__parity {
+        font-weight: 600;
+    }
+
+    &__parity {
+        margin-top: 0.4rem;
+        color: var(--text-general);
+    }
 }

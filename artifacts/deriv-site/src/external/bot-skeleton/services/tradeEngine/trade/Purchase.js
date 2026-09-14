@@ -16,7 +16,12 @@ import { observer as globalObserver } from '../../../utils/observer';
 let delayIndex = 0;
 let purchase_reference;
 
-export const getPurchaseTradeOptions = (tradeOptions, prediction) => {
+export const getPurchaseTradeOptions = (tradeOptions, prediction, contractType) => {
+    if (['DIGITEVEN', 'DIGITODD'].includes(contractType)) {
+        const { prediction: _ignoredPrediction, ...parityTradeOptions } = tradeOptions;
+        return parityTradeOptions;
+    }
+
     if (prediction === undefined || prediction === null || prediction === '') {
         return tradeOptions;
     }
@@ -112,10 +117,10 @@ export default Engine =>
             }
             globalObserver.emit('bot.purchase.mapping', {
                 contractType: contract_type,
-                prediction: prediction ?? null,
+                prediction: ['DIGITEVEN', 'DIGITODD'].includes(contract_type) ? null : prediction ?? null,
                 label: getPurchaseMappingLabel(contract_type, prediction),
             });
-            const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction);
+            const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction, contract_type);
             const releasePurchaseLease = () =>
                 releaseBotContractGate(this, undefined, signalKey);
 

@@ -32,10 +32,13 @@ describe('generated purchase prediction forwarding', () => {
     });
 
     it('does not add a prediction to Even or Odd purchases', () => {
-        const options = getPurchaseTradeOptions(baseTradeOptions, undefined);
+        const options = getPurchaseTradeOptions({ ...baseTradeOptions, prediction: 5 }, 5, 'DIGITODD');
 
-        expect(options).toBe(baseTradeOptions);
+        expect(options).not.toHaveProperty('prediction');
         expect(tradeOptionToBuy('DIGITEVEN', options).parameters).not.toHaveProperty('barrier');
         expect(tradeOptionToBuy('DIGITODD', options).parameters).not.toHaveProperty('barrier');
+        expect(tradeOptionToBuy('DIGITODD', { ...options, prediction: 5 }).parameters).not.toHaveProperty(
+            'barrier'
+        );
     });
 });

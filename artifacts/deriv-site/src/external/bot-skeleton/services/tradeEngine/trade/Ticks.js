@@ -214,8 +214,20 @@ export default Engine =>
         getParityPercentage(parity, count = 1000) {
             return this.getAnalysisDigits(count).then(digits => {
                 const isEven = String(parity).toLowerCase() === 'even';
-                const matches = digits.filter(value => (Number(value) % 2 === 0) === isEven).length;
-                return digits.length ? (matches / digits.length) * 100 : 0;
+                const evenCount = digits.filter(value => Number(value) % 2 === 0).length;
+                const oddCount = digits.length - evenCount;
+                const evenPercentage = digits.length ? (evenCount / digits.length) * 100 : 0;
+                const oddPercentage = digits.length ? (oddCount / digits.length) * 100 : 0;
+
+                globalObserver.emit('bot.analysis.parity', {
+                    market: this.symbol || 'N/A',
+                    count: digits.length,
+                    evenPercentage: Number(evenPercentage.toFixed(0)),
+                    oddPercentage: Number(oddPercentage.toFixed(0)),
+                    sample: digits.slice(-Math.max(1, Number(count) || 1)),
+                });
+
+                return digits.length ? (isEven ? evenPercentage : oddPercentage) : 0;
             });
         }
         getBarrierPercentage(direction, barrier, count = 1000) {

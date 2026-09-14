@@ -31,6 +31,14 @@ export type TLastDigitsAnalysis = {
     purchaseMapping?: string | null;
 };
 
+export type TParityAnalysis = {
+    market: string;
+    count: number;
+    evenPercentage: number;
+    oddPercentage: number;
+    sample: number[];
+};
+
 type TPurchaseMapping = {
     contractType: string;
     prediction: number | string | null;
@@ -77,6 +85,7 @@ export default class RunPanelStore {
             onPauseButtonClick: action,
             is_contract_buying_in_progress: observable,
              last_digits_analysis: observable,
+             parity_analysis: observable,
              is_paused: observable,
              native_bot_stop_handler: observable,
              native_bot_pause_handler: observable,
@@ -107,6 +116,7 @@ export default class RunPanelStore {
             onBotContractEvent: action,
             onError: action,
             onLastDigitsAnalysis: action.bound,
+            onParityAnalysis: action.bound,
              onPurchaseMapping: action.bound,
             clearLastDigitsAnalysis: action,
             showErrorMessage: action,
@@ -145,6 +155,7 @@ export default class RunPanelStore {
     native_bot_pause_handler: ((paused: boolean) => void) | null = null;
     native_apollo_engine: BinaryMatrixEngine | null = null;
     last_digits_analysis: TLastDigitsAnalysis | null = null;
+    parity_analysis: TParityAnalysis | null = null;
 
     run_id = '';
     onOkButtonClick: (() => void) | null = null;
@@ -992,6 +1003,28 @@ export default class RunPanelStore {
         );
     };
 
+    onParityAnalysis = (analysis: TParityAnalysis) => {
+        const previous = this.parity_analysis;
+        this.parity_analysis = analysis;
+
+        const hasChanged =
+            !previous ||
+            previous.market !== analysis.market ||
+            previous.count !== analysis.count ||
+            previous.evenPercentage !== analysis.evenPercentage ||
+            previous.oddPercentage !== analysis.oddPercentage ||
+            previous.sample.join(',') !== analysis.sample.join(',');
+
+        if (hasChanged) {
+            this.root_store.journal.pushMessage(
+                `Even ${analysis.evenPercentage}% || Odd ${analysis.oddPercentage}% ` +
+                    `Based on last ${analysis.count} ticks`,
+                MessageTypes.NOTIFY,
+                'journal__text'
+            );
+        }
+    };
+
     onPurchaseMapping = (mapping: TPurchaseMapping) => {
         if (this.last_digits_analysis) {
             this.last_digits_analysis = {
@@ -1038,6 +1071,7 @@ export default class RunPanelStore {
 
     clearLastDigitsAnalysis = () => {
         this.last_digits_analysis = null;
+        this.parity_analysis = null;
     };
 
     onMount = () => {
@@ -1117,6 +1151,7 @@ export default class RunPanelStore {
         observer.register('ui.log.notify', journal.onNotify);
         observer.register('ui.log.success', journal.onLogSuccess);
         observer.register('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.register('bot.analysis.parity', this.onParityAnalysis);
         observer.register('bot.purchase.mapping', this.onPurchaseMapping);
         observer.register('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.register('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
@@ -1138,6 +1173,7 @@ export default class RunPanelStore {
         observer.unregisterAll('ui.log.notify');
         observer.unregisterAll('ui.log.success');
         observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.unregister('bot.analysis.parity', this.onParityAnalysis);
         observer.unregister('bot.purchase.mapping', this.onPurchaseMapping);
         observer.unregister('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.unregister('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);

@@ -25,3 +25,4 @@
 - [FAST gate test isolation](fast-gate-test-isolation.md) — releasing a lease preserves the last-used FAST key, so focused tests need isolated synthetic slots.
 - [Proposal refresh race](deriv-proposal-refresh-race.md) — live broker proposal responses must match the current purchase reference before entering the selectable set.
 - [Uploaded option blocks](deriv-uploaded-option-blocks.md) — imported pattern XML can depend on serialized option-variable block types that must be registered before Blockly conversion.
+- [Parity contract barriers](parity-contract-barriers.md) — DIGITEVEN and DIGITODD requests must omit prediction, selected_tick, and barrier; only Over/Under use digit barriers.

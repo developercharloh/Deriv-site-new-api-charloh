@@ -1,8 +1,9 @@
-import type { TLastDigitsAnalysis } from '@/stores/run-panel-store';
+import type { TLastDigitsAnalysis, TParityAnalysis } from '@/stores/run-panel-store';
 import './last-digits-analysis.scss';
 
 type TLastDigitsAnalysisProps = {
     analysis: TLastDigitsAnalysis;
+    parity?: TParityAnalysis | null;
 };
 
 const conditionLabel = ({ condition, compareValue }: TLastDigitsAnalysis) => {
@@ -20,7 +21,7 @@ const conditionLabel = ({ condition, compareValue }: TLastDigitsAnalysis) => {
     }
 };
 
-const LastDigitsAnalysis = ({ analysis }: TLastDigitsAnalysisProps) => (
+const LastDigitsAnalysis = ({ analysis, parity }: TLastDigitsAnalysisProps) => (
     <div
         className={`last-digits-analysis ${
             analysis.result ? 'last-digits-analysis--true' : 'last-digits-analysis--false'
@@ -37,6 +38,11 @@ const LastDigitsAnalysis = ({ analysis }: TLastDigitsAnalysisProps) => (
         </span>
         {analysis.purchaseMapping && (
             <span className='last-digits-analysis__mapping'> · Trading: {analysis.purchaseMapping}</span>
+        )}
+        {parity && (
+            <div className='last-digits-analysis__parity'>
+                Even {parity.evenPercentage}% || Odd {parity.oddPercentage}% Based on last {parity.count} ticks
+            </div>
         )}
     </div>
 );

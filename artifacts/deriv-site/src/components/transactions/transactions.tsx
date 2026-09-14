@@ -118,7 +118,9 @@ const Transactions = observer(({ is_drawer_open }: TTransactions) => {
                     <Localize i18n_default_text='View Detail' />
                 </Button>
             </div>
-            {last_digits_analysis && <LastDigitsAnalysis analysis={last_digits_analysis} />}
+            {last_digits_analysis && (
+                <LastDigitsAnalysis analysis={last_digits_analysis} parity={run_panel.parity_analysis} />
+            )}
             <div className='transactions__header'>
                 <span className='transactions__header-column transactions__header-type'>
                     <Localize i18n_default_text='Type' />

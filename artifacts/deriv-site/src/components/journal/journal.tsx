@@ -36,7 +36,12 @@ const Journal = observer(() => {
             })}
             data-testid='dt_mock_journal'
         >
-            {run_panel.last_digits_analysis && <LastDigitsAnalysis analysis={run_panel.last_digits_analysis} />}
+            {run_panel.last_digits_analysis && (
+                <LastDigitsAnalysis
+                    analysis={run_panel.last_digits_analysis}
+                    parity={run_panel.parity_analysis}
+                />
+            )}
             <JournalTools
                 checked_filters={checked_filters}
                 filters={filters}
