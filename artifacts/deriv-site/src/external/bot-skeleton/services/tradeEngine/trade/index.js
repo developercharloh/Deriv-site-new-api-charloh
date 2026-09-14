@@ -337,6 +337,23 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.fastClock?.scheduleAfterSettlement();
     }
 
+    prewarmFastNextProposal() {
+        if (getBotExecutionSpeed() !== 'fast' || !this.is_proposal_subscription_required) return;
+
+        // Binary Matrix can change the stake only after authoritative settlement.
+        // Start fetching the next proposal before the generated interpreter cycle
+        // resumes so proposal latency does not sit on the critical path to buy.
+        const nextTradeOptions = this.getBinaryMatrixTradeOptions?.({
+            ...this.tradeOptions,
+        });
+        if (!nextTradeOptions) return;
+
+        this.makeProposals({
+            ...this.options,
+            ...nextTradeOptions,
+        });
+    }
+
     stopFastClock() {
         this.fastClockActive = false;
         this.fastClock?.stop();

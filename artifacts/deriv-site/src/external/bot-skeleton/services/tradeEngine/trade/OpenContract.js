@@ -52,6 +52,12 @@ export default Engine =>
                         // not from a later rendered win/loss notification.
                         this.updateTotals(contract, executionSpeed === 'fast');
                         this.applyBinaryMatrixSettlement(contract);
+                        if (executionSpeed === 'fast') {
+                            // The settlement determines the next Binary Matrix
+                            // stake. Start its proposal request now instead of
+                            // waiting for the interpreter to finish the cycle.
+                            this.prewarmFastNextProposal?.();
+                        }
 
                         const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
                         const clockPacedFast = executionSpeed === 'fast' && this.fastClockActive;
