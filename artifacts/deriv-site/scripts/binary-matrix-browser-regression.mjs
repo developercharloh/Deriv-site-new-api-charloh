@@ -1045,8 +1045,8 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     const expectedResults = speed === 'fast'
         ? ['loss', 'loss', 'win', 'loss']
         : ['loss', 'win', 'loss', 'win', 'loss', 'win', 'loss', 'win', 'loss', 'win', 'loss', 'win'];
-    const waitedForNextTick = epochs[0] !== epochs[1];
-    const advancedTicks = epochs.every((epoch, index) => index === 0 || epoch > epochs[index - 1]);
+    const strictlyIncreasingFreshEpochs =
+        epochs.length > 1 && epochs.every((epoch, index) => index === 0 || epoch > epochs[index - 1]);
     const eachPurchaseFollowedSettlement = buyRequests.every((request, index) => {
         if (index === 0) return true;
         const previousSettlement = settlementUpdates.find(update => update.contractId === buyRequests[index - 1]?.contractId);
@@ -1084,8 +1084,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     if (
         buyRequests.length !== scenarioBuyCount ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
-        !waitedForNextTick ||
-        !advancedTicks ||
+        !strictlyIncreasingFreshEpochs ||
         settledContractIds.length !== scenarioBuyCount ||
         new Set(settledContractIds).size !== scenarioBuyCount ||
         settledContractIds.some(contractId => !boughtContractIds.has(contractId)) ||

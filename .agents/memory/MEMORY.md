@@ -19,3 +19,4 @@
 - [FAST slot state preservation](deriv-fast-slot-state.md) — every terminal FAST cycle transition must preserve the monotonic slot counter or the gate rejects the next purchase as a duplicate.
 - [SLOW contract lease release](deriv-slow-contract-release.md) — null settlement signal keys must still release the owner’s contract lease by identity.
 - [DBot pause and resume](deriv-bot-pause-resume.md) — pause only blocks new purchases; keep the interpreter and let open contracts settle.
+- [Deriv browser regression gate timing](deriv-browser-regression-gate.md) — splash-triggered social popup can appear after the harness's initial gate check.
