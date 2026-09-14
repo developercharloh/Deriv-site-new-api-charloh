@@ -13,12 +13,12 @@ describe('FastExecutionClock', () => {
         jest.useRealTimers();
     });
 
-    it('keeps a 1.75-second safety interval and a 500 ms settlement rest', () => {
+    it('keeps an 800 ms safety interval with no settlement rest', () => {
         expect(FAST_EXECUTION_INTERVAL_MS).toBe(800);
-        expect(FAST_SETTLEMENT_REST_MS).toBe(400);
+        expect(FAST_SETTLEMENT_REST_MS).toBe(0);
     });
 
-    it('opens 35 slots in the first minute window', () => {
+    it('opens 75 slots in the first minute window', () => {
         const onSlot = jest.fn();
         const clock = new FastExecutionClock(onSlot);
 
@@ -35,7 +35,7 @@ describe('FastExecutionClock', () => {
         expect(onSlot).toHaveBeenCalledTimes(75);
     });
 
-    it('resets the next slot to 500 ms after settlement', () => {
+    it('re-arms the next slot immediately after settlement', () => {
         const onSlot = jest.fn();
         const clock = new FastExecutionClock(onSlot);
 
@@ -43,10 +43,7 @@ describe('FastExecutionClock', () => {
         expect(onSlot).toHaveBeenCalledTimes(1);
 
         clock.scheduleAfterSettlement();
-        jest.advanceTimersByTime(399);
-        expect(onSlot).toHaveBeenCalledTimes(1);
-
-        jest.advanceTimersByTime(1);
+        jest.runOnlyPendingTimers();
         expect(onSlot).toHaveBeenCalledTimes(2);
 
         clock.stop();
