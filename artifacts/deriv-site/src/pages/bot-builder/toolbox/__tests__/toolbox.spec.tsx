@@ -38,7 +38,7 @@ const mockedUseStore = useStore as jest.MockedFunction<typeof useStore>;
 const createToolboxDom = () => {
     const toolboxDom = document.createElement('xml');
 
-    ['Trade parameters', 'Logic'].forEach((name, index) => {
+    ['Analysis Logics 🔥', 'Trade parameters', 'Logic'].forEach((name, index) => {
         const category = document.createElement('category');
         category.id = `category-${index}`;
         category.setAttribute('name', name);
@@ -94,6 +94,7 @@ describe('Toolbox mobile Blocks menu', () => {
         await user.click(screen.getByTestId('button-open-blocks-menu'));
 
         expect(screen.getByPlaceholderText('Search')).toBeInTheDocument();
+        expect(screen.getByText('Analysis Logics 🔥')).toBeInTheDocument();
         expect(screen.getByText('Trade parameters')).toBeInTheDocument();
         expect(screen.getByText('Logic')).toBeInTheDocument();
         expect(screen.getByTestId('button-open-blocks-menu')).toHaveAttribute('aria-expanded', 'true');

@@ -53,6 +53,94 @@ const Xml = ({ ...props }) => {
 export const ToolboxItems = () =>
     ReactDomServer.renderToStaticMarkup(
         <Xml xmlns='http://www.w3.org/1999/xhtml' id='toolbox'>
+            <Category id='analysis_logics' name={localize('Analysis Logics 🔥')}>
+                <Category id='binary_matrix_ai' name={localize('Binary Matrix AI')}>
+                    <Block type='last_digits_condition'>
+                        <Value name='N'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>4</Field>
+                            </Shadow>
+                        </Value>
+                        <Field name='CONDITION'>ALL_ODD</Field>
+                        <Value name='COMPARE_VALUE'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>0</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='last_digits_condition'>
+                        <Value name='N'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>4</Field>
+                            </Shadow>
+                        </Value>
+                        <Field name='CONDITION'>ALL_EVEN</Field>
+                        <Value name='COMPARE_VALUE'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>0</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='last_digits_condition'>
+                        <Value name='N'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>3</Field>
+                            </Shadow>
+                        </Value>
+                        <Field name='CONDITION'>LESS_OR_EQUAL</Field>
+                        <Value name='COMPARE_VALUE'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>3</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='last_digits_condition'>
+                        <Value name='N'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>3</Field>
+                            </Shadow>
+                        </Value>
+                        <Field name='CONDITION'>GREATER_OR_EQUAL</Field>
+                        <Value name='COMPARE_VALUE'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>6</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='apollo_purchase2'>
+                        <Field name='PURCHASE_LIST'>DIGITEVEN</Field>
+                        <Value name='PREDICTION'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>0</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='apollo_purchase2'>
+                        <Field name='PURCHASE_LIST'>DIGITODD</Field>
+                        <Value name='PREDICTION'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>0</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='apollo_purchase2'>
+                        <Field name='PURCHASE_LIST'>DIGITOVER</Field>
+                        <Value name='PREDICTION'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>4</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='apollo_purchase2'>
+                        <Field name='PURCHASE_LIST'>DIGITUNDER</Field>
+                        <Value name='PREDICTION'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>5</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                </Category>
+            </Category>
             <Category id='trade_parameters' name={localize('Trade parameters')}>
                 <Block type='trade_definition'>
                     <Statement name='TRADE_OPTIONS'>
@@ -154,92 +242,6 @@ export const ToolboxItems = () =>
                     <Value name='AMOUNT'>
                         <Shadow type='math_number'>
                             <Field name='NUM'>0</Field>
-                        </Shadow>
-                    </Value>
-                </Block>
-            </Category>
-            <Category id='binary_matrix_ai' name={localize('Binary Matrix AI')}>
-                <Block type='last_digits_condition'>
-                    <Value name='N'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>4</Field>
-                        </Shadow>
-                    </Value>
-                    <Field name='CONDITION'>ALL_ODD</Field>
-                    <Value name='COMPARE_VALUE'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>0</Field>
-                        </Shadow>
-                    </Value>
-                </Block>
-                <Block type='last_digits_condition'>
-                    <Value name='N'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>4</Field>
-                        </Shadow>
-                    </Value>
-                    <Field name='CONDITION'>ALL_EVEN</Field>
-                    <Value name='COMPARE_VALUE'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>0</Field>
-                        </Shadow>
-                    </Value>
-                </Block>
-                <Block type='last_digits_condition'>
-                    <Value name='N'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>3</Field>
-                        </Shadow>
-                    </Value>
-                    <Field name='CONDITION'>LESS_OR_EQUAL</Field>
-                    <Value name='COMPARE_VALUE'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>3</Field>
-                        </Shadow>
-                    </Value>
-                </Block>
-                <Block type='last_digits_condition'>
-                    <Value name='N'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>3</Field>
-                        </Shadow>
-                    </Value>
-                    <Field name='CONDITION'>GREATER_OR_EQUAL</Field>
-                    <Value name='COMPARE_VALUE'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>6</Field>
-                        </Shadow>
-                    </Value>
-                </Block>
-                <Block type='apollo_purchase2'>
-                    <Field name='PURCHASE_LIST'>DIGITEVEN</Field>
-                    <Value name='PREDICTION'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>0</Field>
-                        </Shadow>
-                    </Value>
-                </Block>
-                <Block type='apollo_purchase2'>
-                    <Field name='PURCHASE_LIST'>DIGITODD</Field>
-                    <Value name='PREDICTION'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>0</Field>
-                        </Shadow>
-                    </Value>
-                </Block>
-                <Block type='apollo_purchase2'>
-                    <Field name='PURCHASE_LIST'>DIGITOVER</Field>
-                    <Value name='PREDICTION'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>4</Field>
-                        </Shadow>
-                    </Value>
-                </Block>
-                <Block type='apollo_purchase2'>
-                    <Field name='PURCHASE_LIST'>DIGITUNDER</Field>
-                    <Value name='PREDICTION'>
-                        <Shadow type='math_number'>
-                            <Field name='NUM'>5</Field>
                         </Shadow>
                     </Value>
                 </Block>
@@ -863,6 +865,132 @@ export const ToolboxItems = () =>
                         </Value>
                     </Block>
                 </Category>
+            </Category>
+
+            {/*
+             * These groups mirror the additional sections in the reference
+             * toolbox. They intentionally reuse registered Blockly blocks
+             * instead of introducing visual-only block types. The custom
+             * engine controls shown in the reference images are not part of
+             * the DBot interpreter contract, so exposing them here would
+             * create blocks that look runnable but cannot execute safely.
+             */}
+            <Category id='virtual_hook_switcher' name={localize('Virtual Hook Switcher')}>
+                <Block type='variables_get' />
+                <Block type='variables_set'>
+                    <Value name='VALUE'>
+                        <Shadow type='logic_boolean'>
+                            <Field name='BOOL'>TRUE</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='logic_boolean'>
+                    <Field name='BOOL'>TRUE</Field>
+                </Block>
+            </Category>
+
+            <Category id='custom_notification' name={localize('Custom Notification')}>
+                <Block type='notify'>
+                    <Field name='NOTIFICATION_TYPE'>success</Field>
+                    <Value name='MESSAGE'>
+                        <Shadow type='text'>
+                            <Field name='TEXT'>abc</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='text_print'>
+                    <Value name='TEXT'>
+                        <Shadow type='text'>
+                            <Field name='TEXT'>abc</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='notify_telegram'>
+                    <Value name='TELEGRAM_ACCESS_TOKEN'>
+                        <Shadow type='text'>
+                            <Field name='TEXT' />
+                        </Shadow>
+                    </Value>
+                    <Value name='TELEGRAM_CHAT_ID'>
+                        <Shadow type='text'>
+                            <Field name='TEXT' />
+                        </Shadow>
+                    </Value>
+                    <Value name='TELEGRAM_MESSAGE'>
+                        <Shadow type='text'>
+                            <Field name='TEXT'>abc</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+            </Category>
+
+            <Category id='binarytools' name={localize('Binarytools')}>
+                <Block type='last_digits_condition'>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='CONDITION'>ALL_ODD</Field>
+                    <Value name='COMPARE_VALUE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_purchase2'>
+                    <Field name='PURCHASE_LIST'>DIGITOVER</Field>
+                    <Value name='PREDICTION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='read_details' />
+                <Block type='last_digit' />
+            </Category>
+
+            <Category id='contract_modifiers' name={localize('Contract modifiers')}>
+                <Block type='multiplier_take_profit'>
+                    <Value name='AMOUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='multiplier_stop_loss'>
+                    <Value name='AMOUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='accumulator_take_profit'>
+                    <Value name='AMOUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>0</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+            </Category>
+
+            <Category id='barrier_settings' name={localize('Barrier Settings')}>
+                <Block type='trade_definition_tradeoptions'>
+                    <Mutation has_first_barrier='true' has_second_barrier='true' has_prediction='true' />
+                    <Field name='DURATIONTYPE_LIST' />
+                    <Field name='CURRENCY_LIST'>USD</Field>
+                    <Value name='DURATION'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>1</Field>
+                        </Shadow>
+                    </Value>
+                    <Value name='AMOUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>1</Field>
+                        </Shadow>
+                    </Value>
+                    <Field name='AMOUNT_LIMITS' />
+                </Block>
             </Category>
 
             <Examples id='examples'>
