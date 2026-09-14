@@ -100,7 +100,32 @@ describe('generated bot settlement results', () => {
         (window as any).Blockly = previousBlockly;
     });
 
-    it('prewarms and accepts the next proposal before the generated cycle resumes after settlement', async () => {
+    it.each([
+        {
+            label: 'a loss',
+            startingStake: 0.5,
+            settlementBuyPrice: 0.5,
+            settlementSellPrice: 0,
+            settlementProfit: -0.5,
+            expectedNextStake: 1,
+        },
+        {
+            label: 'a win',
+            startingStake: 1,
+            settlementBuyPrice: 1,
+            settlementSellPrice: 1.85,
+            settlementProfit: 0.85,
+            expectedNextStake: 0.5,
+        },
+    ])(
+        'prewarms and accepts the next proposal before the generated cycle resumes after $label',
+        async ({
+            startingStake,
+            settlementBuyPrice,
+            settlementSellPrice,
+            settlementProfit,
+            expectedNextStake,
+        }) => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
 
         const subscriptions: Array<(message: { data: Record<string, any> }) => void> = [];
@@ -135,7 +160,7 @@ describe('generated bot settlement results', () => {
                         proposal,
                         passthrough: payload.passthrough,
                     };
-                    if (Number(payload.amount) === 0.5) {
+                    if (proposalRequests.length === 1) {
                         delayedProposalResponses.push(response);
                     } else {
                         [...subscriptions].forEach(subscription => subscription({ data: response }));
@@ -191,7 +216,7 @@ describe('generated bot settlement results', () => {
 
         engine.options = { symbol: 'R_25' };
         engine.tradeOptions = {
-            amount: 0.5,
+            amount: startingStake,
             basis: 'stake',
             currency: 'USD',
             duration: 1,
@@ -205,7 +230,7 @@ describe('generated bot settlement results', () => {
         engine.startPromise = Promise.resolve();
         engine.binaryMatrixStakeState = {
             initialStake: 0.5,
-            currentStake: 0.5,
+            currentStake: startingStake,
             multiplier: 2,
             winsSinceAnalysis: 0,
             reanalysisPending: false,
@@ -215,7 +240,7 @@ describe('generated bot settlement results', () => {
         engine.updateTotals = jest.fn(() => events.push('authoritative-totals'));
         engine.getBinaryMatrixTradeOptions = jest.fn(options => {
             events.push('next-options');
-            expect(engine.binaryMatrixStakeState.currentStake).toBe(1);
+            expect(engine.binaryMatrixStakeState.currentStake).toBe(expectedNextStake);
             return {
                 ...options,
                 amount: engine.binaryMatrixStakeState.currentStake,
@@ -240,9 +265,9 @@ describe('generated bot settlement results', () => {
             is_sold: 1,
             is_expired: 1,
             is_valid_to_sell: 0,
-            buy_price: 0.5,
-            sell_price: 0,
-            profit: -0.5,
+            buy_price: settlementBuyPrice,
+            sell_price: settlementSellPrice,
+            profit: settlementProfit,
             currency: 'USD',
             contract_type: 'DIGITEVEN',
             transaction_ids: {
@@ -266,19 +291,19 @@ describe('generated bot settlement results', () => {
 
         expect(contractState.settled).toBe(true);
         expect(engine.lastSettledContract).toBe(settlement);
-        expect(engine.binaryMatrixStakeState.currentStake).toBe(1);
+        expect(engine.binaryMatrixStakeState.currentStake).toBe(expectedNextStake);
         expect(engine.updateTotals).toHaveBeenCalledWith(settlement, true);
         await Promise.resolve();
         await Promise.resolve();
 
         expect(proposalRequests).toEqual([
             expect.objectContaining({
-                amount: 0.5,
+                amount: startingStake,
                 contract_type: 'DIGITEVEN',
                 underlying_symbol: 'R_25',
             }),
             expect.objectContaining({
-                amount: 1,
+                amount: expectedNextStake,
                 contract_type: 'DIGITEVEN',
                 underlying_symbol: 'R_25',
             }),
@@ -286,12 +311,12 @@ describe('generated bot settlement results', () => {
         expect(engine.data.proposals).toEqual([
             expect.objectContaining({
                 id: 'proposal-2',
-                ask_price: 1,
+                ask_price: expectedNextStake,
                 contract_type: 'DIGITEVEN',
             }),
         ]);
 
-        // The old 0.5 proposal was answered after settlement refreshed the
+        // The initial proposal was answered after settlement refreshed the
         // purchase reference. It must not re-enter the refreshed set.
         [...delayedProposalResponses].forEach(response =>
             [...subscriptions].forEach(subscription => subscription({ data: response }))
@@ -299,7 +324,7 @@ describe('generated bot settlement results', () => {
         expect(engine.data.proposals).toEqual([
             expect.objectContaining({
                 id: 'proposal-2',
-                ask_price: 1,
+                ask_price: expectedNextStake,
                 contract_type: 'DIGITEVEN',
             }),
         ]);
@@ -308,18 +333,19 @@ describe('generated bot settlement results', () => {
         await expect(engine.watch('before')).resolves.toBe(true);
         await bot.purchase('DIGITEVEN');
 
-        expect(buyRequests).toEqual([{ buy: 'proposal-2', price: 1 }]);
+        expect(buyRequests).toEqual([{ buy: 'proposal-2', price: expectedNextStake }]);
         releaseBotContractGate(engine, 9102);
         expect(events).toEqual([
-            'proposal:0.5',
+            `proposal:${startingStake}`,
             'authoritative-totals',
             'next-options',
-            'proposal:1',
+            `proposal:${expectedNextStake}`,
             'interpreter-resumed',
             'next-purchase-allowed',
-            'proposal:1',
+            `proposal:${expectedNextStake}`,
         ]);
-    });
+        }
+    );
 
     it('counts only settled Binary Matrix wins and requests repeated re-analysis', () => {
         const previousBlockly = window.Blockly;
