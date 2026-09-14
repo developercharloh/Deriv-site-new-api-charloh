@@ -1,4 +1,5 @@
 import { localize } from '@deriv-com/translations';
+import { config } from '../../../constants/config';
 import { modifyContextMenu } from '../../utils';
 
 const generator = () => window.Blockly.JavaScript.javascriptGenerator;
@@ -82,6 +83,101 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_is_option = blo
         `${varName} === ${JSON.stringify(block.getFieldValue('OPTION') || '')}`,
         generator().ORDER_EQUALITY,
     ];
+};
+
+window.Blockly.Blocks.even_odd_analysis = {
+    init() {
+        this.jsonInit({
+            message0: localize('%1 percentage of the last %2 digits'),
+            args0: [
+                {
+                    type: 'field_dropdown',
+                    name: 'ANALYSIS_TYPE',
+                    options: [
+                        [localize('Even'), 'EVEN_PERCENTAGE'],
+                        [localize('Odd'), 'ODD_PERCENTAGE'],
+                    ],
+                },
+                {
+                    type: 'input_value',
+                    name: 'N',
+                    check: 'Number',
+                },
+            ],
+            output: 'Number',
+            outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
+            colour: window.Blockly.Colours.Base.colour,
+            colourSecondary: window.Blockly.Colours.Base.colourSecondary,
+            colourTertiary: window.Blockly.Colours.Base.colourTertiary,
+            tooltip: localize('Returns the percentage of even or odd digits in the selected tick window.'),
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+        this.setInputsInline(true);
+    },
+    meta() {
+        return {
+            display_name: localize('Even/Odd Analysis'),
+            description: localize('Returns the percentage of even or odd digits in the selected tick window.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.even_odd_analysis = block => {
+    const parity = block.getFieldValue('ANALYSIS_TYPE') === 'ODD_PERCENTAGE' ? 'odd' : 'even';
+    const count = numberInput(block, 'N', '1000');
+    return [`Bot.getParityPercentage('${parity}', ${count})`, generator().ORDER_FUNCTION_CALL];
+};
+
+window.Blockly.Blocks.apollo_notify = {
+    init() {
+        this.jsonInit({
+            message0: localize('Notify %1 with sound %2 %3'),
+            args0: [
+                {
+                    type: 'field_dropdown',
+                    name: 'NOTIFICATION_TYPE',
+                    options: config().lists.NOTIFICATION_TYPE,
+                },
+                {
+                    type: 'field_dropdown',
+                    name: 'NOTIFICATION_SOUND',
+                    options: config().lists.NOTIFICATION_SOUND,
+                },
+                {
+                    type: 'input_value',
+                    name: 'MESSAGE',
+                },
+            ],
+            previousStatement: null,
+            nextStatement: null,
+            colour: window.Blockly.Colours.Special3.colour,
+            colourSecondary: window.Blockly.Colours.Special3.colourSecondary,
+            colourTertiary: window.Blockly.Colours.Special3.colourTertiary,
+            tooltip: localize('Displays a digit-strategy notification.'),
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Digit Pro Notification'),
+            description: localize('Displays a notification from the digit strategy.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.apollo_notify = block => {
+    const notificationType = block.getFieldValue('NOTIFICATION_TYPE') || 'info';
+    const sound = block.getFieldValue('NOTIFICATION_SOUND') || 'silent';
+    const message =
+        generator().valueToCode(block, 'MESSAGE', generator().ORDER_ATOMIC) ||
+        JSON.stringify(localize('<empty message>'));
+    return `Bot.notify({ className: 'journal__text--${notificationType}', message: ${message}, sound: '${sound}', block_id: '${block.id}', variable_name: null });\n`;
 };
 
 window.Blockly.Blocks.last_digits_condition = {

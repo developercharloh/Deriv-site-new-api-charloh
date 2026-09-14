@@ -205,6 +205,25 @@ const BOTS: BotConfig[] = [
         gradient: 'linear-gradient(135deg, #1c1033 0%, #4c1d95 48%, #f59e0b 100%)',
     },
     {
+        id: 'digit-pro-v1',
+        name: 'Digit Pro V1⚡💹',
+        emoji: '⚡💹',
+        description:
+            'Digit strategy for Volatility 10 (1s) Index. Uses Over 2 / Under 7 entry rules with Even/Odd percentage and recent-digit confirmation, plus recovery staking, take-profit, stop-loss, and in-builder notifications.',
+        market: 'Volatility 10 (1s) Index (1HZ10V)',
+        strategy: 'Over 2 / Under 7 · Even/Odd Analysis · Recovery Mode',
+        params: [
+            { label: 'Initial Stake', value: '$0.70' },
+            { label: 'Martingale', value: '2×' },
+            { label: 'Take Profit', value: '$10' },
+            { label: 'Stop Loss', value: '$30' },
+            { label: 'Duration', value: '1 Tick' },
+            { label: 'Prediction', value: '2 / 7' },
+        ],
+        xmlPath: '/bots/Digit_Pro_V1.xml',
+        gradient: 'linear-gradient(135deg, #071a2f 0%, #075985 42%, #f59e0b 100%)',
+    },
+    {
         id: 'over-destroyer',
         name: 'Over Destroyer Bot',
         emoji: '📈📉',

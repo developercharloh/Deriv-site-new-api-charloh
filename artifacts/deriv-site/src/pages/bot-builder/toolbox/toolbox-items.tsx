@@ -54,6 +54,14 @@ export const ToolboxItems = () =>
     ReactDomServer.renderToStaticMarkup(
         <Xml xmlns='http://www.w3.org/1999/xhtml' id='toolbox'>
             <Category id='analysis_logics' name={localize('Analysis Logics 🔥')}>
+                <Block type='even_odd_analysis'>
+                    <Field name='ANALYSIS_TYPE'>EVEN_PERCENTAGE</Field>
+                    <Value name='N'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>25</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
                 <Block type='last_digits_condition'>
                     <Value name='N'>
                         <Shadow type='math_number'>
@@ -132,6 +140,15 @@ export const ToolboxItems = () =>
                     <Value name='N'>
                         <Shadow type='math_number'>
                             <Field name='NUM'>3</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='apollo_notify'>
+                    <Field name='NOTIFICATION_TYPE'>info</Field>
+                    <Field name='NOTIFICATION_SOUND'>silent</Field>
+                    <Value name='MESSAGE'>
+                        <Shadow type='text'>
+                            <Field name='TEXT'>Digit Pro notification</Field>
                         </Shadow>
                     </Value>
                 </Block>
