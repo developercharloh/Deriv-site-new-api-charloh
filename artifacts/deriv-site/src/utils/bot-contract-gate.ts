@@ -11,6 +11,8 @@ type GateState = {
     latestTickKey: string | null;
     lastUsedTickKey: string | null;
     immediateReentryKey: string | null;
+    sessionIds: WeakMap<object, string>;
+    nextSessionId: number;
 };
 
 const getState = (): GateState => {
@@ -25,20 +27,42 @@ const getState = (): GateState => {
             latestTickKey: null,
             lastUsedTickKey: null,
             immediateReentryKey: null,
+            sessionIds: new WeakMap(),
+            nextSessionId: 0,
         };
         globalState[GATE_KEY] = migrated;
         return migrated;
     }
 
-    if (current) return current as GateState;
+    if (current) {
+        const state = current as GateState;
+        // Preserve the gate across hot reloads while adding session tracking
+        // to the state created by an older module version.
+        state.sessionIds ??= new WeakMap();
+        state.nextSessionId ??= 0;
+        return state;
+    }
     const initial: GateState = {
         active: [],
         latestTickKey: null,
         lastUsedTickKey: null,
         immediateReentryKey: null,
+        sessionIds: new WeakMap(),
+        nextSessionId: 0,
     };
     globalState[GATE_KEY] = initial;
     return initial;
+};
+
+export const getBotContractSessionId = (owner: object): string => {
+    const state = getState();
+    const existingSessionId = state.sessionIds.get(owner);
+    if (existingSessionId) return existingSessionId;
+
+    const sessionId = `session-${state.nextSessionId}`;
+    state.nextSessionId += 1;
+    state.sessionIds.set(owner, sessionId);
+    return sessionId;
 };
 
 export const markBotTick = (symbol: string | null | undefined, epoch: string | number | null | undefined): void => {

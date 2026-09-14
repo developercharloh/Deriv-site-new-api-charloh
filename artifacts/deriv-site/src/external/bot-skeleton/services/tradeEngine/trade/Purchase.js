@@ -5,6 +5,7 @@ import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../uti
 import { purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
 import {
+    getBotContractSessionId,
     releaseBotContractGate,
     setBotContractGateContract,
     tryAcquireBotContractGate,
@@ -84,7 +85,7 @@ export default Engine =>
             const symbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
             const signalKey =
                 isFast
-                    ? `fast:${String(currentTradeState.fastSlot || 0)}`
+                    ? `fast:${getBotContractSessionId(this)}:${String(currentTradeState.fastSlot || 0)}`
                     : currentTick === null || currentTick === undefined || currentTick === ''
                       ? undefined
                       : `${symbol ?? 'unknown'}:${String(currentTick)}`;

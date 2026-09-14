@@ -17,6 +17,7 @@ jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
 }));
 
 import {
+    getBotContractSessionId,
     markBotTick,
     releaseBotContractGate,
     setBotContractGateContract,
@@ -580,6 +581,40 @@ describe('automated contract gate', () => {
         expect(releaseBotContractGate(firstRunner, 7002, signalKey, true)).toBe(true);
         expect(tryAcquireBotContractGate(secondRunner, signalKey)).toBe(true);
         releaseBotContractGate(secondRunner);
+    });
+
+    it('scopes FAST slot keys to a bot session without weakening duplicate protection', () => {
+        const firstSession = {};
+        const secondSession = {};
+        const firstSignalKey = `fast:${getBotContractSessionId(firstSession)}:1`;
+        const secondSignalKey = `fast:${getBotContractSessionId(secondSession)}:1`;
+
+        expect(firstSignalKey).not.toBe(secondSignalKey);
+        expect(tryAcquireBotContractGate(firstSession, firstSignalKey)).toBe(true);
+        releaseBotContractGate(firstSession, undefined, firstSignalKey);
+
+        // A restarted cycle in the same session cannot buy the same FAST slot.
+        expect(tryAcquireBotContractGate(firstSession, firstSignalKey)).toBe(false);
+
+        // A new session's first slot is not rejected because an old session
+        // used the same numeric slot.
+        expect(tryAcquireBotContractGate(secondSession, secondSignalKey)).toBe(true);
+        releaseBotContractGate(secondSession, undefined, secondSignalKey);
+    });
+
+    it('still excludes a separate FAST session while another contract is open', () => {
+        const firstSession = {};
+        const secondSession = {};
+        const firstSignalKey = `fast:${getBotContractSessionId(firstSession)}:1`;
+        const secondSignalKey = `fast:${getBotContractSessionId(secondSession)}:1`;
+
+        expect(tryAcquireBotContractGate(firstSession, firstSignalKey)).toBe(true);
+        setBotContractGateContract(firstSession, 'active-fast-contract', firstSignalKey);
+        expect(tryAcquireBotContractGate(secondSession, secondSignalKey)).toBe(false);
+
+        releaseBotContractGate(firstSession, 'active-fast-contract', firstSignalKey);
+        expect(tryAcquireBotContractGate(secondSession, secondSignalKey)).toBe(true);
+        releaseBotContractGate(secondSession, undefined, secondSignalKey);
     });
 
     it('never allows a new contract while another contract is open', () => {
