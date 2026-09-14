@@ -184,6 +184,27 @@ const BOTS: BotConfig[] = [
         signalKey: 'fb_signal_over_under',
     },
     {
+        id: 'over2-under7-reversal',
+        name: 'Over2 / Under7 Reversal',
+        emoji: '🔁',
+        description:
+            'Pattern strategy for Volatility 50 (1s) Index. Choose a 1- through 6-digit lookback, then trade Over 2 when the recent digits are at or below 2 or Under 7 when they are at or above 7. Includes a 3.5× Martingale recovery, four-win take-profit target, and stop-loss protection.',
+        market: 'Volatility 50 (1s) Index (1HZ50V)',
+        strategy: 'Over 2 / Under 7 · 1–6 Digit Pattern Reversal · Martingale',
+        params: [
+            { label: 'Lookback', value: '1–6 digits (selectable)' },
+            { label: 'Over Trigger', value: '≤2' },
+            { label: 'Under Trigger', value: '≥7' },
+            { label: 'Initial Stake', value: '$0.50' },
+            { label: 'Martingale', value: '3.5×' },
+            { label: 'Take Profit', value: '4 wins' },
+            { label: 'Stop Loss', value: '$30' },
+            { label: 'Duration', value: '1 Tick' },
+        ],
+        xmlPath: '/bots/Over2_Under7_Reversal.xml',
+        gradient: 'linear-gradient(135deg, #1c1033 0%, #4c1d95 48%, #f59e0b 100%)',
+    },
+    {
         id: 'over-destroyer',
         name: 'Over Destroyer Bot',
         emoji: '📈📉',

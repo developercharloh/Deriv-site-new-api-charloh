@@ -11,13 +11,14 @@
     <variable id="2]oO6`(1|9(H8I5QalfU">Stop Loss</variable>
     <variable id=".y;h9Tk8uf./r@9$[8(b">Use Martingale</variable>
   </variables>
-  <block type="trade_definition" id="A#/;j,6f#0U+1=7ki!yj" deletable="false" x="0" y="60">
+  <block type="trade_definition" id="A#/;j,6f#0U+1=7ki!yj" deletable="false" x="0" y="110">
     <statement name="TRADE_OPTIONS">
       <block type="trade_definition_market" id="0ELN3?|#ps4EznJW[wVy" deletable="false" movable="false">
-        <mutation xmlns="http://www.w3.org/1999/xhtml" vh_enabled="false" vh_max_steps="1" vh_min_trades="1" vh_stake="0.35"></mutation>
+        <mutation xmlns="http://www.w3.org/1999/xhtml" hide_trade_parameters="false" vh_enabled="false" vh_max_steps="1" vh_min_trades="1" vh_stake="0.35"></mutation>
         <field name="MARKET_LIST">synthetic_index</field>
         <field name="SUBMARKET_LIST">random_index</field>
-        <field name="SYMBOL_LIST">R_25</field>
+        <field name="SYMBOL_LIST">1HZ50V</field>
+        <field name="HIDE_TRADE_PARAMETERS">FALSE</field>
         <field name="ALTERNATE_MARKETS">FALSE</field>
         <field name="ALTERNATE_EVERY">1</field>
         <field name="MULTI_MARKET">FALSE</field>
@@ -157,7 +158,7 @@
       </block>
     </statement>
   </block>
-  <block type="after_purchase" id="(^qi7LaqxU`[;j[JOf%`" collapsed="true" x="1051" y="60">
+  <block type="after_purchase" id="(^qi7LaqxU`[;j[JOf%`" collapsed="true" x="714" y="110">
     <statement name="AFTERPURCHASE_STACK">
       <block type="notify" id="V)B}6tbmCVg?Ix_M*+0/" collapsed="true">
         <field name="NOTIFICATION_TYPE">success</field>
@@ -390,10 +391,10 @@
       </block>
     </statement>
   </block>
-  <block type="before_purchase" id="licmPn={lrajX{,il-1Y" collapsed="true" deletable="false" x="0" y="1154">
+  <block type="before_purchase" id="licmPn={lrajX{,il-1Y" collapsed="true" deletable="false" x="0" y="1272">
     <statement name="BEFOREPURCHASE_STACK">
           <block type="controls_if" id="7=GFbOP$8lEu3wpvo!~}">
-        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="3"></mutation>
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="5"></mutation>
         <value name="IF0">
           <block type="variables_is_option" id=":%VV?:NF|T~}8,OO%OmC">
             <mutation xmlns="http://www.w3.org/1999/xhtml" options="%5B%5B%22If%20last%201%20Digits%20are%20%3D%3C%20to%202%20trade%20Over2%20and%20%3E%3D%20to%207%20trade%20Under7%22%2C%22If%20last%201%20Digits%20are%20%3D%3C%20to%202%20trade%20Over2%20and%20%3E%3D%20to%207%20trade%20Under7%22%5D%2C%5B%22If%20last%202%20Digits%20are%20%3D%3C%20to%202%20trade%20Over2%20and%20%3E%3D%20to%207%20trade%20Under7%22%2C%22If%20last%202%20Digits%20are%20%3D%3C%20to%202%20trade%20Over2%20and%20%3E%3D%20to%207%20trade%20Under7%22%5D%2C%5B%22If%20last%203%20Digits%20are%20%3D%3C%20to%202%20trade%20Over2%20and%20%3E%3D%20to%207%20trade%20Under7%22%2C%22If%20last%203%20Digits%20are%20%3D%3C%20to%202%20trade%20Over2%20and%20%3E%3D%20to%207%20trade%20Under7%22%5D%2C%5B%22If%20last%204%20Digits%20are%20%3D%3C%20to%202%20trade%20Over2%20and%20%3E%3D%20to%207%20trade%20Under7%22%2C%22If%20last%204%20Digits%20are%20%3D%3C%20to%202%20trade%20Over2%20and%20%3E%3D%20to%207%20trade%20Under7%22%5D%2C%5B%22If%20last%207%20Digits%20are%20%3D%3C%20to%204%20trade%20Over4%20and%20%3E%3D%20to%205%20trade%20Under5%22%2C%22If%20last%207%20Digits%20are%20%3D%3C%20to%204%20trade%20Over4%20and%20%3E%3D%20to%205%20trade%20Under5%22%5D%2C%5B%22If%20last%208%20Digits%20are%20%3D%3C%20to%204%20trade%20Over4%20and%20%3E%3D%20to%205%20trade%20Under5%22%2C%22If%20last%208%20Digits%20are%20%3D%3C%20to%204%20trade%20Over4%20and%20%3E%3D%20to%205%20trade%20Under5%22%5D%5D"></mutation>
