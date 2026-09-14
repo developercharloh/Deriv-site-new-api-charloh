@@ -11,13 +11,11 @@ import { TBlocklyEvents } from 'Types';
 import LoadModal from '../../components/load-modal';
 import SaveModal from '../dashboard/bot-list/save-modal';
 import BotBuilderTourHandler from '../tutorials/dbot-tours/bot-builder-tour';
-import QuickStrategy1 from './quick-strategy';
 import WorkspaceWrapper from './workspace-wrapper';
 
 const BotBuilder = observer(() => {
-    const { dashboard, app, run_panel, toolbar, quick_strategy, blockly_store } = useStore();
+    const { dashboard, app, run_panel, toolbar, blockly_store } = useStore();
     const { active_tab, active_tour, is_preview_on_popup } = dashboard;
-    const { is_open } = quick_strategy;
     const { is_running } = run_panel;
     const { is_loading } = blockly_store;
     const is_blockly_listener_registered = React.useRef(false);
@@ -127,7 +125,6 @@ const BotBuilder = observer(() => {
             {/* removed this outside from toolbar becuase it needs to loaded seperately without dependency */}
             <LoadModal />
             <SaveModal />
-            {is_open && <QuickStrategy1 />}
         </>
     );
 });
