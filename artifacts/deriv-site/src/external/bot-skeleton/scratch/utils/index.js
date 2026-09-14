@@ -62,8 +62,11 @@ export const revealWorkspaceFromTop = workspace => {
     normalizeMobileWorkspaceOrigin(workspace);
     window.Blockly?.svgResize?.(workspace);
     workspace.scrollbar?.resize?.();
-    workspace.scrollbar?.setY?.(0);
-    workspace.scrollbar?.set?.(0, 0);
+    // Scrollbar.set receives a handle ratio. It does not reliably reset the
+    // workspace translation after a resize, especially when the content is
+    // taller than the mobile viewport. Use Blockly's absolute scroll API so
+    // the loaded roots remain anchored at the visible origin.
+    workspace.scroll?.(0, 0);
 };
 
 export const scheduleWorkspaceReveal = workspace => {
