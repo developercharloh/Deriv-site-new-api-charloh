@@ -74,8 +74,8 @@ export default Engine =>
                             // it only releases watch('during') and lets the
                             // generated trade_again path prepare for the next
                             // The settlement path releases the generated cycle,
-                            // then the clock schedules the next purchase after
-                            // the explicit 500 ms rest. Leaving Redux in
+                            // then the clock schedules the next purchase in a
+                            // settlement microtask. Leaving Redux in
                             // DURING_PURCHASE
                             // here can make the interpreter wait forever after
                             // the first FAST contract settles.

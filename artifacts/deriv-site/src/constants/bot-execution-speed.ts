@@ -6,7 +6,7 @@ export const BOT_EXECUTION_SPEED_CHANGED_EVENT = 'dbot-execution-speed-changed';
  * Deriv does not offer a 1-second duration for this synthetic digit market;
  * its supported one-second-equivalent is one broker tick. The FAST scheduler
  * remains wall-clock based and opens one slot every 800 ms. Authoritative
- * settlement re-arms the next slot immediately on the next event-loop turn.
+ * settlement re-arms the next slot in a microtask with no timer clamp.
  */
 export const FAST_CONTRACT_DURATION_VALUE = 1;
 export const FAST_CONTRACT_DURATION_UNIT = 't';

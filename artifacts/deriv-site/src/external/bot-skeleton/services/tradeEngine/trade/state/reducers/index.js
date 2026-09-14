@@ -75,6 +75,12 @@ const signal = (state = initialState, action) => {
                 ...state,
                 fastReady: false,
             };
+        case constants.RESET_FAST_READY:
+            return {
+                ...state,
+                fastReady: false,
+                fastPending: false,
+            };
         case constants.PAUSE:
             return {
                 ...state,

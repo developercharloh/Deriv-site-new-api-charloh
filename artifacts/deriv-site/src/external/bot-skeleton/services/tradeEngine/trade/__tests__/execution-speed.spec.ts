@@ -52,6 +52,24 @@ describe('FAST trade-cycle release', () => {
         expect(store.getState().fastSlot).toBe(2);
     });
 
+    it('clears a stale FAST slot only when a new bot session starts', () => {
+        const store = createStore(rootReducer);
+
+        store.dispatch({ type: constants.START });
+        store.dispatch({ type: constants.FAST_REARM });
+        expect(store.getState().fastReady).toBe(true);
+        expect(store.getState().fastSlot).toBe(1);
+
+        store.dispatch({ type: constants.RESET_FAST_READY });
+        expect(store.getState().fastReady).toBe(false);
+        expect(store.getState().fastSlot).toBe(1);
+
+        store.dispatch({ type: constants.FAST_REARM });
+        store.dispatch({ type: constants.START });
+        expect(store.getState().fastReady).toBe(true);
+        expect(store.getState().fastSlot).toBe(2);
+    });
+
     it('keeps a paused before-purchase watcher blocked until FAST resumes', async () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
         const store = createStore(rootReducer);
@@ -214,5 +232,35 @@ describe('shared trade-cycle restart', () => {
         expect(engine.store.getState().scope).toBe(constants.BEFORE_PURCHASE);
         expect(engine.store.getState().fastReady).toBe(true);
         expect(engine.makeDirectPurchaseDecision).toHaveBeenCalledTimes(1);
+    });
+
+    it('stores the settlement-derived stake before prewarming the next proposal', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+
+        const engine = Object.create(TradeEngine.prototype);
+        engine.options = { symbol: 'R_25' };
+        engine.tradeOptions = {
+            amount: 0.5,
+            basis: 'stake',
+            currency: 'USD',
+            duration: 1,
+            duration_unit: 't',
+            contractTypes: ['DIGITEVEN'],
+            symbol: 'R_25',
+        };
+        engine.is_proposal_subscription_required = true;
+        engine.getBinaryMatrixTradeOptions = jest.fn(() => ({
+            ...engine.tradeOptions,
+            amount: 1,
+        }));
+        engine.makeProposals = jest.fn();
+
+        engine.prewarmFastNextProposal();
+
+        expect(engine.tradeOptions.amount).toBe(1);
+        expect(engine.makeProposals).toHaveBeenCalledWith({
+            ...engine.options,
+            ...engine.tradeOptions,
+        });
     });
 });

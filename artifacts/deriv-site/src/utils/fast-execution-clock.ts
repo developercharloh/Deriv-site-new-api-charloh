@@ -35,6 +35,14 @@ export class FastExecutionClock {
         if (!this.running || !this.releaseSlot) return;
 
         this.nextSlotAt = this.now() + FAST_SETTLEMENT_REST_MS;
+        if (FAST_SETTLEMENT_REST_MS === 0) {
+            if (this.timer) {
+                clearTimeout(this.timer);
+                this.timer = null;
+            }
+            queueMicrotask(this.releaseSlot);
+            return;
+        }
         this.scheduleNextSlot(FAST_SETTLEMENT_REST_MS);
     }
 

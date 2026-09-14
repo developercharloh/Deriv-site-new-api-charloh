@@ -11,5 +11,6 @@ export const STOP = 'STOP';
 export const NEW_TICK = 'NEW_TICK';
 export const FAST_REARM = 'FAST_REARM';
 export const CONSUME_FAST_READY = 'CONSUME_FAST_READY';
+export const RESET_FAST_READY = 'RESET_FAST_READY';
 export const PAUSE = 'PAUSE';
 export const RESUME = 'RESUME';

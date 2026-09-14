@@ -6,7 +6,7 @@ import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
 import { expectInitArg } from '../utils/sanitize';
-import { fastRearm, pause, proposalsReady, resume, sell, start } from './state/actions';
+import { fastRearm, pause, proposalsReady, resetFastReady, resume, sell, start } from './state/actions';
 import * as constants from './state/constants';
 import rootReducer from './state/reducers';
 import Balance from './Balance';
@@ -169,6 +169,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const fastClockAlreadyRunning = this.fastClock?.isRunning() === true;
         const isNewBotSession = !this.hasStarted;
         this.hasStarted = true;
+        if (isNewBotSession) this.store.dispatch(resetFastReady());
         if (isNewBotSession && this.isBinaryMatrixWorkspace()) {
             this.binaryMatrixStakeState = null;
         }
@@ -348,6 +349,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         });
         if (!nextTradeOptions) return;
 
+        this.tradeOptions = nextTradeOptions;
         this.makeProposals({
             ...this.options,
             ...nextTradeOptions,

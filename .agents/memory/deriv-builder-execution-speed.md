@@ -16,3 +16,9 @@ The direct V2 proposal pipeline prefetches the next proposal. A proposal must re
 **Why:** Settlement can arrive between proposal creation and purchase, so a global current-stake read at buy time is not enough to prove that the proposal amount is current. Broker terminal status is also less reliable than the settled profit for deciding whether Martingale should reset. A generated-cycle restart can also arrive after FAST_REARM has already moved Redux to BEFORE_PURCHASE; routing that state through SELL clears the one-shot slot and makes the bot take one trade, then sleep.
 
 **How to apply:** Treat settlement as authoritative for stake progression, but validate every prefetched proposal against the current stake immediately before buying. Record the actual buy price on the open-contract record for journal accuracy. When restarting a generated FAST cycle, preserve a prepared BEFORE_PURCHASE/fastReady state instead of normalizing it through SELL.
+
+Settlement-to-next-slot re-entry should use a microtask when the configured rest is zero; `setTimeout(0)` is still subject to browser timer clamping. A genuinely new bot session must clear `fastReady` unconditionally while preserving the monotonic slot counter, and a settlement-derived prewarmed stake must also replace the engine's active trade options before the next buy.
+
+**Why:** A zero-delay timer still produced avoidable pauses, stale ready flags could release a prior session's slot, and proposal prewarming could otherwise request one stake while the later direct buy used another.
+
+**How to apply:** Cancel the pending clock timer before microtask re-entry, reset only session state (not the slot counter) at new-session start, and keep proposal/request/buy stake state synchronized after authoritative settlement.

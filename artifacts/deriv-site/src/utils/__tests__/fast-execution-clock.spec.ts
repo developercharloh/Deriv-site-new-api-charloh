@@ -35,7 +35,7 @@ describe('FastExecutionClock', () => {
         expect(onSlot).toHaveBeenCalledTimes(75);
     });
 
-    it('re-arms the next slot immediately after settlement', () => {
+    it('re-arms the next slot immediately after settlement', async () => {
         const onSlot = jest.fn();
         const clock = new FastExecutionClock(onSlot);
 
@@ -43,7 +43,7 @@ describe('FastExecutionClock', () => {
         expect(onSlot).toHaveBeenCalledTimes(1);
 
         clock.scheduleAfterSettlement();
-        jest.runOnlyPendingTimers();
+        jest.runAllTicks();
         expect(onSlot).toHaveBeenCalledTimes(2);
 
         clock.stop();
