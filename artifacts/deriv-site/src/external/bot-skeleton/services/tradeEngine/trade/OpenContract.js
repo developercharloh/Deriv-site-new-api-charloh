@@ -20,6 +20,7 @@ export default Engine =>
 
                     const contractState = this.getContractState?.(contract.contract_id);
                     if (!contractState) return;
+                    if (contractState.settled) return;
 
                     this.setContractFlags(contract, contractState);
                     contractState.contract = contract;

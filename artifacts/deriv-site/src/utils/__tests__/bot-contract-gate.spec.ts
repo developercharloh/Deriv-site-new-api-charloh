@@ -280,19 +280,25 @@ describe('generated bot settlement results', () => {
             exit_tick: 2,
             barrier: '',
         };
-        [...subscriptions].forEach(subscription =>
-            subscription({
-                data: {
-                    msg_type: 'proposal_open_contract',
-                    proposal_open_contract: settlement,
-                },
-            })
-        );
+        const emitSettlement = (contract: Record<string, any>) =>
+            [...subscriptions].forEach(subscription =>
+                subscription({
+                    data: {
+                        msg_type: 'proposal_open_contract',
+                        proposal_open_contract: contract,
+                    },
+                })
+            );
+        emitSettlement(settlement);
+        // Deriv can repeat the terminal snapshot. It must not apply the
+        // result or prewarm the next proposal a second time.
+        emitSettlement({ ...settlement });
 
         expect(contractState.settled).toBe(true);
         expect(engine.lastSettledContract).toBe(settlement);
         expect(engine.binaryMatrixStakeState.currentStake).toBe(expectedNextStake);
         expect(engine.updateTotals).toHaveBeenCalledWith(settlement, true);
+        expect(engine.updateTotals).toHaveBeenCalledTimes(1);
         await Promise.resolve();
         await Promise.resolve();
 
