@@ -105,6 +105,7 @@ describe('generated bot settlement results', () => {
 
         const subscriptions: Array<(message: { data: Record<string, any> }) => void> = [];
         const proposalRequests: Array<Record<string, any>> = [];
+        const delayedProposalResponses: Array<Record<string, any>> = [];
         const buyRequests: Array<Record<string, any>> = [];
         const events: string[] = [];
         let nextProposalId = 1;
@@ -129,15 +130,16 @@ describe('generated bot settlement results', () => {
                         ask_price: Number(payload.amount),
                         contract_type: payload.contract_type,
                     };
-                    [...subscriptions].forEach(subscription =>
-                        subscription({
-                            data: {
-                                msg_type: 'proposal',
-                                proposal,
-                                passthrough: payload.passthrough,
-                            },
-                        })
-                    );
+                    const response = {
+                        msg_type: 'proposal',
+                        proposal,
+                        passthrough: payload.passthrough,
+                    };
+                    if (Number(payload.amount) === 0.5) {
+                        delayedProposalResponses.push(response);
+                    } else {
+                        [...subscriptions].forEach(subscription => subscription({ data: response }));
+                    }
                 }
 
                 if (payload.buy) {
@@ -219,8 +221,7 @@ describe('generated bot settlement results', () => {
                 amount: engine.binaryMatrixStakeState.currentStake,
             };
         });
-        engine.trade_option = { ...engine.options, ...engine.tradeOptions };
-        engine.regeneratePurchaseReference();
+        engine.makeProposals({ ...engine.options, ...engine.tradeOptions });
         engine.store.dispatch({ type: tradeConstants.START });
 
         expect(tryAcquireBotContractGate(engine, signalKey)).toBe(true);
@@ -272,6 +273,11 @@ describe('generated bot settlement results', () => {
 
         expect(proposalRequests).toEqual([
             expect.objectContaining({
+                amount: 0.5,
+                contract_type: 'DIGITEVEN',
+                underlying_symbol: 'R_25',
+            }),
+            expect.objectContaining({
                 amount: 1,
                 contract_type: 'DIGITEVEN',
                 underlying_symbol: 'R_25',
@@ -279,7 +285,20 @@ describe('generated bot settlement results', () => {
         ]);
         expect(engine.data.proposals).toEqual([
             expect.objectContaining({
-                id: 'proposal-1',
+                id: 'proposal-2',
+                ask_price: 1,
+                contract_type: 'DIGITEVEN',
+            }),
+        ]);
+
+        // The old 0.5 proposal was answered after settlement refreshed the
+        // purchase reference. It must not re-enter the refreshed set.
+        [...delayedProposalResponses].forEach(response =>
+            [...subscriptions].forEach(subscription => subscription({ data: response }))
+        );
+        expect(engine.data.proposals).toEqual([
+            expect.objectContaining({
+                id: 'proposal-2',
                 ask_price: 1,
                 contract_type: 'DIGITEVEN',
             }),
@@ -289,9 +308,10 @@ describe('generated bot settlement results', () => {
         await expect(engine.watch('before')).resolves.toBe(true);
         await bot.purchase('DIGITEVEN');
 
-        expect(buyRequests).toEqual([{ buy: 'proposal-1', price: 1 }]);
+        expect(buyRequests).toEqual([{ buy: 'proposal-2', price: 1 }]);
         releaseBotContractGate(engine, 9102);
         expect(events).toEqual([
+            'proposal:0.5',
             'authoritative-totals',
             'next-options',
             'proposal:1',

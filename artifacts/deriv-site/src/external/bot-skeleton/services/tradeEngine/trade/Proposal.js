@@ -65,10 +65,18 @@ export default Engine =>
             // Since there are two proposals (in most cases), an error may be logged twice, to avoid this
             // flip this boolean on error.
             let has_informed_error = false;
+            const purchase_reference = this.getPurchaseReference();
 
             Promise.all(
                 this.proposal_templates.map(proposal => {
                     doUntilDone(() => api_base.api.send(proposal)).catch(error => {
+                        // A proposal request can finish after settlement has refreshed the
+                        // stake. Do not put an error for the previous request into the
+                        // refreshed proposal set.
+                        if (purchase_reference !== this.getPurchaseReference()) {
+                            return null;
+                        }
+
                         // We intercept ContractBuyValidationError as user may have specified
                         // e.g. a DIGITUNDER 0 or DIGITOVER 9, while one proposal may be invalid
                         // the other is valid. We will error on Purchase rather than here.
@@ -112,6 +120,15 @@ export default Engine =>
             const subscription = api_base.api.onMessage().subscribe(response => {
                 if (response.data.msg_type === 'proposal') {
                     const { passthrough, proposal, error } = response.data;
+
+                    // Broker responses are delivered through one live subscription, so a
+                    // response for the previous purchase reference may arrive after
+                    // renewProposalsOnPurchase has cleared the old set. It must not be
+                    // allowed to reintroduce a stale amount or satisfy the new proposal
+                    // set.
+                    if (passthrough?.purchase_reference !== this.getPurchaseReference()) {
+                        return;
+                    }
 
                     // Handle proposal errors with localized messages
                     if (error) {
