@@ -25,6 +25,8 @@ const Toolbox = observer(() => {
         onToolboxItemClick,
         onToolboxItemExpand,
         onUnmount,
+        categoryMatchesSearch,
+        search_term,
         sub_category_index,
         toolbox_dom,
     } = toolbox;
@@ -73,7 +75,10 @@ const Toolbox = observer(() => {
         <div className='db-toolbox__category-menu'>
             {toolbox_dom &&
                 Array.from(toolbox_dom.childNodes as HTMLElement[]).map((category, index) => {
-                    if (category.tagName.toUpperCase() === 'CATEGORY') {
+                    if (
+                        category.tagName.toUpperCase() === 'CATEGORY' &&
+                        (!search_term || categoryMatchesSearch?.(category))
+                    ) {
                         const has_sub_category = hasSubCategory(category.children);
                         const is_sub_category_open = sub_category_index.includes(index);
                         return (

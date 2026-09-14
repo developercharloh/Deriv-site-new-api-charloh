@@ -7,6 +7,7 @@ import GTM from '@/utils/gtm';
 import { TStores } from '@deriv/stores/types';
 import { localize } from '@deriv-com/translations';
 import RootStore from './root-store';
+import { doesCategoryMatchSearch } from './toolbox-search';
 
 export default class ToolboxStore {
     root_store: RootStore;
@@ -22,6 +23,7 @@ export default class ToolboxStore {
             is_toolbox_open: observable,
             is_search_loading: observable,
             is_search_focus: observable,
+            search_term: observable,
             sub_category_index: observable,
             toolbox_dom: observable,
             toolbox_examples: observable,
@@ -49,6 +51,7 @@ export default class ToolboxStore {
     is_toolbox_open = true;
     is_search_loading = false;
     is_search_focus = false;
+    search_term = '';
     sub_category_index: number[] = [];
     toolbox_dom: HTMLElement | undefined = undefined;
     toolbox_examples: HTMLElement | undefined = undefined;
@@ -280,6 +283,7 @@ export default class ToolboxStore {
     onSearch = (values: any) => {
         const search = values?.search || '';
         this.is_search_focus = true;
+        this.search_term = search;
         this.showSearch(search);
     };
 
@@ -289,6 +293,7 @@ export default class ToolboxStore {
 
     onSearchClear(setFieldValue: (field: string, value: string) => void) {
         setFieldValue('search', '');
+        this.search_term = '';
         this.showSearch('');
     }
 
@@ -306,6 +311,7 @@ export default class ToolboxStore {
     }
 
     showSearch = (search: string) => {
+        this.search_term = search;
         const workspace = window.Blockly.derivWorkspace;
         const flyout_content: HTMLElement[] = [];
         const search_term = search.replace(/\s+/g, ' ').trim().toUpperCase();
@@ -493,5 +499,9 @@ export default class ToolboxStore {
         flyout.setContents(flyout_content, search);
         // Explicitly ensure flyout is visible after search completes
         flyout.setVisibility(true);
+    };
+
+    categoryMatchesSearch = (category: HTMLElement) => {
+        return doesCategoryMatchSearch(category, this.search_term);
     };
 }

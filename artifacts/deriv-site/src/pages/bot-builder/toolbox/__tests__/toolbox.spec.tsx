@@ -1,8 +1,10 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { observable } from 'mobx';
 import { useDevice } from '@deriv-com/ui';
 import { useStore } from '@/hooks/useStore';
+import { doesCategoryMatchSearch } from '@/stores/toolbox-search';
 import Toolbox from '../toolbox';
 
 jest.mock('@/hooks/useStore', () => ({
@@ -21,6 +23,12 @@ jest.mock('@deriv-com/translations', () => ({
 jest.mock('@deriv/quill-icons/LabelPaired', () => ({
     LabelPairedChevronDownMdFillIcon: () => null,
     LabelPairedSearchCaptionRegularIcon: () => null,
+}));
+
+jest.mock('@deriv/quill-icons/Legacy', () => ({
+    LegacyCloseCircle1pxBlackIcon: ({ onClick }: { onClick: () => void }) => (
+        <button type='button' aria-label='clear-search' onClick={onClick} />
+    ),
 }));
 
 jest.mock('@/components/shared_ui/text', () => ({
@@ -42,6 +50,11 @@ const createToolboxDom = () => {
         const category = document.createElement('category');
         category.id = `category-${index}`;
         category.setAttribute('name', name);
+        if (name === 'Logic') {
+            const block = document.createElement('block');
+            block.setAttribute('type', 'logic_compare');
+            category.appendChild(block);
+        }
         toolboxDom.appendChild(category);
     });
 
@@ -59,6 +72,7 @@ describe('Toolbox mobile Blocks menu', () => {
 
     it('opens and closes without changing the Blockly toolbox DOM', async () => {
         const toolboxDom = createToolboxDom();
+
         const initialToolboxMarkup = toolboxDom.innerHTML;
         const onToolboxItemClick = jest.fn();
         const setVisibility = jest.fn();
@@ -67,6 +81,8 @@ describe('Toolbox mobile Blocks menu', () => {
             toolbox: {
                 hasSubCategory: jest.fn(() => false),
                 is_search_loading: false,
+                search_term: '',
+                categoryMatchesSearch: jest.fn(() => true),
                 onMount: jest.fn(),
                 onSearch: jest.fn(),
                 onSearchBlur: jest.fn(),
@@ -109,5 +125,64 @@ describe('Toolbox mobile Blocks menu', () => {
         expect(onToolboxItemClick).not.toHaveBeenCalled();
         expect(setVisibility).toHaveBeenCalledTimes(2);
         expect(setVisibility).toHaveBeenLastCalledWith(false);
+    });
+
+    it('filters matching categories while searching and restores all categories when cleared', async () => {
+        const toolboxDom = createToolboxDom();
+        let toolbox: any;
+        toolbox = observable({
+            hasSubCategory: jest.fn(() => false),
+            is_search_loading: false,
+            search_term: '',
+            categoryMatchesSearch: jest.fn((category: HTMLElement) =>
+                doesCategoryMatchSearch(category, toolbox.search_term)
+            ),
+            onMount: jest.fn(),
+            onSearch: jest.fn((values: { search: string }) => {
+                toolbox.search_term = values.search;
+            }),
+            onSearchBlur: jest.fn(),
+            onSearchClear: jest.fn((setFieldValue: (field: string, value: string) => void) => {
+                setFieldValue('search', '');
+                toolbox.search_term = '';
+            }),
+            onSearchKeyUp: jest.fn(),
+            onToolboxItemClick: jest.fn(),
+            onToolboxItemExpand: jest.fn(),
+            onUnmount: jest.fn(),
+            sub_category_index: [],
+            toolbox_dom: toolboxDom,
+        });
+
+        mockedUseStore.mockReturnValue({
+            toolbox,
+            flyout: {
+                selected_category: undefined,
+                setVisibility: jest.fn(),
+            },
+        } as any);
+
+        const user = userEvent.setup();
+        render(<Toolbox />);
+        await user.click(screen.getByTestId('button-open-blocks-menu'));
+
+        const search = screen.getByPlaceholderText('Search');
+        await user.click(search);
+        await user.type(search, 'logic_compare');
+
+        act(() => {
+            toolbox.onSearch({ search: 'Logic' });
+        });
+
+        expect(toolbox.search_term).toBe('Logic');
+        await waitFor(() => {
+            expect(screen.getByText('Logic')).toBeInTheDocument();
+            expect(screen.queryByText('Trade parameters')).not.toBeInTheDocument();
+        });
+
+        await user.click(screen.getByRole('button', { name: 'clear-search' }));
+
+        expect(screen.getByText('Trade parameters')).toBeInTheDocument();
+        expect(screen.getByText('Logic')).toBeInTheDocument();
     });
 });
