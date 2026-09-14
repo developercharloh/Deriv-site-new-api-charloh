@@ -7,7 +7,6 @@ import useActiveAccount from '@/hooks/api/account/useActiveAccount';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useLogout } from '@/hooks/useLogout';
 import { useStore } from '@/hooks/useStore';
-import { navigateToTransfer } from '@/utils/transfer-utils';
 import { Localize } from '@deriv-com/translations';
 import { Header, useDevice, Wrapper } from '@deriv-com/ui';
 import { AppLogo } from '../app-logo';
@@ -18,7 +17,7 @@ import './header.scss';
 
 const AppHeader = observer(() => {
     const { isDesktop } = useDevice();
-    const { isAuthorizing, activeLoginid, setIsAuthorizing, authData } = useApiBase();
+    const { isAuthorizing, activeLoginid, setIsAuthorizing } = useApiBase();
     const { client } = useStore() ?? {};
     const [authTimeout, setAuthTimeout] = useState(false);
     const is_account_regenerating = client?.is_account_regenerating || false;
@@ -40,7 +39,12 @@ const AppHeader = observer(() => {
     const handleLogout = useLogout();
     const isPublicAlphaScan = typeof window !== 'undefined' && window.location.hash === '#alpha_scan_ai';
     const showPublicDemoAccount =
-        isPublicAlphaScan && !isDesktop && !activeLoginid && !is_account_regenerating && !isAuthorizing && !isOAuthPending;
+        isPublicAlphaScan &&
+        !isDesktop &&
+        !activeLoginid &&
+        !is_account_regenerating &&
+        !isAuthorizing &&
+        !isOAuthPending;
 
     // Clear OAuth-pending flag once the account is set (auth succeeded)
     // or after a generous timeout in case something goes wrong.
@@ -124,20 +128,13 @@ const AppHeader = observer(() => {
         }
     }, [setIsAuthorizing]);
 
-    const handleTransfer = useCallback(() => {
-        const transferCurrency = authData?.currency;
-        if (!transferCurrency) {
-            console.error('No currency available for transfer');
-            return;
-        }
-        navigateToTransfer(transferCurrency);
-    }, [authData?.currency]);
-
     const renderPublicDemoAccount = () => (
         <div className='public-demo-account' aria-label='Public demo account'>
             <div className='public-demo-account__type'>
                 <span>Demo account</span>
-                <span className='public-demo-account__chevron' aria-hidden='true'>⌄</span>
+                <span className='public-demo-account__chevron' aria-hidden='true'>
+                    ⌄
+                </span>
             </div>
             <strong>10,008.77 USD</strong>
         </div>
@@ -153,11 +150,14 @@ const AppHeader = observer(() => {
                 aria-label='Refresh page'
             >
                 <svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg' width='20' height='20'>
-                    <path d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'/>
+                    <path
+                        d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
+                        stroke='currentColor'
+                        strokeWidth='2'
+                        strokeLinecap='round'
+                        strokeLinejoin='round'
+                    />
                 </svg>
-            </button>
-            <button type='button' className='public-demo-actions__transfer' onClick={handleLogin}>
-                Transfer
             </button>
         </div>
     );
@@ -176,7 +176,7 @@ const AppHeader = observer(() => {
                         </div>
                     );
                 } else if (position === 'right') {
-                    // For right section - transfer button (and account switcher on desktop)
+                    // For right section - account switcher and refresh control
                     return (
                         <div className='auth-actions'>
                             {isDesktop && (
@@ -191,17 +191,22 @@ const AppHeader = observer(() => {
                                 title='Refresh page'
                                 aria-label='Refresh page'
                             >
-                                <svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg' width='18' height='18'>
-                                    <path d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'/>
+                                <svg
+                                    viewBox='0 0 24 24'
+                                    fill='none'
+                                    xmlns='http://www.w3.org/2000/svg'
+                                    width='18'
+                                    height='18'
+                                >
+                                    <path
+                                        d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
+                                        stroke='currentColor'
+                                        strokeWidth='2'
+                                        strokeLinecap='round'
+                                        strokeLinejoin='round'
+                                    />
                                 </svg>
                             </button>
-                            <Button
-                                primary
-                                disabled={client?.is_logging_out || !authData?.currency}
-                                onClick={handleTransfer}
-                            >
-                                <Localize i18n_default_text='Transfer' />
-                            </Button>
                         </div>
                     );
                 }
@@ -263,10 +268,8 @@ const AppHeader = observer(() => {
             authTimeout,
             is_account_regenerating,
             isOAuthPending,
-            authData,
             handleLogin,
             handleSignup,
-            handleTransfer,
         ]
     );
 
@@ -283,7 +286,13 @@ const AppHeader = observer(() => {
                 <Wrapper variant='left'>
                     <MobileMenu onLogout={handleLogout} />
                     <AppLogo />
-                    {isDesktop ? <MenuItems /> : showPublicDemoAccount ? renderPublicDemoAccount() : renderAccountSection('left')}
+                    {isDesktop ? (
+                        <MenuItems />
+                    ) : showPublicDemoAccount ? (
+                        renderPublicDemoAccount()
+                    ) : (
+                        renderAccountSection('left')
+                    )}
                 </Wrapper>
                 <Wrapper variant='right'>
                     {showPublicDemoAccount ? renderPublicDemoActions() : renderAccountSection('right')}
