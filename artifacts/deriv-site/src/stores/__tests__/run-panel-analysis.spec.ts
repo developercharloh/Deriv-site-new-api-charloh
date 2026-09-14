@@ -13,6 +13,7 @@ import RunPanelStore from '@/stores/run-panel-store';
 import { BinaryMatrixEngine } from '@/utils/binary-matrix-engine';
 import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { autorun } from 'mobx';
 
 describe('Binary Matrix analysis observer integration', () => {
     const config = {
@@ -217,5 +218,47 @@ describe('Binary Matrix analysis observer integration', () => {
         expect(distinctEpochs.slice(1).map((epoch, index) => epoch - distinctEpochs[index])).toEqual([
             configuredCadenceSeconds,
         ]);
+    });
+
+    it('rerenders the live analysis state through false and true results without opening Journal', () => {
+        const journal = {
+            pushMessage: jest.fn(),
+        };
+        const rootStore = {
+            dbot: {},
+            journal,
+        };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+        runPanel.onMount();
+
+        const renderedResults: boolean[] = [];
+        const dispose = autorun(() => {
+            const analysis = runPanel.last_digits_analysis;
+            if (analysis) renderedResults.push(analysis.result);
+        });
+
+        const emitAnalysis = (result: boolean, digits: number[]) => {
+            observer.emit('bot.analysis.condition', {
+                market: '1HZ50V',
+                condition: result ? 'ALL_EVEN' : 'ALL_ODD',
+                count: 4,
+                compareValue: 0,
+                digits,
+                result,
+            });
+        };
+
+        emitAnalysis(false, [1, 3, 1, 1]);
+        emitAnalysis(true, [2, 6, 2, 8]);
+        emitAnalysis(false, [1, 6, 2, 8]);
+
+        expect(renderedResults).toEqual([false, true, false]);
+        expect(journal.pushMessage).toHaveBeenCalledTimes(3);
+        dispose();
     });
 });

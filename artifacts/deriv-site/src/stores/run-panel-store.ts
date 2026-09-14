@@ -69,6 +69,7 @@ export default class RunPanelStore {
             onRunButtonClick: action,
             onPauseButtonClick: action,
             is_contract_buying_in_progress: observable,
+             last_digits_analysis: observable,
              is_paused: observable,
              native_bot_stop_handler: observable,
              native_bot_pause_handler: observable,
