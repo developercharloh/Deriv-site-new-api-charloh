@@ -49,10 +49,14 @@ async function checkEoParity(symbol: string, direction: string): Promise<boolean
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DERIV_WS         = 'wss://ws.derivws.com/websockets/v3?app_id=1';
-const TICK_COUNT_LONG  = 5000;
+// A 5k-tick history for every market makes the first signal wait behind the
+// slowest response. 1.5k still supplies the 500/1k windows plus a longer
+// consistency window, while keeping the first scan responsive on mobile data.
+const TICK_COUNT_LONG  = 1500;
 const ALL_SYMS         = DERIV_VOLATILITIES;
 const MIN_VOTES        = 6;
-const WATCH_INTERVAL_S = 90;
+const WATCH_INTERVAL_S = 30;
+const SCAN_TIMEOUT_MS  = 18_000;
 
 function getSymbolMinVotes(symCode: string): number {
     if (symCode.includes('75') || symCode.includes('100')) return 7;
@@ -812,6 +816,7 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
     return new Promise(resolve => {
         const ws = new WebSocket(DERIV_WS);
         const priceMap = new Map<number, { prices: number[]; times: number[]; pip: number; sym: DerivVolatility }>();
+        const settledRequests = new Set<number>();
         let received = 0, closed = false;
         const finish = () => {
             if (closed) return; closed = true;
@@ -823,7 +828,13 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
                 const { spiked, sigma } = detectSpike(prices);
                 if (spiked) detectedSpikes.push({ code: sym.code, label: sym.short, sigma: Math.round(sigma * 10) / 10 });
                 const { gapDetected } = detectGap(times);
-                const tfMicro = prices.slice(-200); const tfShort = prices.slice(-1000); const tfMedium = prices.length >= 3000 ? prices.slice(-3000) : prices; const tfLong = prices;
+                // Keep the four checks distinct even in the fast 1.5k-tick
+                // scan. The previous 3k fallback duplicated the long window
+                // whenever the history response was shorter than 3k.
+                const tfMicro = prices.slice(-200);
+                const tfShort = prices.slice(-1000);
+                const tfMedium = prices.slice(-Math.min(1200, prices.length));
+                const tfLong = prices;
                 const full = runModels(tfShort, pip, sym, tradeType, lastLost);
                 if (tfShort.length >= 1600) { const seg = runModels(tfShort.slice(-1500), pip, sym, tradeType, lastLost); full.segmentAgrees = seg.direction === full.direction && seg.statsChecks.passCount >= 3; }
                 const rMicro = runModels(tfMicro, pip, sym, tradeType, lastLost); const rMedium = runModels(tfMedium, pip, sym, tradeType, lastLost); const rLong = runModels(tfLong, pip, sym, tradeType, lastLost);
@@ -855,19 +866,37 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
         ws.onopen = () => { ALL_SYMS.forEach((sym, i) => setTimeout(() => { if (ws.readyState !== WebSocket.OPEN) return; ws.send(JSON.stringify({ ticks_history: sym.code, count: TICK_COUNT_LONG, end: 'latest', style: 'ticks', req_id: i + 1 })); }, i * 80)); };
         ws.onmessage = (ev: MessageEvent) => {
             let msg: any; try { msg = JSON.parse(ev.data as string); } catch { return; }
-            if (msg.msg_type !== 'history') return;
-            const reqId = msg.req_id as number; const sym = ALL_SYMS[reqId - 1]; if (!sym) return;
-            priceMap.set(reqId, { prices: msg.history?.prices ?? [], times: msg.history?.times ?? [], pip: msg.pip_size ?? 2, sym });
+            const reqId = Number(msg.req_id);
+            const sym = ALL_SYMS[reqId - 1];
+            if (!sym || settledRequests.has(reqId)) return;
+
+            // An API error still completes that market's request. Previously
+            // errored symbols were ignored, so the scan stayed on
+            // "Scanning markets…" until the global timeout.
+            settledRequests.add(reqId);
+            if (msg.msg_type === 'history') {
+                priceMap.set(reqId, {
+                    prices: msg.history?.prices ?? [],
+                    times: msg.history?.times ?? [],
+                    pip: msg.pip_size ?? 2,
+                    sym,
+                });
+            }
             onProgress(++received);
             if (received >= ALL_SYMS.length) finish();
         };
         ws.onerror = () => finish(); ws.onclose = () => { if (!closed) finish(); };
-        setTimeout(() => { if (!closed) finish(); }, 40_000);
+        setTimeout(() => { if (!closed) finish(); }, SCAN_TIMEOUT_MS);
     });
 }
 
 // ─── Watchdog ─────────────────────────────────────────────────────────────────
-interface WatchdogEntry { status: 'warming' | 'holding' | 'weakening' | 'reversed'; winPct: number; ticks: number; }
+interface WatchdogEntry {
+    status: 'warming' | 'holding' | 'weakening' | 'reversed';
+    winPct: number;
+    ticks: number;
+    lastTickAt: number;
+}
 
 /** Derive a win-test function directly from a MarketResult */
 function makeWinFn(r: MarketResult): (digit: number) => boolean {
@@ -932,6 +961,7 @@ const AiSignalsPage: React.FC = () => {
     const [watchActive,    setWatchActive]    = useState(true);
     const [watchResults,   setWatchResults]   = useState<MarketResult[]>([]);
     const [watchSpikes,    setWatchSpikes]    = useState<Set<string>>(new Set());
+    const [watchDataMessage, setWatchDataMessage] = useState('');
     const [watchCountdown, setWatchCountdown] = useState(WATCH_INTERVAL_S);
     const [watchScanning,  setWatchScanning]  = useState(false);
     const watchCdRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -997,11 +1027,17 @@ const AiSignalsPage: React.FC = () => {
         const doScan = async () => {
             if (busy || !mounted) return; busy = true; setWatchScanning(true);
             let foundSignal = false;
+            let hasMarketData = false;
             try {
                 const { allResults, spikedMarkets: spikes } = await scanAllMarkets(tradeType, () => {}, false);
                 if (!mounted) return;
                 const spikeSet = new Set(spikes.map(s => s.code));
-                setWatchResults(allResults); setWatchSpikes(spikeSet);
+                hasMarketData = allResults.length > 0;
+                setWatchResults(allResults);
+                setWatchSpikes(spikeSet);
+                setWatchDataMessage(
+                    hasMarketData ? '' : 'Live market data is reconnecting — retrying shortly…'
+                );
                 foundSignal = allResults.some(r =>
                     !spikeSet.has(r.sym.code) && !r.gapDetected &&
                     r.statsChecks.isSignal && !r.recentDominance.isCold
@@ -1010,9 +1046,9 @@ const AiSignalsPage: React.FC = () => {
                 busy = false;
                 if (mounted) {
                     setWatchScanning(false);
-                    // Signal found → re-validate after 90 s
-                    // No signal → rescan immediately after a 1 s breath
-                    startCountdown(foundSignal ? WATCH_INTERVAL_S : 1);
+                    // Keep valid signals fresh, but do not hammer the public
+                    // history endpoint when the current scan has no data.
+                    startCountdown(foundSignal ? WATCH_INTERVAL_S : hasMarketData ? 5 : 8);
                 }
             }
         };
@@ -1079,7 +1115,11 @@ const AiSignalsPage: React.FC = () => {
                     buf.length < 10 ? 'warming' :
                     winPct >= 0.60  ? 'holding' :
                     winPct >= 0.40  ? 'weakening' : 'reversed';
-                setWatchdogMap(prev => { const m = new Map(prev); m.set(code, { status, winPct, ticks: buf.length }); return m; });
+                setWatchdogMap(prev => {
+                    const m = new Map(prev);
+                    m.set(code, { status, winPct, ticks: buf.length, lastTickAt: Date.now() });
+                    return m;
+                });
             };
             ws.onerror = ws.onclose = () => { watchdogWsRef.current.delete(code); };
             watchdogWsRef.current.set(code, ws);
@@ -1165,6 +1205,20 @@ const AiSignalsPage: React.FC = () => {
 
     const handleExecuteTrade = useCallback(async () => {
         if (!result) return;
+        const liveWatch = watchdogMap.get(result.sym.code);
+        if (!liveWatch || liveWatch.status !== 'holding' || Date.now() - liveWatch.lastTickAt > 4_000) {
+            setRunState('error');
+            setRunErr(
+                !liveWatch || Date.now() - liveWatch.lastTickAt > 4_000
+                    ? 'Live tick data is stale or unavailable. Wait for a fresh live check before trading.'
+                    : liveWatch.status === 'reversed'
+                    ? 'This signal reversed on live ticks. Re-scan before trading.'
+                    : liveWatch?.status === 'weakening'
+                        ? 'This signal is weakening on live ticks. Wait for a fresh scan.'
+                        : 'Live confirmation is still warming up. Wait for the market check before trading.'
+            );
+            return;
+        }
         setRunState('launching'); setRunErr('');
         try {
             const cfg: OrbRunConfig = { stake: cfgStake, takeProfit: cfgTakeProfit, stopLoss: cfgStopLoss, martingale: cfgMartingale, martingaleOn: cfgMartingaleOn, eoRecovery: cfgEoRecovery };
@@ -1217,7 +1271,7 @@ const AiSignalsPage: React.FC = () => {
                 setRunState('idle'); setShowRunConfig(false);
             }, 500);
         } catch (e: any) { setRunState('error'); setRunErr(e?.message || 'Failed to launch bot.'); }
-    }, [result, tradeType, editDir, editBarrier, editRecoveryBarrier, editRecoveryMode, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, cfgEoRecovery, store]);
+    }, [result, watchdogMap, tradeType, editDir, editBarrier, editRecoveryBarrier, editRecoveryMode, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, cfgEoRecovery, store]);
 
     // ── Derived display values ────────────────────────────────────────────────
     const vc = result ? voteColor(result.statsChecks.passCount) : '#6366f1';
@@ -1314,6 +1368,10 @@ const AiSignalsPage: React.FC = () => {
                                 <div className='aisig-feed__paused'>Scanner paused — tap Resume to start.</div>
                             )}
 
+                             {watchActive && !watchScanning && watchResults.length === 0 && watchDataMessage && (
+                                 <div className='aisig-feed__paused'>{watchDataMessage}</div>
+                             )}
+
                             {/* No valid signals found */}
                             {!watchScanning && hasResults && validSigs.length === 0 && (
                                 <div className='aisig-feed__nosig'>
@@ -1332,6 +1390,16 @@ const AiSignalsPage: React.FC = () => {
                                         const vc2 = voteColor(r.statsChecks.passCount);
                                         const bestEntry = r.entryDigits[0];
                                         const domLabel = r.recentDominance.label;
+                                         const liveWatch = watchdogMap.get(r.sym.code);
+                                         const liveReady = liveWatch?.status === 'holding' &&
+                                             Date.now() - liveWatch.lastTickAt <= 4_000;
+                                         const liveActionLabel = liveReady
+                                             ? 'Load & Run'
+                                             : liveWatch?.status === 'reversed'
+                                                 ? 'Re-scan required'
+                                                 : liveWatch?.status === 'weakening'
+                                                     ? 'Signal weakening'
+                                                     : 'Live check…';
                                         return (
                                             <div key={r.sym.code} className='aisig-card'>
                                                 {/* Card top row: market */}
@@ -1402,9 +1470,14 @@ const AiSignalsPage: React.FC = () => {
                                                 })()}
 
                                                 {/* Load & Run */}
-                                                <button className='aisig-card__run' onClick={() => loadWatchSignal(r)}>
+                                                 <button
+                                                     className='aisig-card__run'
+                                                     disabled={!liveReady}
+                                                     title={liveReady ? 'Live confirmation is holding' : 'Wait for live confirmation before trading'}
+                                                     onClick={() => loadWatchSignal(r)}
+                                                 >
                                                     <PlayCircle size={14} />
-                                                    Load &amp; Run
+                                                     {liveActionLabel}
                                                 </button>
                                             </div>
                                         );
@@ -1775,7 +1848,20 @@ const AiSignalsPage: React.FC = () => {
             {/* ── Sticky Save & Run bar ──────────────────────────────────────── */}
             {scanState === 'done' && result && !showRunConfig && (
                 <div className='aisig-sticky-bar'>
-                    <button className='aisig-sticky-bar__btn' disabled={runState === 'launching'} onClick={openRunConfig}>
+                    <button
+                        className='aisig-sticky-bar__btn'
+                        disabled={runState === 'launching' || (() => {
+                            const wd = watchdogMap.get(result.sym.code);
+                            return wd?.status !== 'holding' || Date.now() - wd.lastTickAt > 4_000;
+                        })()}
+                        title={(() => {
+                            const wd = watchdogMap.get(result.sym.code);
+                            return wd?.status === 'holding' && Date.now() - wd.lastTickAt <= 4_000
+                                ? 'Live confirmation is holding'
+                                : 'Waiting for fresh live confirmation';
+                        })()}
+                        onClick={openRunConfig}
+                    >
                         <PlayCircle size={17} />
                         Save &amp; Run
                     </button>
