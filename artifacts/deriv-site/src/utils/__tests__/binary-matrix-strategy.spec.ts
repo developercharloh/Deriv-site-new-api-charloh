@@ -60,4 +60,15 @@ describe('Binary Matrix AI Apollo adapters', () => {
             decision: null,
         });
     });
+
+    it('publishes a false partial-window analysis before a purchase window is complete', () => {
+        expect(analyzeBinaryMatrix([1, 3])).toMatchObject({
+            condition: 'ALL_ODD',
+            count: 4,
+            result: false,
+            digits: [1, 3],
+            decision: null,
+        });
+        expect(evaluateBinaryMatrix([1, 3])).toBeNull();
+    });
 });

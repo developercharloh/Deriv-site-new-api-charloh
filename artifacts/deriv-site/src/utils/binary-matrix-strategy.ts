@@ -121,7 +121,17 @@ export function analyzeBinaryMatrix(
     lockedDecision: BinaryMatrixDecision | null = null,
 ): BinaryMatrixAnalysis | null {
     const normalized = normalizeDigits(digits);
-    if (normalized.length < 3) return null;
+    if (normalized.length < 3) {
+        const primaryCondition = MATRIX_CONDITIONS[0];
+        return {
+            condition: primaryCondition.condition,
+            count: primaryCondition.count,
+            compareValue: primaryCondition.compareValue,
+            digits: normalized.slice(-primaryCondition.count),
+            result: false,
+            decision: null,
+        };
+    }
 
     if (lockedDecision?.condition) {
         const lockedCondition = MATRIX_CONDITIONS.find(

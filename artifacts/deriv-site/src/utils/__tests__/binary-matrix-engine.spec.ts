@@ -7,6 +7,7 @@ jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
 
 import { BinaryMatrixEngine } from '@/utils/binary-matrix-engine';
 import { api_base as mockApiBase } from '@/external/bot-skeleton/services/api/api-base';
+import { observer } from '@/external/bot-skeleton/utils/observer';
 
 describe('BinaryMatrixEngine live purchase path', () => {
     beforeEach(() => {
@@ -16,6 +17,45 @@ describe('BinaryMatrixEngine live purchase path', () => {
 
     afterEach(() => {
         jest.useRealTimers();
+    });
+
+    it('publishes one analysis event for every incoming tick, including partial windows', () => {
+        const engine = new BinaryMatrixEngine({
+            symbol: 'R_25',
+            currency: 'USD',
+            initialStake: 0.5,
+            martingale: 2,
+            takeProfit: 10,
+            stopLoss: 50,
+            reanalyzeAfterWins: 3,
+        }) as any;
+        const emit = jest.spyOn(observer, 'emit');
+        engine.running = true;
+        engine.paused = true;
+
+        engine.trader.onTick('1.1', 1);
+        engine.trader.onTick('1.3', 3);
+        engine.trader.onTick('1.5', 5);
+        engine.trader.onTick('1.7', 7);
+
+        const analyses = emit.mock.calls
+            .filter(([event]) => event === 'bot.analysis.condition')
+            .map(([, payload]) => payload);
+
+        expect(analyses).toHaveLength(4);
+        expect(analyses.map(payload => payload.result)).toEqual([false, false, false, true]);
+        expect(analyses[0]).toMatchObject({
+            market: 'R_25',
+            condition: 'ALL_ODD',
+            count: 4,
+            digits: [1],
+        });
+        expect(analyses[1]).toMatchObject({ digits: [1, 3] });
+        expect(analyses[2]).toMatchObject({ digits: [1, 3, 5] });
+        expect(analyses[3]).toMatchObject({ digits: [1, 3, 5, 7] });
+
+        emit.mockRestore();
+        engine.running = false;
     });
 
     it('buys EVEN after four qualifying odd digits', async () => {
