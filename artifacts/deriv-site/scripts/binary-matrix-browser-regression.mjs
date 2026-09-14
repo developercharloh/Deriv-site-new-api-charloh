@@ -854,6 +854,126 @@ const dismissSocialPopup = async cdp => {
     if (dismissed) await sleep(500);
 };
 
+const assertMobileFreeBotsLayout = async cdp => {
+    const initial = await evaluate(
+        cdp,
+        `(() => {
+            const list = document.querySelector('.free-bots');
+            const cards = Array.from(document.querySelectorAll('.free-bots__card'));
+            const controls = document.querySelector('.controls__section');
+            const runButton = document.querySelector('#db-animation__run-button');
+            const firstCard = cards[0];
+            const lastCard = cards.at(-1);
+            const listRect = list?.getBoundingClientRect();
+            const lastCardRect = lastCard?.getBoundingClientRect();
+            const controlsRect = controls?.getBoundingClientRect();
+            const runButtonRect = runButton?.getBoundingClientRect();
+            const cardStyle = firstCard ? getComputedStyle(firstCard) : null;
+            const ancestors = [];
+            let ancestor = list;
+            while (ancestor && ancestors.length < 5) {
+                const rect = ancestor.getBoundingClientRect();
+                const style = getComputedStyle(ancestor);
+                ancestors.push({
+                    tag: ancestor.tagName,
+                    id: ancestor.id || null,
+                    className: typeof ancestor.className === 'string' ? ancestor.className : null,
+                    height: ancestor.clientHeight,
+                    scrollHeight: ancestor.scrollHeight,
+                    rectHeight: rect.height,
+                    overflowY: style.overflowY,
+                    display: style.display,
+                });
+                ancestor = ancestor.parentElement;
+            }
+            return {
+                cardCount: cards.length,
+                categoryCount: cards.filter(card => card.querySelector('.free-bots__card-category')?.textContent?.trim()).length,
+                firstCategory: firstCard?.querySelector('.free-bots__card-category')?.textContent?.trim() || null,
+                listClientHeight: list?.clientHeight || 0,
+                listScrollHeight: list?.scrollHeight || 0,
+                initialScrollTop: list?.scrollTop || 0,
+                ancestors,
+                lastCardInitiallyBelowViewport: Boolean(
+                    listRect && lastCardRect && lastCardRect.top > listRect.bottom
+                ),
+                goldBorder: Boolean(cardStyle?.borderColor?.includes('229, 183, 73')),
+                goldGlow: Boolean(cardStyle?.boxShadow && cardStyle.boxShadow !== 'none'),
+                fixedControlsVisible: Boolean(
+                    controls &&
+                    controlsRect &&
+                    getComputedStyle(controls).position === 'fixed' &&
+                    controlsRect.top >= 0 &&
+                    controlsRect.bottom <= window.innerHeight + 1
+                ),
+                runButtonVisible: Boolean(
+                    runButton &&
+                    runButtonRect &&
+                    runButtonRect.top >= 0 &&
+                    runButtonRect.bottom <= window.innerHeight + 1 &&
+                    runButtonRect.width > 0 &&
+                    runButtonRect.height > 0
+                ),
+            };
+        })()`
+    );
+
+    if (
+        !initial ||
+        initial.cardCount < 2 ||
+        initial.categoryCount !== initial.cardCount ||
+        !initial.firstCategory ||
+        initial.listScrollHeight <= initial.listClientHeight ||
+        !initial.lastCardInitiallyBelowViewport ||
+        !initial.goldBorder ||
+        !initial.goldGlow ||
+        !initial.fixedControlsVisible ||
+        !initial.runButtonVisible
+    ) {
+        throw new Error(`Mobile Free Bots layout is not scrollable or controls are not fixed: ${JSON.stringify(initial)}`);
+    }
+
+    const afterScroll = await evaluate(
+        cdp,
+        `new Promise(resolve => {
+            const list = document.querySelector('.free-bots');
+            const lastCard = document.querySelector('.free-bots__card:last-of-type');
+            if (!list || !lastCard) {
+                resolve(null);
+                return;
+            }
+            list.scrollTop = list.scrollHeight - list.clientHeight;
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                const listRect = list.getBoundingClientRect();
+                const lastCardRect = lastCard.getBoundingClientRect();
+                resolve({
+                    scrollTop: list.scrollTop,
+                    maxScrollTop: list.scrollHeight - list.clientHeight,
+                    lastCardVisible: lastCardRect.top >= listRect.top - 1 &&
+                        lastCardRect.bottom <= listRect.bottom + 1,
+                    lastCardName: lastCard.querySelector('.free-bots__card-name')?.textContent?.trim() || null,
+                });
+            }));
+        })`
+    );
+
+    if (
+        !afterScroll ||
+        afterScroll.scrollTop <= 0 ||
+        afterScroll.scrollTop < afterScroll.maxScrollTop - 1 ||
+        !afterScroll.lastCardVisible ||
+        !afterScroll.lastCardName
+    ) {
+        throw new Error(`Mobile Free Bots list could not reveal a lower card: ${JSON.stringify(afterScroll)}`);
+    }
+
+    console.log(
+        `✓ Mobile Free Bots kept ${initial.cardCount} cards scrollable ` +
+            `(${initial.listClientHeight}px viewport, ${initial.listScrollHeight}px content); ` +
+            `revealed ${afterScroll.lastCardName} with fixed Run controls visible`
+    );
+};
+
 const workspaceSnapshot = async cdp => {
     return evaluate(
         cdp,
@@ -1406,7 +1526,7 @@ const run = async () => {
             cdp,
             `Array.from(document.querySelectorAll('button')).some(
                 button => button.getClientRects().length > 0 &&
-                    (button.textContent.includes('Continue to App') || button.textContent.includes('Load in DBot Builder'))
+                    (button.textContent.includes('Continue to App') || button.textContent.includes('Load bot'))
             )`,
             'app gate or Free Bots loader',
             90_000
@@ -1444,13 +1564,14 @@ const run = async () => {
         await waitFor(
             cdp,
             `Array.from(document.querySelectorAll('button')).some(
-                button => button.getClientRects().length > 0 && button.textContent.includes('Load in DBot Builder')
+                button => button.getClientRects().length > 0 && button.textContent.includes('Load bot')
             )`,
             'Free Bots loader',
             90_000
         );
+        await assertMobileFreeBotsLayout(cdp);
         await seedEmptySavedWorkspace(cdp);
-        await clickButtonInCard(cdp, 'Over2 / Under7 Reversal', 'Load in DBot Builder');
+        await clickButtonInCard(cdp, 'Over2 / Under7 Reversal', 'Load bot');
         await waitFor(cdp, `location.hash === '#bot_builder'`, 'Over2 / Under7 Bot Builder navigation');
         await waitFor(
             cdp,

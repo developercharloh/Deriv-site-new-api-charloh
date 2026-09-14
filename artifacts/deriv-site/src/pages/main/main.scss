@@ -892,6 +892,24 @@
 // tabs (LDP Tool, Free Bots, AI Analysis) need their own scroll context so
 // users can reach all content on mobile.
 @include mobile-or-tablet-screen {
+    .main__container:has(#id-free-bots) {
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+
+        > div,
+        .dc-tabs,
+        .dc-tabs__content,
+        .dc-tabs__content-panel {
+            height: 100%;
+            min-height: 0;
+        }
+
+        .dc-tabs__content {
+            overflow: hidden;
+        }
+    }
+
     #id-free-bots,
     #id-ai-analysis,
     #id-d-circles,
