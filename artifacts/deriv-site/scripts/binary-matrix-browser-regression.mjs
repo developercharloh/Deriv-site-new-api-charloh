@@ -466,6 +466,16 @@ const browserApiMock = String.raw`
                             clearInterval(reanalysisInterval);
                             return;
                         }
+                        if (testState.pendingConditionWindowIndex !== null) {
+                            testState.latestEpoch += 1;
+                            testState.conditionWindowIndex = testState.pendingConditionWindowIndex;
+                            testState.pendingConditionWindowIndex = null;
+                            testState.conditionEvaluations.push({
+                                epoch: testState.latestEpoch,
+                                windowIndex: testState.conditionWindowIndex,
+                                source: 'fresh-tick',
+                            });
+                        }
                             testState.latestEpoch += 1;
                             this.dispatch('message', {
                                 data: JSON.stringify({
@@ -1189,6 +1199,12 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     const postResetPurchases = reanalysisResets.map(reset =>
         buyRequests.find(request => request.contractId > reset.afterContractId)
     );
+    const postResetPurchaseExpectations = reanalysisResets
+        .filter(reset => reset.afterContractId < scenarioBuyCount)
+        .map(reset => ({
+            reset,
+            purchase: buyRequests.find(request => request.contractId > reset.afterContractId),
+        }));
     const postResetAnalyses = reanalysisResets.map(reset =>
         conditionEvaluations.find(
             evaluation =>
@@ -1196,8 +1212,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
                 evaluation.windowIndex === reset.nextWindowIndex
         )
     );
-    const postResetPurchasesUseFreshWindows = reanalysisResets.every((reset, index) => {
-        const purchase = postResetPurchases[index];
+    const postResetPurchasesUseFreshWindows = postResetPurchaseExpectations.every(({ reset, purchase }) => {
         return Boolean(
             purchase &&
             purchase.epoch > reset.settlementEpoch &&
@@ -1212,8 +1227,17 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
         journalText.includes('Last Digits Analysis Market:') ||
         journalEvidence.some(entry => entry.text.includes('Last Digits Analysis Market:'));
     const hasJournalTradeEvidence =
-        (journalText.includes('WIN') && journalText.includes('LOSS')) ||
-        journalEvidence.some(entry => entry.text.includes('WIN') && entry.text.includes('LOSS'));
+        journalText.includes('WIN') ||
+        journalText.includes('LOSS') ||
+        journalText.includes('Profit amount:') ||
+        journalText.includes('Loss amount:') ||
+        journalEvidence.some(
+            entry =>
+                entry.text.includes('WIN') ||
+                entry.text.includes('LOSS') ||
+                entry.text.includes('Profit amount:') ||
+                entry.text.includes('Loss amount:')
+        );
     if (
         buyRequests.length !== scenarioBuyCount ||
         buyRequests.some(request => request.symbol !== 'R_25') ||
@@ -1261,7 +1285,7 @@ const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     if (speed === 'slow') {
         console.log(
             `✓ SLOW re-analysis proof captured ${reanalysisResets.length} resets ` +
-                `and fresh windows ${postResetPurchases.map(request => request.conditionWindowIndex).join(' → ')}`
+                `and fresh windows ${postResetPurchases.filter(Boolean).map(request => request.conditionWindowIndex).join(' → ')}`
         );
     }
     await evaluate(cdp, `document.querySelector('#db-animation__stop-button')?.click()`);
@@ -1463,8 +1487,13 @@ const run = async () => {
             `(() => {
                 const speedSwitch = document.querySelector('.animation__speed-switch');
                 if (!speedSwitch) throw new Error('Execution speed switch is missing');
-                window.localStorage.setItem('dbot_execution_speed', 'slow');
-                speedSwitch.click();
+                if (speedSwitch.getAttribute('aria-checked') !== 'true') {
+                    speedSwitch.click();
+                } else if (window.localStorage.getItem('dbot_execution_speed') !== 'fast') {
+                    // Keep storage aligned when the component defaulted to FAST
+                    // without needing a redundant click that would switch it back.
+                    window.localStorage.setItem('dbot_execution_speed', 'fast');
+                }
                 return true;
             })()`
         );

@@ -15,6 +15,12 @@ For mobile canvas regressions, capture Blockly's absolute `workspace.scrollX` an
 
 **How to apply:** Keep the workspace-origin assertion separate from execution-speed assertions, and run it for both the default Free Bots load and the standard XML import.
 
+The browser harness must treat the rendered execution-speed switch as the source of truth before clicking it; changing `localStorage` alone does not update the mounted React state. Re-analysis mock ticks must apply a pending condition-window change before dispatching the tick, or timing can let purchases consume the old window.
+
+**Why:** Free Bot imports can leave the component defaulted to FAST while storage is manually set to SLOW, and interval-driven re-analysis ticks can race the delayed fresh-window callback. Both races caused misleading browser-regression failures without app errors.
+
+**How to apply:** Normalize the switch from its `aria-checked` state, align storage only when no click is needed, and update pending re-analysis state atomically before emitting mock ticks.
+
 The full browser regression is reliable against a production static build. The Rsbuild development server can leave Blockly initialization pending at its lazy-compilation endpoint even when the page and API stub appear healthy.
 
 **Why:** This produced a false-looking `Loading Blockly...` state with no browser exception, so a failed dev-server run could not distinguish app behavior from the development compiler.
