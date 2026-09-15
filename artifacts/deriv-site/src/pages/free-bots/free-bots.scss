@@ -155,12 +155,16 @@
     }
 
     &__card-name {
-        min-height: 1.1em;
+        display: -webkit-box;
+        min-height: 2.2em;
         margin: 3px 0 5px;
+        overflow: hidden;
         color: #111827;
-        font-size: 0.72rem;
+        font-size: 0.67rem;
         font-weight: 900;
         line-height: 1.1;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
     }
 
     &__card-access {

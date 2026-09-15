@@ -894,7 +894,9 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                     style={{ '--fb-accent': CARD_ACCENT[bot.id] || '#2779bd' } as React.CSSProperties}
                 >
                     <span className='free-bots__card-access'>OPEN ACCESS</span>
-                    <h2 className='free-bots__card-name'>Bot #{ordinal}</h2>
+                    <h2 className='free-bots__card-name'>
+                        Bot #{ordinal} — {bot.name}
+                    </h2>
 
                     {signal && (
                         <SignalBadge signal={signal} onClick={() => setShowSignal(true)} />
