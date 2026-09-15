@@ -25,13 +25,18 @@ type TDesktopFormWrapper = {
     onClickClose: () => void;
     selected_trade_type: string;
     setSelectedTradeType: (selected_trade_type: string) => void;
+    paper_validation_complete: boolean;
+    onPaperValidationChange: (isComplete: boolean) => void;
 };
 
 const QuickSelectionPanel = ({
     selected_trade_type,
     selected_startegy_label,
     children,
-}: Pick<TDesktopFormWrapper, 'selected_trade_type' | 'children'> & { selected_startegy_label: string }) => (
+    onPaperValidationChange,
+}: Pick<TDesktopFormWrapper, 'selected_trade_type' | 'children' | 'onPaperValidationChange'> & {
+    selected_startegy_label: string;
+}) => (
     <>
         <div className='qs__selected-options'>
             <div className='qs__selected-options__item'>
@@ -52,7 +57,7 @@ const QuickSelectionPanel = ({
             </div>
         </div>
         <StrategyTabContent formfields={children} active_tab={'TRADE_PARAMETERS'} />
-        <PaperValidationPanel />
+        <PaperValidationPanel onValidationChange={onPaperValidationChange} />
     </>
 );
 
@@ -64,12 +69,16 @@ const FormWrapper = observer(
         onClickClose,
         selected_trade_type,
         setSelectedTradeType,
+        paper_validation_complete,
+        onPaperValidationChange,
     }: TDesktopFormWrapper) => {
         const scroll_ref = React.useRef<HTMLDivElement & SVGSVGElement>(null);
         const { submitForm, isValid, setFieldValue, validateForm, values } = useFormikContext<TFormValues>();
         const { quick_strategy } = useStore();
         const { selected_strategy, onSubmit, is_stop_bot_dialog_open } = quick_strategy;
         const { handleSubmit } = useQsSubmitHandler();
+        const requires_paper_validation =
+            STRATEGIES()[selected_strategy as keyof typeof STRATEGIES]?.paper_validation === true;
 
         const selected_startegy_label = STRATEGIES()[selected_strategy as keyof typeof STRATEGIES].label;
         const is_selected_strategy_step = current_step === QsSteps.StrategySelect;
@@ -121,6 +130,7 @@ const FormWrapper = observer(
                         <QuickSelectionPanel
                             selected_trade_type={selected_trade_type}
                             selected_startegy_label={selected_startegy_label}
+                            onPaperValidationChange={onPaperValidationChange}
                         >
                             {children}
                         </QuickSelectionPanel>
@@ -130,6 +140,7 @@ const FormWrapper = observer(
                         <QuickSelectionPanel
                             selected_trade_type={selected_trade_type}
                             selected_startegy_label={selected_startegy_label}
+                            onPaperValidationChange={onPaperValidationChange}
                         >
                             {children}
                         </QuickSelectionPanel>
@@ -205,7 +216,11 @@ const FormWrapper = observer(
                                             e.preventDefault();
                                             onRun();
                                         }}
-                                        disabled={!isValid || quick_strategy.is_options_loading}
+                                         disabled={
+                                             !isValid ||
+                                             quick_strategy.is_options_loading ||
+                                             (requires_paper_validation && !paper_validation_complete)
+                                         }
                                     >
                                         {localize('Run')}
                                     </Button>

@@ -217,6 +217,11 @@ const QuickStrategy = observer(() => {
 
     const [current_step, setCurrentStep] = React.useState(QsSteps.StrategySelect);
     const [selected_trade_type, setSelectedTradeType] = React.useState('');
+    const [paper_validation_complete, setPaperValidationComplete] = React.useState(false);
+
+    React.useEffect(() => {
+        setPaperValidationComplete(false);
+    }, [quick_strategy.selected_strategy]);
 
     // Prevent body scrolling when modal is open
     React.useEffect(() => {
@@ -248,6 +253,8 @@ const QuickStrategy = observer(() => {
                             current_step={current_step}
                             selected_trade_type={selected_trade_type}
                             setSelectedTradeType={setSelectedTradeType}
+                            paper_validation_complete={paper_validation_complete}
+                            onPaperValidationChange={setPaperValidationComplete}
                         >
                             <Form />
                         </DesktopFormWrapper>
@@ -269,11 +276,16 @@ const QuickStrategy = observer(() => {
                                 current_step={current_step}
                                 selected_trade_type={selected_trade_type}
                                 setSelectedTradeType={setSelectedTradeType}
+                                onPaperValidationChange={setPaperValidationComplete}
                             >
                                 <Form />
                             </MobileFormWrapper>
                         </MobileFullPageModal>
-                        <MobileQSFooter setCurrentStep={setCurrentStep} current_step={current_step} />
+                        <MobileQSFooter
+                            setCurrentStep={setCurrentStep}
+                            current_step={current_step}
+                            paper_validation_complete={paper_validation_complete}
+                        />
                     </>
                 )}
             </FormikForm>

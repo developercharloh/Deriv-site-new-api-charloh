@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import Button from '@/components/shared_ui/button';
 import { useStore } from '@/hooks/useStore';
 import { localize } from '@deriv-com/translations';
+import { STRATEGIES } from '../config';
 import useQsSubmitHandler from '../form-wrappers/useQsSubmitHandler';
 import { TFormValues } from '../types';
 import { QsSteps } from './trade-constants';
@@ -10,15 +11,18 @@ import { QsSteps } from './trade-constants';
 type TMobileQSFooter = {
     current_step: QsSteps;
     setCurrentStep: (current_step: QsSteps) => void;
+    paper_validation_complete: boolean;
 };
 
-export const MobileQSFooter = observer(({ current_step, setCurrentStep }: TMobileQSFooter) => {
+export const MobileQSFooter = observer(({ current_step, setCurrentStep, paper_validation_complete }: TMobileQSFooter) => {
     const { quick_strategy } = useStore();
     const { isValid } = useFormikContext<TFormValues>();
     const { handleSubmit } = useQsSubmitHandler();
     const is_verified_or_completed_step =
         current_step === QsSteps.StrategyVerified || current_step === QsSteps.StrategyCompleted;
     const is_selected_strategy_step = current_step === QsSteps.StrategySelect;
+    const requires_paper_validation =
+        STRATEGIES()[quick_strategy.selected_strategy as keyof ReturnType<typeof STRATEGIES>]?.paper_validation === true;
 
     const onRun = () => {
         /* [AI] - Analytics removed - rudderstack event call removed */
@@ -45,7 +49,11 @@ export const MobileQSFooter = observer(({ current_step, setCurrentStep }: TMobil
                             e.preventDefault();
                             onRun();
                         }}
-                        disabled={!isValid || quick_strategy.is_options_loading}
+                        disabled={
+                            !isValid ||
+                            quick_strategy.is_options_loading ||
+                            (requires_paper_validation && !paper_validation_complete)
+                        }
                     >
                         {localize('Run')}
                     </Button>

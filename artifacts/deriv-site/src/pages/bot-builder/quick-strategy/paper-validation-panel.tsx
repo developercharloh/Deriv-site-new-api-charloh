@@ -32,6 +32,10 @@ type ValidationResult = {
     };
 };
 
+type PaperValidationPanelProps = {
+    onValidationChange?: (isComplete: boolean) => void;
+};
+
 const PAPER_TICK_COUNT = 1000;
 
 const formatNumber = (value: number) => (Number.isFinite(value) ? value.toFixed(2) : '—');
@@ -46,7 +50,7 @@ const getReplayConfig = (values: TFormValues) => ({
     stopLoss: Number(values.loss) || 10,
 });
 
-const PaperValidationPanel = () => {
+const PaperValidationPanel = ({ onValidationChange }: PaperValidationPanelProps) => {
     const { values } = useFormikContext<TFormValues>();
     const { quick_strategy } = useStore();
     const selected_strategy = quick_strategy.selected_strategy as keyof ReturnType<typeof STRATEGIES>;
@@ -54,11 +58,25 @@ const PaperValidationPanel = () => {
     const [status, setStatus] = React.useState<ValidationStatus>('idle');
     const [result, setResult] = React.useState<ValidationResult | null>(null);
     const [error, setError] = React.useState('');
+    const validation_key = [
+        quick_strategy.selected_strategy,
+        values.symbol,
+        values.warmup_window,
+        values.short_window,
+        values.long_window,
+        values.confidence,
+        values.cooldown_ticks,
+        values.profit,
+        values.loss,
+    ].join('|');
+    const validation_key_ref = React.useRef(validation_key);
+    validation_key_ref.current = validation_key;
 
     React.useEffect(() => {
         setStatus('idle');
         setResult(null);
         setError('');
+        onValidationChange?.(false);
     }, [
         quick_strategy.selected_strategy,
         values.symbol,
@@ -69,6 +87,7 @@ const PaperValidationPanel = () => {
         values.cooldown_ticks,
         values.profit,
         values.loss,
+        onValidationChange,
     ]);
 
     if (!supports_paper_validation) return null;
@@ -77,6 +96,8 @@ const PaperValidationPanel = () => {
         setStatus('loading');
         setResult(null);
         setError('');
+        onValidationChange?.(false);
+        const request_validation_key = validation_key;
 
         try {
             if (!api_base.api || !values.symbol) {
@@ -91,6 +112,7 @@ const PaperValidationPanel = () => {
                 style: 'ticks',
                 subscribe: 0,
             });
+            if (request_validation_key !== validation_key_ref.current) return;
             if (response?.error) {
                 throw new Error(response.error.message || localize('The market history request failed.'));
             }
@@ -105,20 +127,24 @@ const PaperValidationPanel = () => {
                 ticks,
                 config: getReplayConfig(values),
             });
+            if (request_validation_key !== validation_key_ref.current) return;
             setResult(validation);
-            setStatus(
-                validation.metrics.openTrades > 0 || validation.metrics.settledTrades < validation.metrics.purchases
-                    ? 'incomplete'
-                    : 'success'
-            );
+            const is_incomplete =
+                validation.metrics.openTrades > 0 || validation.metrics.settledTrades < validation.metrics.purchases;
+            const validation_status = is_incomplete ? 'incomplete' : 'success';
+            setStatus(validation_status);
+            onValidationChange?.(validation_status === 'success');
         } catch (validationError) {
+            if (request_validation_key !== validation_key_ref.current) return;
             setError(validationError instanceof Error ? validationError.message : localize('The replay failed.'));
             setStatus('failed');
+            onValidationChange?.(false);
         }
     };
 
     const metrics = result?.metrics;
     const statusMessage = {
+        idle: localize('Complete a successful paper replay before running Adaptive Momentum live.'),
         empty: localize('No replayable tick history was returned for this asset.'),
         failed: error || localize('The paper replay could not be completed.'),
         incomplete: localize(

@@ -21,10 +21,18 @@ type TMobileFormWrapper = {
     setSelectedTradeType: (selected_trade_type: string) => void;
     current_step: QsSteps;
     setCurrentStep: (current_step: QsSteps) => void;
+    onPaperValidationChange: (isComplete: boolean) => void;
 };
 
 const MobileFormWrapper = observer(
-    ({ children, current_step, selected_trade_type, setCurrentStep, setSelectedTradeType }: TMobileFormWrapper) => {
+    ({
+        children,
+        current_step,
+        selected_trade_type,
+        setCurrentStep,
+        setSelectedTradeType,
+        onPaperValidationChange,
+    }: TMobileFormWrapper) => {
         const { isValid, validateForm } = useFormikContext<TFormValues>();
         const { quick_strategy } = useStore();
         const { selected_strategy } = quick_strategy;
@@ -89,7 +97,7 @@ const MobileFormWrapper = observer(
                                         </div>
                                     </div>
                                     <StrategyTabContent formfields={children} active_tab={'TRADE_PARAMETERS'} />
-                                    <PaperValidationPanel />
+                                    <PaperValidationPanel onValidationChange={onPaperValidationChange} />
                                 </>
                             )}
                         </ThemedScrollbars>
