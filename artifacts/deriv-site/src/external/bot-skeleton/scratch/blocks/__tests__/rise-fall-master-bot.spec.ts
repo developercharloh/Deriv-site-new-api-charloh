@@ -24,6 +24,16 @@ jest.mock('@deriv-com/translations', () => ({
 describe('Rise/Fall Master Bot XML', () => {
     let Blockly: typeof BlocklyNamespace.default;
     let javascriptGenerator: typeof BlocklyJavaScriptNamespace.javascriptGenerator;
+    const dependentFieldNames = [
+        'MARKET_LIST',
+        'SUBMARKET_LIST',
+        'SYMBOL_LIST',
+        'TRADETYPECAT_LIST',
+        'TRADETYPE_LIST',
+        'TYPE_LIST',
+        'DURATIONTYPE_LIST',
+        'PURCHASE_LIST',
+    ];
 
     beforeAll(async () => {
         Blockly = (BlocklyNamespace.default ?? BlocklyNamespace) as typeof BlocklyNamespace.default;
@@ -90,13 +100,82 @@ describe('Rise/Fall Master Bot XML', () => {
         await import('../index');
     });
 
+    const readFieldValues = (xml: Document, name: string): string[] =>
+        Array.from(xml.getElementsByTagName('field'))
+            .filter(field => field.getAttribute('name') === name)
+            .map(field => field.textContent?.trim() ?? '');
+
+    const removeDependentFields = (xml: Document): Document => {
+        const importDom = xml.cloneNode(true) as Document;
+        Array.from(importDom.getElementsByTagName('field'))
+            .filter(field => dependentFieldNames.includes(field.getAttribute('name') ?? ''))
+            .forEach(field => field.parentNode?.removeChild(field));
+        return importDom;
+    };
+
+    const setDropdownOptions = (block: any, fieldName: string, options: string[][], value: string): void => {
+        const field = block.getField(fieldName);
+        field.menuGenerator_ = options;
+        field.setValue(value);
+    };
+
+    const restoreDependentSelections = (workspace: BlocklyNamespace.Workspace): void => {
+        const marketBlock = workspace.getBlockById('td_mkt');
+        const tradeTypeBlock = workspace.getBlockById('td_tt');
+        const contractTypeBlock = workspace.getBlockById('td_ct');
+        const durationBlock = workspace.getBlockById('td_opts');
+
+        expect(marketBlock).toBeDefined();
+        expect(tradeTypeBlock).toBeDefined();
+        expect(contractTypeBlock).toBeDefined();
+        expect(durationBlock).toBeDefined();
+
+        // These options represent the active-symbol response used by the editor.
+        // Restore each child only after its parent options have been hydrated.
+        setDropdownOptions(marketBlock, 'MARKET_LIST', [['Synthetic Indices', 'synthetic_index']], 'synthetic_index');
+        setDropdownOptions(
+            marketBlock,
+            'SUBMARKET_LIST',
+            [['Random Indices', 'random_index']],
+            'random_index'
+        );
+        setDropdownOptions(
+            marketBlock,
+            'SYMBOL_LIST',
+            [['Volatility 100 (1s) Index', '1HZ100V']],
+            '1HZ100V'
+        );
+        setDropdownOptions(tradeTypeBlock, 'TRADETYPECAT_LIST', [['Rise/Fall', 'callput']], 'callput');
+        setDropdownOptions(tradeTypeBlock, 'TRADETYPE_LIST', [['Rise/Fall', 'callput']], 'callput');
+
+        // Contracts-for supplies contract type and duration options after the
+        // trade type has been restored. Purchase options depend on both values.
+        setDropdownOptions(contractTypeBlock, 'TYPE_LIST', [['Both', 'both']], 'both');
+        setDropdownOptions(durationBlock, 'DURATIONTYPE_LIST', [['Ticks', 't']], 't');
+        workspace
+            .getAllBlocks(false)
+            .filter(block => block.type === 'purchase')
+            .forEach(block => {
+                setDropdownOptions(
+                    block,
+                    'PURCHASE_LIST',
+                    [
+                        ['Rise', 'CALL'],
+                        ['Fall', 'PUT'],
+                    ],
+                    block.id === 'bp_put' ? 'PUT' : 'CALL'
+                );
+            });
+    };
+
     it('imports and generates the live indicator and safety gate', () => {
         const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Rise_Fall_Master_Bot.xml');
         const xmlText = fs.readFileSync(xmlPath, 'utf8');
         const sourceDom = Blockly.utils.xml.textToDom(xmlText);
+        const importDom = removeDependentFields(sourceDom);
 
         const workspace = new Blockly.Workspace();
-        expect(() => Blockly.Xml.domToWorkspace(sourceDom, workspace)).not.toThrow();
+        expect(() => Blockly.Xml.domToWorkspace(importDom, workspace)).not.toThrow();
 
         const blockTypes = new Set(workspace.getAllBlocks(false).map(block => block.type));
         [
@@ -129,6 +208,49 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(generated).toContain('Bot.getModelConfidence');
         expect(generated).toContain('Bot.getIchimokuValue');
         expect(generated).toContain('Bot.isBollingerSqueeze');
+
+        workspace.dispose();
+    });
+
+    it('preserves saved market and contract selections after live option hydration', () => {
+        const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Rise_Fall_Master_Bot.xml');
+        const xmlText = fs.readFileSync(xmlPath, 'utf8');
+        const sourceDom = Blockly.utils.xml.textToDom(xmlText);
+        const savedSelections = Object.fromEntries(
+            dependentFieldNames.map(name => [name, readFieldValues(sourceDom, name)])
+        );
+
+        // Keep the complete strategy structure, but let the focused regression
+        // exercise the same post-import restoration used when API dropdowns
+        // were empty at the moment Blockly created the blocks.
+        const importDom = removeDependentFields(sourceDom);
+
+        const workspace = new Blockly.Workspace();
+        expect(() => Blockly.Xml.domToWorkspace(importDom, workspace)).not.toThrow();
+
+        restoreDependentSelections(workspace);
+
+        expect(workspace.getBlockById('td_mkt')?.getFieldValue('MARKET_LIST')).toBe(savedSelections.MARKET_LIST[0]);
+        expect(workspace.getBlockById('td_mkt')?.getFieldValue('SUBMARKET_LIST')).toBe(
+            savedSelections.SUBMARKET_LIST[0]
+        );
+        expect(workspace.getBlockById('td_mkt')?.getFieldValue('SYMBOL_LIST')).toBe(savedSelections.SYMBOL_LIST[0]);
+        expect(workspace.getBlockById('td_tt')?.getFieldValue('TRADETYPECAT_LIST')).toBe(
+            savedSelections.TRADETYPECAT_LIST[0]
+        );
+        expect(workspace.getBlockById('td_tt')?.getFieldValue('TRADETYPE_LIST')).toBe(
+            savedSelections.TRADETYPE_LIST[0]
+        );
+        expect(workspace.getBlockById('td_ct')?.getFieldValue('TYPE_LIST')).toBe(savedSelections.TYPE_LIST[0]);
+        expect(workspace.getBlockById('td_opts')?.getFieldValue('DURATIONTYPE_LIST')).toBe(
+            savedSelections.DURATIONTYPE_LIST[0]
+        );
+
+        const restoredPurchases = workspace
+            .getAllBlocks(false)
+            .filter(block => block.type === 'purchase')
+            .map(block => block.getFieldValue('PURCHASE_LIST'));
+        expect(restoredPurchases).toEqual(savedSelections.PURCHASE_LIST);
 
         workspace.dispose();
     });
