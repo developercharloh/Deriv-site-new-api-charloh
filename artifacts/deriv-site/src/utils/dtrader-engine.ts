@@ -136,6 +136,8 @@ export class DTraderEngine {
     public onStatus:   (s: DTStatus)                  => void = () => {};
     public onLog:      (l: DTLog)                     => void = () => {};
     public onBuyFeedback: (f: DTBuyFeedback)          => void = () => {};
+    /** Optional last-moment proposal guard used by unattended execution paths. */
+    public buyGuard: (proposal: DTProposal) => string | null = () => null;
     /** Last-digit frequency counts over the rolling 1000-tick window.
      *  Always 10 elements long, indices 0-9 → counts. Emit once on
      *  history seed, then once per new tick. */
@@ -429,6 +431,11 @@ export class DTraderEngine {
         }
 
         const p = this.currentProposal;
+        const guardMessage = this.buyGuard(p);
+        if (guardMessage) {
+            this.emitBuyError(guardMessage);
+            return;
+        }
         this.buyInflight = true;
         this.log(
             `▶︎ Buying ${this.formatContractLabel()} on ${this.cfg.symbol}  stake $${this.cfg.stake.toFixed(2)}  (proposal ${p.id.slice(0, 8)}…)`,

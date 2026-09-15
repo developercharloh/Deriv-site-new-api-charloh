@@ -273,6 +273,11 @@ const getSnapshot = evaluate => evaluate(`(() => {
         primaryOptions: [...document.querySelectorAll('[data-testid="select-primary-market"] option')].map(option => option.textContent?.trim() || ''),
         purchaseOptions: [...document.querySelectorAll('[data-testid="select-primary-purchase"] option')].map(option => option.textContent?.trim() || ''),
         multiMarketScanning: document.querySelector('[data-testid="toggle-multi-market"]')?.getAttribute('aria-pressed') || '',
+        autoVolatilityMode: root?.dataset.autoVolatilityMode || '',
+        payoutFloor: root?.dataset.payoutFloor || '',
+        autoRunnerControls: Boolean(document.querySelector('[data-testid="toggle-auto-volatility"]')) &&
+            Boolean(document.querySelector('[aria-label="Minimum payout"]')),
+        executionLeg: root?.dataset.executionLeg || '',
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
         errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
     };
@@ -339,6 +344,12 @@ const assertScan = (snapshot, sampleSize, expectedSource = 'fixture') => {
     }
     if (!['true', 'false'].includes(snapshot.multiMarketScanning)) {
         throw new Error(`Multi-market scanning toggle is not exposed: ${snapshot.multiMarketScanning}`);
+    }
+    if (!snapshot.autoRunnerControls) {
+        throw new Error('Automatic volatility runner controls are missing.');
+    }
+    if (!['1.5', '1.8', '2'].includes(snapshot.payoutFloor)) {
+        throw new Error(`Unexpected payout floor: ${snapshot.payoutFloor}`);
     }
 };
 
@@ -429,6 +440,37 @@ const run = async () => {
                         throw new Error(`Digit window ${windowSize} produced an incomplete market decision.`);
                     }
                 }
+
+                await client.evaluate(`(() => {
+                    const toggle = document.querySelector('[data-testid="toggle-auto-volatility"]');
+                    if (!toggle) return false;
+                    toggle.click();
+                    return true;
+                })()`);
+                const autoRunnerSnapshot = await waitFor(
+                    async () => {
+                        const next = await getSnapshot(client.evaluate);
+                        return next.autoVolatilityMode === 'true' ? next : false;
+                    },
+                    'automatic volatility runner toggle',
+                );
+                if (autoRunnerSnapshot.executionLeg !== 'idle') {
+                    throw new Error(`Auto runner changed execution state without a live contract: ${autoRunnerSnapshot.executionLeg}`);
+                }
+                const autoRunButton = await client.evaluate(
+                    `document.querySelector('[data-testid="button-run-trade"]')?.disabled === true`,
+                );
+                if (!autoRunButton) {
+                    throw new Error('Auto runner exposed an executable buy without an authorized live account.');
+                }
+                await client.evaluate(`document.querySelector('[data-testid="toggle-auto-volatility"]')?.click()`);
+                await waitFor(
+                    async () => {
+                        const next = await getSnapshot(client.evaluate);
+                        return next.autoVolatilityMode === 'false' ? next : false;
+                    },
+                    'automatic volatility runner reset',
+                );
             }
             results.push({
                 sampleSize,

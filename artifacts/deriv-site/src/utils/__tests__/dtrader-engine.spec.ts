@@ -187,6 +187,33 @@ describe('DTraderEngine Alpha Scan execution path', () => {
         harness.engine.stop();
     });
 
+    it('applies an unattended payout guard before sending a buy', () => {
+        const harness = makeHarness(baseConfig);
+        harness.engine.buyGuard = proposal =>
+            proposal.profitPct >= 80 ? null : 'Payout floor rejected this proposal';
+
+        harness.engine.placeBuyNow(baseConfig);
+        const proposal = harness.latest(payload => payload.proposal === 1);
+        harness.emit({
+            msg_type: 'proposal',
+            req_id: proposal.req_id,
+            proposal: {
+                id: 'low-payout',
+                ask_price: '10.00',
+                payout: '15.00',
+                spot: '1379.50',
+                longcode: 'Low payout contract',
+            },
+        });
+
+        expect(harness.sent.some(payload => payload.buy)).toBe(false);
+        expect(harness.feedback.at(-1)).toMatchObject({
+            kind: 'error',
+            message: 'Payout floor rejected this proposal',
+        });
+        harness.engine.stop();
+    });
+
     it('recovers from an existing tick subscription before scanning', async () => {
         const harness = makeHarness(baseConfig);
         const initialTickRequest = harness.latest(payload => payload.ticks_history === 'R_100');
