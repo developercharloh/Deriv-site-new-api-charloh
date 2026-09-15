@@ -14,6 +14,7 @@ const appUrl = process.env.BINARY_MATRIX_BASE_URL || `http://127.0.0.1:${process
 const projectDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const xmlPath = join(projectDir, 'public', 'bots', 'Binary_Matrix_AI.xml');
 const freeBotXmlPath = join(projectDir, 'public', 'bots', 'Over2_Under7_Reversal.xml');
+const riseFallBotXmlPath = join(projectDir, 'public', 'bots', 'Rise_Fall_Master_Bot.xml');
 const chromiumPath = process.env.CHROMIUM_PATH || 'chromium';
 const rootLabels = {
     trade_definition: 'Trade Parameters',
@@ -51,6 +52,7 @@ const browserApiMock = String.raw`
     });
     const testState = (window.__binaryMatrixInterpreterTest ||= {
         analysisEvidence: [],
+        apiResponses: {},
         buyRequests: [],
         contractCount: 0,
         conditionWindowIndex: 0,
@@ -179,6 +181,17 @@ const browserApiMock = String.raw`
             } else if (request.active_symbols) {
                 response.active_symbols = [
                     {
+                        symbol: '1HZ100V',
+                        display_name: 'Volatility 100 (1s) Index',
+                        market: 'synthetic_index',
+                        market_display_name: 'Synthetic Indices',
+                        submarket: 'random_index',
+                        submarket_display_name: 'Continuous Indices',
+                        exchange_is_open: 1,
+                        is_open: 1,
+                        pip_size: 2,
+                    },
+                    {
                         symbol: 'R_25',
                         display_name: 'Volatility 25 Index',
                         market: 'synthetic_index',
@@ -216,6 +229,10 @@ const browserApiMock = String.raw`
                                     name: 'random_index',
                                     symbols: [
                                         {
+                                            underlying_symbol: '1HZ100V',
+                                            times: { open: ['00:00:00'], close: ['23:59:59'] },
+                                        },
+                                        {
                                             underlying_symbol: 'R_25',
                                             times: { open: ['00:00:00'], close: ['23:59:59'] },
                                         },
@@ -236,6 +253,14 @@ const browserApiMock = String.raw`
             } else if (request.contracts_for) {
                 response.contracts_for = {
                     available: [
+                        {
+                            contract_category: 'callput',
+                            contract_type: ['CALL', 'PUT'],
+                            exchange_name: 'synthetic_index',
+                            expiry_type: 'tick',
+                            min_duration: 1,
+                            max_duration: 10,
+                        },
                         {
                             contract_category: 'digits',
                             contract_type: ['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER'],
@@ -515,7 +540,10 @@ const browserApiMock = String.raw`
             } else if (request.portfolio) {
                 response.portfolio = { contracts: [] };
             }
-            setTimeout(() => this.dispatch('message', { data: JSON.stringify(response) }), responseDelay);
+            setTimeout(() => {
+                testState.apiResponses[response.msg_type] = (testState.apiResponses[response.msg_type] || 0) + 1;
+                this.dispatch('message', { data: JSON.stringify(response) });
+            }, responseDelay);
         }
 
         close() {
@@ -1247,6 +1275,69 @@ const assertFreeBotWorkspace = async (cdp, flowName) => {
     );
 };
 
+const assertRiseFallMarketSettings = async cdp => {
+    await waitFor(
+        cdp,
+        `window.__binaryMatrixInterpreterTest?.apiResponses?.active_symbols > 0 &&
+         window.__binaryMatrixInterpreterTest?.apiResponses?.contracts_for > 0`,
+        'mocked active_symbols and contracts_for responses',
+        30_000
+    );
+    await sleep(6_800);
+
+    const result = await evaluate(
+        cdp,
+        `(() => {
+            const workspace = window.Blockly?.derivWorkspace;
+            const market = workspace?.getAllBlocks(true).find(block => block.type === 'trade_definition_market');
+            const tradeType = workspace?.getAllBlocks(true).find(block => block.type === 'trade_definition_tradetype');
+            const options = workspace?.getAllBlocks(true).find(block => block.type === 'trade_definition_tradeoptions');
+            const read = (block, name) => ({
+                value: block?.getFieldValue(name) || '',
+                text: block?.getField(name)?.getText?.()?.trim() || '',
+            });
+            return {
+                fields: {
+                    market: read(market, 'MARKET_LIST'),
+                    submarket: read(market, 'SUBMARKET_LIST'),
+                    symbol: read(market, 'SYMBOL_LIST'),
+                    tradeType: read(tradeType, 'TRADETYPE_LIST'),
+                    duration: read(options, 'DURATIONTYPE_LIST'),
+                },
+                requests: window.__binaryMatrixInterpreterTest?.requests || [],
+                buyRequests: window.__binaryMatrixInterpreterTest?.buyRequests || [],
+                apiResponses: window.__binaryMatrixInterpreterTest?.apiResponses || {},
+            };
+        })()`
+    );
+
+    const expected = {
+        market: ['synthetic_index', 'Synthetic Indices'],
+        submarket: ['random_index', 'Continuous Indices'],
+        symbol: ['1HZ100V', 'Volatility 100 (1s)'],
+        tradeType: ['callput', 'Rise/Fall'],
+        duration: ['t', 'Ticks'],
+    };
+    const mismatches = Object.entries(expected).filter(([name, [value, text]]) => {
+        const actual = result?.fields?.[name];
+        return !actual?.value || !actual?.text || actual.value !== value || !actual.text.includes(text);
+    });
+    const requestNames = result?.requests?.flat?.() || [];
+    if (
+        mismatches.length > 0 ||
+        result?.buyRequests?.length > 0 ||
+        requestNames.includes('proposal') ||
+        requestNames.includes('buy')
+    ) {
+        throw new Error(`Rise/Fall market settings were not safely restored: ${JSON.stringify(result)}`);
+    }
+
+    console.log(
+        '✓ Rise/Fall Free Bot retained Synthetic Indices → Continuous Indices → ' +
+            'Volatility 100 (1s) → Rise/Fall → Ticks without proposing or purchasing'
+    );
+};
+
 const runGeneratedBinaryMatrixBot = async (cdp, speed) => {
     await evaluate(
         cdp,
@@ -1550,6 +1641,7 @@ const seedEmptySavedWorkspace = async cdp => {
 const run = async () => {
     const xml = await readFile(xmlPath, 'utf8');
     const freeBotXml = await readFile(freeBotXmlPath, 'utf8');
+    const riseFallBotXml = await readFile(riseFallBotXmlPath, 'utf8');
     if ((xml.match(/<block\b/g) || []).length < 3) throw new Error(`Binary Matrix XML is unexpectedly small: ${xmlPath}`);
     if (
         (freeBotXml.match(/<block\b/g) || []).length < 3 ||
@@ -1557,6 +1649,17 @@ const run = async () => {
         !freeBotXml.includes('type="variables_is_option"')
     ) {
         throw new Error(`Over2 / Under7 Reversal XML is missing its serialized option blocks: ${freeBotXmlPath}`);
+    }
+    for (const expectedField of [
+        '<field name="MARKET_LIST">synthetic_index</field>',
+        '<field name="SUBMARKET_LIST">random_index</field>',
+        '<field name="SYMBOL_LIST">1HZ100V</field>',
+        '<field name="TRADETYPE_LIST">callput</field>',
+        '<field name="DURATIONTYPE_LIST">t</field>',
+    ]) {
+        if (!riseFallBotXml.includes(expectedField)) {
+            throw new Error(`Rise/Fall XML is missing ${expectedField}: ${riseFallBotXmlPath}`);
+        }
     }
 
     const debugPort = await getFreePort();
@@ -1659,6 +1762,7 @@ const run = async () => {
             'visible Rise/Fall Bot Builder'
         );
         await assertRiseFallTradeParameters(cdp);
+        await assertRiseFallMarketSettings(cdp);
         if (process.env.RISE_FALL_DROPDOWNS_ONLY === '1') return;
 
         await cdp.send('Page.navigate', { url: `${appUrl}/#free_bots` });
