@@ -630,7 +630,21 @@ const SignalBadge: React.FC<{ signal: LiveSignal; onClick: () => void }> = ({ si
 // Blockly rejects these values (not in the empty options list). The API cascade
 // later sets its own defaults (often wrong). This function waits for the API to
 // populate the options, then force-applies the correct XML values.
-async function postLoadReapplyFields(botId: string, ws: any): Promise<void> {
+type ImportedTradeFields = {
+    market?: string;
+    submarket?: string;
+    symbol?: string;
+    tradeTypeCategory?: string;
+    tradeType?: string;
+    contractType?: string;
+    durationType?: string;
+};
+
+async function postLoadReapplyFields(
+    botId: string,
+    ws: any,
+    desired: ImportedTradeFields
+): Promise<void> {
     const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
     const getDurBlock = (): any =>
@@ -641,16 +655,22 @@ async function postLoadReapplyFields(botId: string, ws: any): Promise<void> {
         ws.getAllBlocks(true).find((b: any) => b.type === 'trade_definition_tradetype');
 
     const tradeTypeBlock = getTradeTypeBlock();
-    const desiredCategory = tradeTypeBlock?.getFieldValue('TRADETYPECAT_LIST');
-    const desiredTradeType = tradeTypeBlock?.getFieldValue('TRADETYPE_LIST');
 
-    const durOptionsReady = (): boolean => {
-        const opts: any[][] = getDurBlock()?.getField('DURATIONTYPE_LIST')?.menuGenerator_ ?? [];
-        return opts.length > 0 && opts[0][1] !== '';
+    const optionsContain = (block: any, fieldName: string, value?: string): boolean => {
+        if (!value) return false;
+        const options: any[][] = block?.getField(fieldName)?.menuGenerator_ ?? [];
+        return options.some(option => option?.[1] === value);
     };
 
-    const triggerTradeTypeCascade = (name: string, blockId: string): void => {
-        const block = getTradeTypeBlock();
+    const waitForOption = async (block: any, fieldName: string, value?: string): Promise<boolean> => {
+        for (let i = 0; i < 50; i++) {
+            if (optionsContain(block, fieldName, value)) return true;
+            await delay(300);
+        }
+        return false;
+    };
+
+    const triggerCascade = (block: any, name: string, blockId: string): void => {
         if (!block?.onchange) return;
         block.onchange({
             type: (window as any).Blockly.Events.BLOCK_CHANGE,
@@ -666,36 +686,39 @@ async function postLoadReapplyFields(botId: string, ws: any): Promise<void> {
     await delay(1100);
     const marketBlock = getMarketBlock();
     if (marketBlock && tradeTypeBlock) {
-        triggerTradeTypeCascade('SYMBOL_LIST', marketBlock.id);
-
-        for (let i = 0; i < 50; i++) {
-            const categoryOptions: any[][] =
-                tradeTypeBlock.getField('TRADETYPECAT_LIST')?.menuGenerator_ ?? [];
-            if (categoryOptions.length > 0 && categoryOptions[0][1] !== '') break;
-            await delay(300);
+        // Market dropdowns are a dependency chain. XML import happens before
+        // active_symbols has populated these menus, so Blockly rejects the saved
+        // values. Restore each parent only after its option exists, then fire the
+        // normal onchange cascade that builds the next child menu.
+        if (await waitForOption(marketBlock, 'MARKET_LIST', desired.market)) {
+            marketBlock.setFieldValue(desired.market, 'MARKET_LIST');
+            triggerCascade(marketBlock, 'MARKET_LIST', marketBlock.id);
+        }
+        if (await waitForOption(marketBlock, 'SUBMARKET_LIST', desired.submarket)) {
+            marketBlock.setFieldValue(desired.submarket, 'SUBMARKET_LIST');
+            triggerCascade(marketBlock, 'SUBMARKET_LIST', marketBlock.id);
+        }
+        if (await waitForOption(marketBlock, 'SYMBOL_LIST', desired.symbol)) {
+            marketBlock.setFieldValue(desired.symbol, 'SYMBOL_LIST');
+            triggerCascade(marketBlock, 'SYMBOL_LIST', marketBlock.id);
         }
 
-        if (desiredCategory) {
-            tradeTypeBlock.getField('TRADETYPECAT_LIST')?.setValue?.(desiredCategory);
-            triggerTradeTypeCascade('TRADETYPECAT_LIST', tradeTypeBlock.id);
+        if (await waitForOption(tradeTypeBlock, 'TRADETYPECAT_LIST', desired.tradeTypeCategory)) {
+            tradeTypeBlock.setFieldValue(desired.tradeTypeCategory, 'TRADETYPECAT_LIST');
+            triggerCascade(tradeTypeBlock, 'TRADETYPECAT_LIST', tradeTypeBlock.id);
         }
-
-        for (let i = 0; i < 50; i++) {
-            const tradeOptions: any[][] =
-                tradeTypeBlock.getField('TRADETYPE_LIST')?.menuGenerator_ ?? [];
-            if (tradeOptions.length > 0 && tradeOptions[0][1] !== '') break;
-            await delay(300);
-        }
-
-        if (desiredTradeType) {
-            tradeTypeBlock.getField('TRADETYPE_LIST')?.setValue?.(desiredTradeType);
+        if (await waitForOption(tradeTypeBlock, 'TRADETYPE_LIST', desired.tradeType)) {
+            tradeTypeBlock.setFieldValue(desired.tradeType, 'TRADETYPE_LIST');
+            triggerCascade(tradeTypeBlock, 'TRADETYPE_LIST', tradeTypeBlock.id);
         }
     }
 
     // Helper: apply all the critical field values
     const applyFields = () => {
         // Duration = Ticks ('t')
-        getDurBlock()?.setFieldValue('t', 'DURATIONTYPE_LIST');
+        if (desired.durationType) {
+            getDurBlock()?.setFieldValue(desired.durationType, 'DURATIONTYPE_LIST');
+        }
 
         // Purchase = Rise (CALL) and Fall (PUT)
         // Re-trigger populatePurchaseList first so the dropdown options are built
@@ -716,7 +739,10 @@ async function postLoadReapplyFields(botId: string, ws: any): Promise<void> {
     const POLL_MS = 300;
     let ready = false;
     for (let i = 0; i < 50; i++) {
-        if (durOptionsReady()) { ready = true; break; }
+        if (optionsContain(getDurBlock(), 'DURATIONTYPE_LIST', desired.durationType)) {
+            ready = true;
+            break;
+        }
         getDurBlock()?.updateDurationInput?.(false, false);
         await delay(POLL_MS);
     }
@@ -729,7 +755,7 @@ async function postLoadReapplyFields(botId: string, ws: any): Promise<void> {
     // re-sets that were triggered by the SYMBOL_LIST or TRADETYPE_LIST cascade
     // firing after our initial applyFields() call.
     await delay(3000);
-    if (durOptionsReady()) applyFields();
+    if (optionsContain(getDurBlock(), 'DURATIONTYPE_LIST', desired.durationType)) applyFields();
 }
 
 // ─── Bot Card ─────────────────────────────────────────────────────────────────
@@ -795,10 +821,24 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             const loadEventGroup = `dbot-load${Date.now()}`;
             (window as any).__DBOT_LOADING_XML = true;
             let importCompleted = false;
+            let importedTradeFields: ImportedTradeFields = {};
             Blockly.Events.setGroup(loadEventGroup);
             try {
                 await Blockly.derivWorkspace.asyncClear();
                 const dom = Blockly.utils.xml.textToDom(xmlText);
+                const importedField = (name: string): string | undefined => {
+                    const value = dom.querySelector?.(`field[name="${name}"]`)?.textContent?.trim();
+                    return value || undefined;
+                };
+                importedTradeFields = {
+                    market: importedField('MARKET_LIST'),
+                    submarket: importedField('SUBMARKET_LIST'),
+                    symbol: importedField('SYMBOL_LIST'),
+                    tradeTypeCategory: importedField('TRADETYPECAT_LIST'),
+                    tradeType: importedField('TRADETYPE_LIST'),
+                    contractType: importedField('TYPE_LIST'),
+                    durationType: importedField('DURATIONTYPE_LIST'),
+                };
                 Blockly.Xml.domToVariables(dom, Blockly.derivWorkspace);
                  // Some browser XML DOM implementations expose the Blockly
                  // namespace inconsistently through localName/tagName. Root
@@ -866,7 +906,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             setStatus('loaded');
 
             // ROOT CAUSE FIX — blank duration/purchase dropdowns:
-            void postLoadReapplyFields(bot.id, Blockly.derivWorkspace);
+            void postLoadReapplyFields(bot.id, Blockly.derivWorkspace, importedTradeFields);
         } catch (err: any) {
             setStatus('error');
             setErrorMsg(err?.message || 'Failed to load bot.');
