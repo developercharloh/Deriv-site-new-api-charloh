@@ -448,3 +448,75 @@ export const selectStrongestMarket = (
         left.displayName.localeCompare(right.displayName),
     )[0] || null;
 };
+
+export const AUTO_MOMENTUM_WARMUP = 30;
+export const AUTO_MOMENTUM_SHORT_WINDOW = 6;
+export const AUTO_MOMENTUM_LONG_WINDOW = 14;
+export const AUTO_MOMENTUM_CONFIDENCE = 55;
+
+const directionalPercentage = (moves: number[], direction: 1 | -1): number =>
+    moves.length ? (moves.filter(move => move === direction).length / moves.length) * 100 : 0;
+
+/**
+ * Select the strongest live Rise/Fall candidate from the complete volatility
+ * scan. This intentionally has a smaller signal surface than the research
+ * model: short/long directional momentum is the signal, while execution
+ * safety remains the engine's responsibility.
+ */
+export const selectStrongestMomentumMarket = (
+    sources: StrategySource[],
+    shortWindow = AUTO_MOMENTUM_SHORT_WINDOW,
+    longWindow = AUTO_MOMENTUM_LONG_WINDOW,
+    minimumConfidence = AUTO_MOMENTUM_CONFIDENCE,
+): RankedMarketDecision | null => {
+    const shortSize = Math.max(2, Math.floor(Number(shortWindow) || AUTO_MOMENTUM_SHORT_WINDOW));
+    const longSize = Math.max(shortSize, Math.floor(Number(longWindow) || AUTO_MOMENTUM_LONG_WINDOW));
+    const confidence = Math.max(1, Math.min(99, Number(minimumConfidence) || AUTO_MOMENTUM_CONFIDENCE));
+
+    const candidates = sources.flatMap(source => {
+            const prices = source.prices.map(Number).filter(Number.isFinite);
+            const minimumHistory = Math.max(AUTO_MOMENTUM_WARMUP, longSize + 1);
+            if (prices.length < minimumHistory) return [];
+
+            const window = prices.slice(-(longSize + 1));
+            const moves = window.slice(1).map((price, index) => {
+                const previous = window[index];
+                return price > previous ? 1 : price < previous ? -1 : 0;
+            });
+            const shortMoves = moves.slice(-shortSize);
+            const shortRise = directionalPercentage(shortMoves, 1);
+            const shortFall = directionalPercentage(shortMoves, -1);
+            const longRise = directionalPercentage(moves, 1);
+            const longFall = directionalPercentage(moves, -1);
+            const shortBias = shortRise - shortFall;
+            const longBias = longRise - longFall;
+            const signal =
+                shortBias >= confidence && longBias > 0
+                    ? 'CALL'
+                    : shortBias <= -confidence && longBias < 0
+                      ? 'PUT'
+                      : null;
+
+            if (!signal) return [];
+
+            const isCall = signal === 'CALL';
+            const signalConfidence = Math.abs(shortBias);
+            const trendConfidence = Math.abs(longBias);
+            return [{
+                symbol: source.symbol,
+                displayName: source.displayName,
+                condition: isCall ? 'all-rise' : 'all-fall',
+                label: `Adaptive Momentum ${signal}`,
+                contractType: isCall ? 'CALL' : 'PUT',
+                barrier: null,
+                digits: [],
+                strength: signalConfidence + trendConfidence / 10,
+                reason: `${signal} confirmed: short ${shortRise.toFixed(0)}% rise / ${shortFall.toFixed(0)}% fall; long ${longRise.toFixed(0)}% rise / ${longFall.toFixed(0)}% fall.`,
+            } satisfies RankedMarketDecision];
+        });
+
+    return candidates.sort((left, right) =>
+        right.strength - left.strength ||
+        left.displayName.localeCompare(right.displayName),
+    )[0] || null;
+};
