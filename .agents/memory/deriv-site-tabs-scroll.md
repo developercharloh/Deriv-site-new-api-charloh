@@ -19,11 +19,13 @@ the child content that owns the list and keep bottom padding for fixed controls.
 For a nested mobile scrollport, sizing the recovered content panel and list alone is not
 enough: the intermediate `.dc-tabs` grid and the wrapper immediately above it also need
 `height: 100%` and `min-height: 0`, while the parent content wrapper must hide overflow.
+Those intermediate wrappers must also use a shrinking column-flex layout; fixed heights
+alone can still leave the grid at its full content height.
 
 **Why:** The grid otherwise grows to the full card content height, so the list reports equal
 `clientHeight` and `scrollHeight` and touch scrolling has no scroll range even though the
 panel has an ID and `overflow-y: auto`.
 
 **How to apply:** Verify the ID exists in the rendered DOM, scope the full-height chain to
-the affected tab, then assert the list's scroll range and a lower card in the mobile
-browser regression.
+the affected tab, make the intermediate wrappers column flex containers with hidden
+overflow, then assert the list's scroll range and a lower card in the mobile regression.
