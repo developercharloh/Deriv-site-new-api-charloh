@@ -91,16 +91,19 @@
         display: flex;
         flex-direction: column;
         isolation: isolate;
-        will-change: box-shadow;
-        animation: free-bot-live-glow 2.4s ease-in-out infinite;
+        will-change: transform, box-shadow;
+        animation:
+            free-bot-live-bounce 3.2s ease-in-out infinite,
+            free-bot-live-glow 2.4s ease-in-out infinite;
 
         &:hover {
             animation-play-state: paused;
             transform: translateY(-3px);
         }
 
-        &:nth-child(3n + 2) { animation-delay: -0.8s; }
-        &:nth-child(3n + 3) { animation-delay: -1.6s; }
+        &:nth-child(4n + 2) { animation-delay: -0.8s, -0.6s; }
+        &:nth-child(4n + 3) { animation-delay: -1.6s, -1.2s; }
+        &:nth-child(4n + 4) { animation-delay: -2.4s, -1.8s; }
     }
 
     &__card-art {
@@ -126,61 +129,14 @@
             pointer-events: none;
         }
 
-        &::after {
-            position: absolute;
-            top: -40%;
-            bottom: -40%;
-            left: -72%;
-            z-index: 2;
-            width: 38%;
-            transform: skewX(-18deg);
-            background: linear-gradient(
-                90deg,
-                transparent,
-                rgba(255, 255, 255, 0.2),
-                rgba(255, 255, 255, 0.88),
-                rgba(255, 226, 123, 0.3),
-                transparent
-            );
-            content: '';
-            pointer-events: none;
-            animation: free-bot-art-shine 3.6s ease-in-out infinite;
-        }
     }
 
     &__card-category {
-        position: absolute;
-        top: 7px;
-        left: 7px;
-        z-index: 3;
-        max-width: calc(100% - 14px);
-        overflow: hidden;
-        padding: 4px 6px;
-        border: 1px solid rgba(226, 180, 70, 0.72);
-        border-radius: 7px;
-        background: rgba(255, 255, 248, 0.98);
-        color: #6f4300;
-        font-size: 0.5rem;
-        font-weight: 900;
-        letter-spacing: 0.045em;
-        line-height: 1;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        box-shadow:
-            0 0 0 1px rgba(255, 255, 255, 0.74),
-            0 0 11px rgba(255, 196, 30, 0.76);
+        display: none;
     }
 
     &__card-name {
-        min-height: 2.1em;
-        margin: 3px 0 5px;
-        color: #111827;
-        font-size: 0.72rem;
-        font-weight: 800;
-        line-height: 1.1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        display: none;
     }
 
     &__card-access {
@@ -317,7 +273,7 @@
 
 @keyframes free-bot-live-bounce {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
+    50% { transform: translateY(-4px); }
 }
 
 @keyframes free-bot-live-glow {
@@ -337,13 +293,6 @@
     }
 }
 
-@keyframes free-bot-art-shine {
-    0%, 38% { left: -72%; opacity: 0; }
-    48% { opacity: 1; }
-    68% { left: 138%; opacity: 0.9; }
-    100% { left: 138%; opacity: 0; }
-}
-
 @keyframes free-bot-live-dot {
     0%, 100% { opacity: 0.55; transform: scale(0.82); }
     50% { opacity: 1; transform: scale(1.18); }
@@ -351,8 +300,7 @@
 
 @media (prefers-reduced-motion: reduce) {
     .free-bots__card,
-    .free-bots__card-access::before,
-    .free-bots__card-art::after {
+    .free-bots__card-access::before {
         animation: none;
     }
 }
