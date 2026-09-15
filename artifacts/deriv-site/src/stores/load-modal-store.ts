@@ -9,7 +9,14 @@ import {
     save_types,
     saveWorkspaceToRecent,
 } from '@/external/bot-skeleton';
-import { inject_workspace_options, revealWorkspaceFromTop, scheduleWorkspaceReveal, updateXmlValues } from '@/external/bot-skeleton/scratch/utils';
+import {
+    captureDropdownSelections,
+    inject_workspace_options,
+    restoreDropdownSelections,
+    revealWorkspaceFromTop,
+    scheduleWorkspaceReveal,
+    updateXmlValues,
+} from '@/external/bot-skeleton/scratch/utils';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { TStores } from '@deriv/stores/types';
 import { localize } from '@deriv-com/translations';
@@ -473,6 +480,7 @@ export default class LoadModalStore {
             block_string,
         } = window.Blockly.xmlValues;
         const derivWorkspace = window.Blockly.derivWorkspace;
+        const saved_dropdown_selections = captureDropdownSelections(convertedDom);
 
         const event_group = `dbot-load${Date.now()}`;
         window.__DBOT_LOADING_XML = true;
@@ -497,6 +505,7 @@ export default class LoadModalStore {
             }
         }
         derivWorkspace.current_strategy_id = strategy_id;
+        await restoreDropdownSelections(derivWorkspace, saved_dropdown_selections);
 
         /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
         /* [/AI] */

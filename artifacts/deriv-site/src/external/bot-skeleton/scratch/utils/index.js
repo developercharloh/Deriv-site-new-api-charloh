@@ -10,7 +10,8 @@ import { observer as globalObserver } from '../../utils/observer';
 import { removeLimitedBlocks } from '../../utils/workspace';
 import BlockConversion from '../backward-compatibility';
 import DBotStore from '../dbot-store';
-import { saveAs } from '../shared';
+import ApiHelpers from '../../services/api/api-helpers';
+import { getContractTypeOptions, saveAs } from '../shared';
 
 export const inject_workspace_options = {
     // Getter (not a literal) so the public-path prefix is read when the options are spread
@@ -91,6 +92,158 @@ export const updateXmlValues = blockly_options => {
         file_name,
         from,
     };
+};
+
+const dependent_dropdown_field_names = [
+    'MARKET_LIST',
+    'SUBMARKET_LIST',
+    'SYMBOL_LIST',
+    'TRADETYPECAT_LIST',
+    'TRADETYPE_LIST',
+    'TYPE_LIST',
+    'DURATIONTYPE_LIST',
+    'PURCHASE_LIST',
+];
+
+/**
+ * Read dependent dropdown values before Blockly imports the XML. Blockly validates
+ * dropdowns while creating blocks, when the API-backed menus may still be empty,
+ * so the imported fields cannot be relied on after the import completes.
+ */
+export const captureDropdownSelections = xml => {
+    if (!xml?.getElementsByTagName) return {};
+
+    return dependent_dropdown_field_names.reduce((selections, field_name) => {
+        selections[field_name] = Array.from(xml.getElementsByTagName('field'))
+            .filter(field => field.getAttribute('name') === field_name)
+            .map(field => field.textContent?.trim() ?? '');
+        return selections;
+    }, {});
+};
+
+const getWorkspaceBlock = (workspace, type) =>
+    workspace?.getAllBlocks?.(false)?.find(block => block.type === type);
+
+const updateDropdownField = (block, field_name, options, saved_value) => {
+    const field = block?.getField?.(field_name);
+    if (!field || !options?.length) return;
+
+    const current_value = field.getValue?.();
+    const default_value = saved_value || current_value;
+
+    if (typeof field.updateOptions === 'function') {
+        field.updateOptions(options, {
+            default_value,
+            should_pretend_empty: true,
+            should_trigger_event: false,
+        });
+        return;
+    }
+
+    // Keep the helper usable in headless Blockly tests where the production
+    // FieldDropdown hook is not installed.
+    field.menuGenerator_ = options;
+    const option = options.find(item => item[1] === default_value) || options[0];
+    option && field.setValue(option[1]);
+};
+
+/**
+ * Rehydrate API-backed dropdowns in dependency order after an XML import.
+ * Missing family-specific blocks are intentionally skipped because multiplier
+ * and accumulator strategies do not have the same duration/contract fields.
+ */
+export const restoreDropdownSelections = async (workspace, saved_selections = {}, api_helpers = ApiHelpers?.instance) => {
+    if (!workspace || !api_helpers?.active_symbols || !api_helpers?.contracts_for) return;
+
+    try {
+        const { active_symbols, contracts_for } = api_helpers;
+        await active_symbols.retrieveActiveSymbols();
+
+        const market_block = getWorkspaceBlock(workspace, 'trade_definition_market');
+        const trade_type_block = getWorkspaceBlock(workspace, 'trade_definition_tradetype');
+        const contract_type_block = getWorkspaceBlock(workspace, 'trade_definition_contracttype');
+        const duration_block =
+            getWorkspaceBlock(workspace, 'trade_definition_tradeoptions') ||
+            getWorkspaceBlock(workspace, 'trade_definition_multiplier') ||
+            getWorkspaceBlock(workspace, 'trade_definition_accumulator');
+
+        if (!market_block || !trade_type_block) return;
+
+        const market_field = market_block.getField('MARKET_LIST');
+        const submarket_field = market_block.getField('SUBMARKET_LIST');
+        const symbol_field = market_block.getField('SYMBOL_LIST');
+
+        updateDropdownField(
+            market_block,
+            'MARKET_LIST',
+            active_symbols.getMarketDropdownOptions(),
+            saved_selections.MARKET_LIST?.[0]
+        );
+        const market = market_field?.getValue?.();
+
+        updateDropdownField(
+            market_block,
+            'SUBMARKET_LIST',
+            active_symbols.getSubmarketDropdownOptions(market),
+            saved_selections.SUBMARKET_LIST?.[0]
+        );
+        const submarket = submarket_field?.getValue?.();
+
+        updateDropdownField(
+            market_block,
+            'SYMBOL_LIST',
+            active_symbols.getSymbolDropdownOptions(submarket),
+            saved_selections.SYMBOL_LIST?.[0]
+        );
+        const symbol = symbol_field?.getValue?.();
+
+        const category_options = await contracts_for.getTradeTypeCategories(market, submarket, symbol);
+        updateDropdownField(
+            trade_type_block,
+            'TRADETYPECAT_LIST',
+            category_options,
+            saved_selections.TRADETYPECAT_LIST?.[0]
+        );
+        const trade_type_category = trade_type_block.getField('TRADETYPECAT_LIST')?.getValue?.();
+
+        const trade_type_options = await contracts_for.getTradeTypes(
+            market,
+            submarket,
+            symbol,
+            trade_type_category
+        );
+        updateDropdownField(trade_type_block, 'TRADETYPE_LIST', trade_type_options, saved_selections.TRADETYPE_LIST?.[0]);
+        const trade_type = trade_type_block.getField('TRADETYPE_LIST')?.getValue?.();
+
+        const contract_type_options = [];
+        const contract_options = getContractTypeOptions('both', trade_type);
+        if (contract_options.length > 1) contract_type_options.push(['Both', 'both']);
+        contract_type_options.push(...contract_options);
+        updateDropdownField(contract_type_block, 'TYPE_LIST', contract_type_options, saved_selections.TYPE_LIST?.[0]);
+        const contract_type = contract_type_block?.getField('TYPE_LIST')?.getValue?.() || 'both';
+
+        if (duration_block?.getField('DURATIONTYPE_LIST')) {
+            const durations = await contracts_for.getDurations(symbol, trade_type);
+            updateDropdownField(
+                duration_block,
+                'DURATIONTYPE_LIST',
+                durations.map(duration => [duration.display, duration.unit]),
+                saved_selections.DURATIONTYPE_LIST?.[0]
+            );
+        }
+
+        const purchase_options = getContractTypeOptions(contract_type, trade_type);
+        workspace
+            .getAllBlocks(false)
+            .filter(block => block.getField?.('PURCHASE_LIST'))
+            .forEach((block, index) => {
+                updateDropdownField(block, 'PURCHASE_LIST', purchase_options, saved_selections.PURCHASE_LIST?.[index]);
+            });
+    } catch (error) {
+        // A failed API hydration must not turn an otherwise valid XML import
+        // into an invalid-strategy error. The next editor event can retry it.
+        console.error('Error restoring imported dropdown selections:', error);
+    }
 };
 
 export const getSelectedTradeType = (workspace = window.Blockly.derivWorkspace) => {
@@ -243,6 +396,7 @@ export const load = async ({
     }
     const blockConversion = new BlockConversion();
     xml = blockConversion.convertStrategy(xml, showIncompatibleStrategyDialog);
+    const saved_dropdown_selections = captureDropdownSelections(xml);
     const blockly_xml = xml.querySelectorAll('block');
 
     // Check if there are any blocks in this strategy.
@@ -283,6 +437,8 @@ export const load = async ({
                 await saveWorkspaceToRecent(xml, from);
             }
         }
+
+        await restoreDropdownSelections(workspace, saved_dropdown_selections);
 
         // Set user disabled state on all disabled blocks. This ensures we don't change the disabled
         // state through code, which was implemented for user experience.
