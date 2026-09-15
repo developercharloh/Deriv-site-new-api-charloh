@@ -866,7 +866,7 @@
                                       <block type="variables_set" id="ap_tp_stop">
                                         <field name="VAR" id="v_stop">Should Stop</field>
                                         <value name="VALUE"><block type="text" id="ap_tp_stop_v"><field name="TEXT">yes</field></block></value>
-                                         <next><block type="adaptive_session_stop" id="ap_tp_adaptive_stop"></block></next>
+                                         <next><block type="adaptive_session_stop" id="ap_tp_adaptive_stop"><field name="REASON">take_profit</field></block></next>
                                       </block>
                                     </next>
                                   </block>
@@ -918,7 +918,7 @@
                                           <block type="variables_set" id="ap_sl_stop">
                                             <field name="VAR" id="v_stop">Should Stop</field>
                                             <value name="VALUE"><block type="text" id="ap_sl_stop_v"><field name="TEXT">yes</field></block></value>
-                                             <next><block type="adaptive_session_stop" id="ap_sl_adaptive_stop"></block></next>
+                                             <next><block type="adaptive_session_stop" id="ap_sl_adaptive_stop"><field name="REASON">stop_loss</field></block></next>
                                           </block>
                                         </next>
                                       </block>

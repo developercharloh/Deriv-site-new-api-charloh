@@ -9,8 +9,9 @@ import { getDirection, getLastDigit } from '../utils/helpers';
 import { expectPositiveInteger } from '../utils/sanitize';
 import * as constants from './state/constants';
 import { markBotTick } from '@/utils/bot-contract-gate';
+import { adaptiveMomentumLog } from '../utils/broadcast';
 
-export const getAdaptiveMomentumSignalFromPrices = (
+export const getAdaptiveMomentumAnalysisFromPrices = (
     prices,
     warmup = 30,
     shortWindow = 8,
@@ -24,7 +25,23 @@ export const getAdaptiveMomentumSignalFromPrices = (
     const numericPrices = prices.map(Number).filter(Number.isFinite);
     const minimumHistory = Math.max(warmupSize, longSize + 1);
 
-    if (numericPrices.length < minimumHistory) return 'WAIT';
+    if (numericPrices.length < minimumHistory) {
+        return {
+            signal: 'WAIT',
+            reason: 'insufficient_history',
+            tickCount: numericPrices.length,
+            requiredTicks: minimumHistory,
+            warmup: warmupSize,
+            shortWindow: shortSize,
+            longWindow: longSize,
+            confidence: minimumConfidence,
+            signalConfidence: 0,
+            shortRisePercentage: 0,
+            shortFallPercentage: 0,
+            longRisePercentage: 0,
+            longFallPercentage: 0,
+        };
+    }
 
     const window = numericPrices.slice(-(longSize + 1));
     const moves = window.slice(1).map((price, index) => {
@@ -41,10 +58,43 @@ export const getAdaptiveMomentumSignalFromPrices = (
     const shortBias = upPercentage(shortMoves) - downPercentage(shortMoves);
     const longBias = upPercentage(moves) - downPercentage(moves);
 
-    if (shortBias >= minimumConfidence && longBias > 0) return 'CALL';
-    if (shortBias <= -minimumConfidence && longBias < 0) return 'PUT';
-    return 'WAIT';
+    const shortRisePercentage = upPercentage(shortMoves);
+    const shortFallPercentage = downPercentage(shortMoves);
+    const longRisePercentage = upPercentage(moves);
+    const longFallPercentage = downPercentage(moves);
+    const signalConfidence = Math.abs(shortBias);
+    const signal =
+        shortBias >= minimumConfidence && longBias > 0
+            ? 'CALL'
+            : shortBias <= -minimumConfidence && longBias < 0
+              ? 'PUT'
+              : 'WAIT';
+    const reason =
+        signal !== 'WAIT'
+            ? 'confidence_confirmed'
+            : Math.abs(shortBias) >= minimumConfidence
+              ? 'long_direction_conflict'
+              : 'confidence_below_threshold';
+
+    return {
+        signal,
+        reason,
+        tickCount: numericPrices.length,
+        requiredTicks: minimumHistory,
+        warmup: warmupSize,
+        shortWindow: shortSize,
+        longWindow: longSize,
+        confidence: minimumConfidence,
+        signalConfidence,
+        shortRisePercentage,
+        shortFallPercentage,
+        longRisePercentage,
+        longFallPercentage,
+    };
 };
+
+export const getAdaptiveMomentumSignalFromPrices = (...args) =>
+    getAdaptiveMomentumAnalysisFromPrices(...args).signal;
 
 export default Engine =>
     class Ticks extends Engine {
@@ -307,7 +357,42 @@ export default Engine =>
         }
         getAdaptiveMomentumSignal(warmup = 30, shortWindow = 8, longWindow = 20, confidence = 60) {
             return this.getTicks().then(ticks => {
-                return getAdaptiveMomentumSignalFromPrices(ticks, warmup, shortWindow, longWindow, confidence);
+                this.adaptiveMomentumActive = true;
+                const analysis = getAdaptiveMomentumAnalysisFromPrices(
+                    ticks,
+                    warmup,
+                    shortWindow,
+                    longWindow,
+                    confidence
+                );
+                adaptiveMomentumLog({
+                    event: 'analysis',
+                    market: this.symbol || 'N/A',
+                    ...analysis,
+                });
+
+                if (this.lastAdaptiveMomentumSignal !== analysis.signal) {
+                    adaptiveMomentumLog({
+                        event: 'decision',
+                        market: this.symbol || 'N/A',
+                        signal: analysis.signal,
+                        reason: analysis.reason,
+                        signalConfidence: analysis.signalConfidence,
+                        confidence: analysis.confidence,
+                    });
+                    if (analysis.signal === 'WAIT') {
+                        adaptiveMomentumLog({
+                            event: 'skip',
+                            market: this.symbol || 'N/A',
+                            reason: analysis.reason,
+                            signalConfidence: analysis.signalConfidence,
+                            confidence: analysis.confidence,
+                        });
+                    }
+                    this.lastAdaptiveMomentumSignal = analysis.signal;
+                }
+
+                return analysis.signal;
             });
         }
         getNthLastDigit(n = 1) {

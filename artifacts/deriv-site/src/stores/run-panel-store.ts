@@ -118,6 +118,7 @@ export default class RunPanelStore {
             onLastDigitsAnalysis: action.bound,
             onParityAnalysis: action.bound,
              onPurchaseMapping: action.bound,
+             onAdaptiveMomentumJournalLog: action.bound,
             clearLastDigitsAnalysis: action,
             showErrorMessage: action,
             switchToJournal: action,
@@ -1069,6 +1070,114 @@ export default class RunPanelStore {
         );
     };
 
+    onAdaptiveMomentumJournalLog = (event: {
+        event?: string;
+        market?: string;
+        tickCount?: number;
+        requiredTicks?: number;
+        warmup?: number;
+        shortWindow?: number;
+        longWindow?: number;
+        confidence?: number;
+        signalConfidence?: number;
+        shortRisePercentage?: number;
+        shortFallPercentage?: number;
+        longRisePercentage?: number;
+        longFallPercentage?: number;
+        signal?: string;
+        reason?: string;
+        contractId?: string | number;
+        contractType?: string;
+        entryTick?: number | string;
+        entryTickTime?: number | string;
+        buyPrice?: number;
+        outcome?: string;
+        profit?: number;
+        currency?: string;
+        totalProfit?: number;
+        totalWins?: number;
+        totalLosses?: number;
+    }) => {
+        const journal = this.root_store.journal;
+        const number = (value: unknown, digits = 1) =>
+            Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '0';
+        const reasonLabel = (reason?: string) =>
+            ({
+                insufficient_history: 'not enough tick history',
+                confidence_below_threshold: 'confidence below threshold',
+                long_direction_conflict: 'short and long direction disagree',
+                confidence_confirmed: 'confidence and trend confirmed',
+                take_profit: 'take-profit reached',
+                stop_loss: 'stop-loss reached',
+                session_risk_limit: 'session risk limit reached',
+            })[reason || ''] || reason || 'not specified';
+        const market = event.market || 'N/A';
+
+        switch (event.event) {
+            case 'analysis': {
+                journal.updateAdaptiveAnalysisMessage(
+                    `[Adaptive Momentum] Analysis · ${market} · ` +
+                        `Ticks ${event.tickCount ?? 0}/${event.requiredTicks ?? 0} ` +
+                        `(warm-up ${event.warmup ?? 0}) · ` +
+                        `Short ${number(event.shortRisePercentage)}% rise / ${number(event.shortFallPercentage)}% fall ` +
+                        `(${event.shortWindow ?? 0}) · ` +
+                        `Long ${number(event.longRisePercentage)}% rise / ${number(event.longFallPercentage)}% fall ` +
+                        `(${event.longWindow ?? 0}) · ` +
+                        `Confidence ${number(event.signalConfidence)}% / threshold ${number(event.confidence)}% · ` +
+                        `Signal ${event.signal || 'WAIT'}`
+                );
+                break;
+            }
+            case 'decision':
+                journal.pushMessage(
+                    `[Adaptive Momentum] Signal decision · ${event.market || 'N/A'} · ` +
+                        `${event.signal || 'WAIT'} · ${reasonLabel(event.reason)} · ` +
+                        `confidence ${number(event.signalConfidence)}% / threshold ${number(event.confidence)}%`,
+                    MessageTypes.NOTIFY,
+                    'journal__text'
+                );
+                break;
+            case 'skip':
+                journal.pushMessage(
+                    `[Adaptive Momentum] Entry skipped · ${market} · ${reasonLabel(event.reason)} · ` +
+                        `confidence ${number(event.signalConfidence)}% / threshold ${number(event.confidence)}%`,
+                    MessageTypes.NOTIFY,
+                    'journal__text'
+                );
+                break;
+            case 'entry':
+                journal.pushMessage(
+                    `[Adaptive Momentum] Entry confirmed · ${market} · ${event.contractType || 'contract'} ` +
+                        `at tick ${event.entryTick ?? 'N/A'} · contract ${event.contractId || 'N/A'} · ` +
+                        `stake ${number(event.buyPrice, 2)}`,
+                    MessageTypes.NOTIFY,
+                    'journal__text'
+                );
+                break;
+            case 'settlement':
+                journal.pushMessage(
+                    `[Adaptive Momentum] Settlement · ${market} · ${event.outcome || 'RESULT'} · ` +
+                        `profit ${number(event.profit, 2)} ${event.currency || ''} · ` +
+                        `session ${number(event.totalProfit, 2)} ${event.currency || ''} · ` +
+                        `wins ${event.totalWins ?? 0}, losses ${event.totalLosses ?? 0} · ` +
+                        `contract ${event.contractId || 'N/A'}`,
+                    MessageTypes.NOTIFY,
+                    'journal__text'
+                );
+                break;
+            case 'risk_stop':
+                journal.pushMessage(
+                    `[Adaptive Momentum] Session stopped · ${market} · ${reasonLabel(event.reason)} · ` +
+                        `session profit ${number(event.totalProfit, 2)}`,
+                    MessageTypes.NOTIFY,
+                    'journal__text'
+                );
+                break;
+            default:
+                break;
+        }
+    };
+
     clearLastDigitsAnalysis = () => {
         this.last_digits_analysis = null;
         this.parity_analysis = null;
@@ -1153,6 +1262,7 @@ export default class RunPanelStore {
         observer.register('bot.analysis.condition', this.onLastDigitsAnalysis);
         observer.register('bot.analysis.parity', this.onParityAnalysis);
         observer.register('bot.purchase.mapping', this.onPurchaseMapping);
+        observer.register('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);
         observer.register('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.register('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.register('client.invalid_token', this.handleInvalidToken);
@@ -1175,6 +1285,7 @@ export default class RunPanelStore {
         observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysis);
         observer.unregister('bot.analysis.parity', this.onParityAnalysis);
         observer.unregister('bot.purchase.mapping', this.onPurchaseMapping);
+        observer.unregister('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);
         observer.unregister('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.unregister('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.unregisterAll('client.invalid_token');

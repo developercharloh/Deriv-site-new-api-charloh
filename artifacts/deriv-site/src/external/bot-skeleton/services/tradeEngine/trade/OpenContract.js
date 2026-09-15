@@ -1,6 +1,6 @@
 import { getRoundedNumber } from '@/components/shared';
 import { api_base } from '../../api/api-base';
-import { contract as broadcastContract, contractStatus } from '../utils/broadcast';
+import { adaptiveMomentumLog, contract as broadcastContract, contractStatus } from '../utils/broadcast';
 import { doUntilDone } from '../utils/helpers';
 import { fastRearm, openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
@@ -24,6 +24,25 @@ export default Engine =>
 
                     this.setContractFlags(contract, contractState);
                     contractState.contract = contract;
+
+                    if (
+                        this.adaptiveMomentumActive &&
+                        !contractState.entryLogged &&
+                        contract.entry_tick !== undefined &&
+                        contract.entry_tick !== null &&
+                        contract.entry_tick !== ''
+                    ) {
+                        contractState.entryLogged = true;
+                        adaptiveMomentumLog({
+                            event: 'entry',
+                            market: contract.underlying || this.symbol || 'N/A',
+                            contractId: contract.contract_id,
+                            contractType: contract.contract_type,
+                            entryTick: contract.entry_tick,
+                            entryTickTime: contract.entry_tick_time,
+                            buyPrice: contract.buy_price,
+                        });
+                    }
 
                     if (String(contract.contract_id) === String(this.contractId)) {
                         this.data.contract = contract;

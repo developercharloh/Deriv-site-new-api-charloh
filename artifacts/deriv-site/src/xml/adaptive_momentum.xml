@@ -99,7 +99,7 @@
           </block>
         </value>
         <statement name="DO0">
-          <block type="adaptive_session_stop" id="adaptive_session_stop_block"></block>
+          <block type="adaptive_session_stop" id="adaptive_session_stop_block"><field name="REASON">session_risk_limit</field></block>
         </statement>
         <statement name="ELSE">
           <block type="controls_if" id="adaptive_cooldown_gate">

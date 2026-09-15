@@ -147,6 +147,7 @@ export default Engine =>
                     afterWatchdog: null,
                     afterWatchdog2: null,
                     recoveryTimeout: null,
+                    entryLogged: false,
                 };
                 if (!this.activeContracts) this.activeContracts = new Map();
                 this.activeContracts.set(contractState.contractId, contractState);

@@ -235,6 +235,83 @@ describe('Ticks last-digit analysis events', () => {
         await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 1)).resolves.toBe('WAIT');
     });
 
+    it('publishes grouped Adaptive Momentum journal events with confidence and tick details', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.symbol = 'R_25';
+        engine.$scope = {
+            ticksService: {
+                request: jest
+                    .fn()
+                    .mockResolvedValue([1, 2, 3, 4, 5, 6, 7, 8, 9].map(quote => ({ quote }))),
+            },
+        };
+
+        const emit = jest.spyOn(observer, 'emit');
+
+        await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 50)).resolves.toBe('CALL');
+
+        expect(emit).toHaveBeenCalledWith(
+            'bot.adaptive_momentum.log',
+            expect.objectContaining({
+                event: 'analysis',
+                market: 'R_25',
+                tickCount: 9,
+                requiredTicks: 9,
+                confidence: 50,
+                signal: 'CALL',
+                signalConfidence: 100,
+            })
+        );
+        expect(emit).toHaveBeenCalledWith(
+            'bot.adaptive_momentum.log',
+            expect.objectContaining({
+                event: 'decision',
+                signal: 'CALL',
+                reason: 'confidence_confirmed',
+            })
+        );
+
+        emit.mockClear();
+        await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 50)).resolves.toBe('CALL');
+        expect(emit).toHaveBeenCalledWith(
+            'bot.adaptive_momentum.log',
+            expect.objectContaining({ event: 'analysis', signal: 'CALL' })
+        );
+        expect(emit).not.toHaveBeenCalledWith(
+            'bot.adaptive_momentum.log',
+            expect.objectContaining({ event: 'decision' })
+        );
+
+        emit.mockRestore();
+    });
+
+    it('publishes a grouped skip event when history is not ready', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.symbol = 'R_25';
+        engine.$scope = {
+            ticksService: {
+                request: jest.fn().mockResolvedValue([1, 2, 3].map(quote => ({ quote }))),
+            },
+        };
+
+        const emit = jest.spyOn(observer, 'emit');
+
+        await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 50)).resolves.toBe('WAIT');
+
+        expect(emit).toHaveBeenCalledWith(
+            'bot.adaptive_momentum.log',
+            expect.objectContaining({
+                event: 'skip',
+                reason: 'insufficient_history',
+                signalConfidence: 0,
+            })
+        );
+
+        emit.mockRestore();
+    });
+
     it('replays loss cooldown progression and maps directional signals to paper contracts', () => {
         const result = runAdaptiveMomentumPaperValidation({
             ticks: Array.from({ length: 14 }, (_, index) => index + 1),

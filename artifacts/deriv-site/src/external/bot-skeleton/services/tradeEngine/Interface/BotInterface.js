@@ -1,3 +1,4 @@
+import { adaptiveMomentumLog } from '../utils/broadcast';
 import { observer as globalObserver } from '../../../utils/observer';
 import { createDetails } from '../utils/helpers';
 
@@ -16,6 +17,16 @@ const getBotInterface = tradeEngine => {
         init: (...args) => tradeEngine.init(...args),
         start: (...args) => tradeEngine.start(...args),
         stop: (...args) => tradeEngine.stop(...args),
+        logAdaptiveSessionStop: reason => {
+            if (tradeEngine.adaptiveMomentumActive) {
+                adaptiveMomentumLog({
+                    event: 'risk_stop',
+                    market: tradeEngine.symbol || 'N/A',
+                    reason,
+                    totalProfit: tradeEngine.getTotalProfit(false),
+                });
+            }
+        },
         pause: (...args) => tradeEngine.pause(...args),
         resume: (...args) => tradeEngine.resume(...args),
         purchase: (contract_type, prediction) => tradeEngine.purchase(contract_type, prediction),

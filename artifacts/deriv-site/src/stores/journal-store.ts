@@ -56,6 +56,7 @@ export interface IJournalStore {
     onError: (message: Error | string) => void;
     onNotify: (data: TNotifyData) => void;
     pushMessage: (message: string, message_type: string, className: string, extra?: TExtra) => void;
+    updateAdaptiveAnalysisMessage: (message: string) => void;
     updateStatMessage: (
         message: string,
         setContractBuyInprogress: () => void,
@@ -86,6 +87,7 @@ export default class JournalStore {
             onError: action.bound,
             onNotify: action.bound,
             pushMessage: action.bound,
+            updateAdaptiveAnalysisMessage: action.bound,
             filtered_messages: computed,
             getServerTime: action.bound,
             playAudio: action.bound,
@@ -268,6 +270,30 @@ export default class JournalStore {
 
         this.unfiltered_messages.unshift({ date, time, message, message_type, className, unique_id, extra });
         this.unfiltered_messages = this.unfiltered_messages.slice(); // force array update
+    }
+
+    updateAdaptiveAnalysisMessage(message: string) {
+        const analysisPrefix = '[Adaptive Momentum] Analysis';
+        const existingIndex = this.unfiltered_messages.findIndex(
+            item => item.message_type === MessageTypes.NOTIFY && typeof item.message === 'string' && item.message.startsWith(analysisPrefix)
+        );
+
+        if (existingIndex < 0) {
+            this.pushMessage(message, MessageTypes.NOTIFY, 'journal__text');
+            return;
+        }
+
+        const existing = this.unfiltered_messages[existingIndex];
+        const updated = {
+            ...existing,
+            message,
+            time: formatDate(this.getServerTime(), 'HH:mm:ss [GMT]'),
+        };
+        this.unfiltered_messages = [
+            updated,
+            ...this.unfiltered_messages.slice(0, existingIndex),
+            ...this.unfiltered_messages.slice(existingIndex + 1),
+        ];
     }
 
     // Method to update the existing stat message instead of creating a new one

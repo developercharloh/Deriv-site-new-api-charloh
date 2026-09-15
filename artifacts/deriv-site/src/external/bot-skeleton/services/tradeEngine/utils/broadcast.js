@@ -12,4 +12,6 @@ export const notify = (className, message) =>
 
 export const log = (log_type, extra) => globalObserver.emit('ui.log.success', { log_type, extra });
 
+export const adaptiveMomentumLog = data => globalObserver.emit('bot.adaptive_momentum.log', data);
+
 export const error = message => globalObserver.emit('ui.log.error', message);

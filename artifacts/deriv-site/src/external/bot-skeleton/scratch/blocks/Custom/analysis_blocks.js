@@ -41,7 +41,18 @@ const registerOutputBlock = ({ type, message0, args0 = [], output = 'Number', to
 window.Blockly.Blocks.adaptive_session_stop = {
     init() {
         this.jsonInit({
-            message0: localize('Stop strategy at risk limit'),
+            message0: localize('Stop strategy at %1'),
+            args0: [
+                {
+                    type: 'field_dropdown',
+                    name: 'REASON',
+                    options: [
+                        [localize('take-profit reached'), 'take_profit'],
+                        [localize('stop-loss reached'), 'stop_loss'],
+                        [localize('session risk limit reached'), 'session_risk_limit'],
+                    ],
+                },
+            ],
             previousStatement: null,
             nextStatement: null,
             ...analysisColours(),
@@ -60,7 +71,8 @@ window.Blockly.Blocks.adaptive_session_stop = {
     },
 };
 
-window.Blockly.JavaScript.javascriptGenerator.forBlock.adaptive_session_stop = () => 'Bot.stop();\n';
+window.Blockly.JavaScript.javascriptGenerator.forBlock.adaptive_session_stop = block =>
+    `Bot.logAdaptiveSessionStop('${block.getFieldValue('REASON') || 'session_risk_limit'}');\nBot.stop();\n`;
 
 const digitOptions = Array.from({ length: 10 }, (_, digit) => [String(digit), String(digit)]);
 const countInput = (name = 'COUNT', defaultValue = '1000') => ({

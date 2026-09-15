@@ -3,7 +3,7 @@ import { getLocalizedErrorMessage } from '@/constants/backend-error-messages';
 import { LogTypes } from '../../../constants/messages';
 import { createError } from '../../../utils/error';
 import { observer as globalObserver } from '../../../utils/observer';
-import { info, log } from '../utils/broadcast';
+import { adaptiveMomentumLog, info, log } from '../utils/broadcast';
 
 const skeleton = {
     totalProfit: 0,
@@ -73,6 +73,23 @@ export default Engine =>
                 });
 
                 log(win ? LogTypes.PROFIT : LogTypes.LOST, { currency, profit });
+
+                if (this.adaptiveMomentumActive) {
+                    adaptiveMomentumLog({
+                        event: 'settlement',
+                        market: contract.underlying || this.symbol || 'N/A',
+                        contractId: contract.contract_id,
+                        contractType: contract.contract_type,
+                        outcome: win ? 'WIN' : 'LOSS',
+                        profit,
+                        currency,
+                        totalProfit: accountStat.totalProfit,
+                        totalWins: accountStat.totalWins,
+                        totalLosses: accountStat.totalLosses,
+                        entryTick: contract.entry_tick,
+                        exitTick: contract.exit_tick,
+                    });
+                }
             };
 
             if (deferNotifications) {
