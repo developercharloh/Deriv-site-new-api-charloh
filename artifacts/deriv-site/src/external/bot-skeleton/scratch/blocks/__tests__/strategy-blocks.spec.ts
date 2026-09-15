@@ -23,7 +23,7 @@ const blockDefinitions = {
     payout_gate: 'Bot.isPayoutAcceptable',
     session_risk_gate: 'Bot.getTotalProfit',
     model_confidence_gate: 'Bot.getModelConfidence',
-    models_agree: '===',
+    models_agree: '!==',
     model_signal: 'Bot.getModelSignal',
     model_confidence: 'Bot.getModelConfidence',
 } as const;
