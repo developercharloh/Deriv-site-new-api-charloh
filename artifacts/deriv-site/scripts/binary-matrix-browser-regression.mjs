@@ -32,6 +32,128 @@ const requiredFreeBotBlockTypes = {
 const emptySavedWorkspaceValue =
     '\u3686\uf044\u0960\u2660\u5c60\u5302\ud801\uc02e\u04f0\u2d01\u9c08\u601b\u8251\u603b\u80f6\u0138\u0d63\u8a78\u0c60\u9800\ud180\u1d9e\u4b3f\u0042\u00d9\ue76d\u5598\u001e\u49f9\uc306\u002f\u805d\u2000';
 
+const activeSymbolsFixture = [
+    {
+        symbol: '1HZ100V',
+        display_name: 'Volatility 100 (1s) Index',
+        market: 'synthetic_index',
+        market_display_name: 'Synthetic Indices',
+        submarket: 'random_index',
+        submarket_display_name: 'Continuous Indices',
+        exchange_is_open: 1,
+        is_open: 1,
+        pip_size: 2,
+    },
+    {
+        symbol: 'R_25',
+        display_name: 'Volatility 25 Index',
+        market: 'synthetic_index',
+        market_display_name: 'Synthetic Indices',
+        submarket: 'random_index',
+        submarket_display_name: 'Continuous Indices',
+        exchange_is_open: 1,
+        is_open: 1,
+        pip_size: 0,
+    },
+    {
+        symbol: 'R_100',
+        display_name: 'Volatility 100 Index',
+        market: 'synthetic_index',
+        market_display_name: 'Synthetic Indices',
+        submarket: 'random_index',
+        submarket_display_name: 'Continuous Indices',
+        exchange_is_open: 1,
+        is_open: 1,
+        pip_size: 0,
+    },
+    {
+        symbol: '1HZ100V',
+        display_name: 'Volatility 100 (1s) Index',
+        market: 'synthetic_index',
+        market_display_name: 'Synthetic Indices',
+        submarket: 'random_index',
+        submarket_display_name: 'Continuous Indices',
+        exchange_is_open: 1,
+        is_open: 1,
+        pip_size: 2,
+    },
+];
+const contractsForFixture = {
+    available: [
+        {
+            contract_category: 'callput',
+            contract_type: ['CALL', 'PUT'],
+            exchange_name: 'synthetic_index',
+            expiry_type: 'tick',
+            min_duration: 1,
+            max_duration: 10,
+        },
+        {
+            contract_category: 'digits',
+            contract_type: ['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER'],
+            exchange_name: 'synthetic_index',
+            expiry_type: 'tick',
+            min_duration: 1,
+            max_duration: 1,
+        },
+        {
+            contract_category: 'callput',
+            contract_type: ['CALL', 'PUT'],
+            exchange_name: 'synthetic_index',
+            expiry_type: 'tick',
+            min_duration: 1,
+            max_duration: 10,
+        },
+    ],
+};
+
+const assertFixtureFields = (fixtureName, entries, requiredFields) => {
+    if (!Array.isArray(entries) || entries.length === 0) {
+        throw new Error(`${fixtureName} fixture must contain at least one entry`);
+    }
+
+    entries.forEach((entry, index) => {
+        requiredFields.forEach(field => {
+            const value = entry?.[field];
+            const isMissing = value === undefined || value === null || value === '';
+            if (isMissing) {
+                const identity = entry?.symbol || entry?.contract_category || `entry ${index}`;
+                throw new Error(`${fixtureName} fixture ${identity} is missing required field "${field}"`);
+            }
+        });
+    });
+};
+
+const validateBrowserApiFixtures = () => {
+    assertFixtureFields('active_symbols', activeSymbolsFixture, [
+        'symbol',
+        'display_name',
+        'market',
+        'market_display_name',
+        'submarket',
+        'submarket_display_name',
+        'exchange_is_open',
+        'is_open',
+        'pip_size',
+    ]);
+    assertFixtureFields('contracts_for.available', contractsForFixture.available, [
+        'contract_category',
+        'contract_type',
+        'exchange_name',
+        'expiry_type',
+        'min_duration',
+        'max_duration',
+    ]);
+
+    contractsForFixture.available.forEach((contract, index) => {
+        if (!Array.isArray(contract.contract_type) || contract.contract_type.length === 0) {
+            throw new Error(`contracts_for.available fixture entry ${index} must have contract types`);
+        }
+    });
+};
+
+validateBrowserApiFixtures();
+
 const browserApiMock = String.raw`
 (() => {
     const accountId = 'VRTC-BINARY-MATRIX';
@@ -179,46 +301,7 @@ const browserApiMock = String.raw`
             } else if (request.balance) {
                 response.balance = { balance: 1000, currency: 'USD', loginid: accountId };
             } else if (request.active_symbols) {
-                response.active_symbols = [
-                    {
-                        symbol: '1HZ100V',
-                        display_name: 'Volatility 100 (1s) Index',
-                        market: 'synthetic_index',
-                        market_display_name: 'Synthetic Indices',
-                        submarket: 'random_index',
-                        submarket_display_name: 'Continuous Indices',
-                        exchange_is_open: 1,
-                        is_open: 1,
-                        pip_size: 2,
-                    },
-                    {
-                        symbol: 'R_25',
-                        display_name: 'Volatility 25 Index',
-                        market: 'synthetic_index',
-                        submarket: 'random_index',
-                        exchange_is_open: 1,
-                        is_open: 1,
-                        pip_size: 0,
-                    },
-                    {
-                        symbol: 'R_100',
-                        display_name: 'Volatility 100 Index',
-                        market: 'synthetic_index',
-                        submarket: 'random_index',
-                        exchange_is_open: 1,
-                        is_open: 1,
-                        pip_size: 0,
-                    },
-                    {
-                        symbol: '1HZ100V',
-                        display_name: 'Volatility 100 (1s) Index',
-                        market: 'synthetic_index',
-                        submarket: 'random_index',
-                        exchange_is_open: 1,
-                        is_open: 1,
-                        pip_size: 2,
-                    },
-                ];
+                response.active_symbols = ${JSON.stringify(activeSymbolsFixture)};
             } else if (request.trading_times) {
                 response.trading_times = {
                     markets: [
@@ -251,34 +334,7 @@ const browserApiMock = String.raw`
                     ],
                 };
             } else if (request.contracts_for) {
-                response.contracts_for = {
-                    available: [
-                        {
-                            contract_category: 'callput',
-                            contract_type: ['CALL', 'PUT'],
-                            exchange_name: 'synthetic_index',
-                            expiry_type: 'tick',
-                            min_duration: 1,
-                            max_duration: 10,
-                        },
-                        {
-                            contract_category: 'digits',
-                            contract_type: ['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER'],
-                            exchange_name: 'synthetic_index',
-                            expiry_type: 'tick',
-                            min_duration: 1,
-                            max_duration: 1,
-                        },
-                        {
-                            contract_category: 'callput',
-                            contract_type: ['CALL', 'PUT'],
-                            exchange_name: 'synthetic_index',
-                            expiry_type: 'tick',
-                            min_duration: 1,
-                            max_duration: 10,
-                        },
-                    ],
-                };
+                response.contracts_for = ${JSON.stringify(contractsForFixture)};
             } else if (request.time) {
                 response.time = Math.floor(Date.now() / 1000);
                 if (testState.pendingConditionWindowIndex !== null) {
