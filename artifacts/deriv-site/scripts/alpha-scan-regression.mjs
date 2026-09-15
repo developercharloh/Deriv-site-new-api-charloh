@@ -252,6 +252,8 @@ const getSnapshot = evaluate => evaluate(`(() => {
         status: root?.dataset.status || '',
         scanSource: root?.dataset.scanSource || '',
         coverage: (root?.dataset.modelRowCount || 0) + ' / ' + (root?.dataset.discoveredCount || 0),
+        scanCoverageSymbols: [...document.querySelectorAll('[data-testid="scan-coverage"] [data-symbol]')]
+            .map(element => element.getAttribute('data-symbol') || ''),
         sample: root?.dataset.sampleSize || '',
         error: root?.dataset.error || '',
         failedSymbols,
@@ -306,6 +308,11 @@ const assertScan = (snapshot, sampleSize, expectedSource = 'fixture') => {
     const minimumCovered = discovered ? Math.max(1, Math.ceil(discovered * 0.8)) : 0;
     if (!covered || !discovered || covered < minimumCovered) {
         throw new Error(`Expected usable coverage for ${sampleSize}, received ${snapshot.coverage}.`);
+    }
+    if (snapshot.scanCoverageSymbols.length !== discovered) {
+        throw new Error(
+            `The visible scan coverage list did not match the scanned universe: ${snapshot.scanCoverageSymbols.length} / ${discovered}.`,
+        );
     }
     if (!snapshot.modelPick) {
         throw new Error('The model scan completed without selecting a best volatility symbol.');

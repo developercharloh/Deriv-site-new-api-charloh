@@ -1072,6 +1072,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const modelPick = autoVolatilityMode
         ? autoMomentumRow || selectedRow
         : bestModelRow || selectedRow;
+    const autoCandidateSymbol = autoVolatilityMode ? autoMomentumDecision?.symbol : undefined;
 
     const calculatedPrimaryDecision = useMemo(() => {
         const source = multiMarketScanning ? bestModelRow : selectedRow;
@@ -1660,9 +1661,34 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
             </section>
 
+            <section className='alpha-tool__scan-coverage panel' data-testid='scan-coverage'>
+                <div className='alpha-tool__section-heading'>
+                    <div><span className='alpha-tool__section-icon'>◎</span><b>Automatic Scan Coverage</b></div>
+                    <span className='alpha-tool__view-label'>{rows.length} / {discoveredCount || rows.length} markets</span>
+                </div>
+                <p className='alpha-tool__scan-coverage-note'>
+                    Every supported continuous volatility is evaluated before one candidate is confirmed. The Trade Journal below records executed contracts only.
+                </p>
+                <div className='alpha-tool__scan-coverage-list'>
+                    {rows.map(row => (
+                        <div
+                            className={`alpha-tool__scan-market${row.symbol === autoCandidateSymbol ? ' alpha-tool__scan-market--selected' : ''}`}
+                            key={row.symbol}
+                            data-symbol={row.symbol}
+                            data-selected={row.symbol === autoCandidateSymbol}
+                        >
+                            <span className='alpha-tool__scan-market-symbol'>{row.symbol}</span>
+                            <span className='alpha-tool__scan-market-status'>
+                                {row.symbol === autoCandidateSymbol ? 'Selected' : row.validationGate === 'validated' ? 'Validated' : 'Gated'}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
             <section className='alpha-tool__journal panel' data-testid='tool-journal'>
                 <div className='alpha-tool__section-heading'>
-                    <div><span className='alpha-tool__section-icon'>▤</span><b>Trade Journal</b></div>
+                    <div><span className='alpha-tool__section-icon'>▤</span><b>Trade Journal · Executed Contracts</b></div>
                     <span className='alpha-tool__view-label'>{liveTrade ? '1 running' : 'No trades running'}⌄</span>
                 </div>
                 <div className='alpha-tool__journal-table-wrap'>

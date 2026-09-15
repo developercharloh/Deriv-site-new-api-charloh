@@ -1573,6 +1573,26 @@
         &--success { color: #caffea; background: rgba(11, 123, 76, 0.68); }
     }
 
+    &__scan-coverage { border-color: #24d6bc; overflow: hidden; }
+    &__scan-coverage-note { margin: -0.15rem 0 0.7rem; color: #aec3e7; font-size: 0.52rem; line-height: 1.35; }
+    &__scan-coverage-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.38rem; }
+    &__scan-market {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.35rem;
+        min-width: 0;
+        padding: 0.42rem 0.5rem;
+        border: 1px solid rgba(49, 124, 224, 0.35);
+        border-radius: 0.42rem;
+        color: #c9dcff;
+        background: rgba(6, 27, 75, 0.52);
+        font-size: 0.5rem;
+    }
+    &__scan-market--selected { border-color: #45ffc2; background: rgba(18, 117, 104, 0.34); }
+    &__scan-market-symbol { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    &__scan-market-status { color: #8eb4e7; white-space: nowrap; }
+    &__scan-market--selected &__scan-market-status { color: #7fffd1; font-weight: 750; }
     &__journal { border-color: #1f86ff; overflow: hidden; }
     &__section-heading { justify-content: space-between; padding-bottom: 0.55rem; }
     &__section-heading > div { display: flex; align-items: center; gap: 0.5rem; }
@@ -1694,6 +1714,7 @@
         &__selector-rule-line { flex-wrap: nowrap; gap: 0.12rem; font-size: 0.42rem; white-space: nowrap; }
         &__selector-rule .alpha-tool__rule-select { min-height: 1.25rem; padding: 0.12rem 0.16rem; font-size: 0.4rem; &--digits { width: 1.8rem; } &--market { min-width: 5.7rem; flex: 1 1 5.7rem; } }
         &__panel, &__journal { margin-top: 0.3rem; border-radius: 0.5rem; }
+        &__scan-coverage-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         &__panel-heading, &__section-heading { min-height: 1.8rem; padding: 0.2rem 0.4rem 0.14rem; font-size: 0.62rem; }
         &__panel-icon, &__section-icon { width: 1.25rem; height: 1.25rem; font-size: 0.76rem; }
         &__panel--settings { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 0.18rem; }
