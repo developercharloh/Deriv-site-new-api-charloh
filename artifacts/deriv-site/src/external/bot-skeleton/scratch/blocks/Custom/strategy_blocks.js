@@ -138,7 +138,7 @@ registerOutput({
 
 registerOutput({
     type: 'atr_value',
-    message0: 'ATR from %1 periods',
+    message0: 'ATR from %1 periods using %2',
     args0: [arrayInput(), numberInput('PERIOD')],
     tooltip: 'Returns the average true range from candle data.',
     meta: 'ATR value',
@@ -195,7 +195,7 @@ registerOutput({
 
 registerOutput({
     type: 'rsi_value',
-    message0: 'RSI from %1 periods',
+    message0: 'RSI from %1 periods using %2',
     args0: [arrayInput(), numberInput('PERIOD')],
     tooltip: 'Returns the latest RSI value from a price list.',
     meta: 'RSI value',

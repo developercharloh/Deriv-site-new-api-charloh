@@ -56,12 +56,9 @@ describe('custom strategy Blockly blocks', () => {
         await import('../Custom/strategy_blocks');
     });
 
-    afterEach(() => {
-        javascriptGenerator.init(new Blockly.Workspace());
-    });
-
     it('registers and generates code for every new strategy block', () => {
         const workspace = new Blockly.Workspace();
+        javascriptGenerator.init(workspace);
 
         Object.entries(blockDefinitions).forEach(([type, expectedCode]) => {
             expect(Blockly.Blocks[type]).toBeDefined();
@@ -80,6 +77,7 @@ describe('custom strategy Blockly blocks', () => {
 
     it('initializes each block with all declared inputs without Blockly errors', () => {
         const workspace = new Blockly.Workspace();
+        javascriptGenerator.init(workspace);
 
         Object.keys(blockDefinitions).forEach(type => {
             const block = workspace.newBlock(type);
