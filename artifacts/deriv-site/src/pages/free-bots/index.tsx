@@ -637,7 +637,9 @@ type ImportedTradeFields = {
     symbol?: string;
     tradeTypeCategory?: string;
     tradeType?: string;
+    contractType?: string;
     durationType?: string;
+    purchaseTypes?: string[];
 };
 
 async function postLoadReapplyFields(
@@ -652,8 +654,14 @@ async function postLoadReapplyFields(
         ws.getAllBlocks(true).find((b: any) => b.type === 'trade_definition_market');
     const getTradeTypeBlock = (): any =>
         ws.getAllBlocks(true).find((b: any) => b.type === 'trade_definition_tradetype');
+    const getContractTypeBlock = (): any =>
+        ws.getAllBlocks(true).find((b: any) => b.type === 'trade_definition_contracttype');
+    const getPurchaseBlocks = (): any[] =>
+        ws.getAllBlocks(true).filter((b: any) => b.getField?.('PURCHASE_LIST'));
 
     const tradeTypeBlock = getTradeTypeBlock();
+    const contractTypeBlock = getContractTypeBlock();
+    const durationBlock = getDurBlock();
 
     const optionsContain = (block: any, fieldName: string, value?: string): boolean => {
         if (!value) return false;
@@ -730,23 +738,30 @@ async function postLoadReapplyFields(
         }
     }
 
+    // Contract type options depend on the restored trade type. Restore the
+    // saved value before rebuilding purchase options so non-callput families
+    // (for example digits and accumulators) do not fall back to callput.
+    if (contractTypeBlock && (await waitForOption(contractTypeBlock, 'TYPE_LIST', desired.contractType))) {
+        contractTypeBlock.setFieldValue(desired.contractType, 'TYPE_LIST');
+        triggerCascade(contractTypeBlock, 'TYPE_LIST', contractTypeBlock.id);
+    }
+
     // Helper: apply all the critical field values
     const applyFields = () => {
-        // Duration = Ticks ('t')
-        if (desired.durationType) {
+        if (desired.durationType && optionsContain(getDurBlock(), 'DURATIONTYPE_LIST', desired.durationType)) {
             getDurBlock()?.setFieldValue(desired.durationType, 'DURATIONTYPE_LIST');
         }
 
-        // Purchase = Rise (CALL) and Fall (PUT)
-        // Re-trigger populatePurchaseList first so the dropdown options are built
-        // from the current trade type (callput → Rise/Fall options), then set values.
-        (ws.getAllBlocks(true) as any[])
-            .filter((b: any) => b.type === 'purchase')
-            .forEach((pb: any) => pb.populatePurchaseList?.({ group: 'reapply' }));
-
-        // Small tick to let populatePurchaseList resolve synchronously
-        ws.getBlockById('bp_call')?.setFieldValue('CALL', 'PURCHASE_LIST');
-        ws.getBlockById('bp_put')?.setFieldValue('PUT',  'PURCHASE_LIST');
+        // Re-trigger populatePurchaseList first so each dropdown is built from
+        // the restored contract family, then restore its corresponding XML
+        // value. Do not assume the blocks are CALL/PUT purchases.
+        getPurchaseBlocks().forEach((purchaseBlock, index) => {
+            const purchaseType = desired.purchaseTypes?.[index];
+            purchaseBlock.populatePurchaseList?.({ group: 'reapply' });
+            if (optionsContain(purchaseBlock, 'PURCHASE_LIST', purchaseType)) {
+                purchaseBlock.setFieldValue(purchaseType, 'PURCHASE_LIST');
+            }
+        });
     };
 
     // Wait for Deriv API to populate DURATIONTYPE_LIST (up to 15 s).
@@ -754,8 +769,8 @@ async function postLoadReapplyFields(
     // been triggered yet (e.g. the initial load event bailed out because
     // ApiHelpers.instance was null at that moment).
     const POLL_MS = 300;
-    let ready = false;
-    for (let i = 0; i < 50; i++) {
+    let ready = !desired.durationType || !durationBlock;
+    for (let i = 0; i < 50 && !ready; i++) {
         if (optionsContain(getDurBlock(), 'DURATIONTYPE_LIST', desired.durationType)) {
             ready = true;
             break;
@@ -853,7 +868,11 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                     symbol: importedField('SYMBOL_LIST'),
                     tradeTypeCategory: importedField('TRADETYPECAT_LIST'),
                     tradeType: importedField('TRADETYPE_LIST'),
+                    contractType: importedField('TYPE_LIST'),
                     durationType: importedField('DURATIONTYPE_LIST'),
+                    purchaseTypes: Array.from(dom.querySelectorAll('field[name="PURCHASE_LIST"]') as NodeListOf<Element>)
+                        .map(field => field.textContent?.trim())
+                        .filter((value): value is string => Boolean(value)),
                 };
                 Blockly.Xml.domToVariables(dom, Blockly.derivWorkspace);
                  // Some browser XML DOM implementations expose the Blockly

@@ -6,6 +6,7 @@ import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
 
 jest.mock('../../utils', () => ({
     modifyContextMenu: jest.fn(),
+    runIrreversibleEvents: (callback: () => void) => callback(),
 }));
 
 jest.mock('@deriv-com/translations', () => ({
@@ -94,6 +95,7 @@ describe('Rise/Fall Master Bot XML', () => {
         } as typeof Blockly.JavaScript;
         window.Blockly = Blockly;
         (Blockly.Block.prototype as any).initSvg = jest.fn();
+        (Blockly.Block.prototype as any).renderEfficiently = jest.fn();
         (Blockly.Block.prototype as any).queueRender = jest.fn();
 
         await import('blockly/blocks');
@@ -249,6 +251,80 @@ describe('Rise/Fall Master Bot XML', () => {
         const restoredPurchases = workspace
             .getAllBlocks(false)
             .filter(block => block.type === 'purchase')
+            .map(block => block.getFieldValue('PURCHASE_LIST'));
+        expect(restoredPurchases).toEqual(savedSelections.PURCHASE_LIST);
+
+        workspace.dispose();
+    });
+
+    it('preserves digit contract settings instead of defaulting to callput values', () => {
+        const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Over_Under_Manual_Trading_Bot.xml');
+        const xmlText = fs.readFileSync(xmlPath, 'utf8');
+        const sourceDom = Blockly.utils.xml.textToDom(xmlText);
+        const savedSelections = Object.fromEntries(
+            dependentFieldNames.map(name => [name, readFieldValues(sourceDom, name)])
+        );
+        const importDom = removeDependentFields(sourceDom);
+
+        const workspace = new Blockly.Workspace();
+        expect(() => Blockly.Xml.domToWorkspace(importDom, workspace)).not.toThrow();
+
+        const marketBlock = workspace.getBlockById('ou_mkt');
+        const tradeTypeBlock = workspace.getBlockById('ou_tt');
+        const contractTypeBlock = workspace.getBlockById('ou_ct');
+        const durationBlock = workspace.getBlockById('ou_to');
+
+        expect(marketBlock).toBeDefined();
+        expect(tradeTypeBlock).toBeDefined();
+        expect(contractTypeBlock).toBeDefined();
+        expect(durationBlock).toBeDefined();
+
+        // Put a different digit purchase first to ensure a default selection
+        // cannot accidentally pass this regression.
+        setDropdownOptions(marketBlock, 'MARKET_LIST', [['Synthetic Indices', 'synthetic_index']], 'synthetic_index');
+        setDropdownOptions(
+            marketBlock,
+            'SUBMARKET_LIST',
+            [['Random Indices', 'random_index']],
+            'random_index'
+        );
+        setDropdownOptions(
+            marketBlock,
+            'SYMBOL_LIST',
+            [['Volatility 75 Index', '1HZ75V']],
+            '1HZ75V'
+        );
+        setDropdownOptions(tradeTypeBlock, 'TRADETYPECAT_LIST', [['Digits', 'digits']], 'digits');
+        setDropdownOptions(tradeTypeBlock, 'TRADETYPE_LIST', [['Over/Under', 'overunder']], 'overunder');
+        setDropdownOptions(contractTypeBlock, 'TYPE_LIST', [['Both', 'both']], 'both');
+        setDropdownOptions(durationBlock, 'DURATIONTYPE_LIST', [['Ticks', 't']], 't');
+
+        workspace
+            .getAllBlocks(false)
+            .filter(block => block.getField?.('PURCHASE_LIST'))
+            .forEach((block, index) => {
+                setDropdownOptions(
+                    block,
+                    'PURCHASE_LIST',
+                    [
+                        ['Under', 'DIGITUNDER'],
+                        ['Over', 'DIGITOVER'],
+                    ],
+                    savedSelections.PURCHASE_LIST[index]
+                );
+            });
+
+        expect(marketBlock?.getFieldValue('MARKET_LIST')).toBe(savedSelections.MARKET_LIST[0]);
+        expect(marketBlock?.getFieldValue('SUBMARKET_LIST')).toBe(savedSelections.SUBMARKET_LIST[0]);
+        expect(marketBlock?.getFieldValue('SYMBOL_LIST')).toBe(savedSelections.SYMBOL_LIST[0]);
+        expect(tradeTypeBlock?.getFieldValue('TRADETYPECAT_LIST')).toBe(savedSelections.TRADETYPECAT_LIST[0]);
+        expect(tradeTypeBlock?.getFieldValue('TRADETYPE_LIST')).toBe(savedSelections.TRADETYPE_LIST[0]);
+        expect(contractTypeBlock?.getFieldValue('TYPE_LIST')).toBe(savedSelections.TYPE_LIST[0]);
+        expect(durationBlock?.getFieldValue('DURATIONTYPE_LIST')).toBe(savedSelections.DURATIONTYPE_LIST[0]);
+
+        const restoredPurchases = workspace
+            .getAllBlocks(false)
+            .filter(block => block.getField?.('PURCHASE_LIST'))
             .map(block => block.getFieldValue('PURCHASE_LIST'));
         expect(restoredPurchases).toEqual(savedSelections.PURCHASE_LIST);
 
