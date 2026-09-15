@@ -75,7 +75,7 @@ describe('custom strategy Blockly blocks', () => {
         workspace.dispose();
     });
 
-    it('treats a neutral WAIT secondary signal as allowed but rejects an opposing direction', () => {
+    it('allows every directional primary signal regardless of secondary direction', () => {
         const workspace = new Blockly.Workspace();
         javascriptGenerator.init(workspace);
 
@@ -93,8 +93,10 @@ describe('custom strategy Blockly blocks', () => {
 
         expect(Function(`return ${makeAgreementBlock('CALL', 'WAIT')}`)()).toBe(true);
         expect(Function(`return ${makeAgreementBlock('PUT', 'WAIT')}`)()).toBe(true);
-        expect(Function(`return ${makeAgreementBlock('CALL', 'PUT')}`)()).toBe(false);
-        expect(Function(`return ${makeAgreementBlock('PUT', 'CALL')}`)()).toBe(false);
+        expect(Function(`return ${makeAgreementBlock('CALL', 'PUT')}`)()).toBe(true);
+        expect(Function(`return ${makeAgreementBlock('PUT', 'CALL')}`)()).toBe(true);
+        expect(Function(`return ${makeAgreementBlock('WAIT', 'CALL')}`)()).toBe(false);
+        expect(Function(`return ${makeAgreementBlock('WAIT', 'PUT')}`)()).toBe(false);
 
         workspace.dispose();
     });

@@ -402,17 +402,13 @@ registerBoolean({
 
 registerBoolean({
     type: 'models_agree',
-    message0: 'Models agree: %1 and %2',
+    message0: 'Primary model is directional: %1 (secondary %2)',
     args0: [stringInput('PRIMARY'), stringInput('SECONDARY')],
     category: window.Blockly.Categories.Before_Purchase,
-    tooltip: 'Returns true when the primary signal is directional and the secondary signal agrees or is neutral WAIT.',
-    meta: 'Model direction gate',
+    tooltip: 'Allows a directional primary model signal. The secondary signal is informational and cannot veto the primary direction.',
+    meta: 'Primary model direction gate',
     generatorCode: block => [
-        `(${valueCode(block, 'PRIMARY', "''")} !== 'WAIT' && (${valueCode(block, 'SECONDARY', "''")} === 'WAIT' || ${valueCode(
-            block,
-            'PRIMARY',
-            "''"
-        )} === ${valueCode(block, 'SECONDARY', "''")}))`,
+        `(${valueCode(block, 'PRIMARY', "''")} !== 'WAIT')`,
         generator().ORDER_RELATIONAL,
     ],
 });
