@@ -75,6 +75,30 @@ describe('custom strategy Blockly blocks', () => {
         workspace.dispose();
     });
 
+    it('treats a neutral WAIT secondary signal as allowed but rejects an opposing direction', () => {
+        const workspace = new Blockly.Workspace();
+        javascriptGenerator.init(workspace);
+
+        const makeAgreementBlock = (primary: string, secondary: string) => {
+            const agreement = workspace.newBlock('models_agree');
+            const primaryBlock = workspace.newBlock('text');
+            const secondaryBlock = workspace.newBlock('text');
+            primaryBlock.setFieldValue(primary, 'TEXT');
+            secondaryBlock.setFieldValue(secondary, 'TEXT');
+            agreement.getInput('PRIMARY')?.connection?.connect(primaryBlock.outputConnection!);
+            agreement.getInput('SECONDARY')?.connection?.connect(secondaryBlock.outputConnection!);
+            const generated = javascriptGenerator.blockToCode(agreement);
+            return Array.isArray(generated) ? generated[0] : generated;
+        };
+
+        expect(Function(`return ${makeAgreementBlock('CALL', 'WAIT')}`)()).toBe(true);
+        expect(Function(`return ${makeAgreementBlock('PUT', 'WAIT')}`)()).toBe(true);
+        expect(Function(`return ${makeAgreementBlock('CALL', 'PUT')}`)()).toBe(false);
+        expect(Function(`return ${makeAgreementBlock('PUT', 'CALL')}`)()).toBe(false);
+
+        workspace.dispose();
+    });
+
     it('initializes each block with all declared inputs without Blockly errors', () => {
         const workspace = new Blockly.Workspace();
         javascriptGenerator.init(workspace);

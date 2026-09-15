@@ -405,14 +405,14 @@ registerBoolean({
     message0: 'Models agree: %1 and %2',
     args0: [stringInput('PRIMARY'), stringInput('SECONDARY')],
     category: window.Blockly.Categories.Before_Purchase,
-    tooltip: 'Returns true only when two model or indicator signals are the same and are not WAIT.',
-    meta: 'Model agreement',
+    tooltip: 'Returns true when the primary signal is directional and the secondary signal agrees or is neutral WAIT.',
+    meta: 'Model direction gate',
     generatorCode: block => [
-        `(${valueCode(block, 'PRIMARY', "''")} !== 'WAIT' && ${valueCode(block, 'PRIMARY', "''")} === ${valueCode(
+        `(${valueCode(block, 'PRIMARY', "''")} !== 'WAIT' && (${valueCode(block, 'SECONDARY', "''")} === 'WAIT' || ${valueCode(
             block,
-            'SECONDARY',
+            'PRIMARY',
             "''"
-        )})`,
+        )} === ${valueCode(block, 'SECONDARY', "''")}))`,
         generator().ORDER_RELATIONAL,
     ],
 });

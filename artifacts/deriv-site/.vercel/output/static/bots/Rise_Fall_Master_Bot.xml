@@ -577,7 +577,7 @@
                             <field name="VARIABLE" id="v_msg">Journal</field>
                             <statement name="STACK">
                               <block type="text_statement" id="ts_bp1">
-                                <value name="TEXT"><shadow type="text" id="ts_bp1s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp1v"><field name="TEXT">CONFLUENCE APPROVED | Model: </field></block></value>
+                            <value name="TEXT"><shadow type="text" id="ts_bp1s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp1v"><field name="TEXT">DIRECTION APPROVED | Model: </field></block></value>
                                 <next><block type="text_statement" id="ts_bp2">
                                   <value name="TEXT"><shadow type="text" id="ts_bp2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp2v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
                                   <next><block type="text_statement" id="ts_bp3">
