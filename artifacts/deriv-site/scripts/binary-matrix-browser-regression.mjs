@@ -196,6 +196,15 @@ const browserApiMock = String.raw`
                         is_open: 1,
                         pip_size: 0,
                     },
+                    {
+                        symbol: '1HZ100V',
+                        display_name: 'Volatility 100 (1s) Index',
+                        market: 'synthetic_index',
+                        submarket: 'random_index',
+                        exchange_is_open: 1,
+                        is_open: 1,
+                        pip_size: 2,
+                    },
                 ];
             } else if (request.trading_times) {
                 response.trading_times = {
@@ -214,6 +223,10 @@ const browserApiMock = String.raw`
                                             underlying_symbol: 'R_100',
                                             times: { open: ['00:00:00'], close: ['23:59:59'] },
                                         },
+                                        {
+                                            underlying_symbol: '1HZ100V',
+                                            times: { open: ['00:00:00'], close: ['23:59:59'] },
+                                        },
                                     ],
                                 },
                             ],
@@ -230,6 +243,14 @@ const browserApiMock = String.raw`
                             expiry_type: 'tick',
                             min_duration: 1,
                             max_duration: 1,
+                        },
+                        {
+                            contract_category: 'callput',
+                            contract_type: ['CALL', 'PUT'],
+                            exchange_name: 'synthetic_index',
+                            expiry_type: 'tick',
+                            min_duration: 1,
+                            max_duration: 10,
                         },
                     ],
                 };
@@ -1009,6 +1030,57 @@ const workspaceSnapshot = async cdp => {
     );
 };
 
+const assertRiseFallTradeParameters = async cdp => {
+    await waitFor(
+        cdp,
+        `(() => {
+            const workspace = window.Blockly?.derivWorkspace;
+            const market = workspace?.getAllBlocks(true)
+                .find(block => block.type === 'trade_definition_market');
+            const tradeType = workspace?.getAllBlocks(true)
+                .find(block => block.type === 'trade_definition_tradetype');
+            const options = workspace?.getAllBlocks(true)
+                .find(block => block.type === 'trade_definition_tradeoptions');
+            return market?.getFieldValue('MARKET_LIST') === 'synthetic_index' &&
+                market?.getFieldValue('SUBMARKET_LIST') === 'random_index' &&
+                market?.getFieldValue('SYMBOL_LIST') === '1HZ100V' &&
+                tradeType?.getFieldValue('TRADETYPECAT_LIST') === 'callput' &&
+                tradeType?.getFieldValue('TRADETYPE_LIST') === 'callput' &&
+                options?.getFieldValue('DURATIONTYPE_LIST') === 't';
+        })()`,
+        'Rise/Fall populated Trade Parameters',
+        30_000
+    );
+
+    const state = await evaluate(
+        cdp,
+        `(() => {
+            const workspace = window.Blockly.derivWorkspace;
+            const market = workspace.getAllBlocks(true)
+                .find(block => block.type === 'trade_definition_market');
+            const tradeType = workspace.getAllBlocks(true)
+                .find(block => block.type === 'trade_definition_tradetype');
+            const options = workspace.getAllBlocks(true)
+                .find(block => block.type === 'trade_definition_tradeoptions');
+            const runButton = document.querySelector('#db-animation__run-button');
+            return {
+                market: market?.getFieldValue('MARKET_LIST'),
+                submarket: market?.getFieldValue('SUBMARKET_LIST'),
+                symbol: market?.getFieldValue('SYMBOL_LIST'),
+                category: tradeType?.getFieldValue('TRADETYPECAT_LIST'),
+                tradeType: tradeType?.getFieldValue('TRADETYPE_LIST'),
+                durationType: options?.getFieldValue('DURATIONTYPE_LIST'),
+                runDisabled: runButton?.disabled ?? null,
+            };
+        })()`
+    );
+
+    if (!state || state.runDisabled !== false) {
+        throw new Error(`Rise/Fall Run button is unavailable after loading: ${JSON.stringify(state)}`);
+    }
+    console.log(`✓ Rise/Fall Trade Parameters populated and Run is enabled: ${JSON.stringify(state)}`);
+};
+
 const assertMobileWorkspaceOrigin = (snapshot, flowName, phase) => {
     if (!snapshot) throw new Error(`${flowName} ${phase}: Blockly workspace is unavailable.`);
 
@@ -1578,6 +1650,26 @@ const run = async () => {
             90_000
         );
         await assertMobileFreeBotsLayout(cdp);
+        await seedEmptySavedWorkspace(cdp);
+        await clickButtonInCard(cdp, 'Rise / Fall Master Bot', 'Load bot');
+        await waitFor(cdp, `location.hash === '#bot_builder'`, 'Rise/Fall Bot Builder navigation');
+        await waitFor(
+            cdp,
+            `Boolean(document.querySelector('#id-bot-builder')?.getClientRects().length)`,
+            'visible Rise/Fall Bot Builder'
+        );
+        await assertRiseFallTradeParameters(cdp);
+        if (process.env.RISE_FALL_DROPDOWNS_ONLY === '1') return;
+
+        await cdp.send('Page.navigate', { url: `${appUrl}/#free_bots` });
+        await waitFor(
+            cdp,
+            `Array.from(document.querySelectorAll('button')).some(
+                button => button.getClientRects().length > 0 && button.textContent.includes('Load bot')
+            )`,
+            'Free Bots loader after Rise/Fall check',
+            90_000
+        );
         await seedEmptySavedWorkspace(cdp);
         await clickButtonInCard(cdp, 'Over2 / Under7 Reversal', 'Load bot');
         await waitFor(cdp, `location.hash === '#bot_builder'`, 'Over2 / Under7 Bot Builder navigation');

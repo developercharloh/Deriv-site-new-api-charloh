@@ -847,7 +847,7 @@
                                     <value name="A"><block type="total_profit" id="ap_sl_profit"></block></value>
                                     <value name="B">
                                       <block type="math_arithmetic" id="ap_sl_neg">
-                                        <field name="OP">SUBTRACT</field>
+                                        <field name="OP">MINUS</field>
                                         <value name="A">
                                           <shadow type="math_number" id="ap_sl_as"><field name="NUM">0</field></shadow>
                                         </value>

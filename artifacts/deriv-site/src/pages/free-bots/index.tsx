@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { DBot } from '@/external/bot-skeleton';
+import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
 import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import type { BotConfig } from './types';
@@ -636,12 +637,10 @@ type ImportedTradeFields = {
     symbol?: string;
     tradeTypeCategory?: string;
     tradeType?: string;
-    contractType?: string;
     durationType?: string;
 };
 
 async function postLoadReapplyFields(
-    botId: string,
     ws: any,
     desired: ImportedTradeFields
 ): Promise<void> {
@@ -680,29 +679,47 @@ async function postLoadReapplyFields(
         });
     };
 
-    // Dynamic contract-type fields are empty during XML import because their
-    // options come from contracts_for. Re-run the same API cascade after the
-    // import guard is released, then restore the bot's saved selections.
-    await delay(1100);
-    const marketBlock = getMarketBlock();
-    if (marketBlock && tradeTypeBlock) {
-        // Market dropdowns are a dependency chain. XML import happens before
-        // active_symbols has populated these menus, so Blockly rejects the saved
-        // values. Restore each parent only after its option exists, then fire the
-        // normal onchange cascade that builds the next child menu.
-        if (await waitForOption(marketBlock, 'MARKET_LIST', desired.market)) {
-            marketBlock.setFieldValue(desired.market, 'MARKET_LIST');
-            triggerCascade(marketBlock, 'MARKET_LIST', marketBlock.id);
-        }
-        if (await waitForOption(marketBlock, 'SUBMARKET_LIST', desired.submarket)) {
-            marketBlock.setFieldValue(desired.submarket, 'SUBMARKET_LIST');
-            triggerCascade(marketBlock, 'SUBMARKET_LIST', marketBlock.id);
-        }
-        if (await waitForOption(marketBlock, 'SYMBOL_LIST', desired.symbol)) {
-            marketBlock.setFieldValue(desired.symbol, 'SYMBOL_LIST');
-            triggerCascade(marketBlock, 'SYMBOL_LIST', marketBlock.id);
-        }
+    // The trade-type onchange handler ignores symbol/category events while the
+    // XML lifecycle guard is active. Wait for the importer to release it.
+    for (let i = 0; i < 50 && (window as any).__DBOT_LOADING_XML; i++) {
+        await delay(200);
+    }
 
+    // Seed the market menus directly from active_symbols. Waiting for these
+    // options is circular: their own parent-change events are what populate them.
+    let activeSymbols: any;
+    for (let i = 0; i < 50; i++) {
+        activeSymbols = (ApiHelpers as any)?.instance?.active_symbols;
+        if (activeSymbols) break;
+        await delay(300);
+    }
+
+    const marketBlock = getMarketBlock();
+    if (marketBlock && activeSymbols) {
+        const updateField = (fieldName: string, options: any[][], defaultValue?: string) => {
+            marketBlock.getField(fieldName)?.updateOptions?.(options, {
+                default_value: defaultValue,
+                should_pretend_empty: true,
+                event_group: 'free-bot-restore',
+            });
+        };
+        updateField('MARKET_LIST', activeSymbols.getMarketDropdownOptions(), desired.market);
+        updateField(
+            'SUBMARKET_LIST',
+            activeSymbols.getSubmarketDropdownOptions(desired.market),
+            desired.submarket
+        );
+        updateField(
+            'SYMBOL_LIST',
+            activeSymbols.getSymbolDropdownOptions(desired.submarket),
+            desired.symbol
+        );
+    }
+
+    if (marketBlock && tradeTypeBlock) {
+        // Ensure contracts_for receives the restored symbol even if Blockly
+        // suppresses the automatic event because the value did not change.
+        triggerCascade(tradeTypeBlock, 'SYMBOL_LIST', marketBlock.id);
         if (await waitForOption(tradeTypeBlock, 'TRADETYPECAT_LIST', desired.tradeTypeCategory)) {
             tradeTypeBlock.setFieldValue(desired.tradeTypeCategory, 'TRADETYPECAT_LIST');
             triggerCascade(tradeTypeBlock, 'TRADETYPECAT_LIST', tradeTypeBlock.id);
@@ -836,7 +853,6 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                     symbol: importedField('SYMBOL_LIST'),
                     tradeTypeCategory: importedField('TRADETYPECAT_LIST'),
                     tradeType: importedField('TRADETYPE_LIST'),
-                    contractType: importedField('TYPE_LIST'),
                     durationType: importedField('DURATIONTYPE_LIST'),
                 };
                 Blockly.Xml.domToVariables(dom, Blockly.derivWorkspace);
@@ -906,7 +922,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             setStatus('loaded');
 
             // ROOT CAUSE FIX — blank duration/purchase dropdowns:
-            void postLoadReapplyFields(bot.id, Blockly.derivWorkspace, importedTradeFields);
+            void postLoadReapplyFields(Blockly.derivWorkspace, importedTradeFields);
         } catch (err: any) {
             setStatus('error');
             setErrorMsg(err?.message || 'Failed to load bot.');
