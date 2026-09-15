@@ -190,9 +190,9 @@
         <value name="VALUE">
           <block type="adaptive_momentum_signal" id="bp_adaptive_signal">
             <value name="WARMUP"><shadow type="math_number" id="bp_signal_warmup_s"><field name="NUM">30</field></shadow><block type="math_number" id="bp_signal_warmup_v"><field name="NUM">30</field></block></value>
-            <value name="SHORT_WINDOW"><shadow type="math_number" id="bp_signal_short_s"><field name="NUM">8</field></shadow><block type="math_number" id="bp_signal_short_v"><field name="NUM">8</field></block></value>
-            <value name="LONG_WINDOW"><shadow type="math_number" id="bp_signal_long_s"><field name="NUM">20</field></shadow><block type="math_number" id="bp_signal_long_v"><field name="NUM">20</field></block></value>
-            <value name="CONFIDENCE"><shadow type="math_number" id="bp_signal_confidence_s"><field name="NUM">60</field></shadow><block type="math_number" id="bp_signal_confidence_v"><field name="NUM">60</field></block></value>
+            <value name="SHORT_WINDOW"><shadow type="math_number" id="bp_signal_short_s"><field name="NUM">6</field></shadow><block type="math_number" id="bp_signal_short_v"><field name="NUM">6</field></block></value>
+            <value name="LONG_WINDOW"><shadow type="math_number" id="bp_signal_long_s"><field name="NUM">14</field></shadow><block type="math_number" id="bp_signal_long_v"><field name="NUM">14</field></block></value>
+            <value name="CONFIDENCE"><shadow type="math_number" id="bp_signal_confidence_s"><field name="NUM">55</field></shadow><block type="math_number" id="bp_signal_confidence_v"><field name="NUM">55</field></block></value>
           </block>
         </value>
         <next>
