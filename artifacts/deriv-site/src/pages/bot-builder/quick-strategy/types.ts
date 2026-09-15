@@ -123,6 +123,7 @@ export type TRsStrategyName =
     | `reverse martingale`
     | `reverse d'alembert`
     | `1-3-2-6`
+    | `adaptive momentum`
     | `accumulators_martingale`
     | `accumulators_dalembert`
     | `accumulators_martingale_on_stat_reset`

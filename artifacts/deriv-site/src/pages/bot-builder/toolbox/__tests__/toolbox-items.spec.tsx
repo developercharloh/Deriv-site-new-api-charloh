@@ -47,6 +47,8 @@ describe('bot builder toolbox structure', () => {
             'match_differ_analysis',
             'last_n_ticks_direction',
             'rise_fall_percentage',
+            'adaptive_momentum_signal',
+            'adaptive_session_stop',
             'tick',
             'last_digit',
             'second_last_digit',

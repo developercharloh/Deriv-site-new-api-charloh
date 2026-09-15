@@ -17,6 +17,7 @@ const getTicksInterface = tradeEngine => {
         getBarrierPercentage: (...args) => tradeEngine.getBarrierPercentage(...args),
         getDirectionPercentage: (...args) => tradeEngine.getDirectionPercentage(...args),
         checkLastNTicksDirection: (...args) => tradeEngine.checkLastNTicksDirection(...args),
+        getAdaptiveMomentumSignal: (...args) => tradeEngine.getAdaptiveMomentumSignal(...args),
         getNthLastDigit: (...args) => tradeEngine.getNthLastDigit(...args),
     };
 };

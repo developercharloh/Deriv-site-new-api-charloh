@@ -133,6 +133,29 @@ export const ToolboxItems = () =>
                         </Shadow>
                     </Value>
                 </Block>
+                <Block type='adaptive_momentum_signal'>
+                    <Value name='WARMUP'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>30</Field>
+                        </Shadow>
+                    </Value>
+                    <Value name='SHORT_WINDOW'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>8</Field>
+                        </Shadow>
+                    </Value>
+                    <Value name='LONG_WINDOW'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>20</Field>
+                        </Shadow>
+                    </Value>
+                    <Value name='CONFIDENCE'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>60</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
+                <Block type='adaptive_session_stop' />
                 <Block type='tick' />
                 <Block type='last_digit' />
                 <Block type='second_last_digit' />

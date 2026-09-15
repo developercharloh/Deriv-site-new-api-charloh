@@ -38,6 +38,30 @@ const registerOutputBlock = ({ type, message0, args0 = [], output = 'Number', to
     window.Blockly.JavaScript.javascriptGenerator.forBlock[type] = generatorCode;
 };
 
+window.Blockly.Blocks.adaptive_session_stop = {
+    init() {
+        this.jsonInit({
+            message0: localize('Stop strategy at risk limit'),
+            previousStatement: null,
+            nextStatement: null,
+            ...analysisColours(),
+            tooltip: 'Stops the adaptive momentum strategy when its session profit or loss limit is reached.',
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Stop at risk limit'),
+            description: localize('Stops the bot when the configured adaptive strategy risk limit is reached.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.adaptive_session_stop = () => 'Bot.stop();\n';
+
 const digitOptions = Array.from({ length: 10 }, (_, digit) => [String(digit), String(digit)]);
 const countInput = (name = 'COUNT', defaultValue = '1000') => ({
     type: 'input_value',
@@ -199,6 +223,29 @@ registerOutputBlock({
             'COUNT',
             '1000'
         )})`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
+});
+
+registerOutputBlock({
+    type: 'adaptive_momentum_signal',
+    message0: localize('Adaptive momentum: warm-up %1, short %2, long %3, confidence %4%'),
+    args0: [
+        countInput('WARMUP', '30'),
+        countInput('SHORT_WINDOW', '8'),
+        countInput('LONG_WINDOW', '20'),
+        countInput('CONFIDENCE', '60'),
+    ],
+    output: 'String',
+    tooltip:
+        'Returns CALL, PUT, or WAIT. It requires enough history, compares short and long tick direction, and only signals when the configured confidence threshold is met.',
+    meta: 'Adaptive Momentum Signal',
+    generatorCode: block => [
+        `Bot.getAdaptiveMomentumSignal(${numberInput(block, 'WARMUP', '30')}, ${numberInput(
+            block,
+            'SHORT_WINDOW',
+            '8'
+        )}, ${numberInput(block, 'LONG_WINDOW', '20')}, ${numberInput(block, 'CONFIDENCE', '60')})`,
         generator().ORDER_FUNCTION_CALL,
     ],
 });

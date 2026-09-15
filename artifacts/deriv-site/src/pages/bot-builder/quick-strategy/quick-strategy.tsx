@@ -84,6 +84,11 @@ const FormikWrapper: React.FC<TFormikWrapper> = observer(({ children }) => {
             boolean_tick_count: data?.boolean_tick_count ?? false,
             max_payout: data?.max_payout ?? 0,
             max_ticks: data?.max_ticks ?? 0,
+            warmup_window: data?.warmup_window ?? 30,
+            short_window: data?.short_window ?? 8,
+            long_window: data?.long_window ?? 20,
+            confidence: data?.confidence ?? 60,
+            cooldown_ticks: data?.cooldown_ticks ?? 10,
         };
         return initial_value;
     };

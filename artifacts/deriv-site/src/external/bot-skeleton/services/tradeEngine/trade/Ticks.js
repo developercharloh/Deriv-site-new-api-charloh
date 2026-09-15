@@ -269,6 +269,40 @@ export default Engine =>
                 );
             });
         }
+        getAdaptiveMomentumSignal(warmup = 30, shortWindow = 8, longWindow = 20, confidence = 60) {
+            const warmupSize = Math.max(2, Math.floor(Number(warmup) || 30));
+            const shortSize = Math.max(2, Math.floor(Number(shortWindow) || 8));
+            const longSize = Math.max(shortSize, Math.floor(Number(longWindow) || 20));
+            const minimumConfidence = Math.max(1, Math.min(99, Number(confidence) || 60));
+
+            return this.getTicks().then(ticks => {
+                const prices = ticks.map(Number).filter(Number.isFinite);
+                const minimumHistory = Math.max(warmupSize, longSize + 1);
+                if (prices.length < minimumHistory) return 'WAIT';
+
+                const moves = prices.slice(-(longSize + 1)).slice(1).map((price, index) => {
+                    const previous = prices.slice(-(longSize + 1))[index];
+                    if (price > previous) return 1;
+                    if (price < previous) return -1;
+                    return 0;
+                });
+                const shortMoves = moves.slice(-shortSize);
+                const upPercentage = values =>
+                    values.length ? (values.filter(value => value > 0).length / values.length) * 100 : 0;
+                const downPercentage = values =>
+                    values.length ? (values.filter(value => value < 0).length / values.length) * 100 : 0;
+                const shortUp = upPercentage(shortMoves);
+                const shortDown = downPercentage(shortMoves);
+                const longUp = upPercentage(moves);
+                const longDown = downPercentage(moves);
+                const shortBias = shortUp - shortDown;
+                const longBias = longUp - longDown;
+
+                if (shortBias >= minimumConfidence && longBias > 0) return 'CALL';
+                if (shortBias <= -minimumConfidence && longBias < 0) return 'PUT';
+                return 'WAIT';
+            });
+        }
         getNthLastDigit(n = 1) {
             const index = Math.max(1, Math.floor(Number(n) || 1));
             return this.getLastDigitList().then(digits => digits[digits.length - index] ?? 0);

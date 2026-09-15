@@ -170,4 +170,41 @@ describe('Ticks last-digit analysis events', () => {
         await expect(engine.checkLastNTicksDirection('rise', 3)).resolves.toBe(true);
         await expect(engine.getNthLastDigit(2)).resolves.toBe(6);
     });
+
+    it('returns CALL, PUT, or WAIT from confirmed adaptive momentum windows', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.$scope = {
+            ticksService: {
+                request: jest.fn().mockResolvedValue([
+                    { quote: 1 },
+                    { quote: 2 },
+                    { quote: 3 },
+                    { quote: 4 },
+                    { quote: 5 },
+                    { quote: 4 },
+                    { quote: 5 },
+                    { quote: 6 },
+                    { quote: 7 },
+                    { quote: 8 },
+                ]),
+            },
+        };
+
+        await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 40)).resolves.toBe('CALL');
+        await expect(engine.getAdaptiveMomentumSignal(20, 4, 8, 40)).resolves.toBe('WAIT');
+
+        engine.$scope.ticksService.request.mockResolvedValue([
+            { quote: 8 },
+            { quote: 7 },
+            { quote: 6 },
+            { quote: 5 },
+            { quote: 4 },
+            { quote: 3 },
+            { quote: 2 },
+            { quote: 1 },
+            { quote: 0 },
+        ]);
+        await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 40)).resolves.toBe('PUT');
+    });
 });

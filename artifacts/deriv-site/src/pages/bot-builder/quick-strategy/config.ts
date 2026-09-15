@@ -311,6 +311,80 @@ const LAST_DIGIT_PREDICTION = (): TConfigItem => ({
     hide_without_should_have: true,
 });
 
+const LABEL_WARMUP_WINDOW = (): TConfigItem => ({
+    type: 'label',
+    label: localize('Warm-up ticks'),
+    description: localize('The minimum number of ticks required before the strategy can produce a signal.'),
+});
+
+const WARMUP_WINDOW = (): TConfigItem => ({
+    type: 'number',
+    name: 'warmup_window',
+    validation: ['number', 'required', 'min', 'integer'],
+});
+
+const LABEL_SHORT_WINDOW = (): TConfigItem => ({
+    type: 'label',
+    label: localize('Short direction window'),
+    description: localize('The recent tick window used to measure immediate momentum.'),
+});
+
+const SHORT_WINDOW = (): TConfigItem => ({
+    type: 'number',
+    name: 'short_window',
+    validation: ['number', 'required', 'min', 'integer'],
+});
+
+const LABEL_LONG_WINDOW = (): TConfigItem => ({
+    type: 'label',
+    label: localize('Long direction window'),
+    description: localize('The wider tick window used to confirm the market regime.'),
+});
+
+const LONG_WINDOW = (): TConfigItem => ({
+    type: 'number',
+    name: 'long_window',
+    validation: ['number', 'required', 'min', 'integer'],
+});
+
+const LABEL_CONFIDENCE = (): TConfigItem => ({
+    type: 'label',
+    label: localize('Minimum confidence'),
+    description: localize('The short-window directional advantage required before entering a trade.'),
+});
+
+const CONFIDENCE = (): TConfigItem => ({
+    type: 'number',
+    name: 'confidence',
+    validation: [
+        'number',
+        'required',
+        'integer',
+        {
+            type: 'min',
+            value: 1,
+            getMessage: (min: string | number) => localize('Minimum confidence is {{ min }}%', { min }),
+        },
+        {
+            type: 'max',
+            value: 99,
+            getMessage: (max: string | number) => localize('Maximum confidence is {{ max }}%', { max }),
+        },
+    ],
+});
+
+const LABEL_COOLDOWN_TICKS = (): TConfigItem => ({
+    type: 'label',
+    label: localize('Cooldown after a loss'),
+    description: localize('The number of fresh ticks to skip after a losing contract.'),
+});
+
+const COOLDOWN_TICKS = (): TConfigItem => ({
+    type: 'number',
+    name: 'cooldown_ticks',
+    validation: ['number', 'required', 'min', 'integer'],
+});
+
 export const STRATEGIES = (): TStrategies => ({
     MARTINGALE: {
         name: 'martingale_max-stake',
@@ -490,6 +564,55 @@ export const STRATEGIES = (): TStrategies => ({
                 DURATION(),
             ],
             [LABEL_PROFIT(), PROFIT(), LABEL_LOSS(), LOSS()],
+        ],
+    },
+    ADAPTIVE_MOMENTUM: {
+        name: 'adaptive_momentum',
+        label: localize('Adaptive Momentum with Confirmation'),
+        rs_strategy_name: 'adaptive momentum',
+        description: [
+            {
+                type: 'content',
+                content: [
+                    localize(
+                        'This strategy waits for enough tick history, compares short and long directional windows, and trades only when momentum reaches the configured confidence threshold.'
+                    ),
+                    localize(
+                        'It skips ambiguous setups, uses a cooldown after losses, and does not use Martingale. Test it on a demo account before considering live execution.'
+                    ),
+                ],
+            },
+        ],
+        fields: [
+            [
+                LABEL_SYMBOL(),
+                SYMBOL(),
+                LABEL_TRADETYPE(),
+                TRADETYPE(),
+                LABEL_PURCHASE_TYPE(),
+                PURCHASE_TYPE(),
+                LABEL_STAKE(),
+                STAKE(),
+                LABEL_DURATION(),
+                DURATION_TYPE(),
+                DURATION(),
+            ],
+            [
+                LABEL_WARMUP_WINDOW(),
+                WARMUP_WINDOW(),
+                LABEL_SHORT_WINDOW(),
+                SHORT_WINDOW(),
+                LABEL_LONG_WINDOW(),
+                LONG_WINDOW(),
+                LABEL_CONFIDENCE(),
+                CONFIDENCE(),
+                LABEL_COOLDOWN_TICKS(),
+                COOLDOWN_TICKS(),
+                LABEL_PROFIT(),
+                PROFIT(),
+                LABEL_LOSS(),
+                LOSS(),
+            ],
         ],
     },
     ACCUMULATORS_MARTINGALE: {
