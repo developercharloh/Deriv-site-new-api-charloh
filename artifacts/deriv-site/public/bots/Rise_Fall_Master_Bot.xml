@@ -15,6 +15,7 @@
     <variable id="v_lt">Last Tick</variable>
     <variable id="v_trend">Tick Trend</variable>
     <variable id="v_flip">Just Flipped</variable>
+    <variable id="v_signal">Momentum Signal</variable>
   </variables>
 
   <!-- ════════════════════════════════════════
@@ -177,7 +178,19 @@
   <block type="before_purchase" id="bp_root" deletable="false" x="820" y="60">
     <statement name="BEFOREPURCHASE_STACK">
 
-      <!-- 1. Compute Tick Trend from current vs Last Tick -->
+      <!-- 1. Confirm direction with Adaptive Momentum before considering a purchase -->
+      <block type="variables_set" id="bp_signal">
+        <field name="VAR" id="v_signal">Momentum Signal</field>
+        <value name="VALUE">
+          <block type="adaptive_momentum_signal" id="bp_adaptive_signal">
+            <value name="WARMUP"><shadow type="math_number" id="bp_signal_warmup_s"><field name="NUM">30</field></shadow><block type="math_number" id="bp_signal_warmup_v"><field name="NUM">30</field></block></value>
+            <value name="SHORT_WINDOW"><shadow type="math_number" id="bp_signal_short_s"><field name="NUM">8</field></shadow><block type="math_number" id="bp_signal_short_v"><field name="NUM">8</field></block></value>
+            <value name="LONG_WINDOW"><shadow type="math_number" id="bp_signal_long_s"><field name="NUM">20</field></shadow><block type="math_number" id="bp_signal_long_v"><field name="NUM">20</field></block></value>
+            <value name="CONFIDENCE"><shadow type="math_number" id="bp_signal_confidence_s"><field name="NUM">60</field></shadow><block type="math_number" id="bp_signal_confidence_v"><field name="NUM">60</field></block></value>
+          </block>
+        </value>
+        <next>
+      <!-- 2. Compute Tick Trend from current vs Last Tick -->
       <block type="controls_if" id="bp_trend_if">
         <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
         <value name="IF0">
@@ -201,7 +214,7 @@
         </statement>
         <next>
 
-          <!-- 2. SMART ENTRY: if first trade AND we have a Last Tick, follow trend -->
+          <!-- 3. SMART ENTRY: if first trade AND we have a Last Tick, follow trend -->
           <block type="controls_if" id="bp_smart_if">
             <value name="IF0">
               <block type="logic_operation" id="bp_smart_and">
@@ -230,7 +243,7 @@
             </statement>
             <next>
 
-              <!-- 3. RE-ENTRY CONFIRMATION: if just flipped AND trend disagrees, revert flip -->
+              <!-- 4. RE-ENTRY CONFIRMATION: if just flipped AND trend disagrees, revert flip -->
               <block type="controls_if" id="bp_reentry_if">
                 <value name="IF0">
                   <block type="logic_operation" id="bp_reentry_and">
@@ -259,19 +272,25 @@
                 </statement>
                 <next>
 
-                  <!-- 4. Store current tick as Last Tick for next cycle -->
+                  <!-- Apply the confirmed momentum direction after legacy trend checks -->
+                  <block type="variables_set" id="bp_apply_signal">
+                    <field name="VAR" id="v_dir">Direction</field>
+                    <value name="VALUE"><block type="variables_get" id="bp_apply_signal_v"><field name="VAR" id="v_signal">Momentum Signal</field></block></value>
+                    <next>
+
+                  <!-- 5. Store current tick as Last Tick for next cycle -->
                   <block type="variables_set" id="bp_save_lt">
                     <field name="VAR" id="v_lt">Last Tick</field>
                     <value name="VALUE"><block type="tick" id="bp_tick_now2"></block></value>
                     <next>
 
-                      <!-- 5. Clear Just Flipped flag -->
+                      <!-- 6. Clear Just Flipped flag -->
                       <block type="variables_set" id="bp_clear_flip">
                         <field name="VAR" id="v_flip">Just Flipped</field>
                         <value name="VALUE"><block type="text" id="bp_clear_flip_v"><field name="TEXT">no</field></block></value>
                         <next>
 
-                          <!-- 6. Log -->
+                          <!-- 7. Log -->
                           <block type="text_join" id="tj_bp">
                             <field name="VARIABLE" id="v_msg">Journal</field>
                             <statement name="STACK">
@@ -309,27 +328,40 @@
                                   <block type="variables_get" id="n_bp_v"><field name="VAR" id="v_msg">Journal</field></block>
                                 </value>
                                 <next>
-                                  <!-- BUY: CALL or PUT based on Direction -->
-                                  <block type="controls_if" id="bp_dir_if">
-                                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                   <!-- BUY only on a confirmed CALL/PUT signal; WAIT stays out -->
+                                   <block type="controls_if" id="bp_dir_if">
+                                     <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                                     <value name="IF0">
-                                      <block type="logic_compare" id="bp_dir_cmp">
+                                      <block type="logic_compare" id="bp_signal_call_cmp">
                                         <field name="OP">EQ</field>
-                                        <value name="A"><block type="variables_get" id="bp_dir_a"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                        <value name="B"><block type="text" id="bp_dir_b"><field name="TEXT">CALL</field></block></value>
+                                        <value name="A"><block type="variables_get" id="bp_signal_call_a"><field name="VAR" id="v_signal">Momentum Signal</field></block></value>
+                                        <value name="B"><block type="text" id="bp_signal_call_b"><field name="TEXT">CALL</field></block></value>
                                       </block>
                                     </value>
                                     <statement name="DO0">
                                       <block type="purchase" id="bp_call"><field name="PURCHASE_LIST">CALL</field></block>
                                     </statement>
                                     <statement name="ELSE">
-                                      <block type="purchase" id="bp_put"><field name="PURCHASE_LIST">PUT</field></block>
+                                      <block type="controls_if" id="bp_put_if">
+                                        <value name="IF0">
+                                          <block type="logic_compare" id="bp_signal_put_cmp">
+                                            <field name="OP">EQ</field>
+                                            <value name="A"><block type="variables_get" id="bp_signal_put_a"><field name="VAR" id="v_signal">Momentum Signal</field></block></value>
+                                            <value name="B"><block type="text" id="bp_signal_put_b"><field name="TEXT">PUT</field></block></value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="purchase" id="bp_put"><field name="PURCHASE_LIST">PUT</field></block>
+                                        </statement>
+                                      </block>
                                     </statement>
                                   </block>
                                 </next>
                               </block>
                             </next>
-                          </block>
+                           </block>
+                         </next>
+                       </block>
 
                         </next>
                       </block>
@@ -342,6 +374,9 @@
 
             </next>
           </block>
+
+        </next>
+      </block>
 
         </next>
       </block>
@@ -831,6 +866,7 @@
                                       <block type="variables_set" id="ap_tp_stop">
                                         <field name="VAR" id="v_stop">Should Stop</field>
                                         <value name="VALUE"><block type="text" id="ap_tp_stop_v"><field name="TEXT">yes</field></block></value>
+                                         <next><block type="adaptive_session_stop" id="ap_tp_adaptive_stop"></block></next>
                                       </block>
                                     </next>
                                   </block>
@@ -882,6 +918,7 @@
                                           <block type="variables_set" id="ap_sl_stop">
                                             <field name="VAR" id="v_stop">Should Stop</field>
                                             <value name="VALUE"><block type="text" id="ap_sl_stop_v"><field name="TEXT">yes</field></block></value>
+                                             <next><block type="adaptive_session_stop" id="ap_sl_adaptive_stop"></block></next>
                                           </block>
                                         </next>
                                       </block>

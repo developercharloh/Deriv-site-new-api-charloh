@@ -95,11 +95,11 @@ const BOTS: BotConfig[] = [
         name: 'Rise / Fall Master Bot',
         emoji: '📈📉',
         description:
-            'Trades Rise/Fall on Volatility 100 (1s) Index. Starts on Rise — wins keep the same direction and reset stake; losses flip to the opposite direction and apply Martingale. Stops automatically on Take Profit or Stop Loss.',
+            'Trades Rise/Fall on Volatility 100 (1s) Index only after Adaptive Momentum confirms a direction. Waits through ambiguous signals, then applies the confirmed Rise/Fall entry with controlled recovery and session risk stops.',
         market: 'Volatility 100 (1s) Index (1HZ100V)',
-        strategy: 'Rise / Fall · Direction Flip on Loss · Martingale',
+        strategy: 'Rise / Fall · Adaptive Momentum Confirmation · Risk Stops',
         params: [
-            { label: 'Initial Direction', value: 'Rise (CALL)' },
+            { label: 'Momentum Confirmation', value: '30 / 8 / 20 ticks · 60%' },
             { label: 'Initial Stake', value: '$0.35' },
             { label: 'Take Profit', value: '$10' },
             { label: 'Stop Loss', value: '$10' },
