@@ -1,6 +1,14 @@
 import { observer } from '@/external/bot-skeleton/utils/observer';
 import Ticks from '../Ticks';
-import { getAdaptiveMomentumContractType, runAdaptiveMomentumPaperValidation } from '../adaptiveMomentumValidation';
+import {
+    getAdaptiveMomentumContractType,
+    runAdaptiveMomentumPaperValidation,
+    runAdaptiveMomentumSessionValidation,
+} from '../adaptiveMomentumValidation';
+import {
+    ADAPTIVE_MOMENTUM_REPLAY_FIXTURE_VERSION,
+    ADAPTIVE_MOMENTUM_REPLAY_FIXTURES,
+} from '../adaptiveMomentumReplayFixtures';
 
 class BaseEngine {}
 
@@ -285,5 +293,39 @@ describe('Ticks last-digit analysis events', () => {
         expect(result.metrics.purchases).toBe(0);
         expect(result.trades).toEqual([]);
         expect(result.disclaimer).toMatch(/not a profitability guarantee/i);
+    });
+
+    it('replays versioned chronological sessions and reports in-sample and out-of-sample metrics separately', () => {
+        const { inSample, outOfSample } = ADAPTIVE_MOMENTUM_REPLAY_FIXTURES;
+        const result = runAdaptiveMomentumSessionValidation({
+            inSample,
+            outOfSample,
+            fixtureVersion: ADAPTIVE_MOMENTUM_REPLAY_FIXTURE_VERSION,
+            config: {
+                warmup: 5,
+                shortWindow: 4,
+                longWindow: 8,
+                confidence: 50,
+                cooldownTicks: 0,
+                takeProfit: 100,
+                stopLoss: 100,
+            },
+        });
+
+        expect(inSample.ticks[0].epoch).toBeLessThan(inSample.ticks[inSample.ticks.length - 1].epoch);
+        expect(outOfSample.ticks[0].epoch).toBeLessThan(outOfSample.ticks[outOfSample.ticks.length - 1].epoch);
+        expect(inSample.capturedAt).toBe('2026-09-08');
+        expect(outOfSample.capturedAt).toBe('2026-09-09');
+        expect(result.fixtureVersion).toBe(ADAPTIVE_MOMENTUM_REPLAY_FIXTURE_VERSION);
+        expect(result.metrics.inSample).toEqual(result.sessions.inSample.metrics);
+        expect(result.metrics.outOfSample).toEqual(result.sessions.outOfSample.metrics);
+        expect(result.metrics.inSample).not.toEqual(result.metrics.outOfSample);
+        expect(result.sessions.inSample.metrics.signalCounts).toEqual({ CALL: 12, PUT: 0, WAIT: 8 });
+        expect(result.sessions.outOfSample.metrics.signalCounts).toEqual({ CALL: 0, PUT: 12, WAIT: 8 });
+        expect(result.sessions.inSample.metrics.totalProfit).toBe(3);
+        expect(result.sessions.outOfSample.metrics.totalProfit).toBe(-3);
+        expect(result.disclaimer).toMatch(/not a profitability guarantee/i);
+        expect(result.executionMode).toBe('paper');
+        expect(result.livePurchasesEnabled).toBe(false);
     });
 });

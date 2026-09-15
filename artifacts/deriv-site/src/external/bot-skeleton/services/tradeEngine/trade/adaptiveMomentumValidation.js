@@ -138,6 +138,8 @@ export const runAdaptiveMomentumPaperValidation = ({ ticks, settlements = [], co
 
     return {
         disclaimer: ADAPTIVE_MOMENTUM_VALIDATION_DISCLAIMER,
+        executionMode: 'paper',
+        livePurchasesEnabled: false,
         config: normalizedConfig,
         metrics: {
             ticksProcessed: ticks.length,
@@ -155,5 +157,51 @@ export const runAdaptiveMomentumPaperValidation = ({ ticks, settlements = [], co
             openTrades: openTrade ? 1 : 0,
         },
         trades,
+    };
+};
+
+const validateReplaySession = (session, config) => {
+    if (!session || !Array.isArray(session.ticks) || session.ticks.length === 0) {
+        throw new Error('Adaptive Momentum session validation requires replayable tick history for every session.');
+    }
+
+    const validation = runAdaptiveMomentumPaperValidation({
+        ticks: session.ticks,
+        settlements: session.settlements,
+        config,
+    });
+
+    return {
+        id: session.id ?? null,
+        label: session.label ?? null,
+        capturedAt: session.capturedAt ?? null,
+        metrics: validation.metrics,
+        trades: validation.trades,
+    };
+};
+
+export const runAdaptiveMomentumSessionValidation = ({
+    inSample,
+    outOfSample,
+    config = {},
+    fixtureVersion = null,
+}) => {
+    const normalizedConfig = normalizeConfig(config);
+    const sessions = {
+        inSample: validateReplaySession(inSample, normalizedConfig),
+        outOfSample: validateReplaySession(outOfSample, normalizedConfig),
+    };
+
+    return {
+        disclaimer: ADAPTIVE_MOMENTUM_VALIDATION_DISCLAIMER,
+        executionMode: 'paper',
+        livePurchasesEnabled: false,
+        fixtureVersion,
+        config: normalizedConfig,
+        sessions,
+        metrics: {
+            inSample: sessions.inSample.metrics,
+            outOfSample: sessions.outOfSample.metrics,
+        },
     };
 };
