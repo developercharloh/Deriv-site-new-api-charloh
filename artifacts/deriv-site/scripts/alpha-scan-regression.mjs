@@ -282,6 +282,7 @@ const getSnapshot = evaluate => evaluate(`(() => {
         feedback: document.querySelector('[data-testid="live-trade-feedback"]')?.innerText || '',
         runningRows: document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]').length,
         settledRows: Number(root?.dataset.journalCount || 0),
+        autoTrades: Number(root?.dataset.autoTrades || 0),
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
         errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
     };
@@ -376,11 +377,12 @@ const run = async () => {
         await client.call('Page.enable');
         await client.call('Network.enable');
         await client.call('Runtime.enable');
-        const fixtureUrl = (sampleSize, executionFixture = false) => {
+        const fixtureUrl = (sampleSize, executionFixture = false, riskFixture = '') => {
             const url = new URL(TARGET_URL);
             url.searchParams.set('alpha_scan_sample', String(sampleSize));
             url.searchParams.set('alpha_scan_fixture', '1');
             if (executionFixture) url.searchParams.set('alpha_scan_execution_fixture', '1');
+            if (riskFixture) url.searchParams.set('alpha_scan_risk_fixture', riskFixture);
             return url.toString();
         };
         const liveUrl = sampleSize => {
@@ -572,7 +574,9 @@ const run = async () => {
         const settled = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.feedback.includes('Rescanning all volatility markets') ? next : false;
+                return next.runningRows === 0 && next.executionLeg === 'idle' && next.settledRows >= 1
+                    ? next
+                    : false;
             },
             'automatic contract settlement',
             5000,
@@ -618,6 +622,74 @@ const run = async () => {
             resumedActiveRows: resumed.runningRows,
         };
         runReport.fixture.autoRunner = autoRunner;
+
+        const riskBoundaryCases = [
+            { mode: 'target', stopMessage: 'Session target reached', settledRows: 2 },
+            { mode: 'stop-loss', stopMessage: 'Session stop loss reached', settledRows: 1 },
+            { mode: 'consecutive-losses', stopMessage: '3 consecutive losses reached', settledRows: 3 },
+            { mode: 'trade-count', stopMessage: '50 trades reached for this session', settledRows: 50 },
+        ];
+        const riskBoundaries = [];
+        for (const riskCase of riskBoundaryCases) {
+            await client.call('Page.navigate', {
+                url: fixtureUrl(SAMPLE_WINDOWS[0], true, riskCase.mode),
+            });
+            await waitFor(
+                () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+                `${riskCase.mode} risk fixture Alpha Tool`,
+            );
+            const riskScan = await waitFor(
+                async () => {
+                    const next = await getSnapshot(client.evaluate);
+                    return ['ready', 'partial-data'].includes(next.status) ? next : false;
+                },
+                `${riskCase.mode} risk fixture scan`,
+                5000,
+            );
+            assertScan(riskScan, SAMPLE_WINDOWS[0], 'fixture');
+            await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
+            const stopped = await waitFor(
+                async () => {
+                    const next = await getSnapshot(client.evaluate);
+                    return next.autoVolatilityMode === 'false' && next.feedback.includes(riskCase.stopMessage)
+                        ? next
+                        : false;
+                },
+                `${riskCase.mode} risk boundary`,
+                riskCase.mode === 'trade-count' ? 30000 : 10000,
+                50,
+            );
+            if (
+                stopped.runningRows !== 0 ||
+                stopped.executionLeg !== 'idle' ||
+                Number(stopped.autoTrades) !== riskCase.settledRows
+            ) {
+                throw new Error(
+                    `${riskCase.mode} risk boundary did not clear execution cleanly: ${JSON.stringify(stopped)}`,
+                );
+            }
+            await sleep(250);
+            const afterStop = await getSnapshot(client.evaluate);
+            if (
+                afterStop.runningRows !== 0 ||
+                afterStop.executionLeg !== 'idle' ||
+                afterStop.autoVolatilityMode !== 'false' ||
+                Number(afterStop.autoTrades) !== riskCase.settledRows ||
+                !afterStop.feedback.includes(riskCase.stopMessage)
+            ) {
+                throw new Error(
+                    `${riskCase.mode} risk boundary placed another contract after stopping: ${JSON.stringify(afterStop)}`,
+                );
+            }
+            riskBoundaries.push({
+                mode: riskCase.mode,
+                status: 'passed',
+                settledRows: afterStop.autoTrades,
+                executionLeg: afterStop.executionLeg,
+                feedback: afterStop.feedback,
+            });
+        }
+        runReport.fixture.riskBoundaries = riskBoundaries;
 
         if (RUN_LIVE) {
             phase = 'external-feed';
@@ -744,6 +816,7 @@ const run = async () => {
                 status: 'passed',
                 scans: fixtureResults,
                 autoRunner,
+                riskBoundaries: runReport.fixture.riskBoundaries || [],
             },
             externalFeed: RUN_LIVE ? {
                 status: 'passed',

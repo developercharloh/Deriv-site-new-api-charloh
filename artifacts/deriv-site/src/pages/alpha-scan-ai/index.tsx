@@ -667,6 +667,7 @@ type AlphaExecutionEngine = {
     placeBuyNow: (patch: Partial<DTConfig>) => void;
 };
 
+type AlphaRiskFixture = 'target' | 'stop-loss' | 'consecutive-losses' | 'trade-count';
 /**
  * The browser regression runs without a Deriv account. This deterministic
  * engine exercises the same Alpha Scan callbacks as DTraderEngine, including
@@ -682,6 +683,11 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
     private activePosition: DTPosition | null = null;
     private contractSequence = 0;
     private timers = new Set<ReturnType<typeof setTimeout>>();
+    private readonly riskFixtureMode: AlphaRiskFixture | null;
+
+    constructor(riskFixtureMode: AlphaRiskFixture | null = null) {
+        this.riskFixtureMode = riskFixtureMode;
+    }
 
     private schedule(callback: () => void, delay: number): void {
         const timer = setTimeout(() => {
@@ -705,6 +711,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         this.config = { ...config };
         this.onStatus('subscribing');
         let prices = Array.from({ length: 30 }, (_, index) => 100 + index * 0.01);
+        const confirmationDelay = this.riskFixtureMode ? 10 : 70;
 
         this.schedule(() => {
             if (!this.config) return;
@@ -715,7 +722,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                     if (!this.config) return;
                     prices = [...prices, prices[prices.length - 1] + 0.01];
                     this.onPriceWindow(prices);
-                }, confirmation * 70);
+                }, confirmation * confirmationDelay);
             }
         }, 20);
         return true;
@@ -781,16 +788,23 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         }, 45);
         this.schedule(() => {
             if (!this.activePosition || this.activePosition.contractId !== contractId) return;
+            const settlement = this.riskFixtureMode === 'stop-loss'
+                ? { payout: config.stake - 5, profit: -5, isWin: false }
+                : this.riskFixtureMode === 'consecutive-losses'
+                    ? { payout: config.stake - 1, profit: -1, isWin: false }
+                    : this.riskFixtureMode === 'trade-count'
+                        ? { payout: config.stake, profit: 0, isWin: true }
+                        : { payout, profit: payout - config.stake, isWin: true };
             this.activePosition = null;
             this.onPosition({
                 ...position,
-                currentBid: payout,
-                profit: payout - config.stake,
+                currentBid: settlement.payout,
+                profit: settlement.profit,
                 isOpen: false,
-                isWin: true,
-                exitSpot: '100.45',
+                isWin: settlement.isWin,
+                exitSpot: settlement.isWin ? '100.45' : '100.35',
             });
-        }, 260);
+        }, this.riskFixtureMode ? 20 : 260);
     }
 }
 
@@ -855,6 +869,7 @@ type AlphaToolSurfaceProps = {
     status: ScanStatus;
     scanSource: DiscoverySource;
     executionFixtureMode: boolean;
+    riskFixtureMode: AlphaRiskFixture | null;
     isBusy: boolean;
     lastUpdated: Date | null;
     modelStatus: string;
@@ -920,6 +935,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     status,
     scanSource,
     executionFixtureMode,
+    riskFixtureMode,
     isBusy,
     lastUpdated,
     modelStatus,
@@ -938,7 +954,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const liveEngineRef = useRef<AlphaExecutionEngine | null>(null);
     if (liveEngineRef.current === null) {
         liveEngineRef.current = executionFixtureMode
-            ? new FixtureAlphaExecutionEngine()
+            ? new FixtureAlphaExecutionEngine(riskFixtureMode)
             : new DTraderEngine();
     }
     const liveEngine = liveEngineRef.current;
@@ -1212,9 +1228,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             return;
         }
 
-        const timer = setTimeout(runTrade, 450);
+        const timer = setTimeout(runTrade, riskFixtureMode ? 50 : 450);
         return () => clearTimeout(timer);
-    }, [autoMomentumDecision, autoVolatilityMode, executionLeg, isBusy, liveAuthorized, liveMode, runTrade]);
+    }, [autoMomentumDecision, autoVolatilityMode, executionLeg, isBusy, liveAuthorized, liveMode, riskFixtureMode, runTrade]);
 
     const upsertJournalEntry = useCallback((position: DTPosition, leg: 'primary' | 'recovery', decision: RankedMarketDecision | null) => {
         const nextEntry: AlphaTradeJournalEntry = {
@@ -1297,7 +1313,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     kind: position.isWin ? 'success' : 'info',
                     message: `${position.isWin ? 'Contract won' : 'Contract settled'}. Rescanning all volatility markets before the next trade.`,
                 });
-                setTimeout(onScan, 650);
+                setTimeout(onScan, riskFixtureMode ? 50 : 650);
                 return;
             }
 
@@ -1418,7 +1434,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             liveEngine.onPosition = () => {};
             liveEngine.onPriceWindow = () => {};
         };
-    }, [autoVolatilityMode, liveEngine, onScan, stopLoss, targetProfit, upsertJournalEntry]);
+    }, [autoVolatilityMode, liveEngine, onScan, riskFixtureMode, stopLoss, targetProfit, upsertJournalEntry]);
 
     const oosAccuracy = rows.length ? Math.round(averageWalkForwardAccuracy * 100) : 0;
     const modelLabel = isBusy ? 'SYNCING' : modelStatus;
@@ -1452,6 +1468,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-auto-volatility-mode={autoVolatilityMode}
             data-execution-fixture={executionFixtureMode}
             data-journal-count={journalRows.length}
+            data-auto-trades={autoRiskRef.current.trades}
             data-payout-floor={payoutFloor}
         >
             <header className='alpha-tool__hero'>
@@ -1679,6 +1696,15 @@ const AlphaScanWorkspace: React.FC = () => {
         new URLSearchParams(window.location.search).get('alpha_scan_fixture') === '1';
     const executionFixtureMode = typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).get('alpha_scan_execution_fixture') === '1';
+    const requestedRiskFixture = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('alpha_scan_risk_fixture')
+        : null;
+    const riskFixtureMode: AlphaRiskFixture | null = requestedRiskFixture === 'target' ||
+        requestedRiskFixture === 'stop-loss' ||
+        requestedRiskFixture === 'consecutive-losses' ||
+        requestedRiskFixture === 'trade-count'
+        ? requestedRiskFixture
+        : null;
     const autoRunnerFixture = fixtureMode && executionFixtureMode;
     const [sampleSize, setSampleSize] = useState<SampleSize>(() => {
         if (typeof window === 'undefined') return 600;
@@ -2110,6 +2136,7 @@ const AlphaScanWorkspace: React.FC = () => {
             status={status}
             scanSource={discoverySource}
             executionFixtureMode={executionFixtureMode}
+            riskFixtureMode={riskFixtureMode}
             isBusy={isBusy}
             lastUpdated={lastUpdated}
             modelStatus={modelStatus}
