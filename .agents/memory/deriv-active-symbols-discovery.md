@@ -14,3 +14,9 @@ The current production options catalogue exposes 13 open Random Index volatiliti
 **Why:** The live catalogue expanded beyond the older five continuous-index assumptions, and testing against the legacy endpoint falsely made valid symbols appear unavailable.
 
 **How to apply:** Keep volatility pickers and Binary Matrix market handling aligned with the full options-catalogue family, and validate contract support against the options endpoint rather than the legacy `ws.derivws.com/websockets/v3` endpoint.
+
+Dropdown option builders must tolerate an empty or not-yet-hydrated processed-symbol catalogue and return no options or the caller's explicit fallback instead of indexing the catalogue directly.
+
+**Why:** Blockly can create trade-definition blocks before the active-symbol request completes; direct indexing during that window surfaced a user-visible `Cannot read properties of undefined` Journal error.
+
+**How to apply:** Keep public dropdown helpers safe for omitted/undefined catalogue data, and cover the pre-hydration call path in service tests.

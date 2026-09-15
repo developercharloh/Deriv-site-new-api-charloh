@@ -254,6 +254,11 @@ describe('ActiveSymbolCategorizationService', () => {
 
                 expect(result[0]).toBe(syntheticIndex);
             });
+
+            it('should return no options while symbols are still hydrating', () => {
+                expect(() => service.getMarketDropdownOptions()).not.toThrow();
+                expect(service.getMarketDropdownOptions()).toEqual([]);
+            });
         });
 
         describe('getSubmarketDropdownOptions', () => {
@@ -269,6 +274,11 @@ describe('ActiveSymbolCategorizationService', () => {
 
                 expect(result[0]).toBe(randomIndex);
             });
+
+            it('should return no options while symbols are still hydrating', () => {
+                expect(() => service.getSubmarketDropdownOptions(undefined, undefined)).not.toThrow();
+                expect(service.getSubmarketDropdownOptions(undefined, undefined)).toEqual([]);
+            });
         });
 
         describe('getSymbolDropdownOptions', () => {
@@ -276,6 +286,11 @@ describe('ActiveSymbolCategorizationService', () => {
                 const result = service.getSymbolDropdownOptions(mockProcessedSymbols, 'random_index');
 
                 expect(result).toContainEqual(['Volatility 10 Index', 'R_10']);
+            });
+
+            it('should return no options while symbols are still hydrating', () => {
+                expect(() => service.getSymbolDropdownOptions(undefined, undefined)).not.toThrow();
+                expect(service.getSymbolDropdownOptions(undefined, undefined)).toEqual([]);
             });
         });
     });

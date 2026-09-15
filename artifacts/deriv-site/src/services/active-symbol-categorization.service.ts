@@ -504,7 +504,7 @@ export class ActiveSymbolCategorizationService {
      * Generates market dropdown options with translations
      */
     public getMarketDropdownOptions(
-        processedSymbols: Record<string, ProcessedMarket>,
+        processedSymbols: Record<string, ProcessedMarket> = {},
         isMarketClosed: (market: string) => boolean = () => false
     ): [string, string][] {
         const marketOptions: [string, string][] = [];
@@ -526,8 +526,8 @@ export class ActiveSymbolCategorizationService {
      * Generates submarket dropdown options with translations
      */
     public getSubmarketDropdownOptions(
-        processedSymbols: Record<string, ProcessedMarket>,
-        market: string,
+        processedSymbols: Record<string, ProcessedMarket> = {},
+        market = '',
         isSubmarketClosed: (submarket: string) => boolean = () => false
     ): [string, string][] {
         const submarketOptions: [string, string][] = [];
@@ -556,8 +556,8 @@ export class ActiveSymbolCategorizationService {
      * Generates symbol dropdown options with translations
      */
     public getSymbolDropdownOptions(
-        processedSymbols: Record<string, ProcessedMarket>,
-        submarket: string,
+        processedSymbols: Record<string, ProcessedMarket> = {},
+        submarket = '',
         isSymbolClosed: (symbol: string) => boolean = () => false
     ): [string, string][] {
         const symbolOptions: [string, string][] = [];
