@@ -229,12 +229,12 @@ const createCdpClient = async port => {
     };
 };
 
-const waitFor = async (condition, description, timeout = 30000) => {
+const waitFor = async (condition, description, timeout = 30000, pollInterval = 500) => {
     const started = Date.now();
     while (Date.now() - started < timeout) {
         const value = await condition();
         if (value) return value;
-        await sleep(500);
+        await sleep(pollInterval);
     }
     throw new Error(`Timed out waiting for ${description}.`);
 };
@@ -258,6 +258,7 @@ const getSnapshot = evaluate => evaluate(`(() => {
         model: document.querySelector('[data-testid="tool-model-status"]')?.innerText || '',
         modelVersion: root?.dataset.modelVersion || '',
         modelPick,
+        scanCount: root?.dataset.scanCount || '',
         digitWindow: root?.dataset.digitWindow || '',
         recoveryDigitWindow: root?.dataset.recoveryDigitWindow || '',
         primaryCondition: root?.dataset.primaryCondition || '',
@@ -278,6 +279,9 @@ const getSnapshot = evaluate => evaluate(`(() => {
         autoRunnerControls: Boolean(document.querySelector('[data-testid="toggle-auto-volatility"]')) &&
             Boolean(document.querySelector('[aria-label="Minimum payout"]')),
         executionLeg: root?.dataset.executionLeg || '',
+        feedback: document.querySelector('[data-testid="live-trade-feedback"]')?.innerText || '',
+        runningRows: document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]').length,
+        settledRows: Number(root?.dataset.journalCount || 0),
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
         errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
     };
@@ -372,10 +376,11 @@ const run = async () => {
         await client.call('Page.enable');
         await client.call('Network.enable');
         await client.call('Runtime.enable');
-        const fixtureUrl = sampleSize => {
+        const fixtureUrl = (sampleSize, executionFixture = false) => {
             const url = new URL(TARGET_URL);
             url.searchParams.set('alpha_scan_sample', String(sampleSize));
             url.searchParams.set('alpha_scan_fixture', '1');
+            if (executionFixture) url.searchParams.set('alpha_scan_execution_fixture', '1');
             return url.toString();
         };
         const liveUrl = sampleSize => {
@@ -488,10 +493,131 @@ const run = async () => {
         let liveResults = [];
         let symbolFailure;
         let blockedFeed;
+        let autoRunner;
         runReport.fixture = {
             status: 'passed',
             scans: fixtureResults,
         };
+
+        await client.call('Page.navigate', { url: fixtureUrl(SAMPLE_WINDOWS[0], true) });
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+            'automatic-runner fixture Alpha Tool',
+        );
+        const autoScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return ['ready', 'partial-data'].includes(next.status) ? next : false;
+            },
+            'automatic-runner fixture scan',
+            90000,
+        );
+        assertScan(autoScan, SAMPLE_WINDOWS[0], 'fixture');
+        const initialAutoScanCount = Number(autoScan.scanCount);
+        if (!Number.isFinite(initialAutoScanCount) || initialAutoScanCount < 1) {
+            throw new Error(`Automatic-runner fixture did not expose its initial scan count: ${autoScan.scanCount}`);
+        }
+
+        await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
+        const autoEnabled = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.autoVolatilityMode === 'true' && next.modelPick ? next : false;
+            },
+            'automatic volatility runner enabled',
+        );
+        const confirmation = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.feedback.includes('Fresh confirmation') ? next : false;
+            },
+            'fresh confirmation messaging before execution',
+            5000,
+            50,
+        );
+        if (!/Fresh confirmation (?:1|2)\/3/.test(confirmation.feedback)) {
+            throw new Error(`Expected an in-progress fresh confirmation before execution, received: ${confirmation.feedback}`);
+        }
+        const passedConfirmation = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.feedback.includes('Fresh confirmation passed') ? next : false;
+            },
+            'fresh confirmation gate passed',
+            5000,
+            50,
+        );
+        if (passedConfirmation.runningRows !== 0) {
+            throw new Error('The automatic runner opened a contract before fresh confirmation passed.');
+        }
+
+        const firstRunning = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.runningRows === 1 ? next : false;
+            },
+            'first automatic contract',
+            5000,
+            50,
+        );
+        await client.evaluate('document.querySelector("[data-testid=\\"button-run-trade\\"]")?.click()');
+        await sleep(100);
+        const singleActiveContract = await getSnapshot(client.evaluate);
+        if (singleActiveContract.runningRows !== 1 || !['primary-running', 'primary-pending'].includes(singleActiveContract.executionLeg)) {
+            throw new Error(
+                `A second automatic purchase was not blocked while the first was active: ${JSON.stringify(singleActiveContract)}`,
+            );
+        }
+
+        const settled = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.feedback.includes('Rescanning all volatility markets') ? next : false;
+            },
+            'automatic contract settlement',
+            5000,
+            50,
+        );
+        if (settled.runningRows !== 0 || settled.settledRows < 1 || settled.executionLeg !== 'idle') {
+            throw new Error(`Settlement did not clear the active position cleanly: ${JSON.stringify(settled)}`);
+        }
+
+        const rescanned = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return Number(next.scanCount) > initialAutoScanCount &&
+                    ['ready', 'partial-data'].includes(next.status)
+                    ? next
+                    : false;
+            },
+            'automatic runner rescan after settlement',
+            10000,
+            50,
+        );
+        if (rescanned.coverage !== '4 / 4' || !rescanned.modelPick) {
+            throw new Error(`Settlement rescan did not cover the full fixture universe: ${JSON.stringify(rescanned)}`);
+        }
+        const resumed = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.runningRows === 1 ? next : false;
+            },
+            'automatic runner resumed after settlement',
+            10000,
+            50,
+        );
+        if (resumed.settledRows < 1 || resumed.runningRows !== 1) {
+            throw new Error(`Automatic runner did not resume with one active contract: ${JSON.stringify(resumed)}`);
+        }
+        autoRunner = {
+            status: 'passed',
+            initialScanCount: initialAutoScanCount,
+            rescanCount: Number(rescanned.scanCount),
+            firstContract: firstRunning.runningRows,
+            settledRows: settled.settledRows,
+            resumedActiveRows: resumed.runningRows,
+        };
+        runReport.fixture.autoRunner = autoRunner;
 
         if (RUN_LIVE) {
             phase = 'external-feed';
@@ -617,6 +743,7 @@ const run = async () => {
             fixture: {
                 status: 'passed',
                 scans: fixtureResults,
+                autoRunner,
             },
             externalFeed: RUN_LIVE ? {
                 status: 'passed',

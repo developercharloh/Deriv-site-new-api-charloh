@@ -199,7 +199,7 @@ const getVerifiedCatalogSymbols = (): SyntheticSymbol[] =>
         submarket: index.tickEvery === 1 ? 'Continuous Indices' : 'Volatility Indices',
     }));
 
-const buildFixtureRows = (sampleSize: SampleSize): ScanRow[] => {
+const buildFixtureRows = (sampleSize: SampleSize, autoRunnerFixture = false): ScanRow[] => {
     const fixtureSymbols = [
         { symbol: 'R_10', displayName: 'Volatility 10 Index', submarket: 'Continuous Indices', digitPattern: [0, 2, 4, 6, 8] },
         { symbol: 'R_25', displayName: 'Volatility 25 Index', submarket: 'Continuous Indices', digitPattern: [1, 3, 5, 7, 9] },
@@ -210,6 +210,9 @@ const buildFixtureRows = (sampleSize: SampleSize): ScanRow[] => {
     return fixtureSymbols.map((fixture, symbolIndex) => {
         const pipSize = 2;
         const prices = Array.from({ length: sampleSize }, (_, index) => {
+            if (autoRunnerFixture && symbolIndex === 0 && index >= sampleSize - 40) {
+                return 100 + index * 0.01;
+            }
             const digit = fixture.digitPattern[(index + symbolIndex) % fixture.digitPattern.length];
             const wholePart = 100 + symbolIndex * 25 + Math.floor(index / 100);
             return Number(`${wholePart}.${String(digit).padStart(2, '0')}`);
@@ -687,6 +690,143 @@ const statusCopy: Record<ScanStatus, string> = {
     'partial-data': 'Snapshot ready with incomplete coverage',
 };
 
+type AlphaExecutionEngine = {
+    onStatus: (status: DTStatus) => void;
+    onBuyFeedback: (feedback: DTBuyFeedback) => void;
+    onPosition: (position: DTPosition) => void;
+    onPriceWindow: (prices: number[]) => void;
+    start: (config: DTConfig) => boolean;
+    stop: () => void;
+    placeBuyNow: (patch: Partial<DTConfig>) => void;
+};
+
+/**
+ * The browser regression runs without a Deriv account. This deterministic
+ * engine exercises the same Alpha Scan callbacks as DTraderEngine, including
+ * fresh price confirmation, one open position, and a later settlement.
+ */
+class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
+    public onStatus: (status: DTStatus) => void = () => {};
+    public onBuyFeedback: (feedback: DTBuyFeedback) => void = () => {};
+    public onPosition: (position: DTPosition) => void = () => {};
+    public onPriceWindow: (prices: number[]) => void = () => {};
+
+    private config: DTConfig | null = null;
+    private activePosition: DTPosition | null = null;
+    private contractSequence = 0;
+    private timers = new Set<ReturnType<typeof setTimeout>>();
+
+    private schedule(callback: () => void, delay: number): void {
+        const timer = setTimeout(() => {
+            this.timers.delete(timer);
+            callback();
+        }, delay);
+        this.timers.add(timer);
+    }
+
+    start(config: DTConfig): boolean {
+        if (this.activePosition) {
+            this.onBuyFeedback({
+                seq: Date.now(),
+                kind: 'error',
+                message: 'A contract is already running.',
+            });
+            return false;
+        }
+
+        this.stop();
+        this.config = { ...config };
+        this.onStatus('subscribing');
+        let prices = Array.from({ length: 30 }, (_, index) => 100 + index * 0.01);
+
+        this.schedule(() => {
+            if (!this.config) return;
+            this.onStatus('ready');
+            this.onPriceWindow(prices);
+            for (let confirmation = 1; confirmation <= 3; confirmation += 1) {
+                this.schedule(() => {
+                    if (!this.config) return;
+                    prices = [...prices, prices[prices.length - 1] + 0.01];
+                    this.onPriceWindow(prices);
+                }, confirmation * 70);
+            }
+        }, 20);
+        return true;
+    }
+
+    stop(): void {
+        this.timers.forEach(timer => clearTimeout(timer));
+        this.timers.clear();
+        if (!this.activePosition) {
+            this.config = null;
+            this.onStatus('idle');
+        }
+    }
+
+    placeBuyNow(patch: Partial<DTConfig>): void {
+        if (!this.config || this.activePosition) {
+            this.onBuyFeedback({
+                seq: Date.now(),
+                kind: 'error',
+                message: 'A contract is already running.',
+            });
+            return;
+        }
+
+        const config = { ...this.config, ...patch };
+        const contractId = `fixture-${++this.contractSequence}`;
+        const payout = config.stake * 1.8;
+        const position: DTPosition = {
+            contractId,
+            contractType: config.contractType,
+            barrier: config.barrier,
+            symbol: config.symbol,
+            stake: config.stake,
+            payout,
+            buyPrice: config.stake,
+            currentSpot: '100.40',
+            currentBid: config.stake,
+            profit: null,
+            isOpen: true,
+            isWin: null,
+            entrySpot: '100.40',
+            exitSpot: null,
+            longcode: 'Fixture contract',
+            purchaseTime: new Date().toLocaleTimeString(),
+            highBarrier: null,
+            lowBarrier: null,
+            entrySpotNum: 100.4,
+            barrierBroken: false,
+            stopOutLevel: null,
+            takeProfitLevel: null,
+            stopLossLevel: null,
+        };
+        this.config = config;
+        this.activePosition = position;
+        this.schedule(() => {
+            if (!this.activePosition || this.activePosition.contractId !== contractId) return;
+            this.onBuyFeedback({
+                seq: Date.now(),
+                kind: 'success',
+                message: `Bought #${contractId}  $${config.stake.toFixed(2)} → payout $${payout.toFixed(2)}`,
+            });
+            this.onPosition(position);
+        }, 45);
+        this.schedule(() => {
+            if (!this.activePosition || this.activePosition.contractId !== contractId) return;
+            this.activePosition = null;
+            this.onPosition({
+                ...position,
+                currentBid: payout,
+                profit: payout - config.stake,
+                isOpen: false,
+                isWin: true,
+                exitSpot: '100.45',
+            });
+        }, 260);
+    }
+}
+
 const Sparkline: React.FC<{ prices: number[]; symbol: string }> = ({ prices, symbol }) => {
     const points = useMemo(() => {
         if (prices.length < 2) return '';
@@ -744,8 +884,10 @@ const PremiumAlphaLanding: React.FC = () => (
 type AlphaToolSurfaceProps = {
     rows: ScanRow[];
     sampleSize: SampleSize;
+    scanCount: number;
     status: ScanStatus;
     scanSource: DiscoverySource;
+    executionFixtureMode: boolean;
     isBusy: boolean;
     lastUpdated: Date | null;
     modelStatus: string;
@@ -807,8 +949,10 @@ const PurchaseMarketSelect: React.FC<PurchaseMarketSelectProps> = ({ value, onCh
 const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     rows,
     sampleSize,
+    scanCount,
     status,
     scanSource,
+    executionFixtureMode,
     isBusy,
     lastUpdated,
     modelStatus,
@@ -824,8 +968,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const AUTO_MAX_CONSECUTIVE_LOSSES = 3;
     const { client } = useStore();
     const { isAuthorized } = useApiBase();
-    const liveEngineRef = useRef<DTraderEngine | null>(null);
-    if (liveEngineRef.current === null) liveEngineRef.current = new DTraderEngine();
+    const liveEngineRef = useRef<AlphaExecutionEngine | null>(null);
+    if (liveEngineRef.current === null) {
+        liveEngineRef.current = executionFixtureMode
+            ? new FixtureAlphaExecutionEngine()
+            : new DTraderEngine();
+    }
     const liveEngine = liveEngineRef.current;
     const [selectedSymbol, setSelectedSymbol] = useState('');
     const [digitWindow, setDigitWindow] = useState(3);
@@ -970,7 +1118,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     }, [calculatedPrimaryDecision, calculatedRecoveryDecision]);
 
     const isLoggedIn = client?.is_logged_in ?? false;
-    const liveAuthorized = isLoggedIn && isAuthorized && Boolean(api_base.api);
+    const liveAuthorized = executionFixtureMode || (isLoggedIn && isAuthorized && Boolean(api_base.api));
 
     useEffect(() => {
         runtimeRef.current = {
@@ -1129,15 +1277,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
     useEffect(() => {
         liveEngine.onStatus = setLiveStatus;
-        liveEngine.buyGuard = proposal => {
-            const runtime = runtimeRef.current;
-            if (!runtime.autoVolatilityMode) return null;
-            const floor = Number(runtime.payoutFloor);
-            const multiplier = proposal.askPrice > 0 ? proposal.payout / proposal.askPrice : 0;
-            return multiplier >= floor
-                ? null
-                : `Proposal payout ${multiplier.toFixed(2)}x is below the ${floor.toFixed(2)}x auto-runner floor. Rescanning.`;
-        };
         liveEngine.onBuyFeedback = feedback => {
             setLiveFeedback(feedback);
             if (feedback.kind === 'error') {
@@ -1145,9 +1284,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setExecutionLeg('idle');
                 activeLegRef.current = null;
                 activeDecisionRef.current = null;
-                if (runtimeRef.current.autoVolatilityMode) {
-                    setTimeout(onScan, 350);
-                }
             }
         };
         liveEngine.onPosition = position => {
@@ -1314,7 +1450,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             liveEngine.onBuyFeedback = () => {};
             liveEngine.onPosition = () => {};
             liveEngine.onPriceWindow = () => {};
-            liveEngine.buyGuard = () => null;
         };
     }, [autoVolatilityMode, liveEngine, onScan, stopLoss, targetProfit, upsertJournalEntry]);
 
@@ -1333,6 +1468,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-discovered-count={discoveredCount}
             data-model-row-count={rows.length}
             data-model-version={MODEL_VERSION}
+            data-scan-count={scanCount}
             data-error={errorMessage}
             data-failed-symbols={JSON.stringify(failedSymbols)}
             data-digit-window={digitWindow}
@@ -1347,6 +1483,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-recovery-purchase={purchaseMarketLabel(recoveryPurchaseMarket)}
             data-execution-leg={executionLeg}
             data-auto-volatility-mode={autoVolatilityMode}
+            data-execution-fixture={executionFixtureMode}
+            data-journal-count={journalRows.length}
             data-payout-floor={payoutFloor}
         >
             <header className='alpha-tool__hero'>
@@ -1572,6 +1710,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 const AlphaScanWorkspace: React.FC = () => {
     const fixtureMode = typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).get('alpha_scan_fixture') === '1';
+    const executionFixtureMode = typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('alpha_scan_execution_fixture') === '1';
+    const autoRunnerFixture = fixtureMode && executionFixtureMode;
     const [sampleSize, setSampleSize] = useState<SampleSize>(() => {
         if (typeof window === 'undefined') return 600;
         const requested = Number(new URLSearchParams(window.location.search).get('alpha_scan_sample'));
@@ -1647,7 +1788,7 @@ const AlphaScanWorkspace: React.FC = () => {
         setStatus('discovering');
 
         if (fixtureMode) {
-            const fixtureRows = buildFixtureRows(sampleSize);
+            const fixtureRows = buildFixtureRows(sampleSize, autoRunnerFixture);
             resultRowsRef.current = fixtureRows;
             setRows(fixtureRows);
             setDiscoveredCount(fixtureRows.length);
@@ -1947,7 +2088,7 @@ const AlphaScanWorkspace: React.FC = () => {
         };
 
         armScanTimeout();
-    }, [closeSocket, finishWithCurrentData, fixtureMode, sampleSize]);
+    }, [autoRunnerFixture, closeSocket, finishWithCurrentData, fixtureMode, sampleSize]);
 
     useEffect(() => () => closeSocket(), [closeSocket]);
 
@@ -1994,8 +2135,10 @@ const AlphaScanWorkspace: React.FC = () => {
         <AlphaToolSurface
             rows={rows}
             sampleSize={sampleSize}
+            scanCount={scanIdRef.current}
             status={status}
             scanSource={discoverySource}
+            executionFixtureMode={executionFixtureMode}
             isBusy={isBusy}
             lastUpdated={lastUpdated}
             modelStatus={modelStatus}
