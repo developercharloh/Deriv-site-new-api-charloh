@@ -31,7 +31,7 @@ const getBotInterface = tradeEngine => {
         resume: (...args) => tradeEngine.resume(...args),
         purchase: (contract_type, prediction) => tradeEngine.purchase(contract_type, prediction),
         getAskPrice: contract_type => Number(getProposal(contract_type, tradeEngine).ask_price),
-        getPayout: contract_type => Number(getProposal(contract_type, tradeEngine).payout),
+        getPayout: contract_type => Number(getProposal(contract_type, tradeEngine)?.payout ?? getCurrentProposal(tradeEngine)?.payout ?? 0),
         getPurchaseReference: () => tradeEngine.getPurchaseReference(),
         isSellAvailable: () => tradeEngine.isSellAtMarketAvailable(),
         sellAtMarket: () => tradeEngine.sellAtMarket(),
@@ -67,6 +67,9 @@ const getProposal = (contract_type, tradeEngine) => {
             proposal.purchase_reference === tradeEngine.getPurchaseReference()
     );
 };
+
+const getCurrentProposal = tradeEngine =>
+    tradeEngine.data.proposals.find(proposal => proposal.purchase_reference === tradeEngine.getPurchaseReference());
 
 const getSellPrice = tradeEngine => {
     return tradeEngine.getSellPrice();
