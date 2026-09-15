@@ -78,28 +78,29 @@
 
     &__card {
         min-width: 0;
-        border: 1px solid rgba(229, 183, 73, 0.76);
+        position: relative;
+        border: 2px solid rgba(255, 209, 72, 0.96);
         border-radius: 14px;
         overflow: hidden;
         box-shadow:
-            0 0 0 1px rgba(255, 214, 92, 0.18),
-            0 0 13px rgba(222, 170, 43, 0.2),
-            0 4px 12px rgba(76, 91, 122, 0.12);
-        background: rgba(255, 255, 255, 0.74);
+            0 0 0 1px rgba(255, 249, 205, 0.92),
+            0 0 12px rgba(255, 207, 55, 0.72),
+            0 0 26px rgba(255, 185, 25, 0.38),
+            0 6px 16px rgba(91, 58, 0, 0.2);
+        background: #fff;
         display: flex;
         flex-direction: column;
-        will-change: transform, box-shadow;
-        animation:
-            free-bot-live-bounce 3.8s ease-in-out infinite,
-            free-bot-live-glow 2.8s ease-in-out infinite;
+        isolation: isolate;
+        will-change: box-shadow;
+        animation: free-bot-live-glow 2.4s ease-in-out infinite;
 
         &:hover {
             animation-play-state: paused;
             transform: translateY(-3px);
         }
 
-        &:nth-child(3n + 2) { animation-delay: -0.9s, -0.5s; }
-        &:nth-child(3n + 3) { animation-delay: -1.8s, -1.2s; }
+        &:nth-child(3n + 2) { animation-delay: -0.8s; }
+        &:nth-child(3n + 3) { animation-delay: -1.6s; }
     }
 
     &__card-art {
@@ -109,34 +110,71 @@
         background-color: #edf1f6;
         background-position: center;
         background-size: cover;
-        border-bottom: 1px solid rgba(215, 222, 232, 0.75);
+        border-bottom: 1px solid rgba(255, 204, 61, 0.72);
+        filter: saturate(1.12) contrast(1.1) brightness(1.04);
+        image-rendering: auto;
+        overflow: hidden;
+
+        &::before {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            background:
+                radial-gradient(circle at 52% 42%, rgba(255, 255, 255, 0.24), transparent 28%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 45%, rgba(20, 12, 0, 0.06));
+            content: '';
+            pointer-events: none;
+        }
+
+        &::after {
+            position: absolute;
+            top: -40%;
+            bottom: -40%;
+            left: -72%;
+            z-index: 2;
+            width: 38%;
+            transform: skewX(-18deg);
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.2),
+                rgba(255, 255, 255, 0.88),
+                rgba(255, 226, 123, 0.3),
+                transparent
+            );
+            content: '';
+            pointer-events: none;
+            animation: free-bot-art-shine 3.6s ease-in-out infinite;
+        }
     }
 
     &__card-category {
         position: absolute;
         top: 7px;
         left: 7px;
-        z-index: 1;
+        z-index: 3;
         max-width: calc(100% - 14px);
         overflow: hidden;
         padding: 4px 6px;
         border: 1px solid rgba(226, 180, 70, 0.72);
         border-radius: 7px;
-        background: rgba(255, 250, 235, 0.96);
-        color: #9a6818;
-        font-size: 0.47rem;
+        background: rgba(255, 255, 248, 0.98);
+        color: #6f4300;
+        font-size: 0.5rem;
         font-weight: 900;
         letter-spacing: 0.045em;
         line-height: 1;
         text-overflow: ellipsis;
         white-space: nowrap;
-        box-shadow: 0 0 9px rgba(255, 205, 74, 0.38);
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.74),
+            0 0 11px rgba(255, 196, 30, 0.76);
     }
 
     &__card-name {
         min-height: 2.1em;
         margin: 3px 0 5px;
-        color: #26334a;
+        color: #111827;
         font-size: 0.72rem;
         font-weight: 800;
         line-height: 1.1;
@@ -285,16 +323,25 @@
 @keyframes free-bot-live-glow {
     0%, 100% {
         box-shadow:
-            0 0 0 1px rgba(255, 214, 92, 0.18),
-            0 0 13px rgba(222, 170, 43, 0.2),
-            0 4px 12px rgba(76, 91, 122, 0.12);
+            0 0 0 1px rgba(255, 249, 205, 0.9),
+            0 0 11px rgba(255, 207, 55, 0.62),
+            0 0 22px rgba(255, 185, 25, 0.28),
+            0 6px 16px rgba(91, 58, 0, 0.18);
     }
     50% {
         box-shadow:
-            0 0 0 1px rgba(255, 226, 126, 0.44),
-            0 0 22px rgba(239, 190, 54, 0.58),
-            0 7px 18px rgba(139, 96, 17, 0.18);
+            0 0 0 2px rgba(255, 255, 220, 1),
+            0 0 18px rgba(255, 220, 88, 0.96),
+            0 0 34px rgba(255, 174, 0, 0.58),
+            0 8px 20px rgba(122, 72, 0, 0.24);
     }
+}
+
+@keyframes free-bot-art-shine {
+    0%, 38% { left: -72%; opacity: 0; }
+    48% { opacity: 1; }
+    68% { left: 138%; opacity: 0.9; }
+    100% { left: 138%; opacity: 0; }
 }
 
 @keyframes free-bot-live-dot {
@@ -304,7 +351,8 @@
 
 @media (prefers-reduced-motion: reduce) {
     .free-bots__card,
-    .free-bots__card-access::before {
+    .free-bots__card-access::before,
+    .free-bots__card-art::after {
         animation: none;
     }
 }

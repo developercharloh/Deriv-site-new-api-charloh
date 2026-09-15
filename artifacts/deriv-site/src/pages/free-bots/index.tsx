@@ -129,7 +129,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'differ-v2',
-        name: 'Differ V2 Bot',
+        name: 'Differs V2 Bot',
         emoji: '🔀',
         description:
             'Trades Digit Differs on Volatility 100 Index. Waits for entry point digit 9, then bets the last digit will NOT be 9. Martingale recovery on losses with Take Profit and Stop Loss.',
@@ -148,7 +148,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'even-odd-scanner',
-        name: 'Even Odd Entry Scanner Bot',
+        name: 'Even / Odd Entry Scanner',
         emoji: '⚡',
         description:
             'Trades Digit Even/Odd on Volatility 100 Index. Scans every tick — enters only when last digit matches the signal entry point, then buys the direction (EVEN or ODD) from the signal. 10-level martingale recovery on losses.',
@@ -166,7 +166,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'over-under-signal',
-        name: 'Over Under Bot',
+        name: 'Over / Under Signal Bot',
         emoji: '📊',
         description:
             'Trades Digit Over/Under using live signal intelligence. Scans every tick — enters only when the last digit equals the signal barrier, then bets OVER or UNDER exactly as the signal directs. Martingale recovery on losses with Take Profit guard.',
@@ -342,12 +342,12 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'elite-entry-scanner',
-        name: 'Elite Entry Scanner Bot 🔥🔥',
+        name: 'Elite Over / Under Entry Scanner 🔥🔥',
         emoji: '🔥',
         description:
-            'Trades Digit Under on Volatility 10 (1s) Index. Scans every tick — enters only when the last digit equals Entry Point 7, then bets UNDER 9. On a win, reverts to prediction 9; on a loss, switches to prediction 6 with smart Martingale recovery (2.55× split). Resets stake to minimum $0.35 floor. Stops automatically on Take Profit ($100) or Stop Loss ($1000).',
+            'Trades Digit Over/Under on Volatility 10 (1s) Index. Its Blockly strategy includes one Over entry and two Under entries, using Entry Point 7 with adaptive predictions and smart Martingale recovery. Resets stake to a minimum $0.35 floor and stops automatically on Take Profit ($100) or Stop Loss ($1000).',
         market: 'Volatility 10 (1s) Index (1HZ10V)',
-        strategy: 'Digit Under · Entry Point Scanner · Adaptive Martingale',
+        strategy: 'Digit Over / Under · Entry Point Scanner · Adaptive Martingale',
         params: [
             { label: 'Entry Point', value: 'Digit 7' },
             { label: 'Prediction (normal)', value: 'Under 9' },
@@ -387,7 +387,7 @@ const CARD_CATEGORY: Record<string, string> = {
     'matches-signal': 'MATCHES',
     'differ-v2': 'DIFFERS',
     'even-odd-scanner': 'EVEN / ODD',
-    'over-under-signal': 'MULTI-MARKET BOT',
+    'over-under-signal': 'OVER / UNDER SIGNAL',
     'over2-under7-reversal': 'OVER / UNDER',
     'digit-pro-v1': 'OVER / UNDER · EVEN / ODD',
     'over-destroyer': 'OVER / UNDER',
@@ -395,8 +395,8 @@ const CARD_CATEGORY: Record<string, string> = {
     'elite-default-speed': 'UNDER',
     'even-odd-manual': 'EVEN / ODD',
     'over-under-manual': 'OVER / UNDER',
-    'over-under-ai-signals': 'MULTI-MARKET BOT',
-    'elite-entry-scanner': 'UNDER',
+    'over-under-ai-signals': 'OVER / UNDER AI',
+    'elite-entry-scanner': 'OVER / UNDER SCANNER',
 };
 
 const CARD_ACCENT: Record<string, string> = {

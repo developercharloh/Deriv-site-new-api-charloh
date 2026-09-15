@@ -869,6 +869,7 @@ const assertMobileFreeBotsLayout = async cdp => {
             const controlsRect = controls?.getBoundingClientRect();
             const runButtonRect = runButton?.getBoundingClientRect();
             const cardStyle = firstCard ? getComputedStyle(firstCard) : null;
+            const borderChannels = cardStyle?.borderTopColor?.match(/[\\d.]+/g)?.map(Number) || [];
             const ancestors = [];
             let ancestor = list;
             while (ancestor && ancestors.length < 5) {
@@ -897,7 +898,14 @@ const assertMobileFreeBotsLayout = async cdp => {
                 lastCardInitiallyBelowViewport: Boolean(
                     listRect && lastCardRect && lastCardRect.top > listRect.bottom
                 ),
-                goldBorder: Boolean(cardStyle?.borderColor?.includes('229, 183, 73')),
+                goldBorder: Boolean(
+                    cardStyle &&
+                    parseFloat(cardStyle.borderTopWidth) >= 2 &&
+                    borderChannels.length >= 3 &&
+                    borderChannels[0] >= 220 &&
+                    borderChannels[1] >= 160 &&
+                    borderChannels[2] <= 130
+                ),
                 goldGlow: Boolean(cardStyle?.boxShadow && cardStyle.boxShadow !== 'none'),
                 fixedControlsVisible: Boolean(
                     controls &&
