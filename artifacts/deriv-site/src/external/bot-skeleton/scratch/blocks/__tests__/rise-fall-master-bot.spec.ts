@@ -214,6 +214,22 @@ describe('Rise/Fall Master Bot XML', () => {
         workspace.dispose();
     });
 
+    it('uses the balanced Adaptive Momentum profile', () => {
+        const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Rise_Fall_Master_Bot.xml');
+        const xmlText = fs.readFileSync(xmlPath, 'utf8');
+        const workspace = new Blockly.Workspace();
+
+        expect(() => Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xmlText), workspace)).not.toThrow();
+
+        const signalBlock = workspace.getBlockById('bp_adaptive_signal');
+        expect(signalBlock?.getInputTargetBlock('WARMUP')?.getFieldValue('NUM')).toBe(30);
+        expect(signalBlock?.getInputTargetBlock('SHORT_WINDOW')?.getFieldValue('NUM')).toBe(6);
+        expect(signalBlock?.getInputTargetBlock('LONG_WINDOW')?.getFieldValue('NUM')).toBe(14);
+        expect(signalBlock?.getInputTargetBlock('CONFIDENCE')?.getFieldValue('NUM')).toBe(55);
+
+        workspace.dispose();
+    });
+
     it('preserves saved market and contract selections after live option hydration', () => {
         const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Rise_Fall_Master_Bot.xml');
         const xmlText = fs.readFileSync(xmlPath, 'utf8');
