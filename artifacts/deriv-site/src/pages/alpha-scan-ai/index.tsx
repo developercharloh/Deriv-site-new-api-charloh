@@ -837,6 +837,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [multiMarketScanning, setMultiMarketScanning] = useState(true);
     const [autoVolatilityMode, setAutoVolatilityMode] = useState(false);
     const [stake, setStake] = useState('10');
+    const [payoutFloor, setPayoutFloor] = useState('1.8');
     const [targetProfit, setTargetProfit] = useState('15');
     const [stopLoss, setStopLoss] = useState('5');
     const [martingale, setMartingale] = useState('no');
@@ -879,6 +880,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         recoveryPurchaseMarket,
         multiMarketScanning,
         autoVolatilityMode,
+        payoutFloor,
         selectedSymbol,
     });
 
@@ -985,9 +987,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             recoveryPurchaseMarket,
             multiMarketScanning,
             autoVolatilityMode,
+            payoutFloor,
             selectedSymbol,
         };
-    }, [autoVolatilityMode, client?.currency, digitWindow, liveAuthorized, liveMode, multiMarketScanning, primaryCondition, primaryPurchaseMarket, recoveryCondition, recoveryDigitWindow, recoveryPurchaseMarket, rows, selectedSymbol, stake]);
+    }, [autoVolatilityMode, client?.currency, digitWindow, liveAuthorized, liveMode, multiMarketScanning, payoutFloor, primaryCondition, primaryPurchaseMarket, recoveryCondition, recoveryDigitWindow, recoveryPurchaseMarket, rows, selectedSymbol, stake]);
 
     const executeDecision = useCallback((decision: RankedMarketDecision, leg: 'primary' | 'recovery') => {
         const runtime = runtimeRef.current;
@@ -1126,6 +1129,15 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
     useEffect(() => {
         liveEngine.onStatus = setLiveStatus;
+        liveEngine.buyGuard = proposal => {
+            const runtime = runtimeRef.current;
+            if (!runtime.autoVolatilityMode) return null;
+            const floor = Number(runtime.payoutFloor);
+            const multiplier = proposal.askPrice > 0 ? proposal.payout / proposal.askPrice : 0;
+            return multiplier >= floor
+                ? null
+                : `Proposal payout ${multiplier.toFixed(2)}x is below the ${floor.toFixed(2)}x auto-runner floor. Rescanning.`;
+        };
         liveEngine.onBuyFeedback = feedback => {
             setLiveFeedback(feedback);
             if (feedback.kind === 'error') {
@@ -1133,6 +1145,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setExecutionLeg('idle');
                 activeLegRef.current = null;
                 activeDecisionRef.current = null;
+                if (runtimeRef.current.autoVolatilityMode) {
+                    setTimeout(onScan, 350);
+                }
             }
         };
         liveEngine.onPosition = position => {
@@ -1299,6 +1314,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             liveEngine.onBuyFeedback = () => {};
             liveEngine.onPosition = () => {};
             liveEngine.onPriceWindow = () => {};
+            liveEngine.buyGuard = () => null;
         };
     }, [autoVolatilityMode, liveEngine, onScan, stopLoss, targetProfit, upsertJournalEntry]);
 
@@ -1331,6 +1347,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-recovery-purchase={purchaseMarketLabel(recoveryPurchaseMarket)}
             data-execution-leg={executionLeg}
             data-auto-volatility-mode={autoVolatilityMode}
+            data-payout-floor={payoutFloor}
         >
             <header className='alpha-tool__hero'>
                 <button type='button' className='alpha-tool__menu' aria-label='Open tool menu'>
@@ -1456,12 +1473,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     </button>
                 </div>
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Stake</span><input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Stake' /></div>
+                <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>%</span><span>Min Payout</span><select value={payoutFloor} onChange={event => setPayoutFloor(event.target.value)} aria-label='Minimum payout'><option value='1.5'>1.50x</option><option value='1.8'>1.80x</option><option value='2'>2.00x</option></select></label>
                 <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↗</span><span>Target Profit</span><select value={targetProfit} onChange={event => setTargetProfit(event.target.value)} aria-label='Target profit'><option value='15'>$15</option><option value='25'>$25</option><option value='50'>$50</option></select></label>
                 <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↓</span><span>Stop Loss</span><select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option></select></label>
                 <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>×</span><span>Martingale</span><select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Martingale'><option value='no'>No (1x)</option><option value='2'>2x</option><option value='3'>3x</option></select></label>
                 <div className='alpha-tool__settings-note'>
                     {autoVolatilityMode
-                        ? `Auto runner · all volatility symbols · Adaptive Momentum ${AUTO_MOMENTUM_SHORT_WINDOW}/${AUTO_MOMENTUM_LONG_WINDOW} · ${AUTO_MOMENTUM_CONFIDENCE}% threshold · one contract at a time`
+                        ? `Auto runner · all volatility symbols · Adaptive Momentum ${AUTO_MOMENTUM_SHORT_WINDOW}/${AUTO_MOMENTUM_LONG_WINDOW} · ${AUTO_MOMENTUM_CONFIDENCE}% threshold · payout ≥ ${payoutFloor}x · one contract at a time`
                         : 'One-tick contract · one selected market condition · recovery starts only after a primary loss'}
                 </div>
             </section>
