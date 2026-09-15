@@ -382,7 +382,7 @@ const CARD_ART: Record<string, string> = {
 };
 
 const CARD_CATEGORY: Record<string, string> = {
-    'binary-matrix-ai': 'MATRIX BOT',
+    'binary-matrix-ai': 'EVEN / ODD · OVER / UNDER',
     'rise-fall-master': 'RISE / FALL',
     'matches-signal': 'MATCHES',
     'differ-v2': 'DIFFERS',
@@ -734,7 +734,8 @@ async function postLoadReapplyFields(botId: string, ws: any): Promise<void> {
 
 // ─── Bot Card ─────────────────────────────────────────────────────────────────
 
-const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer(({ bot, engineMode }) => {
+const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: number }> = observer(
+    ({ bot, engineMode, ordinal }) => {
     const store = useStore();
     const [status,     setStatus]     = useState<BotStatus>('idle');
     const [errorMsg,   setErrorMsg]   = useState('');
@@ -893,7 +894,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode }> = observer((
                     style={{ '--fb-accent': CARD_ACCENT[bot.id] || '#2779bd' } as React.CSSProperties}
                 >
                     <span className='free-bots__card-access'>OPEN ACCESS</span>
-                    <h2 className='free-bots__card-name'>{bot.name}</h2>
+                    <h2 className='free-bots__card-name'>Bot #{ordinal}</h2>
 
                     {signal && (
                         <SignalBadge signal={signal} onClick={() => setShowSignal(true)} />
@@ -962,13 +963,9 @@ const FreeBots = observer(() => {
     return (
         <div className='free-bots'>
             <div className='free-bots__grid'>
-                {BOTS.map(bot => (
-                    <BotCard key={bot.id} bot={bot} engineMode={engineMode} />
+                {BOTS.map((bot, index) => (
+                    <BotCard key={bot.id} bot={bot} engineMode={engineMode} ordinal={index + 1} />
                 ))}
-            </div>
-
-            <div className='free-bots__footer'>
-                <p>All bots are provided for educational purposes. Always test with a demo account first.</p>
             </div>
         </div>
     );

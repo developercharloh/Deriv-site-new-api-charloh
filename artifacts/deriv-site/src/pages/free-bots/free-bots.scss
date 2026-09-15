@@ -132,11 +132,35 @@
     }
 
     &__card-category {
-        display: none;
+        position: absolute;
+        top: 7px;
+        left: 7px;
+        z-index: 3;
+        max-width: calc(100% - 14px);
+        overflow: hidden;
+        padding: 4px 6px;
+        border: 1px solid rgba(226, 180, 70, 0.86);
+        border-radius: 7px;
+        background: rgba(255, 255, 248, 0.97);
+        color: #6f4300;
+        font-size: 0.48rem;
+        font-weight: 900;
+        letter-spacing: 0.035em;
+        line-height: 1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.72),
+            0 0 10px rgba(255, 196, 30, 0.72);
     }
 
     &__card-name {
-        display: none;
+        min-height: 1.1em;
+        margin: 3px 0 5px;
+        color: #111827;
+        font-size: 0.72rem;
+        font-weight: 900;
+        line-height: 1.1;
     }
 
     &__card-access {
