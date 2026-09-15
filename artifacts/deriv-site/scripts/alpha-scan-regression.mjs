@@ -285,6 +285,8 @@ const getSnapshot = evaluate => evaluate(`(() => {
         runningRows: document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]').length,
         settledRows: Number(root?.dataset.journalCount || 0),
         autoTrades: Number(root?.dataset.autoTrades || 0),
+        payoutSkipCount: Number(root?.dataset.payoutSkipCount || 0),
+        lastPayoutSkip: root?.dataset.lastPayoutSkip || '',
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
         errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
     };
@@ -561,6 +563,25 @@ const run = async () => {
             throw new Error('The automatic runner opened a contract before fresh confirmation passed.');
         }
 
+        const payoutSkipped = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.runningRows === 0 &&
+                    Number(next.scanCount) > initialAutoScanCount &&
+                    next.payoutSkipCount >= 1 &&
+                    next.lastPayoutSkip.includes('Skipped automatic buy') &&
+                    next.lastPayoutSkip.includes('below the 1.80x floor')
+                    ? next
+                    : false;
+            },
+            'below-floor payout skipped and rescanned',
+            5000,
+            50,
+        );
+        if (payoutSkipped.runningRows !== 0 || !payoutSkipped.lastPayoutSkip.includes('Rescanning')) {
+            throw new Error(`The automatic runner did not skip the below-floor proposal cleanly: ${JSON.stringify(payoutSkipped)}`);
+        }
+
         const firstRunning = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
@@ -628,6 +649,11 @@ const run = async () => {
             firstContract: firstRunning.runningRows,
             settledRows: settled.settledRows,
             resumedActiveRows: resumed.runningRows,
+            payoutSkipped: {
+                scanCount: Number(payoutSkipped.scanCount),
+                runningRows: payoutSkipped.runningRows,
+                message: payoutSkipped.lastPayoutSkip,
+            },
         };
         runReport.fixture.autoRunner = autoRunner;
 

@@ -62,6 +62,11 @@ export interface DTProposal {
     previewStopOut:        number | null;
 }
 
+export type DTBuyGuard = (proposal: DTProposal) => string | null;
+
+export const getPayoutMultiplier = (proposal: DTProposal): number =>
+    proposal.askPrice > 0 ? proposal.payout / proposal.askPrice : 0;
+
 export interface DTPosition {
     contractId:   string;
     contractType: DTContractType;
@@ -137,7 +142,7 @@ export class DTraderEngine {
     public onLog:      (l: DTLog)                     => void = () => {};
     public onBuyFeedback: (f: DTBuyFeedback)          => void = () => {};
     /** Optional last-moment proposal guard used by unattended execution paths. */
-    public buyGuard: (proposal: DTProposal) => string | null = () => null;
+    public buyGuard: DTBuyGuard = () => null;
     /** Last-digit frequency counts over the rolling 1000-tick window.
      *  Always 10 elements long, indices 0-9 → counts. Emit once on
      *  history seed, then once per new tick. */
@@ -303,6 +308,10 @@ export class DTraderEngine {
         this.currentProposalCfgKey = null;
         this.cfg = null;
         this.setStatus('idle');
+    }
+
+    setBuyGuard(guard: DTBuyGuard | null): void {
+        this.buyGuard = guard || (() => null);
     }
 
     /** Re-establish tick + proposal subscriptions after a freeze / suspend.

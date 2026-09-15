@@ -7,8 +7,10 @@ import {
     DTraderEngine,
     type DTBuyFeedback,
     type DTConfig,
+    type DTBuyGuard,
     type DTPosition,
     type DTStatus,
+    getPayoutMultiplier,
 } from '@/utils/dtrader-engine';
 import {
     MARKET_OPTION_GROUPS,
@@ -666,6 +668,7 @@ type AlphaExecutionEngine = {
     start: (config: DTConfig) => boolean;
     stop: () => void;
     placeBuyNow: (patch: Partial<DTConfig>) => void;
+    setBuyGuard: (guard: DTBuyGuard | null) => void;
 };
 
 type AlphaRiskFixture = 'target' | 'stop-loss' | 'consecutive-losses' | 'trade-count';
@@ -688,6 +691,8 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
     private readonly riskFixtureMode: AlphaRiskFixture | null;
     private readonly confirmationFixtureMode: AlphaConfirmationFixture;
     private confirmationReversalUsed = false;
+    private buyGuard: DTBuyGuard = () => null;
+    private lowPayoutProposalUsed = false;
 
     constructor(
         riskFixtureMode: AlphaRiskFixture | null = null,
@@ -755,6 +760,10 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         }
     }
 
+    setBuyGuard(guard: DTBuyGuard | null): void {
+        this.buyGuard = guard || (() => null);
+    }
+
     placeBuyNow(patch: Partial<DTConfig>): void {
         if (!this.config || this.activePosition) {
             this.onBuyFeedback({
@@ -766,8 +775,32 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         }
 
         const config = { ...this.config, ...patch };
+        const payoutMultiplier = this.lowPayoutProposalUsed ? 1.8 : 1.6;
+        const proposal = {
+            id: `fixture-proposal-${this.contractSequence + 1}`,
+            askPrice: config.stake,
+            payout: config.stake * payoutMultiplier,
+            profit: config.stake * (payoutMultiplier - 1),
+            profitPct: (payoutMultiplier - 1) * 100,
+            longcode: 'Fixture proposal',
+            spot: '100.40',
+            spotNum: 100.4,
+            previewHighBarrier: null,
+            previewLowBarrier: null,
+            previewStopOut: null,
+        };
+        const guardMessage = this.buyGuard(proposal);
+        this.lowPayoutProposalUsed = true;
+        if (guardMessage) {
+            this.onBuyFeedback({
+                seq: Date.now(),
+                kind: 'error',
+                message: guardMessage,
+            });
+            return;
+        }
         const contractId = `fixture-${++this.contractSequence}`;
-        const payout = config.stake * 1.8;
+        const payout = proposal.payout;
         const position: DTPosition = {
             contractId,
             contractType: config.contractType,
@@ -995,6 +1028,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [liveMode, setLiveMode] = useState(true);
     const [liveStatus, setLiveStatus] = useState<DTStatus>('idle');
     const [liveFeedback, setLiveFeedback] = useState<DTBuyFeedback | null>(null);
+    const [payoutSkipCount, setPayoutSkipCount] = useState(0);
+    const [lastPayoutSkipMessage, setLastPayoutSkipMessage] = useState('');
     const [liveTrade, setLiveTrade] = useState<DTPosition | null>(null);
     const [liveTradeLeg, setLiveTradeLeg] = useState<'primary' | 'recovery' | null>(null);
     const [liveTradeDecision, setLiveTradeDecision] = useState<RankedMarketDecision | null>(null);
@@ -1168,6 +1203,28 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             barrier: decision.barrier,
             currency: runtime.currency,
         };
+        const automaticPrimary = runtime.autoVolatilityMode && leg === 'primary';
+        liveEngine.setBuyGuard(automaticPrimary
+            ? proposal => {
+                const minimumPayout = Number(runtimeRef.current.payoutFloor);
+                const payoutMultiplier = getPayoutMultiplier(proposal);
+                if (!Number.isFinite(minimumPayout) || minimumPayout <= 0 || payoutMultiplier >= minimumPayout) {
+                    return null;
+                }
+
+                const message = `Skipped automatic buy: fresh payout ${payoutMultiplier.toFixed(2)}x is below the ${minimumPayout.toFixed(2)}x floor. Rescanning for a qualifying proposal.`;
+                liveEngine.stop();
+                pendingAutoEntryRef.current = null;
+                activeLegRef.current = null;
+                activeDecisionRef.current = null;
+                setExecutionLeg('idle');
+                setPayoutSkipCount(count => count + 1);
+                setLastPayoutSkipMessage(message);
+                setLiveFeedback({ seq: Date.now(), kind: 'error', message });
+                setTimeout(onScan, riskFixtureMode ? 50 : 650);
+                return message;
+            }
+            : null);
         activeLegRef.current = leg;
         activeDecisionRef.current = decision;
         setExecutionLeg(leg === 'primary' ? 'primary-pending' : 'recovery-pending');
@@ -1197,7 +1254,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         if (!runtime.autoVolatilityMode || leg !== 'primary') {
             liveEngine.placeBuyNow(config);
         }
-    }, [liveEngine]);
+    }, [liveEngine, onScan, riskFixtureMode]);
 
     executeDecisionRef.current = executeDecision;
 
@@ -1491,6 +1548,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-journal-count={journalRows.length}
             data-auto-trades={autoRiskRef.current.trades}
             data-payout-floor={payoutFloor}
+            data-payout-skip-count={payoutSkipCount}
+            data-last-payout-skip={lastPayoutSkipMessage}
         >
             <header className='alpha-tool__hero'>
                 <button type='button' className='alpha-tool__menu' aria-label='Open tool menu'>
