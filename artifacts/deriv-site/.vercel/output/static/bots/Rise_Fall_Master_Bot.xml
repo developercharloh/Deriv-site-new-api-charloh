@@ -393,9 +393,9 @@
                                     <field name="OP">AND</field>
                                     <value name="A">
                                       <block type="payout_gate" id="bp_payout_gate">
-                                        <value name="PAYOUT"><block type="math_number" id="bp_payout_value"><field name="NUM">1.8</field></block></value>
+                                        <value name="PAYOUT"><block type="payout" id="bp_payout_value"><field name="PURCHASE_LIST">CALL</field></block></value>
                                         <value name="STAKE"><block type="variables_get" id="bp_payout_stake"><field name="VAR" id="v_stake">Stake</field></block></value>
-                                        <value name="REQUIRED_WIN_RATE"><block type="math_number" id="bp_payout_rate"><field name="NUM">60</field></block></value>
+                                        <value name="REQUIRED_WIN_RATE"><block type="math_number" id="bp_payout_rate"><field name="NUM">62.5</field></block></value>
                                       </block>
                                     </value>
                                     <value name="B">

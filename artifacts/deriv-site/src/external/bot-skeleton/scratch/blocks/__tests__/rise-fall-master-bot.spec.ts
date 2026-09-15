@@ -156,7 +156,7 @@ describe('Rise/Fall Master Bot XML', () => {
         setDropdownOptions(durationBlock, 'DURATIONTYPE_LIST', [['Ticks', 't']], 't');
         workspace
             .getAllBlocks(false)
-            .filter(block => block.type === 'purchase')
+            .filter(block => block.type === 'purchase' || block.type === 'payout')
             .forEach(block => {
                 setDropdownOptions(
                     block,
@@ -217,15 +217,43 @@ describe('Rise/Fall Master Bot XML', () => {
     it('uses the balanced Adaptive Momentum profile', () => {
         const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Rise_Fall_Master_Bot.xml');
         const xmlText = fs.readFileSync(xmlPath, 'utf8');
+        const sourceDom = Blockly.utils.xml.textToDom(xmlText);
         const workspace = new Blockly.Workspace();
 
-        expect(() => Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xmlText), workspace)).not.toThrow();
+        expect(() => Blockly.Xml.domToWorkspace(removeDependentFields(sourceDom), workspace)).not.toThrow();
 
         const signalBlock = workspace.getBlockById('bp_adaptive_signal');
         expect(signalBlock?.getInputTargetBlock('WARMUP')?.getFieldValue('NUM')).toBe(30);
         expect(signalBlock?.getInputTargetBlock('SHORT_WINDOW')?.getFieldValue('NUM')).toBe(6);
         expect(signalBlock?.getInputTargetBlock('LONG_WINDOW')?.getFieldValue('NUM')).toBe(14);
         expect(signalBlock?.getInputTargetBlock('CONFIDENCE')?.getFieldValue('NUM')).toBe(55);
+
+        const noContractGate = workspace.getBlockById('bp_no_contract');
+        const lossGate = workspace.getBlockById('bp_loss_gate');
+        const payoutGate = workspace.getBlockById('bp_payout_gate');
+        const payoutBlock = payoutGate?.getInputTargetBlock('PAYOUT');
+        expect(payoutBlock).toBeDefined();
+        setDropdownOptions(payoutBlock, 'PURCHASE_LIST', [['Rise', 'CALL'], ['Fall', 'PUT']], 'CALL');
+        expect(noContractGate?.type).toBe('no_active_contract');
+        expect(lossGate?.getInputTargetBlock('MAX_LOSSES')?.getFieldValue('NUM')).toBe(3);
+        expect(payoutBlock?.type).toBe('payout');
+        expect(payoutBlock?.getFieldValue('PURCHASE_LIST')).toBe('CALL');
+        expect(payoutGate?.getInputTargetBlock('REQUIRED_WIN_RATE')?.getFieldValue('NUM')).toBe(62.5);
+
+        workspace.dispose();
+    });
+
+    it('imports the reusable Adaptive Momentum preset with its safety gates', () => {
+        const xmlPath = path.resolve(__dirname, '../../../../../../src/xml/adaptive_momentum.xml');
+        const sourceDom = Blockly.utils.xml.textToDom(fs.readFileSync(xmlPath, 'utf8'));
+        const workspace = new Blockly.Workspace();
+
+        expect(() => Blockly.Xml.domToWorkspace(removeDependentFields(sourceDom), workspace)).not.toThrow();
+        expect(workspace.getBlockById('adaptive_signal_block')?.type).toBe('adaptive_momentum_signal');
+        expect(workspace.getBlockById('adaptive_no_active_contract')?.type).toBe('no_active_contract');
+        expect(workspace.getBlockById('adaptive_consecutive_loss_gate')?.getInputTargetBlock('MAX_LOSSES')?.getFieldValue('NUM')).toBe(3);
+        expect(workspace.getBlockById('adaptive_payout_gate')?.getInputTargetBlock('REQUIRED_WIN_RATE')?.getFieldValue('NUM')).toBe(62.5);
+        expect(workspace.getBlockById('adaptive_signal_block')?.getInputTargetBlock('CONFIDENCE')?.getFieldValue('NUM')).toBe(55);
 
         workspace.dispose();
     });
@@ -266,7 +294,7 @@ describe('Rise/Fall Master Bot XML', () => {
 
         const restoredPurchases = workspace
             .getAllBlocks(false)
-            .filter(block => block.type === 'purchase')
+            .filter(block => block.type === 'purchase' || block.type === 'payout')
             .map(block => block.getFieldValue('PURCHASE_LIST'));
         expect(restoredPurchases).toEqual(savedSelections.PURCHASE_LIST);
 

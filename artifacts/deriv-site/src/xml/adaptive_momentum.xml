@@ -2,6 +2,7 @@
   <variables>
     <variable id="adaptive_signal">Adaptive Signal</variable>
     <variable id="adaptive_cooldown">Cooldown Ticks</variable>
+    <variable id="adaptive_stake">Stake</variable>
     <variable id="adaptive_profit_limit">Take Profit Limit</variable>
     <variable id="adaptive_loss_limit">Stop Loss Limit</variable>
   </variables>
@@ -44,13 +45,19 @@
         <field name="VAR" id="adaptive_cooldown">Cooldown Ticks</field>
         <value name="VALUE"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
         <next>
-          <block type="variables_set" id="adaptive_init_profit">
-            <field name="VAR" id="adaptive_profit_limit">Take Profit Limit</field>
-            <value name="VALUE" strategy_value="profit"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+          <block type="variables_set" id="adaptive_init_stake">
+            <field name="VAR" id="adaptive_stake">Stake</field>
+            <value name="VALUE" strategy_value="stake"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
             <next>
-              <block type="variables_set" id="adaptive_init_loss">
-                <field name="VAR" id="adaptive_loss_limit">Stop Loss Limit</field>
-                <value name="VALUE" strategy_value="loss"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+              <block type="variables_set" id="adaptive_init_profit">
+                <field name="VAR" id="adaptive_profit_limit">Take Profit Limit</field>
+                <value name="VALUE" strategy_value="profit"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+                <next>
+                  <block type="variables_set" id="adaptive_init_loss">
+                    <field name="VAR" id="adaptive_loss_limit">Stop Loss Limit</field>
+                    <value name="VALUE" strategy_value="loss"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+                  </block>
+                </next>
               </block>
             </next>
           </block>
@@ -65,6 +72,7 @@
         </value>
         <value name="AMOUNT" strategy_value="stake">
           <shadow type="math_number"><field name="NUM">1</field></shadow>
+          <block type="variables_get" id="adaptive_trade_stake"><field name="VAR" id="adaptive_stake">Stake</field></block>
         </value>
       </block>
     </statement>
@@ -124,41 +132,68 @@
               </block>
             </statement>
             <statement name="ELSE">
-              <block type="variables_set" id="adaptive_signal_set">
-                <field name="VAR" id="adaptive_signal">Adaptive Signal</field>
-                <value name="VALUE">
-                  <block type="adaptive_momentum_signal" id="adaptive_signal_block">
-                    <value name="WARMUP" strategy_value="warmup_window"><shadow type="math_number"><field name="NUM">30</field></shadow></value>
-                    <value name="SHORT_WINDOW" strategy_value="short_window"><shadow type="math_number"><field name="NUM">8</field></shadow></value>
-                    <value name="LONG_WINDOW" strategy_value="long_window"><shadow type="math_number"><field name="NUM">20</field></shadow></value>
-                    <value name="CONFIDENCE" strategy_value="confidence"><shadow type="math_number"><field name="NUM">60</field></shadow></value>
-                  </block>
-                </value>
-                <next>
-                  <block type="controls_if" id="adaptive_call_or_put">
-                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
-                    <value name="IF0">
-                      <block type="logic_compare" id="adaptive_call_compare">
-                        <field name="OP">EQ</field>
-                        <value name="A"><block type="variables_get" id="adaptive_call_signal"><field name="VAR" id="adaptive_signal">Adaptive Signal</field></block></value>
-                        <value name="B"><block type="text" id="adaptive_call_text"><field name="TEXT">CALL</field></block></value>
-                      </block>
-                    </value>
-                    <statement name="DO0"><block type="purchase" id="adaptive_call_purchase"><field name="PURCHASE_LIST">CALL</field></block></statement>
-                    <statement name="ELSE">
-                      <block type="controls_if" id="adaptive_put_gate">
-                        <value name="IF0">
-                          <block type="logic_compare" id="adaptive_put_compare">
-                            <field name="OP">EQ</field>
-                            <value name="A"><block type="variables_get" id="adaptive_put_signal"><field name="VAR" id="adaptive_signal">Adaptive Signal</field></block></value>
-                            <value name="B"><block type="text" id="adaptive_put_text"><field name="TEXT">PUT</field></block></value>
+              <block type="controls_if" id="adaptive_purchase_gate">
+                <value name="IF0">
+                  <block type="logic_operation" id="adaptive_gate_active_and_loss">
+                    <field name="OP">AND</field>
+                    <value name="A"><block type="no_active_contract" id="adaptive_no_active_contract"></block></value>
+                    <value name="B">
+                      <block type="logic_operation" id="adaptive_gate_loss_and_payout">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="consecutive_loss_gate" id="adaptive_consecutive_loss_gate">
+                            <value name="MAX_LOSSES"><shadow type="math_number"><field name="NUM">3</field></shadow></value>
                           </block>
                         </value>
-                        <statement name="DO0"><block type="purchase" id="adaptive_put_purchase"><field name="PURCHASE_LIST">PUT</field></block></statement>
+                        <value name="B">
+                          <block type="payout_gate" id="adaptive_payout_gate">
+                            <value name="PAYOUT"><block type="payout" id="adaptive_payout_value"><field name="PURCHASE_LIST">CALL</field></block></value>
+                            <value name="STAKE"><block type="variables_get" id="adaptive_payout_stake"><field name="VAR" id="adaptive_stake">Stake</field></block></value>
+                            <value name="REQUIRED_WIN_RATE"><shadow type="math_number"><field name="NUM">62.5</field></shadow></value>
+                          </block>
+                        </value>
                       </block>
-                    </statement>
+                    </value>
                   </block>
-                </next>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="adaptive_signal_set">
+                    <field name="VAR" id="adaptive_signal">Adaptive Signal</field>
+                    <value name="VALUE">
+                      <block type="adaptive_momentum_signal" id="adaptive_signal_block">
+                        <value name="WARMUP" strategy_value="warmup_window"><shadow type="math_number"><field name="NUM">30</field></shadow></value>
+                        <value name="SHORT_WINDOW" strategy_value="short_window"><shadow type="math_number"><field name="NUM">8</field></shadow></value>
+                        <value name="LONG_WINDOW" strategy_value="long_window"><shadow type="math_number"><field name="NUM">20</field></shadow></value>
+                        <value name="CONFIDENCE" strategy_value="confidence"><shadow type="math_number"><field name="NUM">55</field></shadow></value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="controls_if" id="adaptive_call_or_put">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="adaptive_call_compare">
+                            <field name="OP">EQ</field>
+                            <value name="A"><block type="variables_get" id="adaptive_call_signal"><field name="VAR" id="adaptive_signal">Adaptive Signal</field></block></value>
+                            <value name="B"><block type="text" id="adaptive_call_text"><field name="TEXT">CALL</field></block></value>
+                          </block>
+                        </value>
+                        <statement name="DO0"><block type="purchase" id="adaptive_call_purchase"><field name="PURCHASE_LIST">CALL</field></block></statement>
+                        <statement name="ELSE">
+                          <block type="controls_if" id="adaptive_put_gate">
+                            <value name="IF0">
+                              <block type="logic_compare" id="adaptive_put_compare">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="adaptive_put_signal"><field name="VAR" id="adaptive_signal">Adaptive Signal</field></block></value>
+                                <value name="B"><block type="text" id="adaptive_put_text"><field name="TEXT">PUT</field></block></value>
+                              </block>
+                            </value>
+                            <statement name="DO0"><block type="purchase" id="adaptive_put_purchase"><field name="PURCHASE_LIST">PUT</field></block></statement>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
               </block>
             </statement>
           </block>
