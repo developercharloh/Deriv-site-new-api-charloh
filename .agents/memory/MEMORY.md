@@ -31,3 +31,4 @@
 - [Blockly custom block validation](deriv-blockly-custom-block-validation.md) — runtime jsonInit smoke tests catch args0/message placeholder mismatches that production builds do not.
 - [Adaptive Momentum safety envelope](adaptive-momentum-safety.md) — keep signal qualification separate from cooldown and session risk-limit guards; do not imply profitability without replay validation.
 - [Adaptive Momentum journaling](adaptive-momentum-journal.md) — refresh one analysis status row; keep signal, skip, entry, settlement, and stop events as separate audit entries.
+- [Rise/Fall XML regression](rise-fall-xml-regression.md) — import the full bot XML, but generate its gate condition separately from editor-only trade and Journal blocks.

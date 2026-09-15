@@ -15,7 +15,13 @@
     <variable id="v_lt">Last Tick</variable>
     <variable id="v_trend">Tick Trend</variable>
     <variable id="v_flip">Just Flipped</variable>
-    <variable id="v_signal">Momentum Signal</variable>
+    <variable id="v_signal">Model Signal</variable>
+    <variable id="v_adaptive">Adaptive Momentum Signal</variable>
+    <variable id="v_candles">Indicator Candles</variable>
+    <variable id="v_closes">Indicator Closes</variable>
+    <variable id="v_bull">Bullish Score</variable>
+    <variable id="v_bear">Bearish Score</variable>
+    <variable id="v_conf">Model Confidence</variable>
   </variables>
 
   <!-- ════════════════════════════════════════
@@ -118,7 +124,7 @@
                                                   <next><block type="text_statement" id="ts_s6">
                                                     <value name="TEXT"><shadow type="text" id="ts_s6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_s6v"><field name="VAR" id="v_mart">Martingale</field></block></value>
                                                     <next><block type="text_statement" id="ts_s7">
-                                                      <value name="TEXT"><shadow type="text" id="ts_s7s"><field name="TEXT"></field></shadow><block type="text" id="ts_s7v"><field name="TEXT"> | Warm-up: 3 | Cool-down at 3 losses</field></block></value>
+                                                      <value name="TEXT"><shadow type="text" id="ts_s7s"><field name="TEXT"></field></shadow><block type="text" id="ts_s7v"><field name="TEXT"> | Warm-up: 3 | Indicators: Aroon/Ichimoku/ADX/ATR/Stoch/MACD/RSI/Bollinger | Gates: history/contract/loss/payout/session</field></block></value>
                                                     </block></next>
                                                   </block></next>
                                                 </block></next>
@@ -180,7 +186,7 @@
 
       <!-- 1. Confirm direction with Adaptive Momentum before considering a purchase -->
       <block type="variables_set" id="bp_signal">
-        <field name="VAR" id="v_signal">Momentum Signal</field>
+        <field name="VAR" id="v_adaptive">Adaptive Momentum Signal</field>
         <value name="VALUE">
           <block type="adaptive_momentum_signal" id="bp_adaptive_signal">
             <value name="WARMUP"><shadow type="math_number" id="bp_signal_warmup_s"><field name="NUM">30</field></shadow><block type="math_number" id="bp_signal_warmup_v"><field name="NUM">30</field></block></value>
@@ -190,7 +196,91 @@
           </block>
         </value>
         <next>
-      <!-- 2. Compute Tick Trend from current vs Last Tick -->
+          <!-- 2. Fetch one candle/close snapshot and build directional scores -->
+          <block type="variables_set" id="bp_candles">
+            <field name="VAR" id="v_candles">Indicator Candles</field>
+            <value name="VALUE"><block type="ohlc" id="bp_ohlc"><field name="CANDLEINTERVAL_LIST">60</field></block></value>
+            <next>
+              <block type="variables_set" id="bp_closes">
+                <field name="VAR" id="v_closes">Indicator Closes</field>
+                <value name="VALUE"><block type="ohlc_values" id="bp_ohlc_close"><field name="OHLCFIELD_LIST">close</field><field name="CANDLEINTERVAL_LIST">60</field></block></value>
+                <next>
+                  <block type="variables_set" id="bp_bull">
+                    <field name="VAR" id="v_bull">Bullish Score</field>
+                    <value name="VALUE">
+                      <block type="logic_ternary" id="bp_bull_score">
+                        <value name="IF">
+                          <block type="logic_compare" id="bp_aroon_bull_cmp">
+                            <field name="OP">GT</field>
+                            <value name="A">
+                              <block type="aroon_value" id="bp_aroon_up">
+                                <field name="COMPONENT">up</field>
+                                <value name="PERIOD"><block type="math_number" id="bp_aroon_up_period"><field name="NUM">25</field></block></value>
+                                <value name="INPUT"><block type="variables_get" id="bp_aroon_up_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="aroon_value" id="bp_aroon_down">
+                                <field name="COMPONENT">down</field>
+                                <value name="PERIOD"><block type="math_number" id="bp_aroon_down_period"><field name="NUM">25</field></block></value>
+                                <value name="INPUT"><block type="variables_get" id="bp_aroon_down_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="THEN"><block type="math_number" id="bp_bull_score_value"><field name="NUM">20</field></block></value>
+                        <value name="ELSE"><block type="math_number" id="bp_bull_score_zero"><field name="NUM">0</field></block></value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="bp_bear">
+                        <field name="VAR" id="v_bear">Bearish Score</field>
+                        <value name="VALUE">
+                          <block type="logic_ternary" id="bp_bear_score">
+                            <value name="IF">
+                              <block type="logic_compare" id="bp_aroon_bear_cmp">
+                                <field name="OP">GT</field>
+                                <value name="A">
+                                  <block type="aroon_value" id="bp_aroon_down_bear">
+                                    <field name="COMPONENT">down</field>
+                                    <value name="PERIOD"><block type="math_number" id="bp_aroon_down_bear_period"><field name="NUM">25</field></block></value>
+                                    <value name="INPUT"><block type="variables_get" id="bp_aroon_down_bear_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="aroon_value" id="bp_aroon_up_bear">
+                                    <field name="COMPONENT">up</field>
+                                    <value name="PERIOD"><block type="math_number" id="bp_aroon_up_bear_period"><field name="NUM">25</field></block></value>
+                                    <value name="INPUT"><block type="variables_get" id="bp_aroon_up_bear_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="THEN"><block type="math_number" id="bp_bear_score_value"><field name="NUM">20</field></block></value>
+                            <value name="ELSE"><block type="math_number" id="bp_bear_score_zero"><field name="NUM">0</field></block></value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="bp_model">
+                            <field name="VAR" id="v_signal">Model Signal</field>
+                            <value name="VALUE">
+                              <block type="model_signal" id="bp_model_signal">
+                                <value name="BULLISH_SCORE"><block type="variables_get" id="bp_model_bull"><field name="VAR" id="v_bull">Bullish Score</field></block></value>
+                                <value name="BEARISH_SCORE"><block type="variables_get" id="bp_model_bear"><field name="VAR" id="v_bear">Bearish Score</field></block></value>
+                                <value name="MINIMUM_EDGE"><block type="math_number" id="bp_model_edge"><field name="NUM">10</field></block></value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="bp_conf">
+                                <field name="VAR" id="v_conf">Model Confidence</field>
+                                <value name="VALUE">
+                                  <block type="model_confidence" id="bp_model_confidence">
+                                    <value name="BULLISH_SCORE"><block type="variables_get" id="bp_conf_bull"><field name="VAR" id="v_bull">Bullish Score</field></block></value>
+                                    <value name="BEARISH_SCORE"><block type="variables_get" id="bp_conf_bear"><field name="VAR" id="v_bear">Bearish Score</field></block></value>
+                                  </block>
+                                </value>
+                                <next>
+      <!-- 3. Compute Tick Trend from current vs Last Tick -->
       <block type="controls_if" id="bp_trend_if">
         <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
         <value name="IF0">
@@ -272,10 +362,202 @@
                 </statement>
                 <next>
 
-                  <!-- Apply the confirmed momentum direction after legacy trend checks -->
-                  <block type="variables_set" id="bp_apply_signal">
-                    <field name="VAR" id="v_dir">Direction</field>
-                    <value name="VALUE"><block type="variables_get" id="bp_apply_signal_v"><field name="VAR" id="v_signal">Momentum Signal</field></block></value>
+                  <!-- Apply the model direction only when every safety and indicator gate passes -->
+                  <block type="controls_if" id="bp_gate_if">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_operation" id="bp_gate_1">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="indicator_ready" id="bp_ready">
+                            <field name="INDICATOR">ichimoku</field>
+                            <value name="PERIOD"><block type="math_number" id="bp_ready_period"><field name="NUM">52</field></block></value>
+                            <value name="EXTRA"><block type="math_number" id="bp_ready_extra"><field name="NUM">0</field></block></value>
+                            <value name="INPUT"><block type="variables_get" id="bp_ready_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_operation" id="bp_gate_2">
+                            <field name="OP">AND</field>
+                            <value name="A"><block type="no_active_contract" id="bp_no_contract"></block></value>
+                            <value name="B">
+                              <block type="logic_operation" id="bp_gate_3">
+                                <field name="OP">AND</field>
+                                <value name="A">
+                                  <block type="consecutive_loss_gate" id="bp_loss_gate">
+                                    <value name="MAX_LOSSES"><block type="math_number" id="bp_loss_limit"><field name="NUM">3</field></block></value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_operation" id="bp_gate_4">
+                                    <field name="OP">AND</field>
+                                    <value name="A">
+                                      <block type="payout_gate" id="bp_payout_gate">
+                                        <value name="PAYOUT"><block type="math_number" id="bp_payout_value"><field name="NUM">1.8</field></block></value>
+                                        <value name="STAKE"><block type="variables_get" id="bp_payout_stake"><field name="VAR" id="v_stake">Stake</field></block></value>
+                                        <value name="REQUIRED_WIN_RATE"><block type="math_number" id="bp_payout_rate"><field name="NUM">60</field></block></value>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="logic_operation" id="bp_gate_5">
+                                        <field name="OP">AND</field>
+                                        <value name="A">
+                                          <block type="session_risk_gate" id="bp_session_gate">
+                                            <value name="MAX_LOSS"><block type="math_number" id="bp_session_loss"><field name="NUM">10</field></block></value>
+                                            <value name="MAX_TRADES"><block type="math_number" id="bp_session_trades"><field name="NUM">50</field></block></value>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="logic_operation" id="bp_gate_6">
+                                            <field name="OP">AND</field>
+                                            <value name="A">
+                                              <block type="model_confidence_gate" id="bp_conf_gate">
+                                                <value name="BULLISH_SCORE"><block type="variables_get" id="bp_conf_gate_bull"><field name="VAR" id="v_bull">Bullish Score</field></block></value>
+                                                <value name="BEARISH_SCORE"><block type="variables_get" id="bp_conf_gate_bear"><field name="VAR" id="v_bear">Bearish Score</field></block></value>
+                                                <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_conf_min"><field name="NUM">20</field></block></value>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="logic_operation" id="bp_gate_7">
+                                                <field name="OP">AND</field>
+                                                <value name="A">
+                                                  <block type="models_agree" id="bp_models_agree">
+                                                    <value name="PRIMARY"><block type="variables_get" id="bp_models_primary"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                    <value name="SECONDARY"><block type="variables_get" id="bp_models_secondary"><field name="VAR" id="v_adaptive">Adaptive Momentum Signal</field></block></value>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="logic_operation" id="bp_gate_8">
+                                                    <field name="OP">AND</field>
+                                                    <value name="A">
+                                                      <block type="logic_compare" id="bp_adx_gate">
+                                                        <field name="OP">GT</field>
+                                                        <value name="A">
+                                                          <block type="adx_value" id="bp_adx">
+                                                            <field name="COMPONENT">adx</field>
+                                                            <value name="PERIOD"><block type="math_number" id="bp_adx_period"><field name="NUM">14</field></block></value>
+                                                            <value name="INPUT"><block type="variables_get" id="bp_adx_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B"><block type="math_number" id="bp_adx_min"><field name="NUM">20</field></block></value>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="logic_operation" id="bp_gate_9">
+                                                        <field name="OP">AND</field>
+                                                        <value name="A">
+                                                          <block type="logic_compare" id="bp_atr_gate">
+                                                            <field name="OP">GT</field>
+                                                            <value name="A">
+                                                              <block type="atr_value" id="bp_atr">
+                                                                <value name="INPUT"><block type="variables_get" id="bp_atr_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value>
+                                                                <value name="PERIOD"><block type="math_number" id="bp_atr_period"><field name="NUM">14</field></block></value>
+                                                              </block>
+                                                            </value>
+                                                            <value name="B"><block type="math_number" id="bp_atr_min"><field name="NUM">0</field></block></value>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="logic_operation" id="bp_signal_indicators">
+                                                            <field name="OP">AND</field>
+                                                            <value name="A">
+                                                              <block type="logic_operation" id="bp_indicator_sanity">
+                                                                <field name="OP">AND</field>
+                                                                <value name="A">
+                                                                  <block type="logic_compare" id="bp_rsi_ready">
+                                                                    <field name="OP">GTE</field>
+                                                                    <value name="A"><block type="rsi_value" id="bp_rsi"><value name="INPUT"><block type="variables_get" id="bp_rsi_input"><field name="VAR" id="v_closes">Indicator Closes</field></block></value><value name="PERIOD"><block type="math_number" id="bp_rsi_period"><field name="NUM">14</field></block></value></block></value>
+                                                                    <value name="B"><block type="math_number" id="bp_rsi_min"><field name="NUM">0</field></block></value>
+                                                                  </block>
+                                                                </value>
+                                                                <value name="B">
+                                                                  <block type="logic_operation" id="bp_indicator_sanity_2">
+                                                                    <field name="OP">AND</field>
+                                                                    <value name="A">
+                                                                      <block type="logic_compare" id="bp_bollinger_ready">
+                                                                        <field name="OP">GTE</field>
+                                                                        <value name="A"><block type="bollinger_value" id="bp_bollinger_width"><field name="COMPONENT">width</field><value name="INPUT"><block type="variables_get" id="bp_bollinger_input"><field name="VAR" id="v_closes">Indicator Closes</field></block></value><value name="PERIOD"><block type="math_number" id="bp_bollinger_period"><field name="NUM">20</field></block></value><value name="UP_MULTIPLIER"><block type="math_number" id="bp_bollinger_up"><field name="NUM">2</field></block></value><value name="DOWN_MULTIPLIER"><block type="math_number" id="bp_bollinger_down"><field name="NUM">2</field></block></value></block></value>
+                                                                        <value name="B"><block type="math_number" id="bp_bollinger_min"><field name="NUM">0</field></block></value>
+                                                                      </block>
+                                                                    </value>
+                                                                    <value name="B">
+                                                                      <block type="logic_negate" id="bp_no_squeeze">
+                                                                        <value name="BOOL">
+                                                                          <block type="bollinger_squeeze" id="bp_squeeze">
+                                                                            <value name="MAX_WIDTH"><block type="math_number" id="bp_squeeze_width"><field name="NUM">0.02</field></block></value>
+                                                                            <value name="PERIOD"><block type="math_number" id="bp_squeeze_period"><field name="NUM">20</field></block></value>
+                                                                            <value name="UP_MULTIPLIER"><block type="math_number" id="bp_squeeze_up"><field name="NUM">2</field></block></value>
+                                                                            <value name="DOWN_MULTIPLIER"><block type="math_number" id="bp_squeeze_down"><field name="NUM">2</field></block></value>
+                                                                            <value name="INPUT"><block type="variables_get" id="bp_squeeze_input"><field name="VAR" id="v_closes">Indicator Closes</field></block></value>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </value>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </value>
+                                                            <value name="B">
+                                                          <block type="logic_ternary" id="bp_direction_filter">
+                                                            <value name="IF">
+                                                              <block type="logic_compare" id="bp_direction_call">
+                                                                <field name="OP">EQ</field>
+                                                                <value name="A"><block type="variables_get" id="bp_direction_call_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                                <value name="B"><block type="text" id="bp_direction_call_b"><field name="TEXT">CALL</field></block></value>
+                                                              </block>
+                                                            </value>
+                                                            <value name="THEN">
+                                                              <block type="logic_operation" id="bp_bull_confirm_1">
+                                                                <field name="OP">OR</field>
+                                                                <value name="A">
+                                                                  <block type="logic_compare" id="bp_ichimoku_bull">
+                                                                    <field name="OP">GT</field>
+                                                                    <value name="A"><block type="ichimoku_value" id="bp_ichimoku_close"><field name="COMPONENT">close</field><value name="INPUT"><block type="variables_get" id="bp_ichimoku_close_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value><value name="CONVERSION_PERIODS"><block type="math_number" id="bp_ichimoku_c"><field name="NUM">9</field></block></value><value name="BASE_PERIODS"><block type="math_number" id="bp_ichimoku_b"><field name="NUM">26</field></block></value><value name="SPAN_PERIODS"><block type="math_number" id="bp_ichimoku_s"><field name="NUM">52</field></block></value></block></value>
+                                                                    <value name="B"><block type="ichimoku_value" id="bp_ichimoku_top"><field name="COMPONENT">cloudTop</field><value name="INPUT"><block type="variables_get" id="bp_ichimoku_top_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value><value name="CONVERSION_PERIODS"><block type="math_number" id="bp_ichimoku_top_c"><field name="NUM">9</field></block></value><value name="BASE_PERIODS"><block type="math_number" id="bp_ichimoku_top_b"><field name="NUM">26</field></block></value><value name="SPAN_PERIODS"><block type="math_number" id="bp_ichimoku_top_s"><field name="NUM">52</field></block></value></block></value>
+                                                                  </block>
+                                                                </value>
+                                                                <value name="B">
+                                                                  <block type="logic_operation" id="bp_bull_confirm_2">
+                                                                    <field name="OP">OR</field>
+                                                                    <value name="A"><block type="logic_compare" id="bp_stoch_bull"><field name="OP">GT</field><value name="A"><block type="stochastic_value" id="bp_stoch_k"><field name="COMPONENT">k</field><value name="PERIOD"><block type="math_number" id="bp_stoch_period"><field name="NUM">14</field></block></value><value name="SIGNAL_PERIOD"><block type="math_number" id="bp_stoch_signal"><field name="NUM">3</field></block></value><value name="INPUT"><block type="variables_get" id="bp_stoch_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value></block></value><value name="B"><block type="stochastic_value" id="bp_stoch_d"><field name="COMPONENT">d</field><value name="PERIOD"><block type="math_number" id="bp_stoch_d_period"><field name="NUM">14</field></block></value><value name="SIGNAL_PERIOD"><block type="math_number" id="bp_stoch_d_signal"><field name="NUM">3</field></block></value><value name="INPUT"><block type="variables_get" id="bp_stoch_d_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value></block></value></block></value>
+                                                                    <value name="B"><block type="logic_compare" id="bp_macd_bull"><field name="OP">GT</field><value name="A"><block type="macd_value" id="bp_macd_hist"><field name="COMPONENT">histogram</field><value name="INPUT"><block type="variables_get" id="bp_macd_input"><field name="VAR" id="v_closes">Indicator Closes</field></block></value><value name="FAST_PERIOD"><block type="math_number" id="bp_macd_fast"><field name="NUM">12</field></block></value><value name="SLOW_PERIOD"><block type="math_number" id="bp_macd_slow"><field name="NUM">26</field></block></value><value name="SIGNAL_PERIOD"><block type="math_number" id="bp_macd_signal"><field name="NUM">9</field></block></value></block></value><value name="B"><block type="math_number" id="bp_macd_zero"><field name="NUM">0</field></block></value></block></value>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </value>
+                                                            <value name="ELSE">
+                                                              <block type="logic_operation" id="bp_bear_confirm_1">
+                                                                <field name="OP">OR</field>
+                                                                <value name="A"><block type="logic_compare" id="bp_ichimoku_bear"><field name="OP">LT</field><value name="A"><block type="ichimoku_value" id="bp_ichimoku_close_bear"><field name="COMPONENT">close</field><value name="INPUT"><block type="variables_get" id="bp_ichimoku_close_bear_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value><value name="CONVERSION_PERIODS"><block type="math_number" id="bp_ichimoku_bear_c"><field name="NUM">9</field></block></value><value name="BASE_PERIODS"><block type="math_number" id="bp_ichimoku_bear_b"><field name="NUM">26</field></block></value><value name="SPAN_PERIODS"><block type="math_number" id="bp_ichimoku_bear_s"><field name="NUM">52</field></block></value></block></value><value name="B"><block type="ichimoku_value" id="bp_ichimoku_bottom"><field name="COMPONENT">cloudBottom</field><value name="INPUT"><block type="variables_get" id="bp_ichimoku_bottom_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value><value name="CONVERSION_PERIODS"><block type="math_number" id="bp_ichimoku_bottom_c"><field name="NUM">9</field></block></value><value name="BASE_PERIODS"><block type="math_number" id="bp_ichimoku_bottom_b"><field name="NUM">26</field></block></value><value name="SPAN_PERIODS"><block type="math_number" id="bp_ichimoku_bottom_s"><field name="NUM">52</field></block></value></block></value></block></value>
+                                                                <value name="B"><block type="logic_operation" id="bp_bear_confirm_2"><field name="OP">OR</field><value name="A"><block type="logic_compare" id="bp_stoch_bear"><field name="OP">LT</field><value name="A"><block type="stochastic_value" id="bp_stoch_k_bear"><field name="COMPONENT">k</field><value name="PERIOD"><block type="math_number" id="bp_stoch_k_bear_period"><field name="NUM">14</field></block></value><value name="SIGNAL_PERIOD"><block type="math_number" id="bp_stoch_k_bear_signal"><field name="NUM">3</field></block></value><value name="INPUT"><block type="variables_get" id="bp_stoch_k_bear_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value></block></value><value name="B"><block type="stochastic_value" id="bp_stoch_d_bear"><field name="COMPONENT">d</field><value name="PERIOD"><block type="math_number" id="bp_stoch_d_bear_period"><field name="NUM">14</field></block></value><value name="SIGNAL_PERIOD"><block type="math_number" id="bp_stoch_d_bear_signal"><field name="NUM">3</field></block></value><value name="INPUT"><block type="variables_get" id="bp_stoch_d_bear_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value></block></value></block></value><value name="B"><block type="logic_compare" id="bp_macd_bear"><field name="OP">LT</field><value name="A"><block type="macd_value" id="bp_macd_hist_bear"><field name="COMPONENT">histogram</field><value name="INPUT"><block type="variables_get" id="bp_macd_bear_input"><field name="VAR" id="v_closes">Indicator Closes</field></block></value><value name="FAST_PERIOD"><block type="math_number" id="bp_macd_bear_fast"><field name="NUM">12</field></block></value><value name="SLOW_PERIOD"><block type="math_number" id="bp_macd_bear_slow"><field name="NUM">26</field></block></value><value name="SIGNAL_PERIOD"><block type="math_number" id="bp_macd_bear_signal"><field name="NUM">9</field></block></value></block></value><value name="B"><block type="math_number" id="bp_macd_bear_zero"><field name="NUM">0</field></block></value></block></value></block></value>
+                                                              </block>
+                                                            </value>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="bp_apply_signal">
+                        <field name="VAR" id="v_dir">Direction</field>
+                        <value name="VALUE"><block type="variables_get" id="bp_apply_signal_v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
                     <next>
 
                   <!-- 5. Store current tick as Last Tick for next cycle -->
@@ -295,21 +577,21 @@
                             <field name="VARIABLE" id="v_msg">Journal</field>
                             <statement name="STACK">
                               <block type="text_statement" id="ts_bp1">
-                                <value name="TEXT"><shadow type="text" id="ts_bp1s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp1v"><field name="TEXT">Placing: </field></block></value>
+                                <value name="TEXT"><shadow type="text" id="ts_bp1s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp1v"><field name="TEXT">CONFLUENCE APPROVED | Model: </field></block></value>
                                 <next><block type="text_statement" id="ts_bp2">
-                                  <value name="TEXT"><shadow type="text" id="ts_bp2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp2v"><field name="VAR" id="v_dir">Direction</field></block></value>
+                                  <value name="TEXT"><shadow type="text" id="ts_bp2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp2v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
                                   <next><block type="text_statement" id="ts_bp3">
-                                    <value name="TEXT"><shadow type="text" id="ts_bp3s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp3v"><field name="TEXT"> | Stake: $</field></block></value>
+                                    <value name="TEXT"><shadow type="text" id="ts_bp3s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp3v"><field name="TEXT"> | Adaptive: </field></block></value>
                                     <next><block type="text_statement" id="ts_bp4">
-                                      <value name="TEXT"><shadow type="text" id="ts_bp4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp4v"><field name="VAR" id="v_stake">Stake</field></block></value>
+                                      <value name="TEXT"><shadow type="text" id="ts_bp4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp4v"><field name="VAR" id="v_adaptive">Adaptive Momentum Signal</field></block></value>
                                       <next><block type="text_statement" id="ts_bp5">
-                                        <value name="TEXT"><shadow type="text" id="ts_bp5s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp5v"><field name="TEXT"> | Trend: </field></block></value>
+                                        <value name="TEXT"><shadow type="text" id="ts_bp5s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp5v"><field name="TEXT"> | Confidence: </field></block></value>
                                         <next><block type="text_statement" id="ts_bp6">
-                                          <value name="TEXT"><shadow type="text" id="ts_bp6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp6v"><field name="VAR" id="v_trend">Tick Trend</field></block></value>
+                                          <value name="TEXT"><shadow type="text" id="ts_bp6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp6v"><field name="VAR" id="v_conf">Model Confidence</field></block></value>
                                           <next><block type="text_statement" id="ts_bp7">
-                                            <value name="TEXT"><shadow type="text" id="ts_bp7s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp7v"><field name="TEXT"> | CL: </field></block></value>
+                                            <value name="TEXT"><shadow type="text" id="ts_bp7s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp7v"><field name="TEXT"> | Stake: $</field></block></value>
                                             <next><block type="text_statement" id="ts_bp8">
-                                              <value name="TEXT"><shadow type="text" id="ts_bp8s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp8v"><field name="VAR" id="v_cl">Consecutive Losses</field></block></value>
+                                              <value name="TEXT"><shadow type="text" id="ts_bp8s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp8v"><field name="VAR" id="v_stake">Stake</field></block></value>
                                             </block></next>
                                           </block></next>
                                         </block></next>
@@ -334,7 +616,7 @@
                                     <value name="IF0">
                                       <block type="logic_compare" id="bp_signal_call_cmp">
                                         <field name="OP">EQ</field>
-                                        <value name="A"><block type="variables_get" id="bp_signal_call_a"><field name="VAR" id="v_signal">Momentum Signal</field></block></value>
+                                        <value name="A"><block type="variables_get" id="bp_signal_call_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
                                         <value name="B"><block type="text" id="bp_signal_call_b"><field name="TEXT">CALL</field></block></value>
                                       </block>
                                     </value>
@@ -346,7 +628,7 @@
                                         <value name="IF0">
                                           <block type="logic_compare" id="bp_signal_put_cmp">
                                             <field name="OP">EQ</field>
-                                            <value name="A"><block type="variables_get" id="bp_signal_put_a"><field name="VAR" id="v_signal">Momentum Signal</field></block></value>
+                                            <value name="A"><block type="variables_get" id="bp_signal_put_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
                                             <value name="B"><block type="text" id="bp_signal_put_b"><field name="TEXT">PUT</field></block></value>
                                           </block>
                                         </value>
@@ -369,11 +651,64 @@
                     </next>
                   </block>
 
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="text_join" id="tj_gate_skip">
+                        <field name="VARIABLE" id="v_msg">Journal</field>
+                        <statement name="STACK">
+                          <block type="text_statement" id="ts_gate_skip_1">
+                            <value name="TEXT"><shadow type="text" id="ts_gate_skip_1s"><field name="TEXT"></field></shadow><block type="text" id="ts_gate_skip_1v"><field name="TEXT">SKIP | Safety/indicator gate rejected | Model: </field></block></value>
+                            <next><block type="text_statement" id="ts_gate_skip_2">
+                              <value name="TEXT"><shadow type="text" id="ts_gate_skip_2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_gate_skip_2v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                              <next><block type="text_statement" id="ts_gate_skip_3">
+                                <value name="TEXT"><shadow type="text" id="ts_gate_skip_3s"><field name="TEXT"></field></shadow><block type="text" id="ts_gate_skip_3v"><field name="TEXT"> | Adaptive: </field></block></value>
+                                <next><block type="text_statement" id="ts_gate_skip_4">
+                                  <value name="TEXT"><shadow type="text" id="ts_gate_skip_4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_gate_skip_4v"><field name="VAR" id="v_adaptive">Adaptive Momentum Signal</field></block></value>
+                                  <next><block type="text_statement" id="ts_gate_skip_5">
+                                    <value name="TEXT"><shadow type="text" id="ts_gate_skip_5s"><field name="TEXT"></field></shadow><block type="text" id="ts_gate_skip_5v"><field name="TEXT"> | Confidence: </field></block></value>
+                                    <next><block type="text_statement" id="ts_gate_skip_6">
+                                      <value name="TEXT"><shadow type="text" id="ts_gate_skip_6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_gate_skip_6v"><field name="VAR" id="v_conf">Model Confidence</field></block></value>
+                                    </block></next>
+                                  </block></next>
+                                </block></next>
+                              </block></next>
+                            </block></next>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="notify" id="n_gate_skip">
+                            <field name="NOTIFICATION_TYPE">info</field>
+                            <field name="NOTIFICATION_SOUND">silent</field>
+                            <value name="MESSAGE"><shadow type="text" id="n_gate_skip_s"><field name="TEXT">Trade skipped by safety gate</field></shadow><block type="variables_get" id="n_gate_skip_v"><field name="VAR" id="v_msg">Journal</field></block></value>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                  </block>
+
                 </next>
               </block>
 
             </next>
           </block>
+
+        </next>
+      </block>
+
+        </next>
+      </block>
+
+        </next>
+      </block>
+
+        </next>
+      </block>
+
+        </next>
+      </block>
+
+        </next>
+      </block>
 
         </next>
       </block>
@@ -436,7 +771,7 @@
                                 <field name="VARIABLE" id="v_msg">Journal</field>
                                 <statement name="STACK">
                                   <block type="text_statement" id="ts_w1">
-                                    <value name="TEXT"><shadow type="text" id="ts_w1s"><field name="TEXT"></field></shadow><block type="text" id="ts_w1v"><field name="TEXT">WIN | Direction kept: </field></block></value>
+                                    <value name="TEXT"><shadow type="text" id="ts_w1s"><field name="TEXT"></field></shadow><block type="text" id="ts_w1v"><field name="TEXT">WIN | Model confluence settled | Direction: </field></block></value>
                                     <next><block type="text_statement" id="ts_w2">
                                       <value name="TEXT"><shadow type="text" id="ts_w2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w2v"><field name="VAR" id="v_dir">Direction</field></block></value>
                                       <next><block type="text_statement" id="ts_w3">
@@ -610,7 +945,7 @@
                                         <field name="VARIABLE" id="v_msg">Journal</field>
                                         <statement name="STACK">
                                           <block type="text_statement" id="ts_l1">
-                                            <value name="TEXT"><shadow type="text" id="ts_l1s"><field name="TEXT"></field></shadow><block type="text" id="ts_l1v"><field name="TEXT">LOSS | Flipped to: </field></block></value>
+                                            <value name="TEXT"><shadow type="text" id="ts_l1s"><field name="TEXT"></field></shadow><block type="text" id="ts_l1v"><field name="TEXT">LOSS | Model confluence settled | Flipped to: </field></block></value>
                                             <next><block type="text_statement" id="ts_l2">
                                               <value name="TEXT"><shadow type="text" id="ts_l2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l2v"><field name="VAR" id="v_dir">Direction</field></block></value>
                                               <next><block type="text_statement" id="ts_l3">
