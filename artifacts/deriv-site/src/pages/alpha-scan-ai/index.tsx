@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
+import { DERIV_CONTINUOUS_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
@@ -139,73 +139,40 @@ const numberFromRecord = (record: Record<string, unknown>, keys: string[]): numb
     return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-const isSyntheticIndex = (record: Record<string, unknown>): boolean => {
-    const symbol = stringFromRecord(record, ['symbol']);
-    const metadata = [
-        record.market,
-        record.market_display_name,
-        record.submarket,
-        record.submarket_display_name,
-        record.symbol_type,
-        record.symbol_type_display_name,
-    ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .replace(/[_-]/g, ' ');
-
-    const syntheticMetadata =
-        metadata.includes('synthetic') ||
-        metadata.includes('derived') ||
-        metadata.includes('volatility') ||
-        metadata.includes('continuous indice') ||
-        metadata.includes('random indice') ||
-        metadata.includes('jump index') ||
-        metadata.includes('boom') ||
-        metadata.includes('crash') ||
-        metadata.includes('step index') ||
-        metadata.includes('drift switch') ||
-        metadata.includes('range break');
-    const syntheticSymbolFamily = /^(?:R_|1HZ|JD|BOOM|CRASH|STEP|JUMP|DRIFT|RB_|RDB_)/i.test(symbol);
-
-    return syntheticMetadata || syntheticSymbolFamily;
-};
-
-const discoverSyntheticSymbols = (records: Array<Record<string, unknown>>): SyntheticSymbol[] => {
-    const seen = new Set<string>();
-
-    return records
-        .filter(isSyntheticIndex)
-        .map(record => {
-            const symbol = stringFromRecord(record, ['symbol']);
-            if (!symbol || seen.has(symbol)) return null;
-            seen.add(symbol);
-            return {
-                symbol,
-                displayName: stringFromRecord(record, ['display_name', 'underlying_symbol', 'symbol']) || symbol,
-                market: stringFromRecord(record, ['market_display_name', 'market']) || 'Synthetic Index',
-                submarket: stringFromRecord(record, ['submarket_display_name', 'submarket']) || 'Synthetic',
-                pipSize: numberFromRecord(record, ['pip_size']),
-            };
-        })
-        .filter((item): item is SyntheticSymbol => item !== null);
-};
-
 const getVerifiedCatalogSymbols = (): SyntheticSymbol[] =>
-    DERIV_VOLATILITIES.map(index => ({
+    DERIV_CONTINUOUS_VOLATILITIES.map(index => ({
         symbol: index.code,
         displayName: index.label,
         market: 'Derived',
-        submarket: index.tickEvery === 1 ? 'Continuous Indices' : 'Volatility Indices',
+        submarket: 'Continuous Indices',
     }));
 
+const discoverContinuousVolatilitySymbols = (records: Array<Record<string, unknown>>): SyntheticSymbol[] => {
+    const metadataBySymbol = new Map(
+        records
+            .map(record => [stringFromRecord(record, ['symbol']), record] as const)
+            .filter(([symbol]) => Boolean(symbol)),
+    );
+
+    return getVerifiedCatalogSymbols().map(catalogSymbol => {
+        const record = metadataBySymbol.get(catalogSymbol.symbol);
+        return {
+            ...catalogSymbol,
+            displayName: stringFromRecord(record || {}, ['display_name', 'underlying_symbol']) || catalogSymbol.displayName,
+            market: stringFromRecord(record || {}, ['market_display_name', 'market']) || catalogSymbol.market,
+            submarket: stringFromRecord(record || {}, ['submarket_display_name', 'submarket']) || catalogSymbol.submarket,
+            pipSize: numberFromRecord(record || {}, ['pip_size']),
+        };
+    });
+};
+
 const buildFixtureRows = (sampleSize: SampleSize, autoRunnerFixture = false): ScanRow[] => {
-    const fixtureSymbols = [
-        { symbol: 'R_10', displayName: 'Volatility 10 Index', submarket: 'Continuous Indices', digitPattern: [0, 2, 4, 6, 8] },
-        { symbol: 'R_25', displayName: 'Volatility 25 Index', submarket: 'Continuous Indices', digitPattern: [1, 3, 5, 7, 9] },
-        { symbol: 'R_50', displayName: 'Volatility 50 Index', submarket: 'Continuous Indices', digitPattern: [2, 4, 6, 8, 0] },
-        { symbol: 'R_75', displayName: 'Volatility 75 Index', submarket: 'Continuous Indices', digitPattern: [9, 7, 5, 3, 1] },
-    ];
+    const fixtureSymbols = DERIV_CONTINUOUS_VOLATILITIES.map((index, symbolIndex) => ({
+        symbol: index.code,
+        displayName: index.label,
+        submarket: 'Continuous Indices',
+        digitPattern: symbolIndex % 2 === 0 ? [0, 2, 4, 6, 8] : [1, 3, 5, 7, 9],
+    }));
 
     return fixtureSymbols.map((fixture, symbolIndex) => {
         const pipSize = 2;
@@ -1952,9 +1919,13 @@ const AlphaScanWorkspace: React.FC = () => {
 
             if (message.active_symbols && !metadataReceived) {
                 metadataReceived = true;
-                const metadataSymbols = discoverSyntheticSymbols(message.active_symbols);
-                const usingVerifiedCatalog = metadataSymbols.length === 0;
-                discoveredSymbols = usingVerifiedCatalog ? getVerifiedCatalogSymbols() : metadataSymbols;
+                const metadataSymbols = discoverContinuousVolatilitySymbols(message.active_symbols);
+                const supportedCodes = new Set(DERIV_CONTINUOUS_VOLATILITIES.map(index => index.code));
+                const matchedMetadataCount = message.active_symbols.filter(record =>
+                    supportedCodes.has(stringFromRecord(record, ['symbol'])),
+                ).length;
+                const usingVerifiedCatalog = matchedMetadataCount === 0;
+                discoveredSymbols = metadataSymbols;
                 simulatedFailureTarget = simulatedFailureSymbol === 'first'
                     ? discoveredSymbols[0]?.symbol || ''
                     : simulatedFailureSymbol;
@@ -1963,7 +1934,7 @@ const AlphaScanWorkspace: React.FC = () => {
                 if (!discoveredSymbols.length) {
                     finishWithCurrentData(
                         'empty',
-                        `Metadata discovery failed: the public metadata response returned ${message.active_symbols.length} records, but none matched a Synthetic Index market or symbol family.`,
+                        `Metadata discovery failed: the public metadata response returned ${message.active_symbols.length} records, but none matched the supported Continuous Volatility symbols.`,
                     );
                     closeSocket();
                     return;
@@ -1973,7 +1944,7 @@ const AlphaScanWorkspace: React.FC = () => {
                 setHasMoreSymbols(true);
                 if (usingVerifiedCatalog) {
                     setErrorMessage(
-                        `The public catalogue returned ${message.active_symbols.length} records. Validating the verified Synthetic Index catalogue through live tick history.`,
+                        `The public catalogue returned ${message.active_symbols.length} records. Validating the verified Continuous Volatility catalogue through live tick history.`,
                     );
                 }
                 requestNextPage();
