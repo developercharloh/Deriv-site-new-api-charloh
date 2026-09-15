@@ -382,6 +382,20 @@ export const ToolboxItems = () =>
 
             <Category id='analysis' name={localize('Analysis')}>
                 <Category id='indicators' name={localize('Indicators')}>
+                    <Block type='aroon_value' />
+                    <Block type='ichimoku_value' />
+                    <Block type='adx_value' />
+                    <Block type='atr_value' />
+                    <Block type='stochastic_value' />
+                    <Block type='macd_value' />
+                    <Block type='rsi_value' />
+                    <Block type='bollinger_value' />
+                    <Block type='macd_cross' />
+                    <Block type='rsi_cross' />
+                    <Block type='bollinger_squeeze' />
+                    <Block type='indicator_ready' />
+                    <Block type='model_signal' />
+                    <Block type='model_confidence' />
                     <Block type='sma_statement'>
                         <Statement name='STATEMENT'>
                             <Block type='input_list' deletable='false' movable='false'>
@@ -982,6 +996,74 @@ export const ToolboxItems = () =>
                         <Value name='MESSAGE'>
                             <Shadow type='text'>
                                 <Field name='TEXT'>abc</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                </Category>
+                <Category id='strategy_controls' name={localize('Strategy controls')}>
+                    <Block type='no_active_contract' />
+                    <Block type='consecutive_loss_gate'>
+                        <Value name='MAX_LOSSES'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>3</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='payout_gate'>
+                        <Value name='PAYOUT'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>1.8</Field>
+                            </Shadow>
+                        </Value>
+                        <Value name='STAKE'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>1</Field>
+                            </Shadow>
+                        </Value>
+                        <Value name='REQUIRED_WIN_RATE'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>56</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='session_risk_gate'>
+                        <Value name='MAX_LOSS'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>1</Field>
+                            </Shadow>
+                        </Value>
+                        <Value name='MAX_TRADES'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>10</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='model_confidence_gate'>
+                        <Value name='BULLISH_SCORE'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>0</Field>
+                            </Shadow>
+                        </Value>
+                        <Value name='BEARISH_SCORE'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>0</Field>
+                            </Shadow>
+                        </Value>
+                        <Value name='MINIMUM_CONFIDENCE'>
+                            <Shadow type='math_number'>
+                                <Field name='NUM'>60</Field>
+                            </Shadow>
+                        </Value>
+                    </Block>
+                    <Block type='models_agree'>
+                        <Value name='PRIMARY'>
+                            <Shadow type='text'>
+                                <Field name='TEXT'>CALL</Field>
+                            </Shadow>
+                        </Value>
+                        <Value name='SECONDARY'>
+                            <Shadow type='text'>
+                                <Field name='TEXT'>CALL</Field>
                             </Shadow>
                         </Value>
                     </Block>

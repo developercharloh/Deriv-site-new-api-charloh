@@ -22,6 +22,7 @@ export default Engine =>
             super();
             this.sessionRuns = 0;
             this.sessionProfit = 0;
+            this.sessionConsecutiveLosses = 0;
 
             globalObserver.register('statistics.clear', this.clearStatistics.bind(this));
         }
@@ -29,6 +30,7 @@ export default Engine =>
         clearStatistics() {
             this.sessionRuns = 0;
             this.sessionProfit = 0;
+            this.sessionConsecutiveLosses = 0;
             if (!this.accountInfo) return;
             const { loginid: accountID } = this.accountInfo;
             globalStat[accountID] = { ...skeleton };
@@ -53,6 +55,7 @@ export default Engine =>
             accountStat.totalLosses += !win ? 1 : 0;
 
             this.sessionProfit = getRoundedNumber(Number(this.sessionProfit) + Number(profit), currency);
+            this.sessionConsecutiveLosses = win ? 0 : this.sessionConsecutiveLosses + 1;
 
             accountStat.totalProfit = getRoundedNumber(Number(accountStat.totalProfit) + Number(profit), currency);
 
@@ -121,6 +124,10 @@ export default Engine =>
             return toString && accountStat.totalProfit !== 0
                 ? getRoundedNumber(+accountStat.totalProfit, currency)
                 : +accountStat.totalProfit;
+        }
+
+        getConsecutiveLosses() {
+            return this.sessionConsecutiveLosses;
         }
 
         /* eslint-enable */

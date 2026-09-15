@@ -36,6 +36,17 @@ const getBotInterface = tradeEngine => {
         isSellAvailable: () => tradeEngine.isSellAtMarketAvailable(),
         sellAtMarket: () => tradeEngine.sellAtMarket(),
         getSellPrice: () => getSellPrice(tradeEngine),
+        getConsecutiveLosses: () => tradeEngine.getConsecutiveLosses(),
+        canOpenNewContract: () => tradeEngine.getActiveContractIds().length === 0,
+        isPayoutAcceptable: (stake, payout, requiredWinRate) => {
+            const normalizedStake = Number(stake);
+            const normalizedPayout = Number(payout);
+            const required = Number(requiredWinRate);
+            if (!Number.isFinite(normalizedStake) || normalizedStake <= 0) return false;
+            if (!Number.isFinite(normalizedPayout) || normalizedPayout <= 0) return false;
+            if (!Number.isFinite(required) || required < 0 || required > 100) return false;
+            return (normalizedStake / normalizedPayout) * 100 <= required;
+        },
         setVirtualHookSettings: (maxVirtualLosses, minRealWins) =>
             tradeEngine.setVirtualHookSettings(maxVirtualLosses, minRealWins),
         enableVirtualHook: enabled => tradeEngine.enableVirtualHook(enabled),
