@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "build": "rsbuild build",
     "test": "jest",
+    "test:adaptive-momentum": "jest src/external/bot-skeleton/services/tradeEngine/trade/__tests__/ticks-analysis.spec.ts --runInBand",
     "test:binary-matrix:browser": "node scripts/binary-matrix-browser-regression.mjs",
     "test:alpha-scan": "pnpm run test:alpha-scan:contract && node scripts/alpha-scan-regression.mjs",
     "test:alpha-scan:live": "pnpm run test:alpha-scan:contract && ALPHA_SCAN_LIVE=1 node scripts/alpha-scan-regression.mjs",

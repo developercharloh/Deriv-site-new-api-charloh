@@ -1,5 +1,6 @@
 import { observer } from '@/external/bot-skeleton/utils/observer';
 import Ticks from '../Ticks';
+import { getAdaptiveMomentumContractType, runAdaptiveMomentumPaperValidation } from '../adaptiveMomentumValidation';
 
 class BaseEngine {}
 
@@ -176,18 +177,20 @@ describe('Ticks last-digit analysis events', () => {
         const engine: any = new Engine();
         engine.$scope = {
             ticksService: {
-                request: jest.fn().mockResolvedValue([
-                    { quote: 1 },
-                    { quote: 2 },
-                    { quote: 3 },
-                    { quote: 4 },
-                    { quote: 5 },
-                    { quote: 4 },
-                    { quote: 5 },
-                    { quote: 6 },
-                    { quote: 7 },
-                    { quote: 8 },
-                ]),
+                request: jest
+                    .fn()
+                    .mockResolvedValue([
+                        { quote: 1 },
+                        { quote: 2 },
+                        { quote: 3 },
+                        { quote: 4 },
+                        { quote: 5 },
+                        { quote: 4 },
+                        { quote: 5 },
+                        { quote: 6 },
+                        { quote: 7 },
+                        { quote: 8 },
+                    ]),
             },
         };
 
@@ -206,5 +209,81 @@ describe('Ticks last-digit analysis events', () => {
             { quote: 0 },
         ]);
         await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 40)).resolves.toBe('PUT');
+    });
+
+    it('returns WAIT for ambiguous windows and enforces the confidence threshold', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.$scope = {
+            ticksService: {
+                request: jest.fn().mockResolvedValue([1, 2, 3, 4, 5, 6, 7, 8, 7].map(quote => ({ quote }))),
+            },
+        };
+
+        await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 51)).resolves.toBe('WAIT');
+        await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 50)).resolves.toBe('CALL');
+
+        engine.$scope.ticksService.request.mockResolvedValue([1, 2, 1, 2, 1, 2, 1, 2, 1].map(quote => ({ quote })));
+        await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 1)).resolves.toBe('WAIT');
+    });
+
+    it('replays loss cooldown progression and maps directional signals to paper contracts', () => {
+        const result = runAdaptiveMomentumPaperValidation({
+            ticks: Array.from({ length: 14 }, (_, index) => index + 1),
+            settlements: [{ tickIndex: 9, outcome: 'loss', profit: -1 }],
+            config: {
+                warmup: 5,
+                shortWindow: 4,
+                longWindow: 8,
+                confidence: 50,
+                cooldownTicks: 2,
+                takeProfit: 10,
+                stopLoss: 10,
+            },
+        });
+
+        expect(result.metrics.signalCounts).toEqual({ CALL: 2, PUT: 0, WAIT: 8 });
+        expect(result.metrics.purchases).toBe(2);
+        expect(result.metrics.skippedByCooldown).toBe(2);
+        expect(result.trades).toEqual([
+            expect.objectContaining({ openedAtTick: 8, signal: 'CALL', contractType: 'CALL', outcome: 'loss' }),
+            expect.objectContaining({ openedAtTick: 11, signal: 'CALL', contractType: 'CALL' }),
+        ]);
+        expect(getAdaptiveMomentumContractType('WAIT')).toBeNull();
+        expect(getAdaptiveMomentumContractType('CALL')).toBe('CALL');
+        expect(getAdaptiveMomentumContractType('PUT')).toBe('PUT');
+    });
+
+    it('stops the paper runner at take-profit and stop-loss limits', () => {
+        const baseConfig = { warmup: 5, shortWindow: 4, longWindow: 8, confidence: 50 };
+        const takeProfit = runAdaptiveMomentumPaperValidation({
+            ticks: Array.from({ length: 13 }, (_, index) => index + 1),
+            settlements: [{ tickIndex: 9, outcome: 'win', profit: 3 }],
+            config: { ...baseConfig, takeProfit: 3, stopLoss: 10 },
+        });
+        const stopLoss = runAdaptiveMomentumPaperValidation({
+            ticks: Array.from({ length: 13 }, (_, index) => index + 1),
+            settlements: [{ tickIndex: 9, outcome: 'loss', profit: -3 }],
+            config: { ...baseConfig, takeProfit: 10, stopLoss: 3, cooldownTicks: 2 },
+        });
+
+        expect(takeProfit.metrics.riskStop).toEqual({ tickIndex: 9, reason: 'take_profit', totalProfit: 3 });
+        expect(takeProfit.metrics.purchases).toBe(1);
+        expect(takeProfit.metrics.skippedByRiskLimit).toBe(4);
+        expect(stopLoss.metrics.riskStop).toEqual({ tickIndex: 9, reason: 'stop_loss', totalProfit: -3 });
+        expect(stopLoss.metrics.purchases).toBe(1);
+        expect(stopLoss.metrics.skippedByRiskLimit).toBe(4);
+    });
+
+    it('never purchases WAIT signals and reports validation metrics with a disclaimer', () => {
+        const result = runAdaptiveMomentumPaperValidation({
+            ticks: [1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1],
+            config: { warmup: 5, shortWindow: 4, longWindow: 8, confidence: 1 },
+        });
+
+        expect(result.metrics.signalCounts).toEqual({ CALL: 0, PUT: 0, WAIT: 11 });
+        expect(result.metrics.purchases).toBe(0);
+        expect(result.trades).toEqual([]);
+        expect(result.disclaimer).toMatch(/not a profitability guarantee/i);
     });
 });
