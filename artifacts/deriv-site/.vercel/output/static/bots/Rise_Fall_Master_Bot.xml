@@ -504,8 +504,8 @@
                                                                 <field name="OP">EQ</field>
                                                                 <value name="A"><block type="variables_get" id="bp_direction_call_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
                                                                 <value name="B"><block type="text" id="bp_direction_call_b"><field name="TEXT">CALL</field></block></value>
-                                                              </block>
-                                                            </value>
+                                                           </block>
+                                                             </value>
                                                             <value name="THEN">
                                                               <block type="logic_operation" id="bp_bull_confirm_1">
                                                                 <field name="OP">OR</field>

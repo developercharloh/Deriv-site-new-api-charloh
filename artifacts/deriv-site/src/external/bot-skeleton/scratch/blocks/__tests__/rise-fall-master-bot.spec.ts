@@ -208,8 +208,9 @@ describe('Rise/Fall Master Bot XML', () => {
         const generated = Array.isArray(generatedResult) ? generatedResult[0] : generatedResult;
         expect(generated).toContain('Bot.canOpenNewContract()');
         expect(generated).toContain('Bot.getModelConfidence');
-        expect(generated).toContain('Bot.getIchimokuValue');
         expect(generated).toContain('Bot.isBollingerSqueeze');
+        expect(generated).toContain('true');
+        expect(generated).not.toContain('Bot.getIchimokuValue');
 
         workspace.dispose();
     });

@@ -62,6 +62,13 @@ window.Blockly.Blocks.logic_ternary = {
 };
 
 window.Blockly.JavaScript.javascriptGenerator.forBlock.logic_ternary = block => {
+    // Rise/Fall Master Bot keeps the historical indicator-confirmation
+    // blocks in its published XML for display and backwards compatibility,
+    // but that confirmation must not veto the primary model direction.
+    if (block.id === 'bp_direction_filter') {
+        return ['true', window.Blockly.JavaScript.javascriptGenerator.ORDER_ATOMIC];
+    }
+
     const valueIf =
         window.Blockly.JavaScript.javascriptGenerator.valueToCode(
             block,
