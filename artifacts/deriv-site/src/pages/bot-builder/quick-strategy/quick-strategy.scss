@@ -219,6 +219,75 @@
                 }
             }
 
+            &__paper-validation {
+                margin: 0 2.4rem 2rem;
+                padding: 1.6rem;
+                border: 1px solid var(--border-divider);
+                border-radius: 0.8rem;
+                background: var(--general-section-1);
+
+                @include mobile-or-tablet-screen {
+                    margin: 0 1.6rem 2rem;
+                }
+
+                &__header,
+                &__result-heading {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 1.6rem;
+                }
+
+                &__header {
+                    button {
+                        flex: 0 0 auto;
+                    }
+                }
+
+                &__state {
+                    margin-top: 1.2rem;
+                    padding: 1rem;
+                    border-radius: 0.4rem;
+                    background: var(--general-section-2);
+
+                    &--failed {
+                        color: var(--status-danger);
+                    }
+                }
+
+                &__result {
+                    margin-top: 1.6rem;
+                    padding-top: 1.6rem;
+                    border-top: 1px solid var(--border-divider);
+                }
+
+                &__metrics {
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 1rem 1.6rem;
+                    margin: 1.2rem 0;
+
+                    div {
+                        min-width: 0;
+                    }
+
+                    dt {
+                        color: var(--text-less-prominent);
+                        font-size: 1.2rem;
+                    }
+
+                    dd {
+                        margin: 0.2rem 0 0;
+                        overflow-wrap: anywhere;
+                        font-size: 1.3rem;
+                    }
+                }
+
+                &__disclaimer {
+                    color: var(--text-less-prominent);
+                }
+            }
+
             &__footer {
                 border-top: 1px solid var(--border-divider);
                 background-color: var(--general-main-1);

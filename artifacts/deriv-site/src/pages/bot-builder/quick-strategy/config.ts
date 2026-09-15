@@ -570,6 +570,7 @@ export const STRATEGIES = (): TStrategies => ({
         name: 'adaptive_momentum',
         label: localize('Adaptive Momentum with Confirmation'),
         rs_strategy_name: 'adaptive momentum',
+        paper_validation: true,
         description: [
             {
                 type: 'content',

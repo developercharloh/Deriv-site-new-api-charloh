@@ -16,6 +16,7 @@ import StrategyTabContent from './strategy-tab-content';
 import StrategyTemplatePicker from './strategy-template-picker';
 import { QsSteps } from './trade-constants';
 import useQsSubmitHandler from './useQsSubmitHandler';
+import PaperValidationPanel from '../paper-validation-panel';
 
 type TDesktopFormWrapper = {
     children: React.ReactNode;
@@ -51,6 +52,7 @@ const QuickSelectionPanel = ({
             </div>
         </div>
         <StrategyTabContent formfields={children} active_tab={'TRADE_PARAMETERS'} />
+        <PaperValidationPanel />
     </>
 );
 

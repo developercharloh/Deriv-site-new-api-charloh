@@ -13,6 +13,7 @@ import QSStepper from './qs-stepper';
 import StrategyTabContent from './strategy-tab-content';
 import StrategyTemplatePicker from './strategy-template-picker';
 import { QsSteps } from './trade-constants';
+import PaperValidationPanel from '../paper-validation-panel';
 
 type TMobileFormWrapper = {
     children: React.ReactNode;
@@ -88,6 +89,7 @@ const MobileFormWrapper = observer(
                                         </div>
                                     </div>
                                     <StrategyTabContent formfields={children} active_tab={'TRADE_PARAMETERS'} />
+                                    <PaperValidationPanel />
                                 </>
                             )}
                         </ThemedScrollbars>

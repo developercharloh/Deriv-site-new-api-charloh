@@ -71,6 +71,7 @@ export type TStrategy = {
     description: TDescriptionItem[];
     fields: TConfigItem[][];
     rs_strategy_name?: TRsStrategyName;
+    paper_validation?: boolean;
 };
 
 export type TStrategies = {
