@@ -16,6 +16,7 @@ import {
     AUTO_MOMENTUM_CONFIDENCE,
     AUTO_MOMENTUM_LONG_WINDOW,
     AUTO_MOMENTUM_SHORT_WINDOW,
+    isMomentumDirectionConfirmed,
     marketConditionLabel,
     purchaseMarketLabel,
     type MarketCondition,
@@ -668,6 +669,7 @@ type AlphaExecutionEngine = {
 };
 
 type AlphaRiskFixture = 'target' | 'stop-loss' | 'consecutive-losses' | 'trade-count';
+type AlphaConfirmationFixture = 'reverse' | null;
 /**
  * The browser regression runs without a Deriv account. This deterministic
  * engine exercises the same Alpha Scan callbacks as DTraderEngine, including
@@ -684,9 +686,15 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
     private contractSequence = 0;
     private timers = new Set<ReturnType<typeof setTimeout>>();
     private readonly riskFixtureMode: AlphaRiskFixture | null;
+    private readonly confirmationFixtureMode: AlphaConfirmationFixture;
+    private confirmationReversalUsed = false;
 
-    constructor(riskFixtureMode: AlphaRiskFixture | null = null) {
+    constructor(
+        riskFixtureMode: AlphaRiskFixture | null = null,
+        confirmationFixtureMode: AlphaConfirmationFixture = null,
+    ) {
         this.riskFixtureMode = riskFixtureMode;
+        this.confirmationFixtureMode = confirmationFixtureMode;
     }
 
     private schedule(callback: () => void, delay: number): void {
@@ -712,6 +720,8 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         this.onStatus('subscribing');
         let prices = Array.from({ length: 30 }, (_, index) => 100 + index * 0.01);
         const confirmationDelay = this.riskFixtureMode ? 10 : 70;
+        const reverseConfirmation = this.confirmationFixtureMode === 'reverse' && !this.confirmationReversalUsed;
+        if (reverseConfirmation) this.confirmationReversalUsed = true;
 
         this.schedule(() => {
             if (!this.config) return;
@@ -720,7 +730,15 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
             for (let confirmation = 1; confirmation <= 3; confirmation += 1) {
                 this.schedule(() => {
                     if (!this.config) return;
-                    prices = [...prices, prices[prices.length - 1] + 0.01];
+                    if (reverseConfirmation && confirmation === 1) {
+                        const latestPrice = prices[prices.length - 1];
+                        prices = [
+                            ...prices,
+                            ...Array.from({ length: 9 }, (_, index) => latestPrice - (index + 1) * 0.01),
+                        ];
+                    } else {
+                        prices = [...prices, prices[prices.length - 1] + 0.01];
+                    }
                     this.onPriceWindow(prices);
                 }, confirmation * confirmationDelay);
             }
@@ -869,6 +887,7 @@ type AlphaToolSurfaceProps = {
     status: ScanStatus;
     scanSource: DiscoverySource;
     executionFixtureMode: boolean;
+    confirmationFixtureMode: AlphaConfirmationFixture;
     riskFixtureMode: AlphaRiskFixture | null;
     isBusy: boolean;
     lastUpdated: Date | null;
@@ -935,6 +954,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     status,
     scanSource,
     executionFixtureMode,
+    confirmationFixtureMode,
     riskFixtureMode,
     isBusy,
     lastUpdated,
@@ -954,7 +974,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const liveEngineRef = useRef<AlphaExecutionEngine | null>(null);
     if (liveEngineRef.current === null) {
         liveEngineRef.current = executionFixtureMode
-            ? new FixtureAlphaExecutionEngine(riskFixtureMode)
+            ? new FixtureAlphaExecutionEngine(riskFixtureMode, confirmationFixtureMode)
             : new DTraderEngine();
     }
     const liveEngine = liveEngineRef.current;
@@ -1388,7 +1408,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 prices,
                 lastDigits: [],
             }]);
-            if (!freshDecision || freshDecision.contractType !== pending.decision.contractType) {
+            if (!isMomentumDirectionConfirmed(pending.decision.contractType, freshDecision)) {
                 pendingAutoEntryRef.current = null;
                 setExecutionLeg('idle');
                 activeLegRef.current = null;
@@ -1397,7 +1417,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: 'error',
-                    message: `Fresh confirmation failed for ${pending.decision.displayName}. Rescanning before another trade.`,
+                    message: `Fresh confirmation failed for ${pending.decision.displayName}. Pending contract cancelled. Rescanning before another trade.`,
                 });
                 setTimeout(onScan, 350);
                 return;
@@ -1696,6 +1716,10 @@ const AlphaScanWorkspace: React.FC = () => {
         new URLSearchParams(window.location.search).get('alpha_scan_fixture') === '1';
     const executionFixtureMode = typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).get('alpha_scan_execution_fixture') === '1';
+    const confirmationFixtureMode: AlphaConfirmationFixture = typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('alpha_scan_confirmation_fixture') === 'reverse'
+        ? 'reverse'
+        : null;
     const requestedRiskFixture = typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search).get('alpha_scan_risk_fixture')
         : null;
@@ -2136,6 +2160,7 @@ const AlphaScanWorkspace: React.FC = () => {
             status={status}
             scanSource={discoverySource}
             executionFixtureMode={executionFixtureMode}
+            confirmationFixtureMode={confirmationFixtureMode}
             riskFixtureMode={riskFixtureMode}
             isBusy={isBusy}
             lastUpdated={lastUpdated}

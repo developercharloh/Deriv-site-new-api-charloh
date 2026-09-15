@@ -15,6 +15,12 @@ The Alpha Scan browser regression must target the hash route (`#alpha_scan_ai`);
 
 **How to apply:** Set `ALPHA_SCAN_URL` to a URL ending in `/#alpha_scan_ai` when running `scripts/alpha-scan-regression.mjs` against the local workflow.
 
+The Alpha Scan browser regression defaults to the published site, so local code changes are only exercised when `ALPHA_SCAN_URL` is explicitly set to the current preview domain.
+
+**Why:** Running the regression without an explicit local target can validate a stale deployed bundle and produce misleading timing or feature results.
+
+**How to apply:** Use the local Replit preview URL for fixture validation; reserve the default target for intentional published-site checks.
+
 For responsive UI work, a passing build and matching live HTML fingerprint only prove that the deployed bundle is current; they do not prove visual parity. Compare a settled screenshot at the target mobile viewport before calling the layout complete. The external screenshot service may return HTTP 402, in which case an attached live capture or another local settled capture is the visual source of truth.
 
 **Why:** The Alpha Scan build was current while its live mobile layout still differed materially from the supplied reference because the small-screen rules stacked and shrank controls.

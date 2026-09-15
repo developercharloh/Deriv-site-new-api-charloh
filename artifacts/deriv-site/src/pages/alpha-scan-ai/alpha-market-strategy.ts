@@ -170,6 +170,11 @@ export type RankedMarketDecision = MarketDecision & {
     displayName: string;
 };
 
+export const isMomentumDirectionConfirmed = (
+    expectedContractType: StrategyContractType,
+    freshDecision: RankedMarketDecision | null,
+): boolean => freshDecision?.contractType === expectedContractType;
+
 const all = (values: number[], predicate: (value: number, index: number) => boolean): boolean =>
     values.length > 0 && values.every(predicate);
 

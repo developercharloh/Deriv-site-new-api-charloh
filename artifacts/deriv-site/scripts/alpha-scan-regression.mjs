@@ -377,12 +377,13 @@ const run = async () => {
         await client.call('Page.enable');
         await client.call('Network.enable');
         await client.call('Runtime.enable');
-        const fixtureUrl = (sampleSize, executionFixture = false, riskFixture = '') => {
+        const fixtureUrl = (sampleSize, executionFixture = false, riskFixture = '', confirmationFixture = '') => {
             const url = new URL(TARGET_URL);
             url.searchParams.set('alpha_scan_sample', String(sampleSize));
             url.searchParams.set('alpha_scan_fixture', '1');
             if (executionFixture) url.searchParams.set('alpha_scan_execution_fixture', '1');
             if (riskFixture) url.searchParams.set('alpha_scan_risk_fixture', riskFixture);
+            if (confirmationFixture) url.searchParams.set('alpha_scan_confirmation_fixture', confirmationFixture);
             return url.toString();
         };
         const liveUrl = sampleSize => {
@@ -547,7 +548,7 @@ const run = async () => {
             },
             'fresh confirmation gate passed',
             5000,
-            50,
+            10,
         );
         if (passedConfirmation.runningRows !== 0) {
             throw new Error('The automatic runner opened a contract before fresh confirmation passed.');
@@ -622,6 +623,93 @@ const run = async () => {
             resumedActiveRows: resumed.runningRows,
         };
         runReport.fixture.autoRunner = autoRunner;
+
+        await client.call('Page.navigate', {
+            url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'reverse'),
+        });
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+            'confirmation-reversal fixture Alpha Tool',
+        );
+        const reversalScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return ['ready', 'partial-data'].includes(next.status) ? next : false;
+            },
+            'confirmation-reversal fixture scan',
+            90000,
+        );
+        assertScan(reversalScan, SAMPLE_WINDOWS[0], 'fixture');
+        const initialReversalScanCount = Number(reversalScan.scanCount);
+        await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
+        const failedConfirmation = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.feedback.includes('Fresh confirmation failed') ? next : false;
+            },
+            'failed fresh confirmation',
+            5000,
+            50,
+        );
+        if (
+            failedConfirmation.runningRows !== 0 ||
+            failedConfirmation.settledRows !== 0 ||
+            failedConfirmation.executionLeg !== 'idle' ||
+            Number(failedConfirmation.autoTrades) !== 0
+        ) {
+            throw new Error(
+                `A failed fresh confirmation left an active or settled contract: ${JSON.stringify(failedConfirmation)}`,
+            );
+        }
+        const reversalRescan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return Number(next.scanCount) > initialReversalScanCount &&
+                    ['ready', 'partial-data'].includes(next.status)
+                    ? next
+                    : false;
+            },
+            'complete rescan after failed fresh confirmation',
+            10000,
+            50,
+        );
+        assertScan(reversalRescan, SAMPLE_WINDOWS[0], 'fixture');
+        if (reversalRescan.runningRows !== 0 || Number(reversalRescan.autoTrades) !== 0) {
+            throw new Error(
+                `The runner resumed execution before a new confirmation: ${JSON.stringify(reversalRescan)}`,
+            );
+        }
+        const resumedConfirmation = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.feedback.includes('Fresh confirmation 1/3') ? next : false;
+            },
+            'fresh confirmation after recovery rescan',
+            10000,
+            50,
+        );
+        if (resumedConfirmation.runningRows !== 0 || resumedConfirmation.executionLeg !== 'primary-pending') {
+            throw new Error(
+                `The runner did not wait for a new valid confirmation: ${JSON.stringify(resumedConfirmation)}`,
+            );
+        }
+        const recoveredRunning = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.runningRows === 1 ? next : false;
+            },
+            'automatic runner resumed after failed confirmation',
+            10000,
+            50,
+        );
+        const confirmationRecovery = {
+            status: 'passed',
+            initialScanCount: initialReversalScanCount,
+            rescanCount: Number(reversalRescan.scanCount),
+            failedActiveRows: failedConfirmation.runningRows,
+            resumedActiveRows: recoveredRunning.runningRows,
+        };
+        runReport.fixture.confirmationRecovery = confirmationRecovery;
 
         const riskBoundaryCases = [
             { mode: 'target', stopMessage: 'Session target reached', settledRows: 2 },
@@ -816,6 +904,7 @@ const run = async () => {
                 status: 'passed',
                 scans: fixtureResults,
                 autoRunner,
+                confirmationRecovery,
                 riskBoundaries: runReport.fixture.riskBoundaries || [],
             },
             externalFeed: RUN_LIVE ? {

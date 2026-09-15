@@ -2,6 +2,7 @@ import {
     AUTO_MOMENTUM_CONFIDENCE,
     AUTO_MOMENTUM_LONG_WINDOW,
     AUTO_MOMENTUM_SHORT_WINDOW,
+    isMomentumDirectionConfirmed,
     selectStrongestMomentumMarket,
     type StrategySource,
 } from '../alpha-market-strategy';
@@ -37,5 +38,14 @@ describe('auto volatility momentum selection', () => {
         ]);
 
         expect(result).toBeNull();
+    });
+
+    it('rejects a fresh confirmation after the live direction reverses', () => {
+        const freshDecision = selectStrongestMomentumMarket([
+            source('REVERSED', Array.from({ length: 30 }, (_, index) => 30 - index)),
+        ]);
+
+        expect(freshDecision?.contractType).toBe('PUT');
+        expect(isMomentumDirectionConfirmed('CALL', freshDecision)).toBe(false);
     });
 });
