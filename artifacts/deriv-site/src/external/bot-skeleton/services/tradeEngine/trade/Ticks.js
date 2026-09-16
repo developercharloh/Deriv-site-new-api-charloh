@@ -387,6 +387,7 @@ export default Engine =>
             const locked = this.volatilitySelectionLock;
             if (!locked) return;
 
+            const conditionSnapshot = this.getVolatilityConditionSnapshot?.(locked.signal);
             globalObserver.emit('bot.volatility.scan', {
                 event: 'rejected',
                 market: locked.code,
@@ -396,6 +397,7 @@ export default Engine =>
                 adx: locked.adx,
                 rsi: locked.rsi,
                 macd: locked.macd,
+                ...conditionSnapshot,
                 reason,
             });
             this.resetVolatilitySelection();
@@ -424,6 +426,30 @@ export default Engine =>
                 tick: this.getPurchaseConditionTick(),
             };
             return value;
+        }
+        getVolatilityConditionSnapshot(contractType) {
+            const lock = this.volatilitySelectionLock;
+            const confidence = this.lastSignalConfidenceEvaluation;
+            const indicators = this.purchaseIndicatorEvaluation;
+            if (!lock && !confidence && !indicators) return null;
+
+            const signal = String(contractType || confidence?.signal || lock?.signal || '').toUpperCase();
+            const isPut = signal === 'PUT';
+            const finiteOrNull = value => (Number.isFinite(Number(value)) ? Number(value) : null);
+
+            return {
+                signal: signal || 'WAIT',
+                availableConfidence: finiteOrNull(confidence?.confidence ?? lock?.confidence),
+                minimumConfidence: finiteOrNull(confidence?.minimum ?? lock?.minimumConfidence ?? 55),
+                availableAdx: finiteOrNull(indicators?.adx ?? lock?.adx),
+                minimumAdx: finiteOrNull(lock?.minimumAdx ?? 20),
+                availableRsi: finiteOrNull(indicators?.rsi ?? lock?.rsi),
+                minimumRsi: 50,
+                rsiOperator: isPut ? '<' : '>',
+                availableMacd: finiteOrNull(indicators?.macd ?? lock?.macd),
+                minimumMacd: 0,
+                macdOperator: isPut ? '<' : '>',
+            };
         }
         isPurchaseConditionValuesGateOpen(contractType) {
             if (!['CALL', 'PUT'].includes(contractType)) return true;
@@ -624,6 +650,12 @@ export default Engine =>
                               adx: selected.adx,
                               rsi: selected.rsi,
                               macd: selected.macd,
+                              minimumConfidence: minimum,
+                              minimumAdx: adxMinimum,
+                              minimumRsi: 50,
+                              minimumMacd: 0,
+                              rsiOperator: selected.signal === 'PUT' ? '<' : '>',
+                              macdOperator: selected.signal === 'PUT' ? '<' : '>',
                           }
                         : null,
                     selectionPolicy: 'strongest_qualified',
@@ -650,6 +682,8 @@ export default Engine =>
                     adx: selected.adx,
                     rsi: selected.rsi,
                     macd: selected.macd,
+                    minimumConfidence: minimum,
+                    minimumAdx: adxMinimum,
                 };
                 return true;
             };

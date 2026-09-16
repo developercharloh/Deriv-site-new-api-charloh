@@ -27,22 +27,34 @@ export default Engine =>
                     contractState.contract = contract;
 
                     if (
-                        this.adaptiveMomentumActive &&
                         !contractState.entryLogged &&
                         contract.entry_tick !== undefined &&
                         contract.entry_tick !== null &&
                         contract.entry_tick !== ''
                     ) {
                         contractState.entryLogged = true;
-                        adaptiveMomentumLog({
-                            event: 'entry',
+                        const entryEvent = {
                             market: contract.underlying || this.symbol || 'N/A',
                             contractId: contract.contract_id,
                             contractType: contract.contract_type,
                             entryTick: contract.entry_tick,
                             entryTickTime: contract.entry_tick_time,
                             buyPrice: contract.buy_price,
-                        });
+                        };
+                        const conditionSnapshot = this.getVolatilityConditionSnapshot?.(contract.contract_type);
+                        if (conditionSnapshot) {
+                            globalObserver.emit('bot.volatility.scan', {
+                                event: 'entry',
+                                ...entryEvent,
+                                ...conditionSnapshot,
+                            });
+                        }
+                        if (this.adaptiveMomentumActive) {
+                            adaptiveMomentumLog({
+                                event: 'entry',
+                                ...entryEvent,
+                            });
+                        }
                     }
 
                     if (String(contract.contract_id) === String(this.contractId)) {

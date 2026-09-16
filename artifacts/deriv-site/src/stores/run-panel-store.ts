@@ -1087,6 +1087,12 @@ export default class RunPanelStore {
             adx?: number;
             rsi?: number;
             macd?: number;
+                minimumConfidence?: number;
+                minimumAdx?: number;
+                minimumRsi?: number;
+                minimumMacd?: number;
+                rsiOperator?: string;
+                macdOperator?: string;
         } | null;
         selectionPolicy?: string;
         rejected?: Array<{
@@ -1105,16 +1111,53 @@ export default class RunPanelStore {
         adx?: number;
         rsi?: number;
         macd?: number;
+            availableConfidence?: number | null;
+            minimumConfidence?: number | null;
+            availableAdx?: number | null;
+            minimumAdx?: number | null;
+            availableRsi?: number | null;
+            minimumRsi?: number | null;
+            rsiOperator?: string;
+            availableMacd?: number | null;
+            minimumMacd?: number | null;
+            macdOperator?: string;
         reason?: string;
         contractType?: string;
         contractId?: string | number;
         buyPrice?: number;
+            entryTick?: number | string;
+            entryTickTime?: number | string;
         outcome?: string;
         profit?: number;
     }) => {
         const journal = this.root_store.journal;
         const number = (value: unknown, digits = 1) =>
             Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : 'N/A';
+            const conditionSummary = (values: {
+                signal?: string;
+                availableConfidence?: number | null;
+                minimumConfidence?: number | null;
+                availableAdx?: number | null;
+                minimumAdx?: number | null;
+                availableRsi?: number | null;
+                minimumRsi?: number | null;
+                rsiOperator?: string;
+                availableMacd?: number | null;
+                minimumMacd?: number | null;
+                macdOperator?: string;
+            }) => {
+                const signal = String(values.signal || 'CALL').toUpperCase();
+                const operator = signal === 'PUT' ? '<' : '>';
+                return (
+                    `Confidence ${number(values.availableConfidence)}% available / ` +
+                    `${number(values.minimumConfidence, 0)}% minimum · ` +
+                    `ADX ${number(values.availableAdx)} available / ${number(values.minimumAdx)} minimum · ` +
+                    `RSI ${number(values.availableRsi)} available / ` +
+                    `${values.rsiOperator || operator}${number(values.minimumRsi)} required · ` +
+                    `MACD ${number(values.availableMacd, 3)} available / ` +
+                    `${values.macdOperator || operator}${number(values.minimumMacd, 3)} required`
+                );
+            };
         const reasonLabel = (reason?: string) =>
             ({
                 market_closed: 'closed',
@@ -1144,16 +1187,38 @@ export default class RunPanelStore {
         if (event.event === 'rejected') {
             journal.updateVolatilityScanMessage(
                 `[Volatility Scan] Rejected ${event.label || event.market || 'selected market'} · ` +
-                    `${reasonLabel(event.reason)} · rescanning for another market`,
+                    `${conditionSummary(event)} · ${reasonLabel(event.reason)} · rescanning for another market`,
+            );
+            return;
+        }
+
+        if (event.event === 'blocked') {
+            journal.pushMessage(
+                `[Volatility Scan] Entry blocked · ${event.market || 'selected market'} · ` +
+                    `${event.contractType || event.signal || 'contract'} · ${conditionSummary(event)} · ` +
+                    `${reasonLabel(event.reason)}`,
+                MessageTypes.NOTIFY,
+                'journal__text'
             );
             return;
         }
 
         if (event.event === 'purchase') {
             journal.pushMessage(
-                `[Volatility Scan] Purchase used ${event.market || 'selected market'} · ` +
+                `[Volatility Scan] Entry order submitted · ${event.market || 'selected market'} · ` +
                     `${event.contractType || 'contract'} · contract ${event.contractId || 'N/A'} · ` +
-                    `stake ${number(event.buyPrice, 2)}`,
+                    `stake ${number(event.buyPrice, 2)} · ${conditionSummary(event)}`,
+                MessageTypes.NOTIFY,
+                'journal__text'
+            );
+            return;
+        }
+
+        if (event.event === 'entry') {
+            journal.pushMessage(
+                `[Volatility Scan] Entry confirmed · ${event.market || 'selected market'} · ` +
+                    `${event.contractType || 'contract'} at tick ${event.entryTick ?? 'N/A'} · ` +
+                    `contract ${event.contractId || 'N/A'} · ${conditionSummary(event)}`,
                 MessageTypes.NOTIFY,
                 'journal__text'
             );
@@ -1173,8 +1238,19 @@ export default class RunPanelStore {
         const selected = event.selected;
         const selectedText = selected
             ? `Selected ${selected.label || selected.symbol} (${selected.symbol}) · ${selected.signal} · ` +
-              `conf ${number(selected.confidence)}% · ADX ${number(selected.adx)} · ` +
-              `RSI ${number(selected.rsi)} · MACD ${number(selected.macd, 3)} · executing after fresh confirmation`
+              `${conditionSummary({
+                  signal: selected.signal,
+                  availableConfidence: selected.confidence,
+                  minimumConfidence: selected.minimumConfidence ?? event.minimumConfidence,
+                  availableAdx: selected.adx,
+                  minimumAdx: selected.minimumAdx ?? event.minimumAdx,
+                  availableRsi: selected.rsi,
+                  minimumRsi: selected.minimumRsi ?? 50,
+                  rsiOperator: selected.rsiOperator,
+                  availableMacd: selected.macd,
+                  minimumMacd: selected.minimumMacd ?? 0,
+                  macdOperator: selected.macdOperator,
+              })} · executing after fresh confirmation`
             : `No market met the ${number(event.minimumConfidence, 0)}% confidence and indicator gates`;
         journal.updateVolatilityScanMessage(
             `[Volatility Scan] Finished ${event.marketCount ?? 0} markets · ` +

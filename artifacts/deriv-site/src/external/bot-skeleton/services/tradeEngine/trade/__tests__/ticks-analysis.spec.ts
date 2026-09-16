@@ -273,6 +273,44 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(true);
     });
 
+    it('exposes available and minimum volatility conditions for Journal entry reporting', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.volatilitySelectionLock = {
+            code: '1HZ25V',
+            label: 'Volatility 25 (1s) Index',
+            signal: 'CALL',
+            confidence: 62,
+            adx: 24,
+            rsi: 58,
+            macd: 0.12,
+            minimumConfidence: 55,
+            minimumAdx: 20,
+        };
+        engine.lastSignalConfidenceEvaluation = {
+            signal: 'CALL',
+            confidence: 61,
+            minimum: 55,
+        };
+        engine.recordIndicatorValue('adx', 23);
+        engine.recordIndicatorValue('rsi', 57);
+        engine.recordIndicatorValue('macd', 0.08);
+
+        expect(engine.getVolatilityConditionSnapshot('CALL')).toEqual({
+            signal: 'CALL',
+            availableConfidence: 61,
+            minimumConfidence: 55,
+            availableAdx: 23,
+            minimumAdx: 20,
+            availableRsi: 57,
+            minimumRsi: 50,
+            rsiOperator: '>',
+            availableMacd: 0.08,
+            minimumMacd: 0,
+            macdOperator: '>',
+        });
+    });
+
     it('keeps the selected volatility while awaiting live confirmation', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

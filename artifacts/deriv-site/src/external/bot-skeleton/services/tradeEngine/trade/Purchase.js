@@ -96,10 +96,21 @@ export default Engine =>
                 if (this.volatilitySelectionLock) {
                     this.releaseVolatilitySelection?.('live_conditions_failed');
                 } else {
-                    notify(
-                        'warning',
-                        `Purchase blocked: ${contract_type} conditions were not satisfied for the current tick.`
-                    );
+                    const conditionSnapshot = this.getVolatilityConditionSnapshot?.(contract_type);
+                    if (conditionSnapshot) {
+                        globalObserver.emit('bot.volatility.scan', {
+                            event: 'blocked',
+                            market: this.tradeOptions?.symbol || this.options?.symbol || this.symbol,
+                            contractType: contract_type,
+                            ...conditionSnapshot,
+                            reason: 'live_conditions_failed',
+                        });
+                    } else {
+                        notify(
+                            'warning',
+                            `Purchase blocked: ${contract_type} conditions were not satisfied for the current tick.`
+                        );
+                    }
                 }
                 return Promise.resolve();
             }
@@ -175,6 +186,7 @@ export default Engine =>
                     contractType: contract_type,
                     contractId: buy.contract_id,
                     buyPrice: buy.buy_price,
+                    ...this.getVolatilityConditionSnapshot?.(contract_type),
                 });
 
                 if (this.is_proposal_subscription_required) {
