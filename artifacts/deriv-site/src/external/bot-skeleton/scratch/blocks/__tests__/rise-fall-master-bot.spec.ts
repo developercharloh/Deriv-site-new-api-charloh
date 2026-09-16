@@ -256,6 +256,8 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(workspace.getBlockById('bp_direct_journal_entry_value')?.type).toBe('logic_ternary');
         expect(workspace.getBlockById('bp_direct_journal_entry_rise')?.getFieldValue('TEXT')).toBe('BUYING RISE');
         expect(workspace.getBlockById('bp_direct_journal_entry_fall')?.getFieldValue('TEXT')).toBe('BUYING FALL');
+         expect(workspace.getBlockById('ts_w1v')?.getFieldValue('TEXT')).toBe('WIN | Signal settled | Direction: ');
+         expect(workspace.getBlockById('ts_l1v')?.getFieldValue('TEXT')).toBe('LOSS | Signal settled | Flipped to: ');
         expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
         expect(workspace.getBlockById('bp_direct_call')?.type).toBe('purchase');
         expect(workspace.getBlockById('bp_direct_put_purchase')?.type).toBe('purchase');

@@ -954,17 +954,47 @@
                                 <field name="VARIABLE" id="v_msg">Journal</field>
                                 <statement name="STACK">
                                   <block type="text_statement" id="ts_w1">
-                                    <value name="TEXT"><shadow type="text" id="ts_w1s"><field name="TEXT"></field></shadow><block type="text" id="ts_w1v"><field name="TEXT">WIN | Model confluence settled | Direction: </field></block></value>
+                                      <value name="TEXT"><shadow type="text" id="ts_w1s"><field name="TEXT"></field></shadow><block type="text" id="ts_w1v"><field name="TEXT">WIN | Signal settled | Direction: </field></block></value>
                                     <next><block type="text_statement" id="ts_w2">
                                       <value name="TEXT"><shadow type="text" id="ts_w2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w2v"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                      <next><block type="text_statement" id="ts_w3">
-                                        <value name="TEXT"><shadow type="text" id="ts_w3s"><field name="TEXT"></field></shadow><block type="text" id="ts_w3v"><field name="TEXT"> | Stake reset: $</field></block></value>
-                                        <next><block type="text_statement" id="ts_w4">
-                                          <value name="TEXT"><shadow type="text" id="ts_w4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w4v"><field name="VAR" id="v_stake">Stake</field></block></value>
-                                          <next><block type="text_statement" id="ts_w5">
-                                            <value name="TEXT"><shadow type="text" id="ts_w5s"><field name="TEXT"></field></shadow><block type="text" id="ts_w5v"><field name="TEXT"> | P/L: $</field></block></value>
-                                            <next><block type="text_statement" id="ts_w6">
-                                              <value name="TEXT"><shadow type="text" id="ts_w6s"><field name="TEXT"></field></shadow><block type="total_profit" id="ts_w6v"></block></value>
+                                      <next><block type="text_statement" id="ts_w_adx_label">
+                                        <value name="TEXT"><shadow type="text" id="ts_w_adx_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_w_adx_label_v"><field name="TEXT"> | ADX: </field></block></value>
+                                        <next><block type="text_statement" id="ts_w_adx">
+                                          <value name="TEXT"><shadow type="text" id="ts_w_adx_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w_adx_v"><field name="VAR" id="v_adx">ADX Indicator</field></block></value>
+                                          <next><block type="text_statement" id="ts_w_rsi_label">
+                                            <value name="TEXT"><shadow type="text" id="ts_w_rsi_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_w_rsi_label_v"><field name="TEXT"> | RSI: </field></block></value>
+                                            <next><block type="text_statement" id="ts_w_rsi">
+                                              <value name="TEXT"><shadow type="text" id="ts_w_rsi_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w_rsi_v"><field name="VAR" id="v_rsi">RSI Indicator</field></block></value>
+                                              <next><block type="text_statement" id="ts_w_macd_label">
+                                                <value name="TEXT"><shadow type="text" id="ts_w_macd_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_w_macd_label_v"><field name="TEXT"> | MACD Histogram: </field></block></value>
+                                                <next><block type="text_statement" id="ts_w_macd">
+                                                  <value name="TEXT"><shadow type="text" id="ts_w_macd_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w_macd_v"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
+                                                  <next><block type="text_statement" id="ts_w_conf_label">
+                                                    <value name="TEXT"><shadow type="text" id="ts_w_conf_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_w_conf_label_v"><field name="TEXT"> | Confidence (last </field></block></value>
+                                                    <next><block type="text_statement" id="ts_w_conf_ticks">
+                                                      <value name="TEXT"><shadow type="text" id="ts_w_conf_ticks_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w_conf_ticks_v"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
+                                                      <next><block type="text_statement" id="ts_w_conf_ticks_label">
+                                                        <value name="TEXT"><shadow type="text" id="ts_w_conf_ticks_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_w_conf_ticks_label_v"><field name="TEXT"> ticks): </field></block></value>
+                                                        <next><block type="text_statement" id="ts_w_conf">
+                                                          <value name="TEXT"><shadow type="text" id="ts_w_conf_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w_conf_v"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
+                                                          <next><block type="text_statement" id="ts_w3">
+                                                            <value name="TEXT"><shadow type="text" id="ts_w3s"><field name="TEXT"></field></shadow><block type="text" id="ts_w3v"><field name="TEXT"> | Stake reset: $</field></block></value>
+                                                            <next><block type="text_statement" id="ts_w4">
+                                                              <value name="TEXT"><shadow type="text" id="ts_w4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w4v"><field name="VAR" id="v_stake">Stake</field></block></value>
+                                                              <next><block type="text_statement" id="ts_w5">
+                                                                <value name="TEXT"><shadow type="text" id="ts_w5s"><field name="TEXT"></field></shadow><block type="text" id="ts_w5v"><field name="TEXT"> | P/L: $</field></block></value>
+                                                                <next><block type="text_statement" id="ts_w6">
+                                                                  <value name="TEXT"><shadow type="text" id="ts_w6s"><field name="TEXT"></field></shadow><block type="total_profit" id="ts_w6v"></block></value>
+                                                                </block></next>
+                                                              </block></next>
+                                                            </block></next>
+                                                          </block></next>
+                                                        </block></next>
+                                                      </block></next>
+                                                    </block></next>
+                                                  </block></next>
+                                                </block></next>
+                                              </block></next>
                                             </block></next>
                                           </block></next>
                                         </block></next>
@@ -1074,21 +1104,51 @@
                                         <field name="VARIABLE" id="v_msg">Journal</field>
                                         <statement name="STACK">
                                           <block type="text_statement" id="ts_l1">
-                                            <value name="TEXT"><shadow type="text" id="ts_l1s"><field name="TEXT"></field></shadow><block type="text" id="ts_l1v"><field name="TEXT">LOSS | Model confluence settled | Flipped to: </field></block></value>
+                                             <value name="TEXT"><shadow type="text" id="ts_l1s"><field name="TEXT"></field></shadow><block type="text" id="ts_l1v"><field name="TEXT">LOSS | Signal settled | Flipped to: </field></block></value>
                                             <next><block type="text_statement" id="ts_l2">
                                               <value name="TEXT"><shadow type="text" id="ts_l2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l2v"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                              <next><block type="text_statement" id="ts_l3">
-                                                <value name="TEXT"><shadow type="text" id="ts_l3s"><field name="TEXT"></field></shadow><block type="text" id="ts_l3v"><field name="TEXT"> | Next stake: $</field></block></value>
-                                                <next><block type="text_statement" id="ts_l4">
-                                                  <value name="TEXT"><shadow type="text" id="ts_l4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l4v"><field name="VAR" id="v_stake">Stake</field></block></value>
-                                                  <next><block type="text_statement" id="ts_l5">
-                                                    <value name="TEXT"><shadow type="text" id="ts_l5s"><field name="TEXT"></field></shadow><block type="text" id="ts_l5v"><field name="TEXT"> | CL: </field></block></value>
-                                                    <next><block type="text_statement" id="ts_l6">
-                                                      <value name="TEXT"><shadow type="text" id="ts_l6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l6v"><field name="VAR" id="v_cl">Consecutive Losses</field></block></value>
-                                                      <next><block type="text_statement" id="ts_l7">
-                                                        <value name="TEXT"><shadow type="text" id="ts_l7s"><field name="TEXT"></field></shadow><block type="text" id="ts_l7v"><field name="TEXT"> of 5 | P/L: $</field></block></value>
-                                                        <next><block type="text_statement" id="ts_l8">
-                                                          <value name="TEXT"><shadow type="text" id="ts_l8s"><field name="TEXT"></field></shadow><block type="total_profit" id="ts_l8v"></block></value>
+                                              <next><block type="text_statement" id="ts_l_adx_label">
+                                                <value name="TEXT"><shadow type="text" id="ts_l_adx_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_l_adx_label_v"><field name="TEXT"> | ADX: </field></block></value>
+                                                <next><block type="text_statement" id="ts_l_adx">
+                                                  <value name="TEXT"><shadow type="text" id="ts_l_adx_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l_adx_v"><field name="VAR" id="v_adx">ADX Indicator</field></block></value>
+                                                  <next><block type="text_statement" id="ts_l_rsi_label">
+                                                    <value name="TEXT"><shadow type="text" id="ts_l_rsi_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_l_rsi_label_v"><field name="TEXT"> | RSI: </field></block></value>
+                                                    <next><block type="text_statement" id="ts_l_rsi">
+                                                      <value name="TEXT"><shadow type="text" id="ts_l_rsi_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l_rsi_v"><field name="VAR" id="v_rsi">RSI Indicator</field></block></value>
+                                                      <next><block type="text_statement" id="ts_l_macd_label">
+                                                        <value name="TEXT"><shadow type="text" id="ts_l_macd_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_l_macd_label_v"><field name="TEXT"> | MACD Histogram: </field></block></value>
+                                                        <next><block type="text_statement" id="ts_l_macd">
+                                                          <value name="TEXT"><shadow type="text" id="ts_l_macd_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l_macd_v"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
+                                                          <next><block type="text_statement" id="ts_l_conf_label">
+                                                            <value name="TEXT"><shadow type="text" id="ts_l_conf_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_l_conf_label_v"><field name="TEXT"> | Confidence (last </field></block></value>
+                                                            <next><block type="text_statement" id="ts_l_conf_ticks">
+                                                              <value name="TEXT"><shadow type="text" id="ts_l_conf_ticks_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l_conf_ticks_v"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
+                                                              <next><block type="text_statement" id="ts_l_conf_ticks_label">
+                                                                <value name="TEXT"><shadow type="text" id="ts_l_conf_ticks_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_l_conf_ticks_label_v"><field name="TEXT"> ticks): </field></block></value>
+                                                                <next><block type="text_statement" id="ts_l_conf">
+                                                                  <value name="TEXT"><shadow type="text" id="ts_l_conf_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l_conf_v"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
+                                                                  <next><block type="text_statement" id="ts_l3">
+                                                                    <value name="TEXT"><shadow type="text" id="ts_l3s"><field name="TEXT"></field></shadow><block type="text" id="ts_l3v"><field name="TEXT"> | Next stake: $</field></block></value>
+                                                                    <next><block type="text_statement" id="ts_l4">
+                                                                      <value name="TEXT"><shadow type="text" id="ts_l4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l4v"><field name="VAR" id="v_stake">Stake</field></block></value>
+                                                                      <next><block type="text_statement" id="ts_l5">
+                                                                        <value name="TEXT"><shadow type="text" id="ts_l5s"><field name="TEXT"></field></shadow><block type="text" id="ts_l5v"><field name="TEXT"> | CL: </field></block></value>
+                                                                        <next><block type="text_statement" id="ts_l6">
+                                                                          <value name="TEXT"><shadow type="text" id="ts_l6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l6v"><field name="VAR" id="v_cl">Consecutive Losses</field></block></value>
+                                                                          <next><block type="text_statement" id="ts_l7">
+                                                                            <value name="TEXT"><shadow type="text" id="ts_l7s"><field name="TEXT"></field></shadow><block type="text" id="ts_l7v"><field name="TEXT"> of 5 | P/L: $</field></block></value>
+                                                                            <next><block type="text_statement" id="ts_l8">
+                                                                              <value name="TEXT"><shadow type="text" id="ts_l8s"><field name="TEXT"></field></shadow><block type="total_profit" id="ts_l8v"></block></value>
+                                                                            </block></next>
+                                                                          </block></next>
+                                                                        </block></next>
+                                                                      </block></next>
+                                                                    </block></next>
+                                                                  </block></next>
+                                                                </block></next>
+                                                              </block></next>
+                                                            </block></next>
+                                                          </block></next>
                                                         </block></next>
                                                       </block></next>
                                                     </block></next>

@@ -106,6 +106,23 @@ class DBot {
         }
     };
 
+    isStaleRiseFallWorkspace = strategy_xml =>
+        typeof strategy_xml === 'string' &&
+        strategy_xml.includes('Model confluence settled') &&
+        !strategy_xml.includes('INDICATORS | ADX:');
+
+    loadCurrentRiseFallTemplate = async () => {
+        try {
+            const response = await fetch('/bots/Rise_Fall_Master_Bot.xml', { cache: 'no-store' });
+            if (!response.ok) return null;
+            const xml = await response.text();
+            return this.hasUsableSavedWorkspace(xml) ? xml : null;
+        } catch (error) {
+            console.warn('[Blockly] Could not refresh the Rise/Fall Master Bot template.', error);
+            return null;
+        }
+    };
+
     /**
      * Initialises the workspace and mounts it to a container element (app_contents).
      */
@@ -197,6 +214,16 @@ class DBot {
             }
         };
 
+        let refreshed_rise_fall_template = null;
+        if (
+            recent_files &&
+            recent_files.length &&
+            this.hasUsableSavedWorkspace(recent_files[0]?.xml) &&
+            this.isStaleRiseFallWorkspace(recent_files[0]?.xml)
+        ) {
+            refreshed_rise_fall_template = await this.loadCurrentRiseFallTemplate();
+        }
+
         return new Promise((resolve, reject) => {
             __webpack_public_path__ = public_path; // eslint-disable-line no-global-assign
             ApiHelpers.setInstance(api_helpers_store);
@@ -267,7 +294,23 @@ class DBot {
                 window.Blockly.getMainWorkspace().RTL = isDbotRTL();
 
                 let file_name = config().default_file_name;
-                if (recent_files && recent_files.length && this.hasUsableSavedWorkspace(recent_files[0]?.xml)) {
+                if (
+                    recent_files &&
+                    recent_files.length &&
+                    this.hasUsableSavedWorkspace(recent_files[0]?.xml) &&
+                    this.isStaleRiseFallWorkspace(recent_files[0]?.xml)
+                ) {
+                    const refreshed_template = refreshed_rise_fall_template;
+                    if (refreshed_template) {
+                        window.Blockly.derivWorkspace.strategy_to_load = refreshed_template;
+                        window.Blockly.getMainWorkspace().strategy_to_load = refreshed_template;
+                        file_name = 'Rise_Fall_Master_Bot';
+                        window.Blockly.derivWorkspace.current_strategy_id = window.Blockly.utils.idGenerator.genUid();
+                        window.Blockly.getMainWorkspace().current_strategy_id =
+                            window.Blockly.derivWorkspace.current_strategy_id;
+                        console.warn('[Blockly] Replaced a stale Rise/Fall Master Bot workspace with the current template.');
+                    }
+                } else if (recent_files && recent_files.length && this.hasUsableSavedWorkspace(recent_files[0]?.xml)) {
                     const latest_file = recent_files[0];
                     window.Blockly.derivWorkspace.strategy_to_load = latest_file.xml;
                     window.Blockly.getMainWorkspace().strategy_to_load = latest_file.xml;
