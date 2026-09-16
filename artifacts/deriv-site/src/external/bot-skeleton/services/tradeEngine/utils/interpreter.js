@@ -76,7 +76,8 @@ const Interpreter = () => {
             const function_args = first_defined_arg_idx < 0 ? [] : reversed_args.slice(first_defined_arg_idx).reverse();
             // End of workaround
 
-            func(...function_args.map(arg => js_interpreter.pseudoToNative(arg)))
+            Promise.resolve()
+                .then(() => func(...function_args.map(arg => js_interpreter.pseudoToNative(arg))))
                 .then(rv => {
                     callback(js_interpreter.nativeToPseudo(rv));
                     loop();

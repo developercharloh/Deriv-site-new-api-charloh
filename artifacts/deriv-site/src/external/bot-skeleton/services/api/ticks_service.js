@@ -70,18 +70,26 @@ export default class TicksService {
 
     async request(options) {
         return new Promise((resolve, reject) => {
-            const { symbol, granularity } = options;
+            const { symbol, granularity, subscribe = true } = options;
 
             const style = getType(granularity);
+            const hasSubscription =
+                style === 'ticks'
+                    ? this.subscriptions.hasIn(['tick', symbol])
+                    : this.subscriptions.hasIn(['ohlc', symbol, Number(granularity)]);
 
-            if (style === 'ticks' && this.ticks.has(symbol)) {
+            if (style === 'ticks' && this.ticks.has(symbol) && (!subscribe || hasSubscription)) {
                 return resolve(this.ticks.get(symbol));
             }
 
-            if (style === 'candles' && this.candles.hasIn([symbol, Number(granularity)])) {
+            if (
+                style === 'candles' &&
+                this.candles.hasIn([symbol, Number(granularity)]) &&
+                (!subscribe || hasSubscription)
+            ) {
                 return resolve(this.candles.getIn([symbol, Number(granularity)]));
             }
-            this.requestStream({ ...options, style })
+            this.requestStream({ ...options, style, subscribe })
                 .then(res => {
                     resolve(res);
                 })
@@ -98,7 +106,7 @@ export default class TicksService {
             const type = getType(granularity);
 
             const key = getUUID();
-            this.request(options)
+            this.request({ ...options, subscribe: true })
                 .then(() => {
                     if (type === 'ticks') {
                         this.tickListeners = this.tickListeners.setIn([symbol, key], callback);
@@ -260,10 +268,10 @@ export default class TicksService {
     }
 
     requestTicks(options) {
-        const { symbol, granularity, style } = options;
+        const { symbol, granularity, style, subscribe = true } = options;
         const request_object = {
             ticks_history: symbol === 'na' ? 'R_100' : symbol,
-            subscribe: 1,
+            subscribe: subscribe === false ? 0 : 1,
             end: 'latest',
             count: 1000,
             granularity: granularity ? Number(granularity) : undefined,

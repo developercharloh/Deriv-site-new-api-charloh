@@ -1085,6 +1085,7 @@ export default class RunPanelStore {
             rsi?: number;
             macd?: number;
         } | null;
+        selectionPolicy?: string;
         rejected?: Array<{
             symbol?: string;
             label?: string;
@@ -1168,7 +1169,8 @@ export default class RunPanelStore {
         journal.pushMessage(
             `[Volatility Scan] Checked ${event.marketCount ?? 0} markets · ` +
                 `${event.qualifiedCount ?? 0} qualified · window ${event.windowSize ?? 0} ticks · ` +
-                `${selectedText}${rejected ? ` · Rejections: ${rejected}` : ''}`,
+                `${selectedText}${event.selected ? ' · strongest qualified market will execute' : ''}` +
+                `${rejected ? ` · Rejections: ${rejected}` : ''}`,
             MessageTypes.NOTIFY,
             'journal__text'
         );

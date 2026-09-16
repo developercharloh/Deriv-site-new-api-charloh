@@ -500,7 +500,12 @@ export default Engine =>
                         }
 
                         try {
-                            const ticks = await this.$scope.ticksService.request({ symbol: volatility.code });
+                            // Scanning is a one-shot history read. Only the selected
+                            // market should keep a live broker stream.
+                            const ticks = await this.$scope.ticksService.request({
+                                symbol: volatility.code,
+                                subscribe: false,
+                            });
                             const prices = ticks.map(tick => Number(tick.quote)).filter(Number.isFinite);
                             const recent = prices.slice(-(windowSize + 1));
                             if (recent.length < windowSize + 1) {
@@ -580,6 +585,7 @@ export default Engine =>
                               macd: selected.macd,
                           }
                         : null,
+                    selectionPolicy: 'strongest_qualified',
                     rejected: rejected.map(record => ({
                         symbol: record.code,
                         label: record.label,
