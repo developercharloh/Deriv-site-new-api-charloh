@@ -108,45 +108,6 @@
                                 <next><block type="variables_set" id="i_flip">
                                   <field name="VAR" id="v_flip">Just Flipped</field>
                                   <value name="VALUE"><block type="text" id="i_flip_v"><field name="TEXT">no</field></block></value>
-                                  <next>
-                                    <!-- START message -->
-                                    <block type="text_join" id="tj_start">
-                                      <field name="VARIABLE" id="v_msg">Journal</field>
-                                      <statement name="STACK">
-                                        <block type="text_statement" id="ts_s1">
-                                          <value name="TEXT"><shadow type="text" id="ts_s1s"><field name="TEXT"></field></shadow><block type="text" id="ts_s1v"><field name="TEXT">Rise/Fall Master Bot STARTED | Stake: $</field></block></value>
-                                          <next><block type="text_statement" id="ts_s2">
-                                            <value name="TEXT"><shadow type="text" id="ts_s2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_s2v"><field name="VAR" id="v_init">Initial Stake</field></block></value>
-                                            <next><block type="text_statement" id="ts_s3">
-                                              <value name="TEXT"><shadow type="text" id="ts_s3s"><field name="TEXT"></field></shadow><block type="text" id="ts_s3v"><field name="TEXT"> | TP: $</field></block></value>
-                                              <next><block type="text_statement" id="ts_s4">
-                                                <value name="TEXT"><shadow type="text" id="ts_s4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_s4v"><field name="VAR" id="v_tp">Take Profit</field></block></value>
-                                                <next><block type="text_statement" id="ts_s5">
-                                                  <value name="TEXT"><shadow type="text" id="ts_s5s"><field name="TEXT"></field></shadow><block type="text" id="ts_s5v"><field name="TEXT"> | SL: $ | Mart: x</field></block></value>
-                                                  <next><block type="text_statement" id="ts_s6">
-                                                    <value name="TEXT"><shadow type="text" id="ts_s6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_s6v"><field name="VAR" id="v_mart">Martingale</field></block></value>
-                                                    <next><block type="text_statement" id="ts_s7">
-                                                       <value name="TEXT"><shadow type="text" id="ts_s7s"><field name="TEXT"></field></shadow><block type="text" id="ts_s7v"><field name="TEXT"> | Indicators: Aroon/Ichimoku/ADX/ATR/Stoch/MACD/RSI/Bollinger | Gates: history/contract/loss/payout/session/MACD</field></block></value>
-                                                    </block></next>
-                                                  </block></next>
-                                                </block></next>
-                                              </block></next>
-                                            </block></next>
-                                          </block></next>
-                                        </block>
-                                      </statement>
-                                      <next>
-                                        <block type="notify" id="n_start">
-                                          <field name="NOTIFICATION_TYPE">info</field>
-                                          <field name="NOTIFICATION_SOUND">silent</field>
-                                          <value name="MESSAGE">
-                                            <shadow type="text" id="n_start_s"><field name="TEXT">Bot started</field></shadow>
-                                            <block type="variables_get" id="n_start_v"><field name="VAR" id="v_msg">Journal</field></block>
-                                          </value>
-                                        </block>
-                                      </next>
-                                    </block>
-                                  </next>
                                 </block></next>
                               </block></next>
                             </block></next>
@@ -481,12 +442,8 @@
                                 <field name="VARIABLE" id="v_msg">Journal</field>
                                 <statement name="STACK">
                                   <block type="text_statement" id="bp_direct_journal_1">
-                                    <value name="TEXT"><shadow type="text" id="bp_direct_journal_1s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_1v"><field name="TEXT">DIRECTION APPROVED | Model: </field></block></value>
-                                    <next><block type="text_statement" id="bp_direct_journal_2">
-                                      <value name="TEXT"><shadow type="text" id="bp_direct_journal_2s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_2v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
-                                      <next><block type="text_statement" id="bp_direct_journal_adx_label">
-                                        <value name="TEXT"><shadow type="text" id="bp_direct_journal_adx_label_s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_adx_label_v"><field name="TEXT"> | ADX: </field></block></value>
-                                        <next><block type="text_statement" id="bp_direct_journal_adx">
+                                    <value name="TEXT"><shadow type="text" id="bp_direct_journal_1s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_1v"><field name="TEXT">INDICATORS | ADX: </field></block></value>
+                                    <next><block type="text_statement" id="bp_direct_journal_adx">
                                           <value name="TEXT"><shadow type="text" id="bp_direct_journal_adx_s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_adx_v"><field name="VAR" id="v_adx">ADX Indicator</field></block></value>
                                           <next><block type="text_statement" id="bp_direct_journal_rsi_label">
                                             <value name="TEXT"><shadow type="text" id="bp_direct_journal_rsi_label_s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_rsi_label_v"><field name="TEXT"> | RSI: </field></block></value>
@@ -496,16 +453,23 @@
                                                 <value name="TEXT"><shadow type="text" id="bp_direct_journal_macd_label_s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_macd_label_v"><field name="TEXT"> | MACD Histogram: </field></block></value>
                                                 <next><block type="text_statement" id="bp_direct_journal_macd">
                                                   <value name="TEXT"><shadow type="text" id="bp_direct_journal_macd_s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_macd_v"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
-                                                  <next><block type="text_statement" id="bp_direct_journal_5">
-                                                    <value name="TEXT"><shadow type="text" id="bp_direct_journal_5s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_5v"><field name="TEXT"> | Confidence: </field></block></value>
-                                                    <next><block type="text_statement" id="bp_direct_journal_6">
-                                                      <value name="TEXT"><shadow type="text" id="bp_direct_journal_6s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_6v"><field name="VAR" id="v_conf">Model Confidence</field></block></value>
-                                                      <next><block type="text_statement" id="bp_direct_journal_7">
-                                                        <value name="TEXT"><shadow type="text" id="bp_direct_journal_7s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_7v"><field name="TEXT"> | Stake: $</field></block></value>
-                                                        <next><block type="text_statement" id="bp_direct_journal_8">
-                                                          <value name="TEXT"><shadow type="text" id="bp_direct_journal_8s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_8v"><field name="VAR" id="v_stake">Stake</field></block></value>
-                                                        </block></next>
-                                                      </block></next>
+                                                  <next><block type="text_statement" id="bp_direct_journal_entry_label">
+                                                    <value name="TEXT"><shadow type="text" id="bp_direct_journal_entry_label_s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_entry_label_v"><field name="TEXT"> | Entry: </field></block></value>
+                                                    <next><block type="text_statement" id="bp_direct_journal_entry">
+                                                      <value name="TEXT">
+                                                        <shadow type="text" id="bp_direct_journal_entry_s"><field name="TEXT"></field></shadow>
+                                                        <block type="logic_ternary" id="bp_direct_journal_entry_value">
+                                                          <value name="IF">
+                                                            <block type="logic_compare" id="bp_direct_journal_entry_call">
+                                                              <field name="OP">EQ</field>
+                                                              <value name="A"><block type="variables_get" id="bp_direct_journal_entry_signal"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                              <value name="B"><block type="text" id="bp_direct_journal_entry_call_text"><field name="TEXT">CALL</field></block></value>
+                                                            </block>
+                                                          </value>
+                                                          <value name="THEN"><block type="text" id="bp_direct_journal_entry_rise"><field name="TEXT">BUYING RISE</field></block></value>
+                                                          <value name="ELSE"><block type="text" id="bp_direct_journal_entry_fall"><field name="TEXT">BUYING FALL</field></block></value>
+                                                        </block>
+                                                      </value>
                                                     </block></next>
                                                   </block></next>
                                                 </block></next>

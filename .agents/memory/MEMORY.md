@@ -35,3 +35,4 @@
 - [Rise/Fall XML regression](rise-fall-xml-regression.md) — import the full bot XML, but generate its gate condition separately from editor-only trade and Journal blocks.
 - [Auto volatility runner](auto-volatility-runner.md) — dynamic symbol selection belongs in the Alpha Scan execution controller, not inside a fixed-symbol Blockly strategy.
 - [Blockly payout gate](blockly-payout-gate.md) — encode a 1.60x payout floor as live payout ÷ stake with a 62.5% break-even threshold.
+- [Bot template refresh](deriv-bot-template-workspaces.md) — published Blockly template changes do not rewrite saved/open workspaces; users must load a fresh workspace to receive them.

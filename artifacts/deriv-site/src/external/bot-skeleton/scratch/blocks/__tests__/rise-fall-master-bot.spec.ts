@@ -97,6 +97,19 @@ describe('Rise/Fall Master Bot XML', () => {
         (Blockly.Block.prototype as any).initSvg = jest.fn();
         (Blockly.Block.prototype as any).renderEfficiently = jest.fn();
         (Blockly.Block.prototype as any).queueRender = jest.fn();
+        (Blockly.Block.prototype as any).getSiblings = function () {
+            const siblings = [this];
+            let nextBlock = this.getNextBlock();
+            while (nextBlock) {
+                siblings.push(nextBlock);
+                nextBlock = nextBlock.getNextBlock();
+            }
+            return siblings;
+        };
+        (Blockly.Block.prototype as any).getBlocksInStatement = function (inputName: string) {
+            const firstBlock = this.getInputTargetBlock(inputName);
+            return firstBlock ? firstBlock.getSiblings() : [];
+        };
 
         await import('blockly/blocks');
         await import('../index');
@@ -173,10 +186,13 @@ describe('Rise/Fall Master Bot XML', () => {
     it('imports the master bot without the removed purchase-block gate', () => {
         const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Rise_Fall_Master_Bot.xml');
         const xmlText = fs.readFileSync(xmlPath, 'utf8');
+        expect(xmlText).not.toContain('Indicators: Aroon/Ichimoku/ADX/ATR/Stoch/MACD/RSI/Bollinger');
+        expect(xmlText).not.toContain('Gates: history/contract/loss/payout/session/MACD');
         const sourceDom = Blockly.utils.xml.textToDom(xmlText);
         const importDom = removeDependentFields(sourceDom);
 
         const workspace = new Blockly.Workspace();
+        window.Blockly.derivWorkspace = workspace;
         expect(() => Blockly.Xml.domToWorkspace(importDom, workspace)).not.toThrow();
 
         const blockTypes = new Set(workspace.getAllBlocks(false).map(block => block.type));
@@ -201,6 +217,8 @@ describe('Rise/Fall Master Bot XML', () => {
 
         javascriptGenerator.init(workspace);
         (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
+        const generatedBeforePurchaseCode = javascriptGenerator.blockToCode(workspace.getBlockById('bp_root') as any);
+        expect(String(generatedBeforePurchaseCode)).not.toContain('undefined');
         expect(workspace.getBlockById('bp_gate_if')).toBeNull();
         expect(workspace.getBlockById('bp_macd_gate')?.type).toBe('controls_if');
         expect(workspace.getBlockById('bp_all_indicators_match')?.getFieldValue('OP')).toBe('AND');
@@ -216,13 +234,22 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(workspace.getBlockById('bp_indicator_adx_value')?.type).toBe('adx_value');
         expect(workspace.getBlockById('bp_indicator_rsi_value')?.type).toBe('rsi_value');
         expect(workspace.getBlockById('bp_indicator_macd_value')?.type).toBe('macd_value');
+        expect(workspace.getBlockById('tj_start')).toBeNull();
+        expect(workspace.getBlockById('bp_direct_journal_1')?.getInputTargetBlock('TEXT')?.getFieldValue('TEXT')).toBe(
+            'INDICATORS | ADX: '
+        );
         expect(workspace.getBlockById('bp_direct_journal_adx')?.type).toBe('text_statement');
         expect(workspace.getBlockById('bp_direct_journal_adx')?.getNextBlock()?.id).toBe(
             'bp_direct_journal_rsi_label'
         );
         expect(workspace.getBlockById('bp_direct_journal_rsi')?.type).toBe('text_statement');
         expect(workspace.getBlockById('bp_direct_journal_macd')?.type).toBe('text_statement');
-        expect(workspace.getBlockById('bp_direct_journal_macd')?.getNextBlock()?.id).toBe('bp_direct_journal_5');
+        expect(workspace.getBlockById('bp_direct_journal_macd')?.getNextBlock()?.id).toBe(
+            'bp_direct_journal_entry_label'
+        );
+        expect(workspace.getBlockById('bp_direct_journal_entry_value')?.type).toBe('logic_ternary');
+        expect(workspace.getBlockById('bp_direct_journal_entry_rise')?.getFieldValue('TEXT')).toBe('BUYING RISE');
+        expect(workspace.getBlockById('bp_direct_journal_entry_fall')?.getFieldValue('TEXT')).toBe('BUYING FALL');
         expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
         expect(workspace.getBlockById('bp_direct_call')?.type).toBe('purchase');
         expect(workspace.getBlockById('bp_direct_put_purchase')?.type).toBe('purchase');
