@@ -18,10 +18,14 @@ import {
     AUTO_MOMENTUM_CONFIDENCE,
     AUTO_MOMENTUM_LONG_WINDOW,
     AUTO_MOMENTUM_SHORT_WINDOW,
+    AUTO_SIGNAL_CONFIDENCE_WINDOW,
+    evaluateMomentumMarket,
     isMomentumDirectionConfirmed,
     marketConditionLabel,
     purchaseMarketLabel,
+    selectBestQualifiedMomentumMarket,
     type MarketCondition,
+    type MomentumMarketEvaluation,
     type PurchaseMarket,
     type RankedMarketDecision,
     type StrategySource,
@@ -1094,12 +1098,28 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     })), [rows]);
 
     const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
+    const autoMomentumEvaluations = useMemo(
+        () => new Map<string, MomentumMarketEvaluation>(
+            strategySources.map(source => [
+                source.symbol,
+                evaluateMomentumMarket(
+                    source,
+                    AUTO_MOMENTUM_SHORT_WINDOW,
+                    AUTO_MOMENTUM_LONG_WINDOW,
+                    AUTO_MOMENTUM_CONFIDENCE,
+                    AUTO_SIGNAL_CONFIDENCE_WINDOW,
+                ),
+            ]),
+        ),
+        [strategySources],
+    );
     const autoMomentumDecision = useMemo(
-        () => selectStrongestMomentumMarket(
+        () => selectBestQualifiedMomentumMarket(
             strategySources,
             AUTO_MOMENTUM_SHORT_WINDOW,
             AUTO_MOMENTUM_LONG_WINDOW,
             AUTO_MOMENTUM_CONFIDENCE,
+            AUTO_SIGNAL_CONFIDENCE_WINDOW,
         ),
         [strategySources],
     );
@@ -1681,7 +1701,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>×</span><span>Martingale</span><select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Martingale'><option value='no'>No (1x)</option><option value='2'>2x</option><option value='3'>3x</option></select></label>
                 <div className='alpha-tool__settings-note'>
                     {autoVolatilityMode
-                        ? `Auto runner · all volatility symbols · Adaptive Momentum ${AUTO_MOMENTUM_SHORT_WINDOW}/${AUTO_MOMENTUM_LONG_WINDOW} · ${AUTO_MOMENTUM_CONFIDENCE}% threshold · payout ≥ ${payoutFloor}x · one contract at a time`
+                        ? `Auto runner · all volatility symbols · ${AUTO_SIGNAL_CONFIDENCE_WINDOW}-tick confidence ≥ ${AUTO_MOMENTUM_CONFIDENCE}% + ${AUTO_MOMENTUM_SHORT_WINDOW}/${AUTO_MOMENTUM_LONG_WINDOW} momentum alignment · payout ≥ ${payoutFloor}x · one contract at a time`
                         : 'One-tick contract · one selected market condition · recovery starts only after a primary loss'}
                 </div>
             </section>
@@ -1726,22 +1746,44 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <span className='alpha-tool__view-label'>{rows.length} / {discoveredCount || rows.length} markets</span>
                 </div>
                 <p className='alpha-tool__scan-coverage-note'>
-                    Every supported continuous volatility is evaluated before one candidate is confirmed. The Trade Journal below records executed contracts only.
+                    Every supported continuous volatility is evaluated against momentum alignment and at least {AUTO_MOMENTUM_CONFIDENCE}% directional confidence across the last {AUTO_SIGNAL_CONFIDENCE_WINDOW} ticks. The best qualified market is confirmed with fresh ticks before execution.
                 </p>
                 <div className='alpha-tool__scan-coverage-list'>
-                    {rows.map(row => (
-                        <div
-                            className={`alpha-tool__scan-market${row.symbol === autoCandidateSymbol ? ' alpha-tool__scan-market--selected' : ''}`}
-                            key={row.symbol}
-                            data-symbol={row.symbol}
-                            data-selected={row.symbol === autoCandidateSymbol}
-                        >
-                            <span className='alpha-tool__scan-market-symbol'>{row.symbol}</span>
-                            <span className='alpha-tool__scan-market-status'>
-                                {row.symbol === autoCandidateSymbol ? 'Selected' : row.validationGate === 'validated' ? 'Validated' : 'Gated'}
-                            </span>
-                        </div>
-                    ))}
+                    {rows.map(row => {
+                        const evaluation = autoMomentumEvaluations.get(row.symbol);
+                        const isCandidate = row.symbol === autoCandidateSymbol;
+                        const wasExecuted = journalRows.some(entry => entry.symbol === row.symbol);
+                        const status = wasExecuted
+                            ? 'Signal executed'
+                            : isCandidate
+                                ? 'Best qualified'
+                                : evaluation?.qualified
+                                    ? 'Qualified'
+                                    : 'Conditions not met';
+                        const conditionSummary = evaluation
+                            ? `${evaluation.signal || 'WAIT'} · ${evaluation.confidence.toFixed(0)}% / ${evaluation.confidenceWindow} ticks`
+                            : 'Waiting for enough ticks';
+                        const reason = evaluation?.qualified
+                            ? 'All scan conditions met'
+                            : evaluation?.reasons[0] || 'No signal direction confirmed';
+                        return (
+                            <div
+                                className={`alpha-tool__scan-market${isCandidate ? ' alpha-tool__scan-market--selected' : ''}${evaluation?.qualified ? ' alpha-tool__scan-market--qualified' : ''}${wasExecuted ? ' alpha-tool__scan-market--executed' : ''}`}
+                                key={row.symbol}
+                                data-symbol={row.symbol}
+                                data-selected={isCandidate}
+                                data-qualified={evaluation?.qualified || false}
+                                data-confidence={evaluation?.confidence ?? 0}
+                                title={`${conditionSummary} — ${reason}`}
+                            >
+                                <span className='alpha-tool__scan-market-copy'>
+                                    <span className='alpha-tool__scan-market-symbol'>{row.symbol}</span>
+                                    <small>{conditionSummary}</small>
+                                </span>
+                                <span className='alpha-tool__scan-market-status'>{status}</span>
+                            </div>
+                        );
+                    })}
                 </div>
             </section>
 

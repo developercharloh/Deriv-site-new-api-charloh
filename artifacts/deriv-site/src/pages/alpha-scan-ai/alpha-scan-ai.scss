@@ -1590,9 +1590,14 @@
         font-size: 0.5rem;
     }
     &__scan-market--selected { border-color: #45ffc2; background: rgba(18, 117, 104, 0.34); }
+    &__scan-market--qualified { border-color: rgba(69, 255, 194, 0.55); }
+    &__scan-market--executed { box-shadow: inset 0 0 0 1px #45ffc2, 0 0 0.8rem rgba(69, 255, 194, 0.2); }
+    &__scan-market-copy { display: grid; min-width: 0; gap: 0.12rem; }
     &__scan-market-symbol { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    &__scan-market-status { color: #8eb4e7; white-space: nowrap; }
+    &__scan-market-copy small { color: #7fa4d5; font-size: 0.43rem; white-space: nowrap; }
+    &__scan-market-status { color: #8eb4e7; font-size: 0.43rem; text-align: right; white-space: nowrap; }
     &__scan-market--selected &__scan-market-status { color: #7fffd1; font-weight: 750; }
+    &__scan-market--executed &__scan-market-status { color: #45ffc2; font-weight: 750; }
     &__journal { border-color: #1f86ff; overflow: hidden; }
     &__section-heading { justify-content: space-between; padding-bottom: 0.55rem; }
     &__section-heading > div { display: flex; align-items: center; gap: 0.5rem; }

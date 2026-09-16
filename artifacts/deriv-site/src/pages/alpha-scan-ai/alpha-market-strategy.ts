@@ -458,9 +458,130 @@ export const AUTO_MOMENTUM_WARMUP = 30;
 export const AUTO_MOMENTUM_SHORT_WINDOW = 6;
 export const AUTO_MOMENTUM_LONG_WINDOW = 14;
 export const AUTO_MOMENTUM_CONFIDENCE = 55;
+export const AUTO_SIGNAL_CONFIDENCE_WINDOW = 60;
+
+export type MomentumSignal = 'CALL' | 'PUT';
+
+export type MomentumMarketEvaluation = {
+    symbol: string;
+    displayName: string;
+    signal: MomentumSignal | null;
+    confidence: number;
+    confidenceWindow: number;
+    shortRise: number;
+    shortFall: number;
+    longRise: number;
+    longFall: number;
+    historyReady: boolean;
+    momentumAligned: boolean;
+    confidencePassed: boolean;
+    qualified: boolean;
+    reasons: string[];
+};
 
 const directionalPercentage = (moves: number[], direction: 1 | -1): number =>
     moves.length ? (moves.filter(move => move === direction).length / moves.length) * 100 : 0;
+
+const directionalMovesForWindow = (prices: number[], windowSize: number): number[] => {
+    const window = prices.slice(-(windowSize + 1));
+    return window.slice(1).map((price, index) => {
+        const previous = window[index];
+        return price > previous ? 1 : price < previous ? -1 : 0;
+    });
+};
+
+export const evaluateMomentumMarket = (
+    source: StrategySource,
+    shortWindow = AUTO_MOMENTUM_SHORT_WINDOW,
+    longWindow = AUTO_MOMENTUM_LONG_WINDOW,
+    minimumConfidence = AUTO_MOMENTUM_CONFIDENCE,
+    confidenceWindow = AUTO_SIGNAL_CONFIDENCE_WINDOW,
+): MomentumMarketEvaluation => {
+    const prices = source.prices.map(Number).filter(Number.isFinite);
+    const shortSize = Math.max(2, Math.floor(Number(shortWindow) || AUTO_MOMENTUM_SHORT_WINDOW));
+    const longSize = Math.max(shortSize, Math.floor(Number(longWindow) || AUTO_MOMENTUM_LONG_WINDOW));
+    const requiredConfidence = Math.max(1, Math.min(99, Number(minimumConfidence) || AUTO_MOMENTUM_CONFIDENCE));
+    const requestedConfidenceWindow = Math.max(
+        longSize,
+        Math.floor(Number(confidenceWindow) || AUTO_SIGNAL_CONFIDENCE_WINDOW),
+    );
+    const historyReady = prices.length >= Math.max(AUTO_MOMENTUM_WARMUP, requestedConfidenceWindow + 1);
+    const moves = directionalMovesForWindow(prices, requestedConfidenceWindow);
+    const shortMoves = moves.slice(-shortSize);
+    const longMoves = moves.slice(-longSize);
+    const shortRise = directionalPercentage(shortMoves, 1);
+    const shortFall = directionalPercentage(shortMoves, -1);
+    const longRise = directionalPercentage(longMoves, 1);
+    const longFall = directionalPercentage(longMoves, -1);
+    const shortBias = shortRise - shortFall;
+    const longBias = longRise - longFall;
+    const signal: MomentumSignal | null = shortBias >= requiredConfidence && longBias > 0
+        ? 'CALL'
+        : shortBias <= -requiredConfidence && longBias < 0
+            ? 'PUT'
+            : null;
+    const confidence = signal === 'CALL'
+        ? directionalPercentage(moves, 1)
+        : signal === 'PUT'
+            ? directionalPercentage(moves, -1)
+            : Math.max(directionalPercentage(moves, 1), directionalPercentage(moves, -1));
+    const momentumAligned = signal !== null;
+    const confidencePassed = signal !== null && confidence >= requiredConfidence;
+    const reasons: string[] = [];
+
+    if (!historyReady) {
+        reasons.push(`Needs ${requestedConfidenceWindow + 1} prices for a ${requestedConfidenceWindow}-tick confidence check; received ${prices.length}.`);
+    }
+    if (!momentumAligned) {
+        reasons.push(`Short/long momentum did not align at the ${requiredConfidence}% signal threshold.`);
+    }
+    if (signal && !confidencePassed) {
+        reasons.push(`${requestedConfidenceWindow}-tick ${signal} confidence is ${confidence.toFixed(0)}%, below ${requiredConfidence}%.`);
+    }
+
+    return {
+        symbol: source.symbol,
+        displayName: source.displayName,
+        signal,
+        confidence,
+        confidenceWindow: requestedConfidenceWindow,
+        shortRise,
+        shortFall,
+        longRise,
+        longFall,
+        historyReady,
+        momentumAligned,
+        confidencePassed,
+        qualified: historyReady && momentumAligned && confidencePassed,
+        reasons,
+    };
+};
+
+export const selectBestQualifiedMomentumMarket = (
+    sources: StrategySource[],
+    shortWindow = AUTO_MOMENTUM_SHORT_WINDOW,
+    longWindow = AUTO_MOMENTUM_LONG_WINDOW,
+    minimumConfidence = AUTO_MOMENTUM_CONFIDENCE,
+    confidenceWindow = AUTO_SIGNAL_CONFIDENCE_WINDOW,
+): RankedMarketDecision | null => sources
+    .map(source => evaluateMomentumMarket(source, shortWindow, longWindow, minimumConfidence, confidenceWindow))
+    .filter(evaluation => evaluation.qualified && evaluation.signal)
+    .sort((left, right) =>
+        right.confidence - left.confidence ||
+        Math.max(right.longRise, right.longFall) - Math.max(left.longRise, left.longFall) ||
+        left.displayName.localeCompare(right.displayName),
+    )
+    .map(evaluation => ({
+        symbol: evaluation.symbol,
+        displayName: evaluation.displayName,
+        condition: evaluation.signal === 'CALL' ? 'all-rise' : 'all-fall',
+        label: `Momentum ${evaluation.signal} · ${evaluation.confidence.toFixed(0)}% / ${evaluation.confidenceWindow} ticks`,
+        contractType: evaluation.signal as StrategyContractType,
+        barrier: null,
+        digits: [],
+        strength: evaluation.confidence,
+        reason: `${evaluation.signal} qualified: ${evaluation.confidence.toFixed(0)}% confidence across the last ${evaluation.confidenceWindow} ticks; short/long momentum aligned.`,
+    } satisfies RankedMarketDecision))[0] || null;
 
 /**
  * Select the strongest live Rise/Fall candidate from the complete volatility
