@@ -186,6 +186,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const fastClockAlreadyRunning = this.fastClock?.isRunning() === true;
         const isNewBotSession = !this.hasStarted;
         this.hasStarted = true;
+        if (isNewBotSession) this.resetVolatilitySelection?.();
         if (isNewBotSession) this.store.dispatch(resetFastReady());
         if (isNewBotSession && this.isBinaryMatrixWorkspace()) {
             this.binaryMatrixStakeState = null;

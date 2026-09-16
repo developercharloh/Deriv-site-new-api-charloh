@@ -273,6 +273,59 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(true);
     });
 
+    it('keeps the first qualified volatility locked for the bot session', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.symbol = '1HZ100V';
+        engine.options = { symbol: '1HZ100V' };
+        engine.tradeOptions = { symbol: '1HZ100V' };
+        engine.volatilitySelectionLock = {
+            code: '1HZ25V',
+            label: 'Volatility 25 (1s) Index',
+            signal: 'CALL',
+            confidence: 62,
+        };
+        engine.watchTicks = jest.fn(async symbol => {
+            engine.symbol = symbol;
+        });
+        engine.makeProposals = jest.fn();
+        engine.$scope = {
+            ticksService: {
+                request: jest.fn(),
+            },
+        };
+
+        await expect(engine.scanVolatilityUntilQualified()).resolves.toBe(true);
+
+        expect(engine.$scope.ticksService.request).not.toHaveBeenCalled();
+        expect(engine.watchTicks).toHaveBeenCalledTimes(1);
+        expect(engine.watchTicks).toHaveBeenCalledWith('1HZ25V');
+        expect(engine.options.symbol).toBe('1HZ25V');
+        expect(engine.tradeOptions.symbol).toBe('1HZ25V');
+        expect(engine.makeProposals).toHaveBeenCalledTimes(1);
+
+        await expect(engine.scanVolatilityUntilQualified()).resolves.toBe(true);
+        expect(engine.$scope.ticksService.request).not.toHaveBeenCalled();
+        expect(engine.watchTicks).toHaveBeenCalledTimes(1);
+    });
+
+    it('blocks a purchase when the engine no longer points at the locked volatility', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.symbol = '1HZ100V';
+        engine.tradeOptions = { symbol: '1HZ100V' };
+        engine.volatilitySelectionLock = { code: '1HZ25V' };
+        engine.store = {
+            getState: () => ({ newTick: 123 }),
+        };
+
+        expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(false);
+
+        engine.symbol = '1HZ25V';
+        engine.tradeOptions = { symbol: '1HZ25V' };
+        expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(true);
+    });
+
     it('publishes grouped Adaptive Momentum journal events with confidence and tick details', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

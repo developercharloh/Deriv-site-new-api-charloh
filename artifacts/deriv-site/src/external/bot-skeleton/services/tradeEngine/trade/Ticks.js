@@ -104,6 +104,7 @@ export default Engine =>
             super(...args);
             this.tickListenerKey = null;
             this.latestTick = null;
+            this.volatilitySelectionLock = null;
         }
 
         async watchTicks(symbol) {
@@ -370,6 +371,26 @@ export default Engine =>
         getPurchaseConditionTick() {
             return this.store?.getState?.().newTick ?? this.latestTick?.epoch ?? null;
         }
+        resetVolatilitySelection() {
+            this.volatilitySelectionLock = null;
+        }
+        async restoreLockedVolatilitySelection() {
+            const locked = this.volatilitySelectionLock;
+            if (!locked) return false;
+
+            if (
+                this.symbol !== locked.code ||
+                this.options?.symbol !== locked.code ||
+                this.tradeOptions?.symbol !== locked.code
+            ) {
+                await this.watchTicks(locked.code);
+                this.options = { ...this.options, symbol: locked.code };
+                this.tradeOptions = { ...this.tradeOptions, symbol: locked.code };
+                this.makeProposals?.({ ...this.options, ...this.tradeOptions });
+            }
+
+            return true;
+        }
         recordIndicatorValue(indicator, value) {
             this.purchaseIndicatorEvaluation = {
                 ...(this.purchaseIndicatorEvaluation || {}),
@@ -380,6 +401,10 @@ export default Engine =>
         }
         isPurchaseConditionGateOpen(contractType) {
             if (!['CALL', 'PUT'].includes(contractType)) return true;
+
+            const lockedSymbol = this.volatilitySelectionLock?.code;
+            const purchaseSymbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
+            if (lockedSymbol && (purchaseSymbol !== lockedSymbol || this.symbol !== lockedSymbol)) return false;
 
             const confidence = this.lastSignalConfidenceEvaluation;
             if (!confidence) return true;
@@ -407,6 +432,10 @@ export default Engine =>
         }
         async scanVolatilityUntilQualified(minimumConfidence = 55, count = 60, minimumAdx = 20) {
             if (this.volatilityScanPromise) return this.volatilityScanPromise;
+
+            if (this.volatilitySelectionLock) {
+                return this.restoreLockedVolatilitySelection();
+            }
 
             const minimum = Math.max(0, Math.min(100, Number(minimumConfidence) || 55));
             const windowSize = Math.max(2, Math.floor(Number(count) || 60));
@@ -479,15 +508,25 @@ export default Engine =>
                     return false;
                 }
 
-                if (this.symbol !== selected.code) {
+                if (
+                    this.symbol !== selected.code ||
+                    this.options?.symbol !== selected.code ||
+                    this.tradeOptions?.symbol !== selected.code
+                ) {
                     await this.watchTicks(selected.code);
                     this.options = { ...this.options, symbol: selected.code };
                     this.tradeOptions = { ...this.tradeOptions, symbol: selected.code };
                     this.makeProposals({ ...this.options, ...this.tradeOptions });
                 }
+                this.volatilitySelectionLock = {
+                    code: selected.code,
+                    label: selected.label,
+                    signal: selected.signal,
+                    confidence: selected.confidence,
+                };
                 notify(
                     'info',
-                    `Volatility scan selected ${selected.label}: ${selected.signal} confidence ${selected.confidence.toFixed(
+                    `Volatility scan locked ${selected.label}: ${selected.signal} confidence ${selected.confidence.toFixed(
                         2
                     )}% with ADX ${selected.adx.toFixed(2)}.`
                 );

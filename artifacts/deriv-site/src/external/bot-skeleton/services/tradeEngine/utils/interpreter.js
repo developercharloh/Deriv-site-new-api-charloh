@@ -204,6 +204,7 @@ const Interpreter = () => {
         return new Promise((resolve, reject) => {
             try {
                 bot.tradeEngine.stopFastClock?.();
+                bot.tradeEngine.resetVolatilitySelection?.();
                 releaseBotContractGate(bot.tradeEngine);
                 $scope.stopped = true;
                 $scope.is_error_triggered = false;
