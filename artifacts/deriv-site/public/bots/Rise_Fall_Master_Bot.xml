@@ -362,6 +362,9 @@
                                       </block>
                                     </value>
                                     <value name="B">
+                                      <block type="logic_operation" id="bp_confidence_and">
+                                        <field name="OP">AND</field>
+                                        <value name="A">
                                       <block type="logic_operation" id="bp_direction_indicator_match">
                                         <field name="OP">OR</field>
                                         <value name="A">
@@ -424,6 +427,15 @@
                                                 </value>
                                               </block>
                                             </value>
+                                          </block>
+                                        </value>
+                                      </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="logic_compare" id="bp_confidence_threshold">
+                                            <field name="OP">GTE</field>
+                                            <value name="A"><block type="variables_get" id="bp_confidence_value"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
+                                            <value name="B"><block type="math_number" id="bp_confidence_minimum"><field name="NUM">55</field></block></value>
                                           </block>
                                         </value>
                                       </block>

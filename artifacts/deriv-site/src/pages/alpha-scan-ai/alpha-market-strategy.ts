@@ -163,6 +163,8 @@ export type StrategySource = {
     displayName: string;
     prices: number[];
     lastDigits: number[];
+    /** A closed symbol remains visible in scan coverage but cannot be selected. */
+    tradable?: boolean;
 };
 
 export type RankedMarketDecision = MarketDecision & {
@@ -564,6 +566,7 @@ export const selectBestQualifiedMomentumMarket = (
     minimumConfidence = AUTO_MOMENTUM_CONFIDENCE,
     confidenceWindow = AUTO_SIGNAL_CONFIDENCE_WINDOW,
 ): RankedMarketDecision | null => sources
+    .filter(source => source.tradable !== false)
     .map(source => evaluateMomentumMarket(source, shortWindow, longWindow, minimumConfidence, confidenceWindow))
     .filter(evaluation => evaluation.qualified && evaluation.signal)
     .sort((left, right) =>

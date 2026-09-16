@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DERIV_CONTINUOUS_VOLATILITIES } from '@/utils/deriv-volatilities';
+import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
@@ -77,6 +77,7 @@ type SyntheticSymbol = {
     market: string;
     submarket: string;
     pipSize?: number;
+    status?: 'open' | 'closed' | 'unknown';
 };
 
 type ScanRow = SyntheticSymbol & {
@@ -147,14 +148,27 @@ const numberFromRecord = (record: Record<string, unknown>, keys: string[]): numb
 };
 
 const getVerifiedCatalogSymbols = (): SyntheticSymbol[] =>
-    DERIV_CONTINUOUS_VOLATILITIES.map(index => ({
+    DERIV_VOLATILITIES.map(index => ({
         symbol: index.code,
         displayName: index.label,
         market: 'Derived',
-        submarket: 'Continuous Indices',
+        submarket: index.tickEvery === 1 ? 'Continuous Indices' : 'Standard Indices',
+        status: 'unknown',
     }));
 
-const discoverContinuousVolatilitySymbols = (records: Array<Record<string, unknown>>): SyntheticSymbol[] => {
+const symbolStatusFromRecord = (record: Record<string, unknown>): SyntheticSymbol['status'] => {
+    const explicitStatus = stringFromRecord(record, ['status', 'market_status']).toLowerCase();
+    if (['closed', 'close', 'inactive', 'disabled'].includes(explicitStatus)) return 'closed';
+    if (['open', 'active', 'enabled'].includes(explicitStatus)) return 'open';
+    const statusFlags = ['exchange_is_open', 'is_open', 'is_trading']
+        .map(key => record[key])
+        .filter(value => typeof value === 'boolean');
+    if (statusFlags.some(value => value === false)) return 'closed';
+    if (statusFlags.some(value => value === true)) return 'open';
+    return 'unknown';
+};
+
+const discoverVolatilitySymbols = (records: Array<Record<string, unknown>>): SyntheticSymbol[] => {
     const metadataBySymbol = new Map(
         records
             .map(record => [stringFromRecord(record, ['symbol']), record] as const)
@@ -169,16 +183,18 @@ const discoverContinuousVolatilitySymbols = (records: Array<Record<string, unkno
             market: stringFromRecord(record || {}, ['market_display_name', 'market']) || catalogSymbol.market,
             submarket: stringFromRecord(record || {}, ['submarket_display_name', 'submarket']) || catalogSymbol.submarket,
             pipSize: numberFromRecord(record || {}, ['pip_size']),
+            status: record ? symbolStatusFromRecord(record) : 'unknown',
         };
     });
 };
 
 const buildFixtureRows = (sampleSize: SampleSize, autoRunnerFixture = false): ScanRow[] => {
-    const fixtureSymbols = DERIV_CONTINUOUS_VOLATILITIES.map((index, symbolIndex) => ({
+    const fixtureSymbols = DERIV_VOLATILITIES.map((index, symbolIndex) => ({
         symbol: index.code,
         displayName: index.label,
-        submarket: 'Continuous Indices',
+        submarket: index.tickEvery === 1 ? 'Continuous Indices' : 'Standard Indices',
         digitPattern: symbolIndex % 2 === 0 ? [0, 2, 4, 6, 8] : [1, 3, 5, 7, 9],
+        status: 'open' as const,
     }));
 
     return fixtureSymbols.map((fixture, symbolIndex) => {
@@ -200,6 +216,7 @@ const buildFixtureRows = (sampleSize: SampleSize, autoRunnerFixture = false): Sc
             displayName: fixture.displayName,
             market: 'Derived',
             submarket: fixture.submarket,
+            status: fixture.status,
             pipSize,
             prices,
             lastDigits,
@@ -1095,6 +1112,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         displayName: row.displayName,
         prices: row.prices,
         lastDigits: row.lastDigits,
+        tradable: row.status !== 'closed',
     })), [rows]);
 
     const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
@@ -1746,26 +1764,30 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <span className='alpha-tool__view-label'>{rows.length} / {discoveredCount || rows.length} markets</span>
                 </div>
                 <p className='alpha-tool__scan-coverage-note'>
-                    Every supported continuous volatility is evaluated against momentum alignment and at least {AUTO_MOMENTUM_CONFIDENCE}% directional confidence across the last {AUTO_SIGNAL_CONFIDENCE_WINDOW} ticks. The best qualified market is confirmed with fresh ticks before execution.
+                    Every supported volatility index is evaluated against symbol status, momentum alignment, and at least {AUTO_MOMENTUM_CONFIDENCE}% directional confidence across the last {AUTO_SIGNAL_CONFIDENCE_WINDOW} ticks. The best qualified market is confirmed with fresh ticks before execution.
                 </p>
                 <div className='alpha-tool__scan-coverage-list'>
                     {rows.map(row => {
                         const evaluation = autoMomentumEvaluations.get(row.symbol);
                         const isCandidate = row.symbol === autoCandidateSymbol;
                         const wasExecuted = journalRows.some(entry => entry.symbol === row.symbol);
-                        const status = wasExecuted
-                            ? 'Signal executed'
-                            : isCandidate
-                                ? 'Best qualified'
-                                : evaluation?.qualified
-                                    ? 'Qualified'
-                                    : 'Conditions not met';
+                        const status = row.status === 'closed'
+                            ? 'Symbol closed'
+                            : wasExecuted
+                                ? 'Signal executed'
+                                : isCandidate
+                                    ? 'Best qualified'
+                                    : evaluation?.qualified
+                                        ? 'Qualified'
+                                        : 'Conditions not met';
                         const conditionSummary = evaluation
                             ? `${evaluation.signal || 'WAIT'} · ${evaluation.confidence.toFixed(0)}% / ${evaluation.confidenceWindow} ticks`
                             : 'Waiting for enough ticks';
-                        const reason = evaluation?.qualified
-                            ? 'All scan conditions met'
-                            : evaluation?.reasons[0] || 'No signal direction confirmed';
+                        const reason = row.status === 'closed'
+                            ? 'Symbol status is closed; it cannot be selected.'
+                            : evaluation?.qualified
+                                ? 'All scan conditions met'
+                                : evaluation?.reasons[0] || 'No signal direction confirmed';
                         return (
                             <div
                                 className={`alpha-tool__scan-market${isCandidate ? ' alpha-tool__scan-market--selected' : ''}${evaluation?.qualified ? ' alpha-tool__scan-market--qualified' : ''}${wasExecuted ? ' alpha-tool__scan-market--executed' : ''}`}
@@ -2096,8 +2118,8 @@ const AlphaScanWorkspace: React.FC = () => {
 
             if (message.active_symbols && !metadataReceived) {
                 metadataReceived = true;
-                const metadataSymbols = discoverContinuousVolatilitySymbols(message.active_symbols);
-                const supportedCodes = new Set(DERIV_CONTINUOUS_VOLATILITIES.map(index => index.code));
+                const metadataSymbols = discoverVolatilitySymbols(message.active_symbols);
+                const supportedCodes = new Set(DERIV_VOLATILITIES.map(index => index.code));
                 const matchedMetadataCount = message.active_symbols.filter(record =>
                     supportedCodes.has(stringFromRecord(record, ['symbol'])),
                 ).length;
@@ -2111,7 +2133,7 @@ const AlphaScanWorkspace: React.FC = () => {
                 if (!discoveredSymbols.length) {
                     finishWithCurrentData(
                         'empty',
-                        `Metadata discovery failed: the public metadata response returned ${message.active_symbols.length} records, but none matched the supported Continuous Volatility symbols.`,
+                        `Metadata discovery failed: the public metadata response returned ${message.active_symbols.length} records, but none matched the supported Volatility Index symbols.`,
                     );
                     closeSocket();
                     return;
@@ -2121,7 +2143,7 @@ const AlphaScanWorkspace: React.FC = () => {
                 setHasMoreSymbols(true);
                 if (usingVerifiedCatalog) {
                     setErrorMessage(
-                        `The public catalogue returned ${message.active_symbols.length} records. Validating the verified Continuous Volatility catalogue through live tick history.`,
+                        `The public catalogue returned ${message.active_symbols.length} records. Validating the verified Volatility Index catalogue through live tick history.`,
                     );
                 }
                 requestNextPage();
