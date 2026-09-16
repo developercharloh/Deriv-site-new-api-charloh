@@ -95,11 +95,11 @@ const BOTS: BotConfig[] = [
         name: 'Rise / Fall Master Bot',
         emoji: '📈📉',
         description:
-            'Trades Rise/Fall on Volatility 100 (1s) Index only after Adaptive Momentum confirms a direction. Waits through ambiguous signals, then applies the confirmed Rise/Fall entry with controlled recovery and session risk stops.',
+            'Trades Rise/Fall on Volatility 100 (1s) Index using the model direction and MACD confirmation gate, with controlled recovery and session risk stops.',
         market: 'Volatility 100 (1s) Index (1HZ100V)',
-        strategy: 'Rise / Fall · Adaptive Momentum Confirmation · Risk Stops',
+        strategy: 'Rise / Fall · Model + MACD Confirmation · Risk Stops',
         params: [
-            { label: 'Momentum Confirmation', value: '30 / 8 / 20 ticks · 60%' },
+            { label: 'MACD Confirmation', value: 'CALL > 0 · PUT < 0' },
             { label: 'Initial Stake', value: '$0.35' },
             { label: 'Take Profit', value: '$10' },
             { label: 'Stop Loss', value: '$10' },

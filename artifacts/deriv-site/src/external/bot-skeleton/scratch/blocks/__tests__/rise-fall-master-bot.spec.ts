@@ -180,9 +180,10 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(() => Blockly.Xml.domToWorkspace(importDom, workspace)).not.toThrow();
 
         const blockTypes = new Set(workspace.getAllBlocks(false).map(block => block.type));
-        ['aroon_value', 'adaptive_momentum_signal', 'model_signal', 'adx_value', 'rsi_value', 'macd_value', 'purchase'].forEach(type =>
+        ['aroon_value', 'model_signal', 'adx_value', 'rsi_value', 'macd_value', 'purchase'].forEach(type =>
             expect(blockTypes).toContain(type)
         );
+        expect(blockTypes).not.toContain('adaptive_momentum_signal');
         [
             'indicator_ready',
             'no_active_contract',
@@ -225,7 +226,7 @@ describe('Rise/Fall Master Bot XML', () => {
         workspace.dispose();
     });
 
-    it('uses the balanced Adaptive Momentum profile', () => {
+    it('does not include Adaptive Momentum blocks in the master bot', () => {
         const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Rise_Fall_Master_Bot.xml');
         const xmlText = fs.readFileSync(xmlPath, 'utf8');
         const sourceDom = Blockly.utils.xml.textToDom(xmlText);
@@ -233,11 +234,11 @@ describe('Rise/Fall Master Bot XML', () => {
 
         expect(() => Blockly.Xml.domToWorkspace(removeDependentFields(sourceDom), workspace)).not.toThrow();
 
-        const signalBlock = workspace.getBlockById('bp_adaptive_signal');
-        expect(signalBlock?.getInputTargetBlock('WARMUP')?.getFieldValue('NUM')).toBe(30);
-        expect(signalBlock?.getInputTargetBlock('SHORT_WINDOW')?.getFieldValue('NUM')).toBe(6);
-        expect(signalBlock?.getInputTargetBlock('LONG_WINDOW')?.getFieldValue('NUM')).toBe(14);
-        expect(signalBlock?.getInputTargetBlock('CONFIDENCE')?.getFieldValue('NUM')).toBe(55);
+        expect(workspace.getBlockById('bp_adaptive_signal')).toBeNull();
+        expect(workspace.getBlockById('bp_signal')).toBeNull();
+        expect(workspace.getBlockById('bp_direct_journal_4v')).toBeNull();
+        expect(workspace.getBlockById('ts_bp4v')).toBeNull();
+        expect(workspace.getBlockById('ts_gate_skip_4v')).toBeNull();
 
         expect(workspace.getBlockById('bp_no_contract')).toBeNull();
         expect(workspace.getBlockById('bp_loss_gate')).toBeNull();

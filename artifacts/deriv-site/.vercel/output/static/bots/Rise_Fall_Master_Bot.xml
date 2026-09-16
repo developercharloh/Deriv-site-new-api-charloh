@@ -16,7 +16,6 @@
     <variable id="v_trend">Tick Trend</variable>
     <variable id="v_flip">Just Flipped</variable>
     <variable id="v_signal">Model Signal</variable>
-    <variable id="v_adaptive">Adaptive Momentum Signal</variable>
     <variable id="v_candles">Indicator Candles</variable>
     <variable id="v_closes">Indicator Closes</variable>
     <variable id="v_bull">Bullish Score</variable>
@@ -127,7 +126,7 @@
                                                   <next><block type="text_statement" id="ts_s6">
                                                     <value name="TEXT"><shadow type="text" id="ts_s6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_s6v"><field name="VAR" id="v_mart">Martingale</field></block></value>
                                                     <next><block type="text_statement" id="ts_s7">
-                                                      <value name="TEXT"><shadow type="text" id="ts_s7s"><field name="TEXT"></field></shadow><block type="text" id="ts_s7v"><field name="TEXT"> | Warm-up: 3 | Indicators: Aroon/Ichimoku/ADX/ATR/Stoch/MACD/RSI/Bollinger | Gates: history/contract/loss/payout/session</field></block></value>
+                                                       <value name="TEXT"><shadow type="text" id="ts_s7s"><field name="TEXT"></field></shadow><block type="text" id="ts_s7v"><field name="TEXT"> | Indicators: Aroon/Ichimoku/ADX/ATR/Stoch/MACD/RSI/Bollinger | Gates: history/contract/loss/payout/session/MACD</field></block></value>
                                                     </block></next>
                                                   </block></next>
                                                 </block></next>
@@ -187,20 +186,8 @@
   <block type="before_purchase" id="bp_root" deletable="false" x="820" y="60">
     <statement name="BEFOREPURCHASE_STACK">
 
-      <!-- 1. Confirm direction with Adaptive Momentum before considering a purchase -->
-      <block type="variables_set" id="bp_signal">
-        <field name="VAR" id="v_adaptive">Adaptive Momentum Signal</field>
-        <value name="VALUE">
-          <block type="adaptive_momentum_signal" id="bp_adaptive_signal">
-            <value name="WARMUP"><shadow type="math_number" id="bp_signal_warmup_s"><field name="NUM">30</field></shadow><block type="math_number" id="bp_signal_warmup_v"><field name="NUM">30</field></block></value>
-            <value name="SHORT_WINDOW"><shadow type="math_number" id="bp_signal_short_s"><field name="NUM">6</field></shadow><block type="math_number" id="bp_signal_short_v"><field name="NUM">6</field></block></value>
-            <value name="LONG_WINDOW"><shadow type="math_number" id="bp_signal_long_s"><field name="NUM">14</field></shadow><block type="math_number" id="bp_signal_long_v"><field name="NUM">14</field></block></value>
-            <value name="CONFIDENCE"><shadow type="math_number" id="bp_signal_confidence_s"><field name="NUM">55</field></shadow><block type="math_number" id="bp_signal_confidence_v"><field name="NUM">55</field></block></value>
-          </block>
-        </value>
-        <next>
-          <!-- 2. Fetch one candle/close snapshot and build directional scores -->
-          <block type="variables_set" id="bp_candles">
+      <!-- Fetch one candle/close snapshot and build directional scores -->
+      <block type="variables_set" id="bp_candles">
             <field name="VAR" id="v_candles">Indicator Candles</field>
             <value name="VALUE"><block type="ohlc" id="bp_ohlc"><field name="CANDLEINTERVAL_LIST">60</field></block></value>
             <next>
@@ -461,11 +448,7 @@
                                     <value name="TEXT"><shadow type="text" id="bp_direct_journal_1s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_1v"><field name="TEXT">DIRECTION APPROVED | Model: </field></block></value>
                                     <next><block type="text_statement" id="bp_direct_journal_2">
                                       <value name="TEXT"><shadow type="text" id="bp_direct_journal_2s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_2v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
-                                      <next><block type="text_statement" id="bp_direct_journal_3">
-                                        <value name="TEXT"><shadow type="text" id="bp_direct_journal_3s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_3v"><field name="TEXT"> | Adaptive: </field></block></value>
-                                        <next><block type="text_statement" id="bp_direct_journal_4">
-                                          <value name="TEXT"><shadow type="text" id="bp_direct_journal_4s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_4v"><field name="VAR" id="v_adaptive">Adaptive Momentum Signal</field></block></value>
-                                          <next><block type="text_statement" id="bp_direct_journal_5">
+                                      <next><block type="text_statement" id="bp_direct_journal_5">
                                             <value name="TEXT"><shadow type="text" id="bp_direct_journal_5s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_5v"><field name="TEXT"> | Confidence: </field></block></value>
                                             <next><block type="text_statement" id="bp_direct_journal_6">
                                               <value name="TEXT"><shadow type="text" id="bp_direct_journal_6s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_6v"><field name="VAR" id="v_conf">Model Confidence</field></block></value>
@@ -476,8 +459,6 @@
                                                 </block></next>
                                               </block></next>
                                             </block></next>
-                                          </block></next>
-                                        </block></next>
                                       </block></next>
                                     </block></next>
                                   </block>
@@ -873,9 +854,6 @@
 
             </next>
           </block>
-
-        </next>
-      </block>
 
         </next>
       </block>
