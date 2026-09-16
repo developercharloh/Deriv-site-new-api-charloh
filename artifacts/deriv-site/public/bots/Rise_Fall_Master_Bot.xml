@@ -404,7 +404,7 @@
                                             <value name="A">
                                               <block type="logic_compare" id="bp_call_signal_match">
                                                 <field name="OP">EQ</field>
-                                                <value name="A"><block type="variables_get" id="bp_call_signal_value"><field name="VAR">Model Signal</field></block></value>
+                                                <value name="A"><block type="variables_get" id="bp_call_signal_value"><field name="VAR" id="v_signal">Model Signal</field></block></value>
                                                 <value name="B"><block type="text" id="bp_call_signal_text"><field name="TEXT">CALL</field></block></value>
                                               </block>
                                             </value>
@@ -435,7 +435,7 @@
                                             <value name="A">
                                               <block type="logic_compare" id="bp_put_signal_match">
                                                 <field name="OP">EQ</field>
-                                                <value name="A"><block type="variables_get" id="bp_put_signal_value"><field name="VAR">Model Signal</field></block></value>
+                                                <value name="A"><block type="variables_get" id="bp_put_signal_value"><field name="VAR" id="v_signal">Model Signal</field></block></value>
                                                 <value name="B"><block type="text" id="bp_put_signal_text"><field name="TEXT">PUT</field></block></value>
                                               </block>
                                             </value>
@@ -463,49 +463,6 @@
                                       </block>
                                     </value>
                                   </block>
-<!--
-                                  <block type="logic_operation" id="bp_macd_direction_match">
-                                    <field name="OP">OR</field>
-                                    <value name="A">
-                                      <block type="logic_operation" id="bp_macd_call_match">
-                                        <field name="OP">AND</field>
-                                        <value name="A">
-                                          <block type="logic_compare" id="bp_macd_call_signal">
-                                            <field name="OP">EQ</field>
-                                            <value name="A"><block type="variables_get" id="bp_macd_call_signal_v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
-                                            <value name="B"><block type="text" id="bp_macd_call_signal_b"><field name="TEXT">CALL</field></block></value>
-                                          </block>
-                                        </value>
-                                        <value name="B">
-                                          <block type="logic_compare" id="bp_macd_call_histogram">
-                                            <field name="OP">GT</field>
-                                            <value name="A"><block type="variables_get" id="bp_macd_call_histogram_v"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
-                                            <value name="B"><block type="math_number" id="bp_macd_call_zero"><field name="NUM">0</field></block></value>
-                                          </block>
-                                        </value>
-                                      </block>
-                                    </value>
-                                    <value name="B">
-                                      <block type="logic_operation" id="bp_macd_put_match">
-                                        <field name="OP">AND</field>
-                                        <value name="A">
-                                          <block type="logic_compare" id="bp_macd_put_signal">
-                                            <field name="OP">EQ</field>
-                                            <value name="A"><block type="variables_get" id="bp_macd_put_signal_v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
-                                            <value name="B"><block type="text" id="bp_macd_put_signal_b"><field name="TEXT">PUT</field></block></value>
-                                          </block>
-                                        </value>
-                                        <value name="B">
-                                          <block type="logic_compare" id="bp_macd_put_histogram">
-                                            <field name="OP">LT</field>
-                                            <value name="A"><block type="variables_get" id="bp_macd_put_histogram_v"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
-                                            <value name="B"><block type="math_number" id="bp_macd_put_zero"><field name="NUM">0</field></block></value>
-                                          </block>
-                                        </value>
-                                      </block>
-                                    </value>
-                                  </block>
--->
                                 </value>
                                 <statement name="DO0">
                   <block type="variables_set" id="bp_direct_apply_signal">
