@@ -70,7 +70,7 @@ export default class TicksService {
 
     async request(options) {
         return new Promise((resolve, reject) => {
-            const { symbol, granularity, subscribe = true } = options;
+            const { symbol, granularity, subscribe = true, force = false } = options;
 
             const style = getType(granularity);
             const hasSubscription =
@@ -78,11 +78,12 @@ export default class TicksService {
                     ? this.subscriptions.hasIn(['tick', symbol])
                     : this.subscriptions.hasIn(['ohlc', symbol, Number(granularity)]);
 
-            if (style === 'ticks' && this.ticks.has(symbol) && (!subscribe || hasSubscription)) {
+            if (!force && style === 'ticks' && this.ticks.has(symbol) && (!subscribe || hasSubscription)) {
                 return resolve(this.ticks.get(symbol));
             }
 
             if (
+                !force &&
                 style === 'candles' &&
                 this.candles.hasIn([symbol, Number(granularity)]) &&
                 (!subscribe || hasSubscription)
@@ -268,19 +269,26 @@ export default class TicksService {
     }
 
     requestTicks(options) {
-        const { symbol, granularity, style, subscribe = true } = options;
+        const { symbol, granularity, style, subscribe = true, count = 1000 } = options;
         const request_object = {
             ticks_history: symbol === 'na' ? 'R_100' : symbol,
             subscribe: subscribe === false ? 0 : 1,
             end: 'latest',
-            count: 1000,
+            count: Math.max(1, Math.floor(Number(count) || 1000)),
             granularity: granularity ? Number(granularity) : undefined,
             style,
         };
         return new Promise((resolve, reject) => {
             if (!api_base.api) resolve([]);
-            doUntilDone(() => api_base.api.send(request_object), [], api_base)
+            const requestPromise =
+                subscribe === false
+                    ? api_base.api.send(request_object)
+                    : doUntilDone(() => api_base.api.send(request_object), [], api_base);
+            requestPromise
                 .then(r => {
+                    if (!r || (style === 'ticks' && !r.history) || (style === 'candles' && !r.candles)) {
+                        throw new Error('History response was empty');
+                    }
                     if (style === 'ticks') {
                         const ticks = historyToTicks(r.history);
 

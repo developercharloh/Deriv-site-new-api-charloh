@@ -1076,6 +1076,9 @@ export default class RunPanelStore {
         qualifiedCount?: number;
         minimumConfidence?: number;
         windowSize?: number;
+        marketIndex?: number;
+        marketTotal?: number;
+        completedCount?: number;
         selected?: {
             symbol?: string;
             label?: string;
@@ -1122,12 +1125,26 @@ export default class RunPanelStore {
                 live_conditions_failed: 'fresh confirmation failed',
             })[reason || ''] || reason || 'not specified';
 
+        if (event.event === 'checking') {
+            journal.updateVolatilityScanMessage(
+                `[Volatility Scan] Checking market ${event.marketIndex ?? 0}/${event.marketTotal ?? 0} · ` +
+                    `${event.label || event.market || 'next market'}`
+            );
+            return;
+        }
+
+        if (event.event === 'market') {
+            journal.updateVolatilityScanMessage(
+                `[Volatility Scan] Checked ${event.marketIndex ?? 0}/${event.marketTotal ?? 0} · ` +
+                    `${event.label || event.market || 'market'} · ${reasonLabel(event.reason)} · moving to the next market`
+            );
+            return;
+        }
+
         if (event.event === 'rejected') {
-            journal.pushMessage(
+            journal.updateVolatilityScanMessage(
                 `[Volatility Scan] Rejected ${event.label || event.market || 'selected market'} · ` +
                     `${reasonLabel(event.reason)} · rescanning for another market`,
-                MessageTypes.NOTIFY,
-                'journal__text'
             );
             return;
         }
@@ -1153,26 +1170,16 @@ export default class RunPanelStore {
             return;
         }
 
-        const rejected = (event.rejected || [])
-            .map(
-                item =>
-                    `${item.label || item.symbol || 'market'}: ${reasonLabel(item.reason)} ` +
-                    `(conf ${number(item.confidence)}%, ADX ${number(item.adx)}, RSI ${number(item.rsi)}, MACD ${number(item.macd, 3)})`
-            )
-            .join(' · ');
         const selected = event.selected;
         const selectedText = selected
             ? `Selected ${selected.label || selected.symbol} (${selected.symbol}) · ${selected.signal} · ` +
               `conf ${number(selected.confidence)}% · ADX ${number(selected.adx)} · ` +
-              `RSI ${number(selected.rsi)} · MACD ${number(selected.macd, 3)} · waiting for fresh confirmation`
+              `RSI ${number(selected.rsi)} · MACD ${number(selected.macd, 3)} · executing after fresh confirmation`
             : `No market met the ${number(event.minimumConfidence, 0)}% confidence and indicator gates`;
-        journal.pushMessage(
-            `[Volatility Scan] Checked ${event.marketCount ?? 0} markets · ` +
+        journal.updateVolatilityScanMessage(
+            `[Volatility Scan] Finished ${event.marketCount ?? 0} markets · ` +
                 `${event.qualifiedCount ?? 0} qualified · window ${event.windowSize ?? 0} ticks · ` +
-                `${selectedText}${event.selected ? ' · strongest qualified market will execute' : ''}` +
-                `${rejected ? ` · Rejections: ${rejected}` : ''}`,
-            MessageTypes.NOTIFY,
-            'journal__text'
+                selectedText
         );
     };
 

@@ -105,6 +105,8 @@ export default Engine =>
             this.tickListenerKey = null;
             this.latestTick = null;
             this.volatilitySelectionLock = null;
+            this.volatilityScanIndex = 0;
+            this.volatilityScanRecords = [];
         }
 
         async watchTicks(symbol) {
@@ -378,6 +380,8 @@ export default Engine =>
             this.volatilitySelectionLock = null;
             this.lastSignalConfidenceEvaluation = null;
             this.purchaseIndicatorEvaluation = null;
+            this.volatilityScanIndex = 0;
+            this.volatilityScanRecords = [];
         }
         releaseVolatilitySelection(reason = 'conditions_failed') {
             const locked = this.volatilitySelectionLock;
@@ -483,39 +487,56 @@ export default Engine =>
             const adxMinimum = Math.max(0, Number(minimumAdx) || 20);
             const scan = async () => {
                 const activeSymbols = Array.isArray(api_base.active_symbols) ? api_base.active_symbols : [];
-                const records = await Promise.all(
-                    DERIV_VOLATILITIES.map(async volatility => {
-                        const activeRecord = activeSymbols.find(record => record?.symbol === volatility.code);
-                        if (
-                            activeRecord &&
-                            (activeRecord.exchange_is_open === false ||
-                                activeRecord.is_trading_suspended === 1 ||
-                                activeRecord.is_trading_suspended === true)
-                        ) {
-                            return {
+                const marketIndex = this.volatilityScanIndex;
+                const volatility = DERIV_VOLATILITIES[marketIndex];
+                if (!volatility) {
+                    this.volatilityScanIndex = 0;
+                    this.volatilityScanRecords = [];
+                    return false;
+                }
+
+                globalObserver.emit('bot.volatility.scan', {
+                    event: 'checking',
+                    market: volatility.code,
+                    label: volatility.label,
+                    marketIndex: marketIndex + 1,
+                    marketTotal: DERIV_VOLATILITIES.length,
+                    completedCount: this.volatilityScanRecords.length,
+                    qualifiedCount: this.volatilityScanRecords.filter(record => record.qualifies).length,
+                });
+
+                const activeRecord = activeSymbols.find(record => record?.symbol === volatility.code);
+                let record;
+                if (
+                    activeRecord &&
+                    (activeRecord.exchange_is_open === false ||
+                        activeRecord.is_trading_suspended === 1 ||
+                        activeRecord.is_trading_suspended === true)
+                ) {
+                    record = {
+                        ...volatility,
+                        qualifies: false,
+                        reason: 'market_closed',
+                    };
+                } else {
+                    try {
+                        // Scan one market at a time with a small history-only request.
+                        // The selected market is the only one that gets a live stream.
+                        const ticks = await this.$scope.ticksService.request({
+                            symbol: volatility.code,
+                            subscribe: false,
+                            force: true,
+                            count: windowSize + 1,
+                        });
+                        const prices = ticks.map(tick => Number(tick.quote)).filter(Number.isFinite);
+                        const recent = prices.slice(-(windowSize + 1));
+                        if (recent.length < windowSize + 1) {
+                            record = {
                                 ...volatility,
                                 qualifies: false,
-                                reason: 'market_closed',
+                                reason: 'insufficient_history',
                             };
-                        }
-
-                        try {
-                            // Scanning is a one-shot history read. Only the selected
-                            // market should keep a live broker stream.
-                            const ticks = await this.$scope.ticksService.request({
-                                symbol: volatility.code,
-                                subscribe: false,
-                            });
-                            const prices = ticks.map(tick => Number(tick.quote)).filter(Number.isFinite);
-                            const recent = prices.slice(-(windowSize + 1));
-                            if (recent.length < windowSize + 1) {
-                                return {
-                                    ...volatility,
-                                    qualifies: false,
-                                    reason: 'insufficient_history',
-                                };
-                            }
-
+                        } else {
                             const moves = recent.slice(1).map((price, index) => {
                                 const previous = recent[index];
                                 return price > previous ? 1 : price < previous ? -1 : 0;
@@ -535,10 +556,12 @@ export default Engine =>
                             })?.histogram ?? 0;
                             const indicatorsPass =
                                 Number(adx) >= adxMinimum &&
-                                (signal === 'CALL' ? Number(rsi) > 50 && Number(macd) > 0 : Number(rsi) < 50 && Number(macd) < 0);
+                                (signal === 'CALL'
+                                    ? Number(rsi) > 50 && Number(macd) > 0
+                                    : Number(rsi) < 50 && Number(macd) < 0);
                             const qualifies = confidence >= minimum && indicatorsPass;
 
-                            return {
+                            record = {
                                 ...volatility,
                                 signal,
                                 confidence,
@@ -552,21 +575,39 @@ export default Engine =>
                                       ? 'confidence_below_threshold'
                                       : 'indicator_confirmation_failed',
                             };
-                        } catch {
-                            return {
-                                ...volatility,
-                                qualifies: false,
-                                reason: 'history_request_failed',
-                            };
                         }
-                    })
-                );
+                    } catch {
+                        record = {
+                            ...volatility,
+                            qualifies: false,
+                            reason: 'history_request_failed',
+                        };
+                    }
+                }
 
+                this.volatilityScanRecords.push(record);
+                this.volatilityScanIndex += 1;
+
+                if (this.volatilityScanIndex < DERIV_VOLATILITIES.length) {
+                    globalObserver.emit('bot.volatility.scan', {
+                        event: 'market',
+                        market: record.code,
+                        label: record.label,
+                        reason: record.reason,
+                        marketIndex: this.volatilityScanIndex,
+                        marketTotal: DERIV_VOLATILITIES.length,
+                        qualifiedCount: this.volatilityScanRecords.filter(item => item.qualifies).length,
+                    });
+                    return false;
+                }
+
+                const records = this.volatilityScanRecords;
                 const qualified = records
                     .filter(record => record.qualifies)
                     .sort((left, right) => right.confidence - left.confidence || right.adx - left.adx);
                 const selected = qualified[0] || null;
-                const rejected = records.filter(record => !record.qualifies);
+                this.volatilityScanIndex = 0;
+                this.volatilityScanRecords = [];
                 globalObserver.emit('bot.volatility.scan', {
                     event: 'scan',
                     marketCount: records.length,
@@ -586,15 +627,6 @@ export default Engine =>
                           }
                         : null,
                     selectionPolicy: 'strongest_qualified',
-                    rejected: rejected.map(record => ({
-                        symbol: record.code,
-                        label: record.label,
-                        reason: record.reason,
-                        confidence: record.confidence,
-                        adx: record.adx,
-                        rsi: record.rsi,
-                        macd: record.macd,
-                    })),
                 });
                 if (!selected) {
                     return false;
