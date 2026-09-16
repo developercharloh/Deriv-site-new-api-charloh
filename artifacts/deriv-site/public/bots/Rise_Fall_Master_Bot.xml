@@ -112,6 +112,12 @@
                                   <next><block type="variables_set" id="i_conf_ticks">
                                     <field name="VAR" id="v_conf_ticks">Confidence Ticks</field>
                                     <value name="VALUE"><block type="math_number" id="i_conf_ticks_v"><field name="NUM">60</field></block></value>
+                                   <next>
+                                     <block type="variables_set" id="i_msg">
+                                       <field name="VAR" id="v_msg">Journal</field>
+                                       <value name="VALUE"><block type="text" id="i_msg_v"><field name="TEXT"></field></block></value>
+                                     </block>
+                                   </next>
                                   </block></next>
                                 </block></next>
                               </block></next>
@@ -143,6 +149,8 @@
           <block type="variables_get" id="amt_v"><field name="VAR" id="v_stake">Stake</field></block>
         </value>
       </block>
+        </statement>
+      </block>
     </statement>
   </block>
 
@@ -152,8 +160,17 @@
   <block type="before_purchase" id="bp_root" deletable="false" x="820" y="60">
     <statement name="BEFOREPURCHASE_STACK">
 
-      <!-- Fetch one candle/close snapshot and build directional scores -->
-      <block type="variables_set" id="bp_candles">
+      <!-- Scan the full volatility universe before evaluating the selected market. -->
+      <block type="controls_if" id="bp_volatility_scan_if">
+        <value name="IF0">
+          <block type="scan_volatility_until_qualified" id="bp_volatility_scan">
+            <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_volatility_scan_confidence"><field name="NUM">55</field></block></value>
+            <value name="COUNT"><block type="variables_get" id="bp_volatility_scan_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
+            <value name="MINIMUM_ADX"><block type="math_number" id="bp_volatility_scan_adx"><field name="NUM">20</field></block></value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="variables_set" id="bp_candles">
             <field name="VAR" id="v_candles">Indicator Candles</field>
             <value name="VALUE"><block type="ohlc" id="bp_ohlc"><field name="CANDLEINTERVAL_LIST">60</field></block></value>
             <next>
@@ -520,10 +537,10 @@
                                                </block>
                                              </value>
                                              <value name="B">
-                                               <block type="logic_compare" id="bp_direct_call_confidence">
-                                                 <field name="OP">GTE</field>
-                                                 <value name="A"><block type="variables_get" id="bp_direct_call_confidence_value"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
-                                                 <value name="B"><block type="math_number" id="bp_direct_call_confidence_minimum"><field name="NUM">55</field></block></value>
+                                                <block type="signal_confidence_gate" id="bp_direct_call_confidence_gate">
+                                                  <value name="SIGNAL"><block type="variables_get" id="bp_direct_call_confidence_signal"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                  <value name="COUNT"><block type="variables_get" id="bp_direct_call_confidence_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
+                                                  <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_direct_call_confidence_minimum"><field name="NUM">55</field></block></value>
                                                </block>
                                              </value>
                                           </block>
@@ -544,10 +561,10 @@
                                                    </block>
                                                  </value>
                                                  <value name="B">
-                                                   <block type="logic_compare" id="bp_direct_put_confidence">
-                                                     <field name="OP">GTE</field>
-                                                     <value name="A"><block type="variables_get" id="bp_direct_put_confidence_value"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
-                                                     <value name="B"><block type="math_number" id="bp_direct_put_confidence_minimum"><field name="NUM">55</field></block></value>
+                                                    <block type="signal_confidence_gate" id="bp_direct_put_confidence_gate">
+                                                      <value name="SIGNAL"><block type="variables_get" id="bp_direct_put_confidence_signal"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                      <value name="COUNT"><block type="variables_get" id="bp_direct_put_confidence_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
+                                                      <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_direct_put_confidence_minimum"><field name="NUM">55</field></block></value>
                                                    </block>
                                                  </value>
                                               </block>

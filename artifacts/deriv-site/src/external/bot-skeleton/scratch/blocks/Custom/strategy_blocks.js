@@ -401,6 +401,46 @@ registerBoolean({
 });
 
 registerBoolean({
+    type: 'signal_confidence_gate',
+    message0: 'Signal confidence for %1 over %2 ticks is at least %3%',
+    args0: [stringInput('SIGNAL'), numberInput('COUNT', 60), numberInput('MINIMUM_CONFIDENCE', 55)],
+    category: window.Blockly.Categories.Before_Purchase,
+    tooltip:
+        'Scans the selected signal over the configured tick window and allows purchase only when available confidence reaches the editable minimum.',
+    meta: 'Signal confidence gate',
+    generatorCode: block => [
+        `Bot.getSignalConfidenceGate(${valueCode(block, 'SIGNAL', "''")}, ${valueCode(
+            block,
+            'COUNT',
+            '60'
+        )}, ${valueCode(block, 'MINIMUM_CONFIDENCE', '55')})`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
+});
+
+registerBoolean({
+    type: 'scan_volatility_until_qualified',
+    message0: 'Scan volatility until confidence %1% over %2 ticks, ADX %3, RSI and MACD all pass',
+    args0: [
+        numberInput('MINIMUM_CONFIDENCE', 55),
+        numberInput('COUNT', 60),
+        numberInput('MINIMUM_ADX', 20),
+    ],
+    category: window.Blockly.Categories.Before_Purchase,
+    tooltip:
+        'Scans the supported Volatility Index universe, skips closed or unqualified markets, selects the strongest qualified market, and switches the bot to it before purchase.',
+    meta: 'Scan volatility until qualified',
+    generatorCode: block => [
+        `Bot.scanVolatilityUntilQualified(${valueCode(block, 'MINIMUM_CONFIDENCE', '55')}, ${valueCode(
+            block,
+            'COUNT',
+            '60'
+        )}, ${valueCode(block, 'MINIMUM_ADX', '20')})`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
+});
+
+registerBoolean({
     type: 'models_agree',
     message0: 'Primary model is directional: %1 (secondary %2)',
     args0: [stringInput('PRIMARY'), stringInput('SECONDARY')],

@@ -259,12 +259,19 @@ describe('Rise/Fall Master Bot XML', () => {
          expect(workspace.getBlockById('ts_w1v')?.getFieldValue('TEXT')).toBe('WIN | Signal settled | Direction: ');
          expect(workspace.getBlockById('ts_l1v')?.getFieldValue('TEXT')).toBe('LOSS | Signal settled | Flipped to: ');
         expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
-         expect(workspace.getBlockById('bp_direct_call_gate')?.getFieldValue('OP')).toBe('AND');
-         expect(workspace.getBlockById('bp_direct_call_confidence')?.getFieldValue('OP')).toBe('GTE');
-         expect(workspace.getBlockById('bp_direct_call_confidence')?.getInputTargetBlock('B')?.getFieldValue('NUM')).toBe(55);
-         expect(workspace.getBlockById('bp_direct_put_gate')?.getFieldValue('OP')).toBe('AND');
-         expect(workspace.getBlockById('bp_direct_put_confidence')?.getFieldValue('OP')).toBe('GTE');
-         expect(workspace.getBlockById('bp_direct_put_confidence')?.getInputTargetBlock('B')?.getFieldValue('NUM')).toBe(55);
+        expect(workspace.getBlockById('bp_direct_call_gate')?.getFieldValue('OP')).toBe('AND');
+        expect(workspace.getBlockById('bp_direct_call_confidence_gate')?.type).toBe('signal_confidence_gate');
+        expect(
+            workspace.getBlockById('bp_direct_call_confidence_gate')?.getInputTargetBlock('MINIMUM_CONFIDENCE')?.getFieldValue('NUM')
+        ).toBe(55);
+        expect(workspace.getBlockById('bp_direct_put_gate')?.getFieldValue('OP')).toBe('AND');
+        expect(workspace.getBlockById('bp_direct_put_confidence_gate')?.type).toBe('signal_confidence_gate');
+        expect(
+            workspace.getBlockById('bp_direct_put_confidence_gate')?.getInputTargetBlock('MINIMUM_CONFIDENCE')?.getFieldValue('NUM')
+        ).toBe(55);
+        expect(workspace.getBlockById('bp_volatility_scan')?.type).toBe('scan_volatility_until_qualified');
+        expect(workspace.getBlockById('i_msg')?.type).toBe('variables_set');
+        expect(workspace.getBlockById('i_msg')?.getInputTargetBlock('VALUE')?.getFieldValue('TEXT')).toBe('');
         expect(workspace.getBlockById('bp_direct_call')?.type).toBe('purchase');
         expect(workspace.getBlockById('bp_direct_put_purchase')?.type).toBe('purchase');
         expect(workspace.getBlockById('ap_stake_immediate')?.type).toBe('variables_set');

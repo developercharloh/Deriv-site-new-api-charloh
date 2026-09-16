@@ -9,7 +9,9 @@ import { getDirection, getLastDigit } from '../utils/helpers';
 import { expectPositiveInteger } from '../utils/sanitize';
 import * as constants from './state/constants';
 import { markBotTick } from '@/utils/bot-contract-gate';
-import { adaptiveMomentumLog } from '../utils/broadcast';
+import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
+import { adxSnapshot, macdSnapshot, rsiSnapshot } from '@/external/indicators';
+import { adaptiveMomentumLog, notify } from '../utils/broadcast';
 
 export const getAdaptiveMomentumAnalysisFromPrices = (
     prices,
@@ -344,6 +346,106 @@ export default Engine =>
             const normalizedSignal = String(signal || '').toUpperCase();
             if (normalizedSignal !== 'CALL' && normalizedSignal !== 'PUT') return Promise.resolve(0);
             return this.getDirectionPercentage(normalizedSignal === 'CALL' ? 'rise' : 'fall', count);
+        }
+        getSignalConfidenceGate(signal, count = 60, minimumConfidence = 55) {
+            const minimum = Math.max(0, Math.min(100, Number(minimumConfidence) || 55));
+            return this.getSignalConfidence(signal, count).then(availableConfidence => {
+                return Number(availableConfidence) >= minimum;
+            });
+        }
+        async scanVolatilityUntilQualified(minimumConfidence = 55, count = 60, minimumAdx = 20) {
+            if (this.volatilityScanPromise) return this.volatilityScanPromise;
+
+            const minimum = Math.max(0, Math.min(100, Number(minimumConfidence) || 55));
+            const windowSize = Math.max(2, Math.floor(Number(count) || 60));
+            const adxMinimum = Math.max(0, Number(minimumAdx) || 20);
+            const scan = async () => {
+                const activeSymbols = Array.isArray(api_base.active_symbols) ? api_base.active_symbols : [];
+                const records = await Promise.all(
+                    DERIV_VOLATILITIES.map(async volatility => {
+                        const activeRecord = activeSymbols.find(record => record?.symbol === volatility.code);
+                        if (
+                            activeRecord &&
+                            (activeRecord.exchange_is_open === false ||
+                                activeRecord.is_trading_suspended === 1 ||
+                                activeRecord.is_trading_suspended === true)
+                        ) {
+                            return null;
+                        }
+
+                        try {
+                            const ticks = await this.$scope.ticksService.request({ symbol: volatility.code });
+                            const prices = ticks.map(tick => Number(tick.quote)).filter(Number.isFinite);
+                            const recent = prices.slice(-(windowSize + 1));
+                            if (recent.length < windowSize + 1) return null;
+
+                            const moves = recent.slice(1).map((price, index) => {
+                                const previous = recent[index];
+                                return price > previous ? 1 : price < previous ? -1 : 0;
+                            });
+                            const rises = (moves.filter(move => move > 0).length / moves.length) * 100;
+                            const falls = (moves.filter(move => move < 0).length / moves.length) * 100;
+                            const signal = rises >= falls ? 'CALL' : 'PUT';
+                            const confidence = signal === 'CALL' ? rises : falls;
+                            const pipSize = Number(api_base.pip_sizes?.[volatility.code]) || 0;
+                            const adx = adxSnapshot(prices, { periods: 14, pipSize })?.adx ?? 0;
+                            const rsi = rsiSnapshot(prices, { periods: 14, pipSize }) ?? 0;
+                            const macd = macdSnapshot(prices, {
+                                fastEmaPeriod: 12,
+                                slowEmaPeriod: 26,
+                                signalEmaPeriod: 9,
+                                pipSize,
+                            })?.histogram ?? 0;
+                            const indicatorsPass =
+                                Number(adx) >= adxMinimum &&
+                                (signal === 'CALL' ? Number(rsi) > 50 && Number(macd) > 0 : Number(rsi) < 50 && Number(macd) < 0);
+
+                            return {
+                                ...volatility,
+                                signal,
+                                confidence,
+                                adx: Number(adx),
+                                rsi: Number(rsi),
+                                macd: Number(macd),
+                                qualifies: confidence >= minimum && indicatorsPass,
+                            };
+                        } catch {
+                            return null;
+                        }
+                    })
+                );
+
+                const qualified = records
+                    .filter(record => record?.qualifies)
+                    .sort((left, right) => right.confidence - left.confidence || right.adx - left.adx);
+                const selected = qualified[0] || null;
+                if (!selected) {
+                    notify(
+                        'info',
+                        `Volatility scan skipped all markets: no open index met confidence ${minimum}% over ${windowSize} ticks with ADX/RSI/MACD confirmation.`
+                    );
+                    return false;
+                }
+
+                if (this.symbol !== selected.code) {
+                    await this.watchTicks(selected.code);
+                    this.options = { ...this.options, symbol: selected.code };
+                    this.tradeOptions = { ...this.tradeOptions, symbol: selected.code };
+                    this.makeProposals({ ...this.options, ...this.tradeOptions });
+                }
+                notify(
+                    'info',
+                    `Volatility scan selected ${selected.label}: ${selected.signal} confidence ${selected.confidence.toFixed(
+                        2
+                    )}% with ADX ${selected.adx.toFixed(2)}.`
+                );
+                return true;
+            };
+
+            this.volatilityScanPromise = scan().finally(() => {
+                this.volatilityScanPromise = null;
+            });
+            return this.volatilityScanPromise;
         }
         checkLastNTicksDirection(direction, count = 5) {
             const size = Math.max(1, Math.floor(Number(count) || 5));
