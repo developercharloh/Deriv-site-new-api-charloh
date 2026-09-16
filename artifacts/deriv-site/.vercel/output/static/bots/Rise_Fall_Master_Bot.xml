@@ -448,17 +448,35 @@
                                     <value name="TEXT"><shadow type="text" id="bp_direct_journal_1s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_1v"><field name="TEXT">DIRECTION APPROVED | Model: </field></block></value>
                                     <next><block type="text_statement" id="bp_direct_journal_2">
                                       <value name="TEXT"><shadow type="text" id="bp_direct_journal_2s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_2v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
-                                      <next><block type="text_statement" id="bp_direct_journal_5">
-                                            <value name="TEXT"><shadow type="text" id="bp_direct_journal_5s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_5v"><field name="TEXT"> | Confidence: </field></block></value>
-                                            <next><block type="text_statement" id="bp_direct_journal_6">
-                                              <value name="TEXT"><shadow type="text" id="bp_direct_journal_6s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_6v"><field name="VAR" id="v_conf">Model Confidence</field></block></value>
-                                              <next><block type="text_statement" id="bp_direct_journal_7">
-                                                <value name="TEXT"><shadow type="text" id="bp_direct_journal_7s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_7v"><field name="TEXT"> | Stake: $</field></block></value>
-                                                <next><block type="text_statement" id="bp_direct_journal_8">
-                                                  <value name="TEXT"><shadow type="text" id="bp_direct_journal_8s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_8v"><field name="VAR" id="v_stake">Stake</field></block></value>
+                                      <next><block type="text_statement" id="bp_direct_journal_adx_label">
+                                        <value name="TEXT"><shadow type="text" id="bp_direct_journal_adx_label_s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_adx_label_v"><field name="TEXT"> | ADX: </field></block></value>
+                                        <next><block type="text_statement" id="bp_direct_journal_adx">
+                                          <value name="TEXT"><shadow type="text" id="bp_direct_journal_adx_s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_adx_v"><field name="VAR" id="v_adx">ADX Indicator</field></block></value>
+                                          <next><block type="text_statement" id="bp_direct_journal_rsi_label">
+                                            <value name="TEXT"><shadow type="text" id="bp_direct_journal_rsi_label_s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_rsi_label_v"><field name="TEXT"> | RSI: </field></block></value>
+                                            <next><block type="text_statement" id="bp_direct_journal_rsi">
+                                              <value name="TEXT"><shadow type="text" id="bp_direct_journal_rsi_s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_rsi_v"><field name="VAR" id="v_rsi">RSI Indicator</field></block></value>
+                                              <next><block type="text_statement" id="bp_direct_journal_macd_label">
+                                                <value name="TEXT"><shadow type="text" id="bp_direct_journal_macd_label_s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_macd_label_v"><field name="TEXT"> | MACD Histogram: </field></block></value>
+                                                <next><block type="text_statement" id="bp_direct_journal_macd">
+                                                  <value name="TEXT"><shadow type="text" id="bp_direct_journal_macd_s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_macd_v"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
+                                                  <next><block type="text_statement" id="bp_direct_journal_5">
+                                                    <value name="TEXT"><shadow type="text" id="bp_direct_journal_5s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_5v"><field name="TEXT"> | Confidence: </field></block></value>
+                                                    <next><block type="text_statement" id="bp_direct_journal_6">
+                                                      <value name="TEXT"><shadow type="text" id="bp_direct_journal_6s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_6v"><field name="VAR" id="v_conf">Model Confidence</field></block></value>
+                                                      <next><block type="text_statement" id="bp_direct_journal_7">
+                                                        <value name="TEXT"><shadow type="text" id="bp_direct_journal_7s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_7v"><field name="TEXT"> | Stake: $</field></block></value>
+                                                        <next><block type="text_statement" id="bp_direct_journal_8">
+                                                          <value name="TEXT"><shadow type="text" id="bp_direct_journal_8s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_8v"><field name="VAR" id="v_stake">Stake</field></block></value>
+                                                        </block></next>
+                                                      </block></next>
+                                                    </block></next>
+                                                  </block></next>
                                                 </block></next>
                                               </block></next>
                                             </block></next>
+                                          </block></next>
+                                        </block></next>
                                       </block></next>
                                     </block></next>
                                   </block>

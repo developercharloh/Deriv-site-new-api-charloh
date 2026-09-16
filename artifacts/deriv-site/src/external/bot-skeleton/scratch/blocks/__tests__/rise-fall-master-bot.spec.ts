@@ -210,6 +210,13 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(workspace.getBlockById('bp_indicator_adx_value')?.type).toBe('adx_value');
         expect(workspace.getBlockById('bp_indicator_rsi_value')?.type).toBe('rsi_value');
         expect(workspace.getBlockById('bp_indicator_macd_value')?.type).toBe('macd_value');
+        expect(workspace.getBlockById('bp_direct_journal_adx')?.type).toBe('text_statement');
+        expect(workspace.getBlockById('bp_direct_journal_adx')?.getNextBlock()?.id).toBe(
+            'bp_direct_journal_rsi_label'
+        );
+        expect(workspace.getBlockById('bp_direct_journal_rsi')?.type).toBe('text_statement');
+        expect(workspace.getBlockById('bp_direct_journal_macd')?.type).toBe('text_statement');
+        expect(workspace.getBlockById('bp_direct_journal_macd')?.getNextBlock()?.id).toBe('bp_direct_journal_5');
         expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
         expect(workspace.getBlockById('bp_direct_call')?.type).toBe('purchase');
         expect(workspace.getBlockById('bp_direct_put_purchase')?.type).toBe('purchase');
