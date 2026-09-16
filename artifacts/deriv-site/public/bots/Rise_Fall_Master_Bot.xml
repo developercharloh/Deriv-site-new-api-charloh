@@ -826,6 +826,12 @@
                     </next>
                   </block>
 
+                        </next>
+                      </block>
+
+                    </next>
+                  </block>
+
                     </statement>
                     <statement name="ELSE">
                       <block type="text_join" id="tj_gate_skip">
@@ -1030,9 +1036,6 @@
                                     </value>
                                   </block>
                                 </value>
-                              </block>
-                            </next>
-                          </block>
                             <next>
 
                               <!-- Flip Direction: CALL→PUT or PUT→CALL -->
@@ -1203,6 +1206,9 @@
 
                         </next>
                       </block>
+
+                    </next>
+                  </block>
 
                     </statement>
                     <next>
