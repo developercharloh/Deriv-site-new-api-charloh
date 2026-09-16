@@ -67,3 +67,5 @@ The Vercel REST upload endpoint can exhaust an account-wide 5,000-file quota eve
 **Why:** Repeated prebuilt uploads of the same static tree still count against the upload quota when the client posts every file instead of reusing known digests.
 
 **How to apply:** Compare the local prebuilt manifest against the last READY deployment and upload only new digests. If Vercel still returns `api-upload-free` with `remaining: 0`, keep the code verified locally and do not claim production was updated; retry after the reported reset time.
+
+**Current runtime note:** `npx vercel@latest deploy --prebuilt` can be blocked by the package firewall while fetching `tar`; the REST fallback works by uploading only new SHA-1 digests and creating `/v13/deployments?prebuilt=1`.
