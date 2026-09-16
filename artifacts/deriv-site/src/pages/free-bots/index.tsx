@@ -362,6 +362,26 @@ const BOTS: BotConfig[] = [
         xmlPath: '/bots/Elite_Entry_Scanner_Bot.xml',
         gradient: 'linear-gradient(135deg, #1a0800 0%, #5c1a00 50%, #ff6b00 100%)',
     },
+    {
+        id: 'apex-ai',
+        name: 'Apex AI Multi-Strategy Bot',
+        emoji: '🦅',
+        description:
+            'Multi-strategy bot for the Volatility 25 (1s) Index. Switches between Even/Odd, Over 4/Under 5, and Rise/Fall modes after every three trades, with 2× recovery, a $10 take-profit target, and a $50 stop-loss limit.',
+        market: 'Volatility 25 (1s) Index (1HZ25V)',
+        strategy: 'Even / Odd · Over 4 / Under 5 · Rise / Fall · Scheduled Strategy Switch',
+        params: [
+            { label: 'Initial Stake', value: '$0.70' },
+            { label: 'Strategy Switch', value: 'Every 3 trades' },
+            { label: 'Martingale', value: '2×' },
+            { label: 'Take Profit', value: '$10' },
+            { label: 'Stop Loss', value: '$50' },
+            { label: 'Duration', value: '1 Tick' },
+        ],
+        xmlPath: '/bots/Apex_AI.xml',
+        gradient: 'linear-gradient(135deg, #07152e 0%, #123b72 45%, #06b6d4 100%)',
+        category: 'MULTI-STRATEGY AI',
+    },
 ];
 
 const CARD_ART: Record<string, string> = {
@@ -380,6 +400,7 @@ const CARD_ART: Record<string, string> = {
     'over-under-manual': '/assets/free-bots/digit-switcher.jpg',
     'over-under-ai-signals': '/assets/free-bots/concept-ai.jpg',
     'elite-entry-scanner': '/assets/free-bots/blueprint.jpg',
+    'apex-ai': '/assets/free-bots/blueprint.jpg',
 };
 
 const CARD_CATEGORY: Record<string, string> = {
@@ -398,6 +419,7 @@ const CARD_CATEGORY: Record<string, string> = {
     'over-under-manual': 'OVER / UNDER',
     'over-under-ai-signals': 'OVER / UNDER AI',
     'elite-entry-scanner': 'OVER / UNDER SCANNER',
+    'apex-ai': 'EVEN / ODD · OVER / UNDER · RISE / FALL',
 };
 
 const CARD_ACCENT: Record<string, string> = {
@@ -416,6 +438,7 @@ const CARD_ACCENT: Record<string, string> = {
     'over-under-manual': '#e6315b',
     'over-under-ai-signals': '#8330c3',
     'elite-entry-scanner': '#ed7439',
+    'apex-ai': '#06b6d4',
 };
 
 // ─── Engine selector dropdown ─────────────────────────────────────────────────
