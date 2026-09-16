@@ -151,8 +151,6 @@
       </block>
         </statement>
       </block>
-    </statement>
-  </block>
 
   <!-- ════════════════════════════════════════
        BEFORE PURCHASE — read tick, smart entry, re-entry confirm, then buy
@@ -516,9 +514,7 @@
                                             </block></next>
                                           </block></next>
                                         </block></next>
-                                      </block></next>
-                                    </block></next>
-                                  </block>
+                                      </block>
                                 </statement>
                                 <next>
                                   <block type="notify" id="bp_direct_notify">
@@ -590,9 +586,9 @@
                            </block>
                          </next>
                        </block>
-                     </next>
+                    </statement>
                    </block>
-                                </statement>
+                             </next>
                               </block>
                              </next>
                           </block>
@@ -961,6 +957,8 @@
 
     </statement>
   </block>
+  </statement>
+</block>
 
   <!-- ════════════════════════════════════════
        AFTER PURCHASE — increment trades, handle WIN/LOSS, check TP/SL, trade_again
