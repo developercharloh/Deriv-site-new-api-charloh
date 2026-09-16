@@ -5,6 +5,7 @@ import { doUntilDone } from '../utils/helpers';
 import { fastRearm, openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
 import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
+import { observer as globalObserver } from '../../../utils/observer';
 
 export default Engine =>
     class OpenContract extends Engine {
@@ -72,6 +73,13 @@ export default Engine =>
                         // not from a later rendered win/loss notification.
                         this.updateTotals(contract, executionSpeed === 'fast');
                         this.applyBinaryMatrixSettlement(contract);
+                        globalObserver.emit('bot.volatility.scan', {
+                            event: 'settlement',
+                            market: contract.underlying || this.symbol || this.options?.symbol,
+                            contractId: contract.contract_id,
+                            outcome: contract.status || (Number(contract.profit) >= 0 ? 'won' : 'lost'),
+                            profit: contract.profit,
+                        });
                         if (executionSpeed === 'fast') {
                             // The settlement determines the next Binary Matrix
                             // stake. Start its proposal request now instead of
@@ -80,6 +88,7 @@ export default Engine =>
                         }
 
                         const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
+                        if (!hasOtherActiveContracts) this.resetVolatilitySelection?.();
                         const clockPacedFast = executionSpeed === 'fast' && this.fastClockActive;
                         const canFastRearm = releaseBotContractGate(
                             this,

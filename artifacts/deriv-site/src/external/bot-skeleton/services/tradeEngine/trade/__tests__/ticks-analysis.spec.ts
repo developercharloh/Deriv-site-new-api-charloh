@@ -273,7 +273,7 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(true);
     });
 
-    it('keeps the first qualified volatility locked for the bot session', async () => {
+    it('keeps the selected volatility while awaiting live confirmation', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         engine.symbol = '1HZ100V';
@@ -307,6 +307,27 @@ describe('Ticks last-digit analysis events', () => {
         await expect(engine.scanVolatilityUntilQualified()).resolves.toBe(true);
         expect(engine.$scope.ticksService.request).not.toHaveBeenCalled();
         expect(engine.watchTicks).toHaveBeenCalledTimes(1);
+    });
+
+    it('releases a selected volatility after live conditions fail', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.volatilitySelectionLock = {
+            code: '1HZ25V',
+            label: 'Volatility 25 (1s) Index',
+            signal: 'PUT',
+            confidence: 58,
+        };
+        engine.lastSignalConfidenceEvaluation = {
+            signal: 'PUT',
+            confidence: 54,
+            minimum: 55,
+            tick: 123,
+        };
+        engine.releaseVolatilitySelection('live_conditions_failed');
+
+        expect(engine.volatilitySelectionLock).toBeNull();
+        expect(engine.lastSignalConfidenceEvaluation).toBeNull();
     });
 
     it('blocks a purchase when the engine no longer points at the locked volatility', () => {

@@ -244,6 +244,11 @@
                               </block>
                             </value>
                             <next>
+                              <!-- The volatility scan owns direction for the selected market. -->
+                              <block type="variables_set" id="bp_apply_scanned_signal">
+                                <field name="VAR" id="v_signal">Model Signal</field>
+                                <value name="VALUE"><block type="volatility_signal" id="bp_scanned_signal"></block></value>
+                                <next>
                               <block type="variables_set" id="bp_conf">
                                 <field name="VAR" id="v_conf">Signal Confidence</field>
                                 <value name="VALUE">
@@ -577,6 +582,8 @@
                                        </block>
                                      </next>
                                    </block>
+                                </next>
+                              </block>
                                  </next>
                                </block>
                              </next>

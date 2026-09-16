@@ -11,7 +11,7 @@ import * as constants from './state/constants';
 import { markBotTick } from '@/utils/bot-contract-gate';
 import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { adxSnapshot, macdSnapshot, rsiSnapshot } from '@/external/indicators';
-import { adaptiveMomentumLog, notify } from '../utils/broadcast';
+import { adaptiveMomentumLog } from '../utils/broadcast';
 
 export const getAdaptiveMomentumAnalysisFromPrices = (
     prices,
@@ -368,11 +368,33 @@ export default Engine =>
                 return Number(availableConfidence) >= minimum;
             });
         }
+        getVolatilitySelectionSignal() {
+            return this.volatilitySelectionLock?.signal || 'WAIT';
+        }
         getPurchaseConditionTick() {
             return this.store?.getState?.().newTick ?? this.latestTick?.epoch ?? null;
         }
         resetVolatilitySelection() {
             this.volatilitySelectionLock = null;
+            this.lastSignalConfidenceEvaluation = null;
+            this.purchaseIndicatorEvaluation = null;
+        }
+        releaseVolatilitySelection(reason = 'conditions_failed') {
+            const locked = this.volatilitySelectionLock;
+            if (!locked) return;
+
+            globalObserver.emit('bot.volatility.scan', {
+                event: 'rejected',
+                market: locked.code,
+                label: locked.label,
+                signal: locked.signal,
+                confidence: locked.confidence,
+                adx: locked.adx,
+                rsi: locked.rsi,
+                macd: locked.macd,
+                reason,
+            });
+            this.resetVolatilitySelection();
         }
         async restoreLockedVolatilitySelection() {
             const locked = this.volatilitySelectionLock;
@@ -399,23 +421,16 @@ export default Engine =>
             };
             return value;
         }
-        isPurchaseConditionGateOpen(contractType) {
+        isPurchaseConditionValuesGateOpen(contractType) {
             if (!['CALL', 'PUT'].includes(contractType)) return true;
-
-            const lockedSymbol = this.volatilitySelectionLock?.code;
-            const purchaseSymbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
-            if (lockedSymbol && (purchaseSymbol !== lockedSymbol || this.symbol !== lockedSymbol)) return false;
 
             const confidence = this.lastSignalConfidenceEvaluation;
             if (!confidence) return true;
 
-            const currentTick = this.getPurchaseConditionTick();
-            if (confidence.tick !== null && currentTick !== null && confidence.tick !== currentTick) return false;
             if (confidence.signal !== contractType || confidence.confidence < confidence.minimum) return false;
 
             const indicators = this.purchaseIndicatorEvaluation;
             if (!indicators) return true;
-            if (indicators.tick !== null && currentTick !== null && indicators.tick !== currentTick) return false;
 
             const hasAnyIndicator = ['adx', 'rsi', 'macd'].some(indicator => Number.isFinite(indicators[indicator]));
             if (!hasAnyIndicator) return true;
@@ -430,11 +445,37 @@ export default Engine =>
                     : indicators.rsi < 50 && indicators.macd < 0)
             );
         }
+        isPurchaseConditionGateOpen(contractType) {
+            if (!['CALL', 'PUT'].includes(contractType)) return true;
+
+            const lockedSymbol = this.volatilitySelectionLock?.code;
+            const purchaseSymbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
+            if (lockedSymbol && (purchaseSymbol !== lockedSymbol || this.symbol !== lockedSymbol)) return false;
+
+            const confidence = this.lastSignalConfidenceEvaluation;
+            if (!confidence) return true;
+
+            const currentTick = this.getPurchaseConditionTick();
+            if (confidence.tick !== null && currentTick !== null && confidence.tick !== currentTick) return false;
+            const indicators = this.purchaseIndicatorEvaluation;
+            if (indicators?.tick !== null && currentTick !== null && indicators.tick !== currentTick) return false;
+
+            return this.isPurchaseConditionValuesGateOpen(contractType);
+        }
         async scanVolatilityUntilQualified(minimumConfidence = 55, count = 60, minimumAdx = 20) {
             if (this.volatilityScanPromise) return this.volatilityScanPromise;
 
             if (this.volatilitySelectionLock) {
-                return this.restoreLockedVolatilitySelection();
+                const previousEvaluation = this.lastSignalConfidenceEvaluation;
+                if (
+                    previousEvaluation?.signal &&
+                    ['CALL', 'PUT'].includes(previousEvaluation.signal) &&
+                    !this.isPurchaseConditionValuesGateOpen(previousEvaluation.signal)
+                ) {
+                    this.releaseVolatilitySelection('live_conditions_failed');
+                } else {
+                    return this.restoreLockedVolatilitySelection();
+                }
             }
 
             const minimum = Math.max(0, Math.min(100, Number(minimumConfidence) || 55));
@@ -451,14 +492,24 @@ export default Engine =>
                                 activeRecord.is_trading_suspended === 1 ||
                                 activeRecord.is_trading_suspended === true)
                         ) {
-                            return null;
+                            return {
+                                ...volatility,
+                                qualifies: false,
+                                reason: 'market_closed',
+                            };
                         }
 
                         try {
                             const ticks = await this.$scope.ticksService.request({ symbol: volatility.code });
                             const prices = ticks.map(tick => Number(tick.quote)).filter(Number.isFinite);
                             const recent = prices.slice(-(windowSize + 1));
-                            if (recent.length < windowSize + 1) return null;
+                            if (recent.length < windowSize + 1) {
+                                return {
+                                    ...volatility,
+                                    qualifies: false,
+                                    reason: 'insufficient_history',
+                                };
+                            }
 
                             const moves = recent.slice(1).map((price, index) => {
                                 const previous = recent[index];
@@ -480,6 +531,7 @@ export default Engine =>
                             const indicatorsPass =
                                 Number(adx) >= adxMinimum &&
                                 (signal === 'CALL' ? Number(rsi) > 50 && Number(macd) > 0 : Number(rsi) < 50 && Number(macd) < 0);
+                            const qualifies = confidence >= minimum && indicatorsPass;
 
                             return {
                                 ...volatility,
@@ -488,23 +540,57 @@ export default Engine =>
                                 adx: Number(adx),
                                 rsi: Number(rsi),
                                 macd: Number(macd),
-                                qualifies: confidence >= minimum && indicatorsPass,
+                                qualifies,
+                                reason: qualifies
+                                    ? 'qualified'
+                                    : confidence < minimum
+                                      ? 'confidence_below_threshold'
+                                      : 'indicator_confirmation_failed',
                             };
                         } catch {
-                            return null;
+                            return {
+                                ...volatility,
+                                qualifies: false,
+                                reason: 'history_request_failed',
+                            };
                         }
                     })
                 );
 
                 const qualified = records
-                    .filter(record => record?.qualifies)
+                    .filter(record => record.qualifies)
                     .sort((left, right) => right.confidence - left.confidence || right.adx - left.adx);
                 const selected = qualified[0] || null;
+                const rejected = records.filter(record => !record.qualifies);
+                globalObserver.emit('bot.volatility.scan', {
+                    event: 'scan',
+                    marketCount: records.length,
+                    qualifiedCount: qualified.length,
+                    minimumConfidence: minimum,
+                    windowSize,
+                    minimumAdx: adxMinimum,
+                    selected: selected
+                        ? {
+                              symbol: selected.code,
+                              label: selected.label,
+                              signal: selected.signal,
+                              confidence: selected.confidence,
+                              adx: selected.adx,
+                              rsi: selected.rsi,
+                              macd: selected.macd,
+                          }
+                        : null,
+                    rejected: rejected.map(record => ({
+                        symbol: record.code,
+                        label: record.label,
+                        reason: record.reason,
+                        confidence: record.confidence,
+                        adx: record.adx,
+                        rsi: record.rsi,
+                        macd: record.macd,
+                    })),
+                });
                 if (!selected) {
-                    notify(
-                        'info',
-                        `Volatility scan skipped all markets: no open index met confidence ${minimum}% over ${windowSize} ticks with ADX/RSI/MACD confirmation.`
-                    );
                     return false;
                 }
 
@@ -523,13 +609,10 @@ export default Engine =>
                     label: selected.label,
                     signal: selected.signal,
                     confidence: selected.confidence,
+                    adx: selected.adx,
+                    rsi: selected.rsi,
+                    macd: selected.macd,
                 };
-                notify(
-                    'info',
-                    `Volatility scan locked ${selected.label}: ${selected.signal} confidence ${selected.confidence.toFixed(
-                        2
-                    )}% with ADX ${selected.adx.toFixed(2)}.`
-                );
                 return true;
             };
 

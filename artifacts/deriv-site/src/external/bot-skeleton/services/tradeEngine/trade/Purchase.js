@@ -93,10 +93,14 @@ export default Engine =>
             // confidence and indicators, enforce the same requirements here so the
             // first contract cannot bypass an unmet confidence or trend condition.
             if (!this.isPurchaseConditionGateOpen(contract_type)) {
-                notify(
-                    'warning',
-                    `Purchase blocked: ${contract_type} conditions were not satisfied for the current tick.`
-                );
+                if (this.volatilitySelectionLock) {
+                    this.releaseVolatilitySelection?.('live_conditions_failed');
+                } else {
+                    notify(
+                        'warning',
+                        `Purchase blocked: ${contract_type} conditions were not satisfied for the current tick.`
+                    );
+                }
                 return Promise.resolve();
             }
             // Use this engine's own observed tick first. The shared latest-tick
@@ -165,6 +169,13 @@ export default Engine =>
                 this.setCurrentContract(contractState.contractId);
                 setBotContractGateContract(this, buy.contract_id, signalKey);
                 this.store.dispatch(purchaseSuccessful());
+                globalObserver.emit('bot.volatility.scan', {
+                    event: 'purchase',
+                    market: this.tradeOptions?.symbol || this.options?.symbol || this.symbol,
+                    contractType: contract_type,
+                    contractId: buy.contract_id,
+                    buyPrice: buy.buy_price,
+                });
 
                 if (this.is_proposal_subscription_required) {
                     this.renewProposalsOnPurchase();

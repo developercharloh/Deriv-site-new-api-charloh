@@ -440,6 +440,16 @@ registerBoolean({
     ],
 });
 
+registerOutput({
+    type: 'volatility_signal',
+    message0: 'Selected volatility signal',
+    output: 'String',
+    category: window.Blockly.Categories.Indicators,
+    tooltip: 'Returns the direction selected by the volatility scan for the current candidate market.',
+    meta: 'Selected volatility signal',
+    generatorCode: () => [`Bot.getVolatilitySelectionSignal()`, generator().ORDER_FUNCTION_CALL],
+});
+
 registerBoolean({
     type: 'models_agree',
     message0: 'Primary model is directional: %1 (secondary %2)',

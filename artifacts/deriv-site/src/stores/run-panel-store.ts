@@ -1070,6 +1070,110 @@ export default class RunPanelStore {
         );
     };
 
+    onVolatilityScan = (event: {
+        event?: string;
+        marketCount?: number;
+        qualifiedCount?: number;
+        minimumConfidence?: number;
+        windowSize?: number;
+        selected?: {
+            symbol?: string;
+            label?: string;
+            signal?: string;
+            confidence?: number;
+            adx?: number;
+            rsi?: number;
+            macd?: number;
+        } | null;
+        rejected?: Array<{
+            symbol?: string;
+            label?: string;
+            reason?: string;
+            confidence?: number;
+            adx?: number;
+            rsi?: number;
+            macd?: number;
+        }>;
+        market?: string;
+        label?: string;
+        signal?: string;
+        confidence?: number;
+        adx?: number;
+        rsi?: number;
+        macd?: number;
+        reason?: string;
+        contractType?: string;
+        contractId?: string | number;
+        buyPrice?: number;
+        outcome?: string;
+        profit?: number;
+    }) => {
+        const journal = this.root_store.journal;
+        const number = (value: unknown, digits = 1) =>
+            Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : 'N/A';
+        const reasonLabel = (reason?: string) =>
+            ({
+                market_closed: 'closed',
+                insufficient_history: 'not enough ticks',
+                history_request_failed: 'history unavailable',
+                confidence_below_threshold: 'confidence below threshold',
+                indicator_confirmation_failed: 'ADX/RSI/MACD failed',
+                live_conditions_failed: 'fresh confirmation failed',
+            })[reason || ''] || reason || 'not specified';
+
+        if (event.event === 'rejected') {
+            journal.pushMessage(
+                `[Volatility Scan] Rejected ${event.label || event.market || 'selected market'} · ` +
+                    `${reasonLabel(event.reason)} · rescanning for another market`,
+                MessageTypes.NOTIFY,
+                'journal__text'
+            );
+            return;
+        }
+
+        if (event.event === 'purchase') {
+            journal.pushMessage(
+                `[Volatility Scan] Purchase used ${event.market || 'selected market'} · ` +
+                    `${event.contractType || 'contract'} · contract ${event.contractId || 'N/A'} · ` +
+                    `stake ${number(event.buyPrice, 2)}`,
+                MessageTypes.NOTIFY,
+                'journal__text'
+            );
+            return;
+        }
+
+        if (event.event === 'settlement') {
+            journal.pushMessage(
+                `[Volatility Scan] Settlement ${event.market || 'selected market'} · ` +
+                    `${event.outcome || 'result'} · profit ${number(event.profit, 2)} · next scan will begin`,
+                MessageTypes.NOTIFY,
+                'journal__text'
+            );
+            return;
+        }
+
+        const rejected = (event.rejected || [])
+            .map(
+                item =>
+                    `${item.label || item.symbol || 'market'}: ${reasonLabel(item.reason)} ` +
+                    `(conf ${number(item.confidence)}%, ADX ${number(item.adx)}, RSI ${number(item.rsi)}, MACD ${number(item.macd, 3)})`
+            )
+            .join(' · ');
+        const selected = event.selected;
+        const selectedText = selected
+            ? `Selected ${selected.label || selected.symbol} (${selected.symbol}) · ${selected.signal} · ` +
+              `conf ${number(selected.confidence)}% · ADX ${number(selected.adx)} · ` +
+              `RSI ${number(selected.rsi)} · MACD ${number(selected.macd, 3)} · waiting for fresh confirmation`
+            : `No market met the ${number(event.minimumConfidence, 0)}% confidence and indicator gates`;
+        journal.pushMessage(
+            `[Volatility Scan] Checked ${event.marketCount ?? 0} markets · ` +
+                `${event.qualifiedCount ?? 0} qualified · window ${event.windowSize ?? 0} ticks · ` +
+                `${selectedText}${rejected ? ` · Rejections: ${rejected}` : ''}`,
+            MessageTypes.NOTIFY,
+            'journal__text'
+        );
+    };
+
     onAdaptiveMomentumJournalLog = (event: {
         event?: string;
         market?: string;
@@ -1265,6 +1369,7 @@ export default class RunPanelStore {
         observer.register('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);
         observer.register('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.register('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
+        observer.register('bot.volatility.scan', this.onVolatilityScan);
         observer.register('client.invalid_token', this.handleInvalidToken);
     };
 
@@ -1288,6 +1393,7 @@ export default class RunPanelStore {
         observer.unregister('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);
         observer.unregister('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.unregister('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
+        observer.unregister('bot.volatility.scan', this.onVolatilityScan);
         observer.unregisterAll('client.invalid_token');
     };
 

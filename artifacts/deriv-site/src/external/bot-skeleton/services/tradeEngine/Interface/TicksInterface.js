@@ -18,6 +18,7 @@ const getTicksInterface = tradeEngine => {
         getDirectionPercentage: (...args) => tradeEngine.getDirectionPercentage(...args),
         getSignalConfidence: (...args) => tradeEngine.getSignalConfidence(...args),
         getSignalConfidenceGate: (...args) => tradeEngine.getSignalConfidenceGate(...args),
+        getVolatilitySelectionSignal: (...args) => tradeEngine.getVolatilitySelectionSignal(...args),
         scanVolatilityUntilQualified: (...args) => tradeEngine.scanVolatilityUntilQualified(...args),
         checkLastNTicksDirection: (...args) => tradeEngine.checkLastNTicksDirection(...args),
         getAdaptiveMomentumSignal: (...args) => tradeEngine.getAdaptiveMomentumSignal(...args),
