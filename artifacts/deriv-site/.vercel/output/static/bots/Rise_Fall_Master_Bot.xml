@@ -362,7 +362,95 @@
                 </statement>
                 <next>
 
-                  <!-- Apply the model direction only when every safety and indicator gate passes -->
+                  <!-- The safety/indicator purchase gate was removed from the imported bot blocks. -->
+                  <block type="variables_set" id="bp_direct_apply_signal">
+                    <field name="VAR" id="v_dir">Direction</field>
+                    <value name="VALUE"><block type="variables_get" id="bp_direct_apply_signal_v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                    <next>
+                      <block type="variables_set" id="bp_direct_save_tick">
+                        <field name="VAR" id="v_lt">Last Tick</field>
+                        <value name="VALUE"><block type="tick" id="bp_direct_tick_now"></block></value>
+                        <next>
+                          <block type="variables_set" id="bp_direct_clear_flip">
+                            <field name="VAR" id="v_flip">Just Flipped</field>
+                            <value name="VALUE"><block type="text" id="bp_direct_clear_flip_v"><field name="TEXT">no</field></block></value>
+                            <next>
+                              <block type="text_join" id="bp_direct_journal">
+                                <field name="VARIABLE" id="v_msg">Journal</field>
+                                <statement name="STACK">
+                                  <block type="text_statement" id="bp_direct_journal_1">
+                                    <value name="TEXT"><shadow type="text" id="bp_direct_journal_1s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_1v"><field name="TEXT">DIRECTION APPROVED | Model: </field></block></value>
+                                    <next><block type="text_statement" id="bp_direct_journal_2">
+                                      <value name="TEXT"><shadow type="text" id="bp_direct_journal_2s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_2v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                      <next><block type="text_statement" id="bp_direct_journal_3">
+                                        <value name="TEXT"><shadow type="text" id="bp_direct_journal_3s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_3v"><field name="TEXT"> | Adaptive: </field></block></value>
+                                        <next><block type="text_statement" id="bp_direct_journal_4">
+                                          <value name="TEXT"><shadow type="text" id="bp_direct_journal_4s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_4v"><field name="VAR" id="v_adaptive">Adaptive Momentum Signal</field></block></value>
+                                          <next><block type="text_statement" id="bp_direct_journal_5">
+                                            <value name="TEXT"><shadow type="text" id="bp_direct_journal_5s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_5v"><field name="TEXT"> | Confidence: </field></block></value>
+                                            <next><block type="text_statement" id="bp_direct_journal_6">
+                                              <value name="TEXT"><shadow type="text" id="bp_direct_journal_6s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_6v"><field name="VAR" id="v_conf">Model Confidence</field></block></value>
+                                              <next><block type="text_statement" id="bp_direct_journal_7">
+                                                <value name="TEXT"><shadow type="text" id="bp_direct_journal_7s"><field name="TEXT"></field></shadow><block type="text" id="bp_direct_journal_7v"><field name="TEXT"> | Stake: $</field></block></value>
+                                                <next><block type="text_statement" id="bp_direct_journal_8">
+                                                  <value name="TEXT"><shadow type="text" id="bp_direct_journal_8s"><field name="TEXT"></field></shadow><block type="variables_get" id="bp_direct_journal_8v"><field name="VAR" id="v_stake">Stake</field></block></value>
+                                                </block></next>
+                                              </block></next>
+                                            </block></next>
+                                          </block></next>
+                                        </block></next>
+                                      </block></next>
+                                    </block></next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="notify" id="bp_direct_notify">
+                                    <field name="NOTIFICATION_TYPE">info</field>
+                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                    <value name="MESSAGE">
+                                      <shadow type="text" id="bp_direct_notify_s"><field name="TEXT">Placing trade</field></shadow>
+                                      <block type="variables_get" id="bp_direct_notify_v"><field name="VAR" id="v_msg">Journal</field></block>
+                                    </value>
+                                    <next>
+                                      <block type="controls_if" id="bp_direct_direction">
+                                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                        <value name="IF0">
+                                          <block type="logic_compare" id="bp_direct_call_cmp">
+                                            <field name="OP">EQ</field>
+                                            <value name="A"><block type="variables_get" id="bp_direct_call_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                            <value name="B"><block type="text" id="bp_direct_call_b"><field name="TEXT">CALL</field></block></value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="purchase" id="bp_direct_call"><field name="PURCHASE_LIST">CALL</field></block>
+                                        </statement>
+                                        <statement name="ELSE">
+                                          <block type="controls_if" id="bp_direct_put">
+                                            <value name="IF0">
+                                              <block type="logic_compare" id="bp_direct_put_cmp">
+                                                <field name="OP">EQ</field>
+                                                <value name="A"><block type="variables_get" id="bp_direct_put_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                <value name="B"><block type="text" id="bp_direct_put_b"><field name="TEXT">PUT</field></block></value>
+                                              </block>
+                                            </value>
+                                            <statement name="DO0">
+                                              <block type="purchase" id="bp_direct_put_purchase"><field name="PURCHASE_LIST">PUT</field></block>
+                                            </statement>
+                                          </block>
+                                        </statement>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+
+                  <!--
                   <block type="controls_if" id="bp_gate_if">
                     <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                     <value name="IF0">
@@ -560,19 +648,19 @@
                         <value name="VALUE"><block type="variables_get" id="bp_apply_signal_v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
                     <next>
 
-                  <!-- 5. Store current tick as Last Tick for next cycle -->
+                  REMOVED: Store current tick as Last Tick for next cycle
                   <block type="variables_set" id="bp_save_lt">
                     <field name="VAR" id="v_lt">Last Tick</field>
                     <value name="VALUE"><block type="tick" id="bp_tick_now2"></block></value>
                     <next>
 
-                      <!-- 6. Clear Just Flipped flag -->
+                      REMOVED: Clear Just Flipped flag
                       <block type="variables_set" id="bp_clear_flip">
                         <field name="VAR" id="v_flip">Just Flipped</field>
                         <value name="VALUE"><block type="text" id="bp_clear_flip_v"><field name="TEXT">no</field></block></value>
                         <next>
 
-                          <!-- 7. Log -->
+                          REMOVED: Log
                           <block type="text_join" id="tj_bp">
                             <field name="VARIABLE" id="v_msg">Journal</field>
                             <statement name="STACK">
@@ -610,7 +698,7 @@
                                   <block type="variables_get" id="n_bp_v"><field name="VAR" id="v_msg">Journal</field></block>
                                 </value>
                                 <next>
-                                   <!-- BUY only on a confirmed CALL/PUT signal; WAIT stays out -->
+                                   REMOVED: BUY only on a confirmed CALL/PUT signal; WAIT stays out
                                    <block type="controls_if" id="bp_dir_if">
                                      <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                                     <value name="IF0">
@@ -685,6 +773,7 @@
                       </block>
                     </statement>
                   </block>
+                  -->
 
                 </next>
               </block>

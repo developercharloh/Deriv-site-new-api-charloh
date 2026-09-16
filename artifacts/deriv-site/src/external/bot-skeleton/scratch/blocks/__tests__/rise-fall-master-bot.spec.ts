@@ -165,12 +165,12 @@ describe('Rise/Fall Master Bot XML', () => {
                         ['Rise', 'CALL'],
                         ['Fall', 'PUT'],
                     ],
-                    block.id === 'bp_put' ? 'PUT' : 'CALL'
+                    block.id === 'bp_put' || block.id === 'bp_direct_put_purchase' ? 'PUT' : 'CALL'
                 );
             });
     };
 
-    it('imports and generates the live indicator and safety gate', () => {
+    it('imports the master bot without the removed purchase-block gate', () => {
         const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Rise_Fall_Master_Bot.xml');
         const xmlText = fs.readFileSync(xmlPath, 'utf8');
         const sourceDom = Blockly.utils.xml.textToDom(xmlText);
@@ -180,6 +180,9 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(() => Blockly.Xml.domToWorkspace(importDom, workspace)).not.toThrow();
 
         const blockTypes = new Set(workspace.getAllBlocks(false).map(block => block.type));
+        ['aroon_value', 'adaptive_momentum_signal', 'model_signal', 'purchase'].forEach(type =>
+            expect(blockTypes).toContain(type)
+        );
         [
             'indicator_ready',
             'no_active_contract',
@@ -196,21 +199,14 @@ describe('Rise/Fall Master Bot XML', () => {
             'rsi_value',
             'bollinger_value',
             'bollinger_squeeze',
-        ].forEach(type => expect(blockTypes).toContain(type));
+        ].forEach(type => expect(blockTypes).not.toContain(type));
 
         javascriptGenerator.init(workspace);
         (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
-        const gateBlock = workspace.getBlockById('bp_gate_if');
-        expect(gateBlock).toBeDefined();
-        const gateCondition = gateBlock!.getInputTargetBlock('IF0');
-        expect(gateCondition).toBeDefined();
-        const generatedResult = javascriptGenerator.blockToCode(gateCondition!);
-        const generated = Array.isArray(generatedResult) ? generatedResult[0] : generatedResult;
-        expect(generated).toContain('Bot.canOpenNewContract()');
-        expect(generated).toContain('Bot.getModelConfidence');
-        expect(generated).toContain('Bot.isBollingerSqueeze');
-        expect(generated).toContain('true');
-        expect(generated).not.toContain('Bot.getIchimokuValue');
+        expect(workspace.getBlockById('bp_gate_if')).toBeNull();
+        expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
+        expect(workspace.getBlockById('bp_direct_call')?.type).toBe('purchase');
+        expect(workspace.getBlockById('bp_direct_put_purchase')?.type).toBe('purchase');
 
         workspace.dispose();
     });
@@ -229,17 +225,12 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(signalBlock?.getInputTargetBlock('LONG_WINDOW')?.getFieldValue('NUM')).toBe(14);
         expect(signalBlock?.getInputTargetBlock('CONFIDENCE')?.getFieldValue('NUM')).toBe(55);
 
-        const noContractGate = workspace.getBlockById('bp_no_contract');
-        const lossGate = workspace.getBlockById('bp_loss_gate');
-        const payoutGate = workspace.getBlockById('bp_payout_gate');
-        const payoutBlock = payoutGate?.getInputTargetBlock('PAYOUT');
-        expect(payoutBlock).toBeDefined();
-        setDropdownOptions(payoutBlock, 'PURCHASE_LIST', [['Rise', 'CALL'], ['Fall', 'PUT']], 'CALL');
-        expect(noContractGate?.type).toBe('no_active_contract');
-        expect(lossGate?.getInputTargetBlock('MAX_LOSSES')?.getFieldValue('NUM')).toBe(3);
-        expect(payoutBlock?.type).toBe('payout');
-        expect(payoutBlock?.getFieldValue('PURCHASE_LIST')).toBe('CALL');
-        expect(payoutGate?.getInputTargetBlock('REQUIRED_WIN_RATE')?.getFieldValue('NUM')).toBe(62.5);
+        expect(workspace.getBlockById('bp_no_contract')).toBeNull();
+        expect(workspace.getBlockById('bp_loss_gate')).toBeNull();
+        expect(workspace.getBlockById('bp_payout_gate')).toBeNull();
+        expect(workspace.getBlockById('bp_session_gate')).toBeNull();
+        expect(workspace.getBlockById('bp_conf_gate')).toBeNull();
+        expect(workspace.getBlockById('bp_models_agree')).toBeNull();
 
         workspace.dispose();
     });
