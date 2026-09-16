@@ -1,6 +1,6 @@
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
-import { contractStatus, info, log } from '../utils/broadcast';
+import { contractStatus, info, log, notify } from '../utils/broadcast';
 import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../utils/helpers';
 import { purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
@@ -86,6 +86,17 @@ export default Engine =>
         purchase(contract_type, prediction) {
             // Prevent calling purchase twice
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
+                return Promise.resolve();
+            }
+            // Blockly conditions are user-editable and saved workspaces can retain
+            // older purchase branches. Once the current cycle has evaluated signal
+            // confidence and indicators, enforce the same requirements here so the
+            // first contract cannot bypass an unmet confidence or trend condition.
+            if (!this.isPurchaseConditionGateOpen(contract_type)) {
+                notify(
+                    'warning',
+                    `Purchase blocked: ${contract_type} conditions were not satisfied for the current tick.`
+                );
                 return Promise.resolve();
             }
             // Use this engine's own observed tick first. The shared latest-tick

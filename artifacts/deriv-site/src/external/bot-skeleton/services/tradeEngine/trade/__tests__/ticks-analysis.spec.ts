@@ -251,6 +251,28 @@ describe('Ticks last-digit analysis events', () => {
         await expect(engine.getSignalConfidence('WAIT', 5)).resolves.toBe(0);
     });
 
+    it('closes the purchase gate when current-tick confidence is below the minimum', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.store = {
+            getState: () => ({ newTick: 123 }),
+        };
+        engine.lastSignalConfidenceEvaluation = {
+            signal: 'CALL',
+            confidence: 54,
+            minimum: 55,
+            tick: 123,
+        };
+        engine.recordIndicatorValue('adx', 30);
+        engine.recordIndicatorValue('rsi', 60);
+        engine.recordIndicatorValue('macd', 1);
+
+        expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(false);
+
+        engine.lastSignalConfidenceEvaluation.confidence = 55;
+        expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(true);
+    });
+
     it('publishes grouped Adaptive Momentum journal events with confidence and tick details', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

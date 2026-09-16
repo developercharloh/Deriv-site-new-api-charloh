@@ -55,15 +55,29 @@ const getIndicatorsInterface = tradeEngine => {
                 }),
                 component
             ),
-        getAdxValue: (input, periods, component) => snapshotValue(adxSnapshot(input, { periods, pipSize }), component),
+        getAdxValue: (input, periods, component) => {
+            const value = snapshotValue(adxSnapshot(input, { periods, pipSize }), component);
+            tradeEngine.recordIndicatorValue?.('adx', value);
+            return value;
+        },
         getAtrValue: (input, periods) => safeNumber(atrSnapshot(input, { periods, pipSize })),
         getStochasticValue: (input, periods, signalPeriods, component) =>
             snapshotValue(stochasticSnapshot(input, { periods, signalPeriods, pipSize }), component),
-        getMacdValue: (input, fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, component) =>
-            snapshotValue(macdSnapshot(input, { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, pipSize }), component),
+        getMacdValue: (input, fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, component) => {
+            const value = snapshotValue(
+                macdSnapshot(input, { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, pipSize }),
+                component
+            );
+            tradeEngine.recordIndicatorValue?.('macd', value);
+            return value;
+        },
         isMacdCross: (input, fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, direction) =>
             macdCross(input, { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, pipSize }, direction),
-        getRsiValue: (input, periods) => safeNumber(rsiSnapshot(input, { periods, pipSize })),
+        getRsiValue: (input, periods) => {
+            const value = safeNumber(rsiSnapshot(input, { periods, pipSize }));
+            tradeEngine.recordIndicatorValue?.('rsi', value);
+            return value;
+        },
         isRsiCross: (input, periods, level, direction) => rsiCross(input, { periods, pipSize }, level, direction),
         getBollingerValue: (input, periods, stdDevUp, stdDevDown, component) =>
             snapshotValue(

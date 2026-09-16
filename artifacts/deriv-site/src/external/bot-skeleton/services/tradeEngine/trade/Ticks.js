@@ -344,14 +344,66 @@ export default Engine =>
         }
         getSignalConfidence(signal, count = 60) {
             const normalizedSignal = String(signal || '').toUpperCase();
-            if (normalizedSignal !== 'CALL' && normalizedSignal !== 'PUT') return Promise.resolve(0);
-            return this.getDirectionPercentage(normalizedSignal === 'CALL' ? 'rise' : 'fall', count);
+            const minimum = 55;
+            const remember = confidence => {
+                this.lastSignalConfidenceEvaluation = {
+                    signal: normalizedSignal,
+                    confidence: Number(confidence) || 0,
+                    minimum,
+                    tick: this.getPurchaseConditionTick(),
+                };
+                return confidence;
+            };
+            if (normalizedSignal !== 'CALL' && normalizedSignal !== 'PUT') return Promise.resolve(0).then(remember);
+            return this.getDirectionPercentage(normalizedSignal === 'CALL' ? 'rise' : 'fall', count).then(remember);
         }
         getSignalConfidenceGate(signal, count = 60, minimumConfidence = 55) {
             const minimum = Math.max(0, Math.min(100, Number(minimumConfidence) || 55));
             return this.getSignalConfidence(signal, count).then(availableConfidence => {
+                this.lastSignalConfidenceEvaluation = {
+                    ...this.lastSignalConfidenceEvaluation,
+                    minimum,
+                };
                 return Number(availableConfidence) >= minimum;
             });
+        }
+        getPurchaseConditionTick() {
+            return this.store?.getState?.().newTick ?? this.latestTick?.epoch ?? null;
+        }
+        recordIndicatorValue(indicator, value) {
+            this.purchaseIndicatorEvaluation = {
+                ...(this.purchaseIndicatorEvaluation || {}),
+                [indicator]: Number(value),
+                tick: this.getPurchaseConditionTick(),
+            };
+            return value;
+        }
+        isPurchaseConditionGateOpen(contractType) {
+            if (!['CALL', 'PUT'].includes(contractType)) return true;
+
+            const confidence = this.lastSignalConfidenceEvaluation;
+            if (!confidence) return true;
+
+            const currentTick = this.getPurchaseConditionTick();
+            if (confidence.tick !== null && currentTick !== null && confidence.tick !== currentTick) return false;
+            if (confidence.signal !== contractType || confidence.confidence < confidence.minimum) return false;
+
+            const indicators = this.purchaseIndicatorEvaluation;
+            if (!indicators) return true;
+            if (indicators.tick !== null && currentTick !== null && indicators.tick !== currentTick) return false;
+
+            const hasAnyIndicator = ['adx', 'rsi', 'macd'].some(indicator => Number.isFinite(indicators[indicator]));
+            if (!hasAnyIndicator) return true;
+
+            return (
+                Number.isFinite(indicators.adx) &&
+                Number.isFinite(indicators.rsi) &&
+                Number.isFinite(indicators.macd) &&
+                indicators.adx >= 20 &&
+                (contractType === 'CALL'
+                    ? indicators.rsi > 50 && indicators.macd > 0
+                    : indicators.rsi < 50 && indicators.macd < 0)
+            );
         }
         async scanVolatilityUntilQualified(minimumConfidence = 55, count = 60, minimumAdx = 20) {
             if (this.volatilityScanPromise) return this.volatilityScanPromise;
