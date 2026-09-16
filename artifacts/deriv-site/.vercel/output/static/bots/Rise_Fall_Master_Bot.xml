@@ -510,10 +510,22 @@
                                       <block type="controls_if" id="bp_direct_direction">
                                         <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                                         <value name="IF0">
-                                          <block type="logic_compare" id="bp_direct_call_cmp">
-                                            <field name="OP">EQ</field>
-                                            <value name="A"><block type="variables_get" id="bp_direct_call_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
-                                            <value name="B"><block type="text" id="bp_direct_call_b"><field name="TEXT">CALL</field></block></value>
+                                           <block type="logic_operation" id="bp_direct_call_gate">
+                                             <field name="OP">AND</field>
+                                             <value name="A">
+                                               <block type="logic_compare" id="bp_direct_call_cmp">
+                                                 <field name="OP">EQ</field>
+                                                 <value name="A"><block type="variables_get" id="bp_direct_call_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                 <value name="B"><block type="text" id="bp_direct_call_b"><field name="TEXT">CALL</field></block></value>
+                                               </block>
+                                             </value>
+                                             <value name="B">
+                                               <block type="logic_compare" id="bp_direct_call_confidence">
+                                                 <field name="OP">GTE</field>
+                                                 <value name="A"><block type="variables_get" id="bp_direct_call_confidence_value"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
+                                                 <value name="B"><block type="math_number" id="bp_direct_call_confidence_minimum"><field name="NUM">55</field></block></value>
+                                               </block>
+                                             </value>
                                           </block>
                                         </value>
                                         <statement name="DO0">
@@ -522,10 +534,22 @@
                                         <statement name="ELSE">
                                           <block type="controls_if" id="bp_direct_put">
                                             <value name="IF0">
-                                              <block type="logic_compare" id="bp_direct_put_cmp">
-                                                <field name="OP">EQ</field>
-                                                <value name="A"><block type="variables_get" id="bp_direct_put_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
-                                                <value name="B"><block type="text" id="bp_direct_put_b"><field name="TEXT">PUT</field></block></value>
+                                               <block type="logic_operation" id="bp_direct_put_gate">
+                                                 <field name="OP">AND</field>
+                                                 <value name="A">
+                                                   <block type="logic_compare" id="bp_direct_put_cmp">
+                                                     <field name="OP">EQ</field>
+                                                     <value name="A"><block type="variables_get" id="bp_direct_put_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                     <value name="B"><block type="text" id="bp_direct_put_b"><field name="TEXT">PUT</field></block></value>
+                                                   </block>
+                                                 </value>
+                                                 <value name="B">
+                                                   <block type="logic_compare" id="bp_direct_put_confidence">
+                                                     <field name="OP">GTE</field>
+                                                     <value name="A"><block type="variables_get" id="bp_direct_put_confidence_value"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
+                                                     <value name="B"><block type="math_number" id="bp_direct_put_confidence_minimum"><field name="NUM">55</field></block></value>
+                                                   </block>
+                                                 </value>
                                               </block>
                                             </value>
                                             <statement name="DO0">
