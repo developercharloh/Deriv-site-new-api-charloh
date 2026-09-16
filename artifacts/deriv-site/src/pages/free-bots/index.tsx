@@ -807,7 +807,10 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
         setStatus('loading');
         setErrorMsg('');
         try {
-            const res = await fetch(bot.xmlPath);
+            // Built-in bots are versioned by deployment. Always fetch the
+            // current template so a browser cannot reload an older XML copy
+            // after the bot source has been updated.
+            const res = await fetch(bot.xmlPath, { cache: 'no-store' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const xmlText = await res.text();
             if (!xmlText.trim()) {
