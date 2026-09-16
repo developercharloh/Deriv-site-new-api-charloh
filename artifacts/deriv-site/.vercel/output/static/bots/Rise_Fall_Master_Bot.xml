@@ -22,6 +22,9 @@
     <variable id="v_bull">Bullish Score</variable>
     <variable id="v_bear">Bearish Score</variable>
     <variable id="v_conf">Model Confidence</variable>
+    <variable id="v_adx">ADX Indicator</variable>
+    <variable id="v_rsi">RSI Indicator</variable>
+    <variable id="v_macd">MACD Histogram</variable>
   </variables>
 
   <!-- ════════════════════════════════════════
@@ -362,7 +365,38 @@
                 </statement>
                 <next>
 
-                  <!-- The safety/indicator purchase gate was removed from the imported bot blocks. -->
+                  <!-- These indicators are calculated for the bot journal/analysis only; none is a purchase veto. -->
+                  <block type="variables_set" id="bp_indicator_adx">
+                    <field name="VAR" id="v_adx">ADX Indicator</field>
+                    <value name="VALUE">
+                      <block type="adx_value" id="bp_indicator_adx_value">
+                        <field name="COMPONENT">adx</field>
+                        <value name="PERIOD"><block type="math_number" id="bp_indicator_adx_period"><field name="NUM">14</field></block></value>
+                        <value name="INPUT"><block type="variables_get" id="bp_indicator_adx_input"><field name="VAR" id="v_candles">Indicator Candles</field></block></value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="bp_indicator_rsi">
+                        <field name="VAR" id="v_rsi">RSI Indicator</field>
+                        <value name="VALUE">
+                          <block type="rsi_value" id="bp_indicator_rsi_value">
+                            <value name="INPUT"><block type="variables_get" id="bp_indicator_rsi_input"><field name="VAR" id="v_closes">Indicator Closes</field></block></value>
+                            <value name="PERIOD"><block type="math_number" id="bp_indicator_rsi_period"><field name="NUM">14</field></block></value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="bp_indicator_macd">
+                            <field name="VAR" id="v_macd">MACD Histogram</field>
+                            <value name="VALUE">
+                              <block type="macd_value" id="bp_indicator_macd_value">
+                                <field name="COMPONENT">histogram</field>
+                                <value name="INPUT"><block type="variables_get" id="bp_indicator_macd_input"><field name="VAR" id="v_closes">Indicator Closes</field></block></value>
+                                <value name="FAST_PERIOD"><block type="math_number" id="bp_indicator_macd_fast"><field name="NUM">12</field></block></value>
+                                <value name="SLOW_PERIOD"><block type="math_number" id="bp_indicator_macd_slow"><field name="NUM">26</field></block></value>
+                                <value name="SIGNAL_PERIOD"><block type="math_number" id="bp_indicator_macd_signal"><field name="NUM">9</field></block></value>
+                              </block>
+                            </value>
+                            <next>
                   <block type="variables_set" id="bp_direct_apply_signal">
                     <field name="VAR" id="v_dir">Direction</field>
                     <value name="VALUE"><block type="variables_get" id="bp_direct_apply_signal_v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
@@ -443,6 +477,12 @@
                                   </block>
                                 </next>
                               </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
                             </next>
                           </block>
                         </next>

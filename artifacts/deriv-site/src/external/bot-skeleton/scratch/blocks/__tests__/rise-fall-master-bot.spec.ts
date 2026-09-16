@@ -180,7 +180,7 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(() => Blockly.Xml.domToWorkspace(importDom, workspace)).not.toThrow();
 
         const blockTypes = new Set(workspace.getAllBlocks(false).map(block => block.type));
-        ['aroon_value', 'adaptive_momentum_signal', 'model_signal', 'purchase'].forEach(type =>
+        ['aroon_value', 'adaptive_momentum_signal', 'model_signal', 'adx_value', 'rsi_value', 'macd_value', 'purchase'].forEach(type =>
             expect(blockTypes).toContain(type)
         );
         [
@@ -191,12 +191,9 @@ describe('Rise/Fall Master Bot XML', () => {
             'session_risk_gate',
             'model_confidence_gate',
             'models_agree',
-            'adx_value',
             'atr_value',
             'ichimoku_value',
             'stochastic_value',
-            'macd_value',
-            'rsi_value',
             'bollinger_value',
             'bollinger_squeeze',
         ].forEach(type => expect(blockTypes).not.toContain(type));
@@ -204,6 +201,9 @@ describe('Rise/Fall Master Bot XML', () => {
         javascriptGenerator.init(workspace);
         (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
         expect(workspace.getBlockById('bp_gate_if')).toBeNull();
+        expect(workspace.getBlockById('bp_indicator_adx_value')?.type).toBe('adx_value');
+        expect(workspace.getBlockById('bp_indicator_rsi_value')?.type).toBe('rsi_value');
+        expect(workspace.getBlockById('bp_indicator_macd_value')?.type).toBe('macd_value');
         expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
         expect(workspace.getBlockById('bp_direct_call')?.type).toBe('purchase');
         expect(workspace.getBlockById('bp_direct_put_purchase')?.type).toBe('purchase');

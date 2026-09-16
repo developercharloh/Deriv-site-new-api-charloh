@@ -487,6 +487,8 @@
                           </block>
                         </next>
                       </block>
+                    </next>
+                  </block>
 
                   <!--
                   <block type="controls_if" id="bp_gate_if">
