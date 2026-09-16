@@ -20,7 +20,8 @@
     <variable id="v_closes">Indicator Closes</variable>
     <variable id="v_bull">Bullish Score</variable>
     <variable id="v_bear">Bearish Score</variable>
-    <variable id="v_conf">Model Confidence</variable>
+    <variable id="v_conf">Signal Confidence</variable>
+    <variable id="v_conf_ticks">Confidence Ticks</variable>
     <variable id="v_adx">ADX Indicator</variable>
     <variable id="v_rsi">RSI Indicator</variable>
     <variable id="v_macd">MACD Histogram</variable>
@@ -108,6 +109,10 @@
                                 <next><block type="variables_set" id="i_flip">
                                   <field name="VAR" id="v_flip">Just Flipped</field>
                                   <value name="VALUE"><block type="text" id="i_flip_v"><field name="TEXT">no</field></block></value>
+                                  <next><block type="variables_set" id="i_conf_ticks">
+                                    <field name="VAR" id="v_conf_ticks">Confidence Ticks</field>
+                                    <value name="VALUE"><block type="math_number" id="i_conf_ticks_v"><field name="NUM">60</field></block></value>
+                                  </block></next>
                                 </block></next>
                               </block></next>
                             </block></next>
@@ -223,11 +228,11 @@
                             </value>
                             <next>
                               <block type="variables_set" id="bp_conf">
-                                <field name="VAR" id="v_conf">Model Confidence</field>
+                                <field name="VAR" id="v_conf">Signal Confidence</field>
                                 <value name="VALUE">
-                                  <block type="model_confidence" id="bp_model_confidence">
-                                    <value name="BULLISH_SCORE"><block type="variables_get" id="bp_conf_bull"><field name="VAR" id="v_bull">Bullish Score</field></block></value>
-                                    <value name="BEARISH_SCORE"><block type="variables_get" id="bp_conf_bear"><field name="VAR" id="v_bear">Bearish Score</field></block></value>
+                                  <block type="signal_confidence" id="bp_signal_confidence">
+                                    <value name="SIGNAL"><block type="variables_get" id="bp_conf_signal"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                    <value name="COUNT"><block type="variables_get" id="bp_conf_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
                                   </block>
                                 </value>
                                 <next>
@@ -761,7 +766,7 @@
                                       <next><block type="text_statement" id="ts_bp5">
                                         <value name="TEXT"><shadow type="text" id="ts_bp5s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp5v"><field name="TEXT"> | Confidence: </field></block></value>
                                         <next><block type="text_statement" id="ts_bp6">
-                                          <value name="TEXT"><shadow type="text" id="ts_bp6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp6v"><field name="VAR" id="v_conf">Model Confidence</field></block></value>
+                                          <value name="TEXT"><shadow type="text" id="ts_bp6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp6v"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
                                           <next><block type="text_statement" id="ts_bp7">
                                             <value name="TEXT"><shadow type="text" id="ts_bp7s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp7v"><field name="TEXT"> | Stake: $</field></block></value>
                                             <next><block type="text_statement" id="ts_bp8">
@@ -847,7 +852,7 @@
                                   <next><block type="text_statement" id="ts_gate_skip_5">
                                     <value name="TEXT"><shadow type="text" id="ts_gate_skip_5s"><field name="TEXT"></field></shadow><block type="text" id="ts_gate_skip_5v"><field name="TEXT"> | Confidence: </field></block></value>
                                     <next><block type="text_statement" id="ts_gate_skip_6">
-                                      <value name="TEXT"><shadow type="text" id="ts_gate_skip_6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_gate_skip_6v"><field name="VAR" id="v_conf">Model Confidence</field></block></value>
+                                      <value name="TEXT"><shadow type="text" id="ts_gate_skip_6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_gate_skip_6v"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
                                     </block></next>
                                   </block></next>
                                 </block></next>

@@ -199,6 +199,7 @@ describe('Rise/Fall Master Bot XML', () => {
         ['aroon_value', 'model_signal', 'adx_value', 'rsi_value', 'macd_value', 'purchase'].forEach(type =>
             expect(blockTypes).toContain(type)
         );
+         expect(blockTypes).toContain('signal_confidence');
         expect(blockTypes).not.toContain('adaptive_momentum_signal');
         [
             'indicator_ready',
@@ -234,6 +235,11 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(workspace.getBlockById('bp_indicator_adx_value')?.type).toBe('adx_value');
         expect(workspace.getBlockById('bp_indicator_rsi_value')?.type).toBe('rsi_value');
         expect(workspace.getBlockById('bp_indicator_macd_value')?.type).toBe('macd_value');
+         expect(workspace.getBlockById('bp_signal_confidence')?.type).toBe('signal_confidence');
+         expect(workspace.getBlockById('i_conf_ticks')?.getInputTargetBlock('VALUE')?.getFieldValue('NUM')).toBe(60);
+         expect(workspace.getBlockById('bp_signal_confidence')?.getInputTargetBlock('COUNT')?.id).toBe(
+             'bp_conf_ticks'
+         );
         expect(workspace.getBlockById('tj_start')).toBeNull();
         expect(workspace.getBlockById('bp_direct_journal_1')?.getInputTargetBlock('TEXT')?.getFieldValue('TEXT')).toBe(
             'INDICATORS | ADX: '

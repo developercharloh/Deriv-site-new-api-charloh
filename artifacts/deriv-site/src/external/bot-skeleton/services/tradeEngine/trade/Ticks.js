@@ -340,6 +340,11 @@ export default Engine =>
                 return comparisons ? (matches / comparisons) * 100 : 0;
             });
         }
+        getSignalConfidence(signal, count = 60) {
+            const normalizedSignal = String(signal || '').toUpperCase();
+            if (normalizedSignal !== 'CALL' && normalizedSignal !== 'PUT') return Promise.resolve(0);
+            return this.getDirectionPercentage(normalizedSignal === 'CALL' ? 'rise' : 'fall', count);
+        }
         checkLastNTicksDirection(direction, count = 5) {
             const size = Math.max(1, Math.floor(Number(count) || 5));
             return this.getTicks().then(ticks => {

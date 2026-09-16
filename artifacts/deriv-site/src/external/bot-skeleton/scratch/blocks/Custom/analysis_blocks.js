@@ -240,6 +240,25 @@ registerOutputBlock({
 });
 
 registerOutputBlock({
+    type: 'signal_confidence',
+    message0: localize('Signal confidence for %1 over last %2 ticks'),
+    args0: [
+        {
+            type: 'input_value',
+            name: 'SIGNAL',
+            check: 'String',
+        },
+        countInput('COUNT', '60'),
+    ],
+    tooltip: 'Returns how often the predicted CALL or PUT direction matched recent tick movement.',
+    meta: 'Signal Confidence',
+    generatorCode: block => [
+        `Bot.getSignalConfidence(${numberInput(block, 'SIGNAL', "''")}, ${numberInput(block, 'COUNT', '60')})`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
+});
+
+registerOutputBlock({
     type: 'adaptive_momentum_signal',
     message0: localize('Adaptive momentum: warm-up %1, short %2, long %3, confidence %4%'),
     args0: [

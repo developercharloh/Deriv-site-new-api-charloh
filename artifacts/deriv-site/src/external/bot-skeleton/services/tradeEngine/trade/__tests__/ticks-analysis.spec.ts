@@ -235,6 +235,22 @@ describe('Ticks last-digit analysis events', () => {
         await expect(engine.getAdaptiveMomentumSignal(5, 4, 8, 1)).resolves.toBe('WAIT');
     });
 
+    it('calculates predicted signal confidence from the requested recent tick window', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.$scope = {
+            ticksService: {
+                request: jest
+                    .fn()
+                    .mockResolvedValue([1, 2, 3, 2, 3, 4].map(quote => ({ quote }))),
+            },
+        };
+
+        await expect(engine.getSignalConfidence('CALL', 5)).resolves.toBe(80);
+        await expect(engine.getSignalConfidence('PUT', 5)).resolves.toBe(20);
+        await expect(engine.getSignalConfidence('WAIT', 5)).resolves.toBe(0);
+    });
+
     it('publishes grouped Adaptive Momentum journal events with confidence and tick details', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
