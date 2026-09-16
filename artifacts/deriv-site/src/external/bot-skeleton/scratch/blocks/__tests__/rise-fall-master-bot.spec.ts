@@ -201,6 +201,11 @@ describe('Rise/Fall Master Bot XML', () => {
         javascriptGenerator.init(workspace);
         (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
         expect(workspace.getBlockById('bp_gate_if')).toBeNull();
+        expect(workspace.getBlockById('bp_macd_gate')?.type).toBe('controls_if');
+        expect(workspace.getBlockById('bp_macd_call_match')?.type).toBe('logic_operation');
+        expect(workspace.getBlockById('bp_macd_put_match')?.type).toBe('logic_operation');
+        expect(workspace.getBlockById('bp_macd_call_histogram')?.getFieldValue('OP')).toBe('GT');
+        expect(workspace.getBlockById('bp_macd_put_histogram')?.getFieldValue('OP')).toBe('LT');
         expect(workspace.getBlockById('bp_indicator_adx_value')?.type).toBe('adx_value');
         expect(workspace.getBlockById('bp_indicator_rsi_value')?.type).toBe('rsi_value');
         expect(workspace.getBlockById('bp_indicator_macd_value')?.type).toBe('macd_value');

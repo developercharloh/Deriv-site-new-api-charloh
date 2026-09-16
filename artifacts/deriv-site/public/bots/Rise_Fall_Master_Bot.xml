@@ -513,22 +513,24 @@
                                               </block>
                                             </value>
                                             <statement name="DO0">
-                                              <block type="purchase" id="bp_direct_put_purchase"><field name="PURCHASE_LIST">PUT</field></block>
-                                            </statement>
-                                          </block>
-                                        </statement>
-                                      </block>
-                                    </next>
-                                  </block>
-                                </next>
+                                               <block type="purchase" id="bp_direct_put_purchase"><field name="PURCHASE_LIST">PUT</field></block>
+                                             </statement>
+                                           </block>
+                                         </statement>
+                                       </block>
+                                     </next>
+                                   </block>
+                                 </next>
+                               </block>
+                             </next>
+                           </block>
+                         </next>
+                       </block>
+                     </next>
+                   </block>
+                                </statement>
                               </block>
-                            </next>
-                          </block>
-                        </next>
-                      </block>
-                    </next>
-                  </block>
-                            </next>
+                             </next>
                           </block>
                         </next>
                       </block>
