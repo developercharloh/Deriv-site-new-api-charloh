@@ -1093,6 +1093,7 @@ export default class RunPanelStore {
                 minimumMacd?: number;
                 rsiOperator?: string;
                 macdOperator?: string;
+                conditionsPassed?: boolean;
         } | null;
         selectionPolicy?: string;
         rejected?: Array<{
@@ -1121,6 +1122,7 @@ export default class RunPanelStore {
             availableMacd?: number | null;
             minimumMacd?: number | null;
             macdOperator?: string;
+            conditionsPassed?: boolean;
         reason?: string;
         contractType?: string;
         contractId?: string | number;
@@ -1145,10 +1147,18 @@ export default class RunPanelStore {
                 availableMacd?: number | null;
                 minimumMacd?: number | null;
                 macdOperator?: string;
+                conditionsPassed?: boolean;
             }) => {
                 const signal = String(values.signal || 'CALL').toUpperCase();
                 const operator = signal === 'PUT' ? '<' : '>';
+                const status =
+                    values.conditionsPassed === true
+                        ? '✅ ALL CONDITIONS MET · '
+                        : values.conditionsPassed === false
+                          ? '❌ CONDITIONS NOT MET · '
+                          : '';
                 return (
+                    status +
                     `Confidence ${number(values.availableConfidence)}% available / ` +
                     `${number(values.minimumConfidence, 0)}% minimum · ` +
                     `ADX ${number(values.availableAdx)} available / ${number(values.minimumAdx)} minimum · ` +
@@ -1250,6 +1260,7 @@ export default class RunPanelStore {
                   availableMacd: selected.macd,
                   minimumMacd: selected.minimumMacd ?? 0,
                   macdOperator: selected.macdOperator,
+                  conditionsPassed: selected.conditionsPassed ?? true,
               })} · executing after fresh confirmation`
             : `No market met the ${number(event.minimumConfidence, 0)}% confidence and indicator gates`;
         journal.updateVolatilityScanMessage(

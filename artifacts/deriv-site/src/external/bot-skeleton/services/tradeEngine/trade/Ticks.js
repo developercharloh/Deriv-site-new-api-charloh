@@ -436,19 +436,36 @@ export default Engine =>
             const signal = String(contractType || confidence?.signal || lock?.signal || '').toUpperCase();
             const isPut = signal === 'PUT';
             const finiteOrNull = value => (Number.isFinite(Number(value)) ? Number(value) : null);
+            const availableConfidence = finiteOrNull(confidence?.confidence ?? lock?.confidence);
+            const minimumConfidence = finiteOrNull(confidence?.minimum ?? lock?.minimumConfidence ?? 55);
+            const availableAdx = finiteOrNull(indicators?.adx ?? lock?.adx);
+            const minimumAdx = finiteOrNull(lock?.minimumAdx ?? 20);
+            const availableRsi = finiteOrNull(indicators?.rsi ?? lock?.rsi);
+            const availableMacd = finiteOrNull(indicators?.macd ?? lock?.macd);
 
             return {
                 signal: signal || 'WAIT',
-                availableConfidence: finiteOrNull(confidence?.confidence ?? lock?.confidence),
-                minimumConfidence: finiteOrNull(confidence?.minimum ?? lock?.minimumConfidence ?? 55),
-                availableAdx: finiteOrNull(indicators?.adx ?? lock?.adx),
-                minimumAdx: finiteOrNull(lock?.minimumAdx ?? 20),
-                availableRsi: finiteOrNull(indicators?.rsi ?? lock?.rsi),
+                availableConfidence,
+                minimumConfidence,
+                availableAdx,
+                minimumAdx,
+                availableRsi,
                 minimumRsi: 50,
                 rsiOperator: isPut ? '<' : '>',
-                availableMacd: finiteOrNull(indicators?.macd ?? lock?.macd),
+                availableMacd,
                 minimumMacd: 0,
                 macdOperator: isPut ? '<' : '>',
+                conditionsPassed:
+                    signal !== 'WAIT' &&
+                    availableConfidence !== null &&
+                    minimumConfidence !== null &&
+                    availableConfidence >= minimumConfidence &&
+                    availableAdx !== null &&
+                    minimumAdx !== null &&
+                    availableAdx >= minimumAdx &&
+                    availableRsi !== null &&
+                    availableMacd !== null &&
+                    (isPut ? availableRsi < 50 && availableMacd < 0 : availableRsi > 50 && availableMacd > 0),
             };
         }
         isPurchaseConditionValuesGateOpen(contractType) {
@@ -656,6 +673,7 @@ export default Engine =>
                               minimumMacd: 0,
                               rsiOperator: selected.signal === 'PUT' ? '<' : '>',
                               macdOperator: selected.signal === 'PUT' ? '<' : '>',
+                              conditionsPassed: true,
                           }
                         : null,
                     selectionPolicy: 'strongest_qualified',
