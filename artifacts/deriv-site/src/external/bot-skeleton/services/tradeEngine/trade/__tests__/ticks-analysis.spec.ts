@@ -308,6 +308,7 @@ describe('Ticks last-digit analysis events', () => {
             availableMacd: 0.08,
             minimumMacd: 0,
             macdOperator: '>',
+            conditionsPassed: true,
         });
     });
 
