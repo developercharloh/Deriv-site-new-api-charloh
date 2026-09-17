@@ -756,46 +756,43 @@ export default Engine =>
                 }
                 this.volatilityScanRecords.push(record);
                 this.volatilityScanIndex += 1;
-                const selectedImmediately = record.qualifies === true;
+                globalObserver.emit('bot.volatility.scan', {
+                    event: 'market',
+                    market: record.code,
+                    label: record.label,
+                    signal: record.signal,
+                    confidence: record.confidence,
+                    adx: record.adx,
+                    rsi: record.rsi,
+                    macd: record.macd,
+                    minimumAdx: adxMinimum,
+                    minimumRsi: 50,
+                    minimumMacd: 0,
+                    rsiOperator: record.signal === 'PUT' ? '<' : '>',
+                    macdOperator: record.signal === 'PUT' ? '<' : '>',
+                    conditionsPassed: record.qualifies,
+                    qualifies: record.qualifies,
+                    reason: record.reason,
+                    marketIndex: this.volatilityScanIndex,
+                    marketTotal: scanOrder.length,
+                    qualifiedCount: this.volatilityScanRecords.filter(item => item.qualifies).length,
+                });
 
                 if (this.volatilityScanIndex < scanOrder.length) {
-                    await wait(VOLATILITY_SCAN_REQUEST_GAP_MS);
-                    globalObserver.emit('bot.volatility.scan', {
-                        event: 'market',
-                        market: record.code,
-                        label: record.label,
-                        signal: record.signal,
-                        confidence: record.confidence,
-                        adx: record.adx,
-                        rsi: record.rsi,
-                        macd: record.macd,
-                        minimumAdx: adxMinimum,
-                        minimumRsi: 50,
-                        minimumMacd: 0,
-                        rsiOperator: record.signal === 'PUT' ? '<' : '>',
-                        macdOperator: record.signal === 'PUT' ? '<' : '>',
-                        conditionsPassed: record.qualifies,
-                        qualifies: record.qualifies,
-                        reason: record.reason,
-                        marketIndex: this.volatilityScanIndex,
-                        marketTotal: scanOrder.length,
-                        qualifiedCount: this.volatilityScanRecords.filter(item => item.qualifies).length,
-                    });
-                    // A qualified market must hand control back to the Blockly
-                    // before-purchase branch now. Waiting for every remaining
-                    // volatility would make the Journal say RECOMMENDED while
-                    // the purchase branch is still being skipped.
-                    if (!selectedImmediately) return false;
+                    await wait(this.volatilityScanRequestGapMs ?? VOLATILITY_SCAN_REQUEST_GAP_MS);
+                    return scan();
                 }
 
                 const records = this.volatilityScanRecords;
                 const qualified = records
                     .filter(record => record.qualifies)
-                     .sort(
-                         (left, right) =>
-                             (confidenceRequired ? right.confidence - left.confidence : 0) ||
-                             right.adx - left.adx
-                     );
+                    .sort((left, right) => {
+                        // The scan order is meaningful: it puts the previously
+                        // successful market first, so keep the first qualifying
+                        // market rather than switching to a later one just
+                        // because its confidence is marginally higher.
+                        return records.indexOf(left) - records.indexOf(right);
+                    });
                 const selected = qualified[0] || null;
                 this.volatilityScanIndex = 0;
                 this.volatilityScanRecords = [];
@@ -834,7 +831,7 @@ export default Engine =>
                               conditionsPassed: true,
                           }
                         : null,
-                    selectionPolicy: selectedImmediately ? 'first_qualified' : 'strongest_qualified',
+                    selectionPolicy: 'first_qualified',
                 });
                 if (!selected) {
                     return false;
