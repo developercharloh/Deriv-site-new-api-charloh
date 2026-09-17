@@ -689,6 +689,7 @@ export default Engine =>
 
                 this.volatilityScanRecords.push(record);
                 this.volatilityScanIndex += 1;
+                const selectedImmediately = record.qualifies === true;
 
                 if (this.volatilityScanIndex < DERIV_VOLATILITIES.length) {
                     await wait(VOLATILITY_SCAN_REQUEST_GAP_MS);
@@ -713,7 +714,11 @@ export default Engine =>
                         marketTotal: DERIV_VOLATILITIES.length,
                         qualifiedCount: this.volatilityScanRecords.filter(item => item.qualifies).length,
                     });
-                    return false;
+                    // A qualified market must hand control back to the Blockly
+                    // before-purchase branch now. Waiting for every remaining
+                    // volatility would make the Journal say RECOMMENDED while
+                    // the purchase branch is still being skipped.
+                    if (!selectedImmediately) return false;
                 }
 
                 const records = this.volatilityScanRecords;
@@ -752,7 +757,7 @@ export default Engine =>
                               conditionsPassed: true,
                           }
                         : null,
-                    selectionPolicy: 'strongest_qualified',
+                    selectionPolicy: selectedImmediately ? 'first_qualified' : 'strongest_qualified',
                 });
                 if (!selected) {
                     return false;

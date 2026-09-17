@@ -16,3 +16,9 @@ History-only requests may fail transiently while the selected market has a live 
 **Why:** Rapid sequential broker history requests can be rate-limited or collide with active stream state, producing misleading all-N/A scan rows even when the markets are available.
 
 **How to apply:** Keep retries inside the scanner, and reserve `DATA UNAVAILABLE` for a request that remains unsuccessful after the bounded retry policy.
+
+For the Rise/Fall Master Bot, return control to the purchase branch as soon as the current market qualifies; do not require the remaining volatility universe to finish first.
+
+**Why:** The Blockly before-purchase condition skips its entire purchase stack whenever the scanner returns false, so a qualified mid-scan market can be displayed as RECOMMENDED without any trade attempt.
+
+**How to apply:** Emit the per-market result, lock the qualified symbol and direction, then return true and let the live purchase gate perform the final confirmation.
