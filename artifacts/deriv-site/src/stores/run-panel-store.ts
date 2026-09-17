@@ -1259,6 +1259,14 @@ export default class RunPanelStore {
             return;
         }
 
+        if (event.event === 'error') {
+            journal.updateVolatilityScanMessage(
+                `[Volatility Scan] History error · ${event.label || event.market || 'market'} · ` +
+                    `${event.errorCode || 'UNKNOWN'} · ${event.errorMessage || 'request failed'}`
+            );
+            return;
+        }
+
         if (event.event === 'rejected') {
             journal.updateVolatilityScanMessage(
                 `[Volatility Scan] Status · Rejected ${event.label || event.market || 'selected market'} · ` +

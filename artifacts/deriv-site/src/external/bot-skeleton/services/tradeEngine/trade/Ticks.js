@@ -113,6 +113,8 @@ export default Engine =>
             this.volatilityExcludedMarket = null;
             this.volatilityScanIndex = 0;
             this.volatilityScanRecords = [];
+            this.volatilityDiagnosticsToken = 0;
+            this.volatilityDiagnosticsPromise = null;
             this.purchaseConditionEvaluationTick = null;
         }
 
@@ -399,6 +401,7 @@ export default Engine =>
             ];
         }
         prepareVolatilityRescan() {
+            this.volatilityDiagnosticsToken += 1;
             const locked = this.volatilitySelectionLock;
             if (locked?.code) {
                 this.volatilityPreferredMarket = {
@@ -409,6 +412,7 @@ export default Engine =>
             this.resetVolatilitySelection({ preservePreferred: true });
         }
         resetVolatilitySelection({ preservePreferred = false } = {}) {
+            this.volatilityDiagnosticsToken += 1;
             this.volatilitySelectionLock = null;
             if (!preservePreferred) this.volatilityPreferredMarket = null;
             this.lastSignalConfidenceEvaluation = null;
@@ -573,6 +577,266 @@ export default Engine =>
             }
 
             return this.isPurchaseConditionValuesGateOpen(contractType);
+        }
+        async getVolatilityMarketRecord(
+            volatility,
+            { windowSize, adxMinimum, confidenceRequired, minimum }
+        ) {
+            const activeSymbols = Array.isArray(api_base.active_symbols) ? api_base.active_symbols : [];
+            const activeRecord = activeSymbols.find(record => record?.symbol === volatility.code);
+            if (
+                activeRecord &&
+                (activeRecord.exchange_is_open === false ||
+                    activeRecord.is_trading_suspended === 1 ||
+                    activeRecord.is_trading_suspended === true)
+            ) {
+                return {
+                    ...volatility,
+                    qualifies: false,
+                    reason: 'market_closed',
+                };
+            }
+
+            try {
+                let ticks;
+                let historyError;
+                for (let attempt = 0; attempt <= VOLATILITY_SCAN_HISTORY_RETRIES; attempt += 1) {
+                    try {
+                        ticks = await this.$scope.ticksService.request({
+                            symbol: volatility.code,
+                            subscribe: false,
+                            force: attempt > 0,
+                            count: windowSize + 1,
+                        });
+                        const numericTickCount = Array.isArray(ticks)
+                            ? ticks.filter(tick => Number.isFinite(Number(tick?.quote))).length
+                            : 0;
+                        if (numericTickCount >= windowSize + 1 || attempt === VOLATILITY_SCAN_HISTORY_RETRIES) {
+                            break;
+                        }
+                    } catch (error) {
+                        historyError = error;
+                        if (attempt < VOLATILITY_SCAN_HISTORY_RETRIES) {
+                            await wait(350 * (attempt + 1));
+                        }
+                    }
+                }
+                if (!ticks) throw historyError || new Error('History response was empty');
+
+                const prices = ticks.map(tick => Number(tick.quote)).filter(Number.isFinite);
+                const recent = prices.slice(-(windowSize + 1));
+                if (recent.length < windowSize + 1) {
+                    return {
+                        ...volatility,
+                        qualifies: false,
+                        reason: 'insufficient_history',
+                    };
+                }
+
+                const moves = recent.slice(1).map((price, index) => {
+                    const previous = recent[index];
+                    return price > previous ? 1 : price < previous ? -1 : 0;
+                });
+                const rises = (moves.filter(move => move > 0).length / moves.length) * 100;
+                const falls = (moves.filter(move => move < 0).length / moves.length) * 100;
+                const signal = rises >= falls ? 'CALL' : 'PUT';
+                const confidence = signal === 'CALL' ? rises : falls;
+                const pipSize = Number(api_base.pip_sizes?.[volatility.code]) || 0;
+                const adx = adxSnapshot(prices, { periods: 14, pipSize })?.adx ?? 0;
+                const rsi = rsiSnapshot(prices, { periods: 14, pipSize }) ?? 0;
+                const macd = macdSnapshot(prices, {
+                    fastEmaPeriod: 12,
+                    slowEmaPeriod: 26,
+                    signalEmaPeriod: 9,
+                    pipSize,
+                })?.histogram ?? 0;
+                const adxPass = Number(adx) >= adxMinimum;
+                const rsiPass = signal === 'CALL' ? Number(rsi) > 50 : Number(rsi) < 50;
+                const macdPass = signal === 'CALL' ? Number(macd) > 0 : Number(macd) < 0;
+                const indicatorsPass = macdPass && (adxPass || rsiPass);
+                const isRecentlyRejected = this.volatilityExcludedMarket?.code === volatility.code;
+                const qualifies =
+                    !isRecentlyRejected &&
+                    indicatorsPass &&
+                    (!confidenceRequired || confidence >= minimum);
+
+                return {
+                    ...volatility,
+                    signal,
+                    confidence,
+                    adx: Number(adx),
+                    rsi: Number(rsi),
+                    macd: Number(macd),
+                    qualifies,
+                    reason: isRecentlyRejected
+                        ? 'recently_rejected'
+                        : qualifies
+                          ? 'qualified'
+                          : confidenceRequired && confidence < minimum
+                            ? 'confidence_below_threshold'
+                            : 'indicator_confirmation_failed',
+                };
+            } catch (error) {
+                const cachedRecord = this.volatilityMarketSnapshots?.get?.(volatility.code);
+                const brokerError = error?.error ?? error;
+                const errorCode = brokerError?.code ?? brokerError?.name ?? 'UNKNOWN';
+                const errorMessage = String(
+                    brokerError?.message ?? brokerError?.msg ?? error?.message ?? 'History request failed'
+                );
+                globalObserver.emit('bot.volatility.scan', {
+                    event: 'error',
+                    market: volatility.code,
+                    label: volatility.label,
+                    errorCode,
+                    errorMessage,
+                });
+                return cachedRecord
+                    ? {
+                          ...cachedRecord,
+                          ...volatility,
+                          qualifies: false,
+                          reason: 'history_refresh_failed',
+                          errorCode,
+                          errorMessage,
+                      }
+                    : {
+                          ...volatility,
+                          qualifies: false,
+                          reason: 'history_request_failed',
+                          errorCode,
+                          errorMessage,
+                      };
+            }
+        }
+        saveVolatilityMarketSnapshot(record) {
+            if (!this.volatilityMarketSnapshots) this.volatilityMarketSnapshots = new Map();
+            if (
+                record.reason !== 'history_request_failed' &&
+                record.reason !== 'history_refresh_failed' &&
+                record.reason !== 'insufficient_history'
+            ) {
+                this.volatilityMarketSnapshots.set(record.code, record);
+            }
+        }
+        emitVolatilityMarketRecord(record, marketIndex, marketTotal, qualifiedCount, minimumAdx) {
+            globalObserver.emit('bot.volatility.scan', {
+                event: 'market',
+                market: record.code,
+                label: record.label,
+                signal: record.signal,
+                confidence: record.confidence,
+                adx: record.adx,
+                rsi: record.rsi,
+                macd: record.macd,
+                minimumAdx,
+                minimumRsi: 50,
+                minimumMacd: 0,
+                rsiOperator: record.signal === 'PUT' ? '<' : '>',
+                macdOperator: record.signal === 'PUT' ? '<' : '>',
+                conditionsPassed: record.qualifies,
+                qualifies: record.qualifies,
+                reason: record.reason,
+                marketIndex,
+                marketTotal,
+                qualifiedCount,
+            });
+        }
+        async scanRemainingVolatilityMarkets(scanOrder, startIndex, options, token) {
+            for (let index = startIndex; index < scanOrder.length; index += 1) {
+                if (token !== this.volatilityDiagnosticsToken) return;
+                const volatility = scanOrder[index];
+                const record = await this.getVolatilityMarketRecord(volatility, options);
+                this.saveVolatilityMarketSnapshot(record);
+                this.emitVolatilityMarketRecord(
+                    record,
+                    index + 1,
+                    scanOrder.length,
+                    0,
+                    options.adxMinimum
+                );
+                if (index < scanOrder.length - 1) {
+                    await wait(this.volatilityScanRequestGapMs ?? VOLATILITY_SCAN_REQUEST_GAP_MS);
+                }
+            }
+        }
+        startVolatilityDiagnostics(scanOrder, startIndex, options) {
+            const token = ++this.volatilityDiagnosticsToken;
+            this.volatilityDiagnosticsPromise = this.scanRemainingVolatilityMarkets(
+                scanOrder,
+                startIndex,
+                options,
+                token
+            ).finally(() => {
+                if (token === this.volatilityDiagnosticsToken) {
+                    this.volatilityDiagnosticsPromise = null;
+                }
+            });
+        }
+        async activateVolatilitySelection(
+            selected,
+            { minimum, adxMinimum, confidenceRequired, windowSize, marketCount, qualifiedCount }
+        ) {
+            this.volatilityPreferredMarket = {
+                code: selected.code,
+                label: selected.label,
+            };
+            this.volatilityExcludedMarket = null;
+            globalObserver.emit('bot.volatility.scan', {
+                event: 'scan',
+                marketCount,
+                qualifiedCount,
+                minimumConfidence: confidenceRequired ? minimum : null,
+                windowSize,
+                minimumAdx: adxMinimum,
+                selected: {
+                    symbol: selected.code,
+                    label: selected.label,
+                    signal: selected.signal,
+                    confidence: selected.confidence,
+                    adx: selected.adx,
+                    rsi: selected.rsi,
+                    macd: selected.macd,
+                    minimumConfidence: minimum,
+                    minimumAdx: adxMinimum,
+                    minimumRsi: 50,
+                    minimumMacd: 0,
+                    rsiOperator: selected.signal === 'PUT' ? '<' : '>',
+                    macdOperator: selected.signal === 'PUT' ? '<' : '>',
+                    conditionsPassed: true,
+                },
+                selectionPolicy: 'first_qualified',
+            });
+
+            if (
+                this.symbol !== selected.code ||
+                this.options?.symbol !== selected.code ||
+                this.tradeOptions?.symbol !== selected.code
+            ) {
+                await this.watchTicks(selected.code);
+                this.options = { ...this.options, symbol: selected.code };
+                this.tradeOptions = { ...this.tradeOptions, symbol: selected.code };
+                this.makeProposals({ ...this.options, ...this.tradeOptions });
+            }
+            this.volatilitySelectionLock = {
+                code: selected.code,
+                label: selected.label,
+                signal: selected.signal,
+                confidence: selected.confidence,
+                adx: selected.adx,
+                rsi: selected.rsi,
+                macd: selected.macd,
+                minimumConfidence: minimum,
+                minimumAdx: adxMinimum,
+            };
+            if (
+                this.is_proposal_subscription_required &&
+                !(await this.waitForProposalsReady?.())
+            ) {
+                this.releaseVolatilitySelection('proposals_not_ready');
+                return false;
+            }
+            this.beginPurchaseConditionEvaluation();
+            return true;
         }
         async scanVolatilityUntilQualified(
             minimumConfidence = 55,
@@ -777,6 +1041,31 @@ export default Engine =>
                     marketTotal: scanOrder.length,
                     qualifiedCount: this.volatilityScanRecords.filter(item => item.qualifies).length,
                 });
+
+                if (record.qualifies) {
+                    const marketCount = this.volatilityScanIndex;
+                    const qualifiedCount = this.volatilityScanRecords.filter(item => item.qualifies).length;
+                    const remainingStartIndex = this.volatilityScanIndex;
+                    this.volatilityScanIndex = 0;
+                    this.volatilityScanRecords = [];
+                    const activated = await this.activateVolatilitySelection(record, {
+                        minimum,
+                        adxMinimum,
+                        confidenceRequired,
+                        windowSize,
+                        marketCount,
+                        qualifiedCount,
+                    });
+                    if (activated && remainingStartIndex < scanOrder.length) {
+                        this.startVolatilityDiagnostics(scanOrder, remainingStartIndex, {
+                            windowSize,
+                            adxMinimum,
+                            confidenceRequired,
+                            minimum,
+                        });
+                    }
+                    return activated;
+                }
 
                 if (this.volatilityScanIndex < scanOrder.length) {
                     await wait(this.volatilityScanRequestGapMs ?? VOLATILITY_SCAN_REQUEST_GAP_MS);

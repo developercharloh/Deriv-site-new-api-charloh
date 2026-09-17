@@ -40,3 +40,4 @@
 - [Signal confidence semantics](deriv-signal-confidence.md) — confidence is recent directional agreement over a configurable 60-tick default and remains informational.
 - [Purchase evaluation cycle](deriv-purchase-evaluation-cycle.md) — bind asynchronous confidence and indicator checks to one before-purchase cycle, not the moving current tick.
 - [Rise/Fall volatility scan observability](rise-fall-volatility-scan-observability.md) — preserve scanner direction and keep per-market indicator results visible while scanning.
+- [Volatility scan purchase handoff](deriv-volatility-scan-handoff.md) — buy immediately on the first qualified live market; run remaining history diagnostics in a cancellable background pass.

@@ -447,6 +447,9 @@ describe('Ticks last-digit analysis events', () => {
 
         const scanResult = await engine.scanVolatilityUntilIndicatorsPass(20);
         expect(scanResult).toBe(true);
+        expect(engine.volatilityDiagnosticsPromise).toBeInstanceOf(Promise);
+        expect(request.mock.calls.length).toBeLessThan(DERIV_VOLATILITIES.length);
+        await engine.volatilityDiagnosticsPromise;
 
         expect(request).toHaveBeenCalledTimes(DERIV_VOLATILITIES.length);
         expect(request.mock.calls.map(([options]) => options.symbol)).toEqual(
