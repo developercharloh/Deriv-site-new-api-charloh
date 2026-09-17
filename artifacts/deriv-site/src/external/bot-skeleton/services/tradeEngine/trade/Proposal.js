@@ -5,8 +5,8 @@ import { clearProposals, proposalsReady } from './state/actions';
 
 export default Engine =>
     class Proposal extends Engine {
-        makeProposals(trade_option) {
-            if (!this.isNewTradeOption(trade_option)) {
+        makeProposals(trade_option, force = false) {
+            if (!force && !this.isNewTradeOption(trade_option)) {
                 return;
             }
 
@@ -16,6 +16,38 @@ export default Engine =>
             this.trade_option = trade_option;
             this.proposal_templates = tradeOptionToProposal(trade_option, this.getPurchaseReference());
             this.renewProposalsOnPurchase();
+        }
+
+        waitForProposalsReady(timeout = 10000) {
+            if (!this.is_proposal_subscription_required) return Promise.resolve(true);
+
+            const purchaseReference = this.getPurchaseReference();
+            const isReady = () => {
+                const state = this.store.getState();
+                return (
+                    state.proposalsReady &&
+                    this.data.proposals.some(proposal => proposal.purchase_reference === purchaseReference)
+                );
+            };
+
+            if (isReady()) return Promise.resolve(true);
+
+            return new Promise(resolve => {
+                let timeoutId;
+                const finish = result => {
+                    clearTimeout(timeoutId);
+                    unsubscribe?.();
+                    resolve(result);
+                };
+                const unsubscribe = this.store.subscribe(() => {
+                    if (purchaseReference !== this.getPurchaseReference()) {
+                        finish(false);
+                        return;
+                    }
+                    if (isReady()) finish(true);
+                });
+                timeoutId = setTimeout(() => finish(false), timeout);
+            });
         }
 
         selectProposal(contract_type) {
@@ -194,6 +226,7 @@ export default Engine =>
                 'duration_unit',
                 'prediction',
                 'secondBarrierOffset',
+                'symbol',
                 'underlying_symbol',
             ].some(value => this.trade_option[value] !== trade_option[value]);
         }

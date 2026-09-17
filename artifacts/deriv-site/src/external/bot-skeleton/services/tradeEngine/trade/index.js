@@ -127,6 +127,8 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             proposals: [],
         };
         this.lastSettledContract = null;
+        this.purchaseReference = undefined;
+        this.purchaseDelayIndex = 0;
         this.subscription_id_for_accumulators = null;
         this.is_proposal_requested_for_accumulators = false;
         this.fastClock = null;

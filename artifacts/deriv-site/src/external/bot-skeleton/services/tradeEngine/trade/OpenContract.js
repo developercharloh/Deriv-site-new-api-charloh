@@ -9,6 +9,14 @@ import { observer as globalObserver } from '../../../utils/observer';
 
 export default Engine =>
     class OpenContract extends Engine {
+        clearAfterWatchdogs(contractState) {
+            if (!contractState) return;
+            clearTimeout(contractState.afterWatchdog);
+            clearTimeout(contractState.afterWatchdog2);
+            contractState.afterWatchdog = null;
+            contractState.afterWatchdog2 = null;
+        }
+
         observeOpenContract() {
             if (!api_base.api) return;
             const subscription = api_base.api.onMessage().subscribe(({ data }) => {
@@ -78,6 +86,7 @@ export default Engine =>
                         // contract may already be a newer open contract.
                         this.lastSettledContract = contract;
                         clearTimeout(contractState.recoveryTimeout);
+                        this.clearAfterWatchdogs(contractState);
 
                         // Update the authoritative settlement and unlock the
                         // generated after-purchase path before broadcasting
@@ -139,6 +148,9 @@ export default Engine =>
                             contractState.afterPromise = null;
                             resolve();
                         }
+
+                        this.activeContracts?.delete(String(contract.contract_id));
+                        if (hasOtherActiveContracts) this.selectLatestActiveContract?.();
 
                         const publishSettlement = () => {
                             if (executionSpeed === 'fast') {

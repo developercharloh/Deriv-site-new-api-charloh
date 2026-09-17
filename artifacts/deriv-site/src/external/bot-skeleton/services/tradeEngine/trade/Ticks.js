@@ -528,6 +528,13 @@ export default Engine =>
                     this.releaseVolatilitySelection('live_conditions_failed');
                 } else {
                     await this.restoreLockedVolatilitySelection();
+                    if (
+                        this.is_proposal_subscription_required &&
+                        !(await this.waitForProposalsReady?.())
+                    ) {
+                        this.releaseVolatilitySelection('proposals_not_ready');
+                        return false;
+                    }
                     this.beginPurchaseConditionEvaluation();
                     return true;
                 }
@@ -711,6 +718,13 @@ export default Engine =>
                     minimumConfidence: minimum,
                     minimumAdx: adxMinimum,
                 };
+                if (
+                    this.is_proposal_subscription_required &&
+                    !(await this.waitForProposalsReady?.())
+                ) {
+                    this.releaseVolatilitySelection('proposals_not_ready');
+                    return false;
+                }
                 this.beginPurchaseConditionEvaluation();
                 return true;
             };

@@ -1176,6 +1176,7 @@ export default class RunPanelStore {
                 confidence_below_threshold: 'confidence below threshold',
                 indicator_confirmation_failed: 'ADX/RSI/MACD failed',
                 live_conditions_failed: 'fresh confirmation failed',
+                proposals_not_ready: 'proposal refresh timed out',
             })[reason || ''] || reason || 'not specified';
 
         if (event.event === 'checking') {

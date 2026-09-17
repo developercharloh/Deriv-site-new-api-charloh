@@ -242,16 +242,27 @@
                               </block>
                             </value>
                             <next>
-                              <!-- The volatility scan owns direction for the selected market. -->
-                              <block type="variables_set" id="bp_apply_scanned_signal">
-                                <field name="VAR" id="v_signal">Model Signal</field>
-                                <value name="VALUE"><block type="volatility_signal" id="bp_scanned_signal"></block></value>
+                              <!-- Keep a post-loss flip until the re-entry confirmation resolves it. -->
+                              <block type="controls_if" id="bp_apply_scanned_direction_if">
+                                <value name="IF0">
+                                  <block type="logic_compare" id="bp_apply_scanned_direction_check">
+                                    <field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="bp_apply_scanned_direction_flip"><field name="VAR" id="v_flip">Just Flipped</field></block></value>
+                                    <value name="B"><block type="text" id="bp_apply_scanned_direction_no"><field name="TEXT">no</field></block></value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="variables_set" id="bp_apply_scanned_direction">
+                                    <field name="VAR" id="v_dir">Direction</field>
+                                    <value name="VALUE"><block type="volatility_signal" id="bp_scanned_signal"></block></value>
+                                  </block>
+                                </statement>
                                 <next>
                               <block type="variables_set" id="bp_conf">
                                 <field name="VAR" id="v_conf">Signal Confidence</field>
                                 <value name="VALUE">
                                   <block type="signal_confidence" id="bp_signal_confidence">
-                                    <value name="SIGNAL"><block type="variables_get" id="bp_conf_signal"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                    <value name="SIGNAL"><block type="variables_get" id="bp_conf_signal"><field name="VAR" id="v_dir">Direction</field></block></value>
                                     <value name="COUNT"><block type="variables_get" id="bp_conf_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
                                   </block>
                                 </value>
@@ -393,7 +404,7 @@
                                             <value name="A">
                                               <block type="logic_compare" id="bp_call_signal_match">
                                                 <field name="OP">EQ</field>
-                                                <value name="A"><block type="variables_get" id="bp_call_signal_value"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                 <value name="A"><block type="variables_get" id="bp_call_signal_value"><field name="VAR" id="v_dir">Direction</field></block></value>
                                                 <value name="B"><block type="text" id="bp_call_signal_text"><field name="TEXT">CALL</field></block></value>
                                               </block>
                                             </value>
@@ -424,7 +435,7 @@
                                             <value name="A">
                                               <block type="logic_compare" id="bp_put_signal_match">
                                                 <field name="OP">EQ</field>
-                                                <value name="A"><block type="variables_get" id="bp_put_signal_value"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                 <value name="A"><block type="variables_get" id="bp_put_signal_value"><field name="VAR" id="v_dir">Direction</field></block></value>
                                                 <value name="B"><block type="text" id="bp_put_signal_text"><field name="TEXT">PUT</field></block></value>
                                               </block>
                                             </value>
@@ -465,7 +476,7 @@
                                 <statement name="DO0">
                   <block type="variables_set" id="bp_direct_apply_signal">
                     <field name="VAR" id="v_dir">Direction</field>
-                    <value name="VALUE"><block type="variables_get" id="bp_direct_apply_signal_v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                    <value name="VALUE"><block type="variables_get" id="bp_direct_apply_signal_v"><field name="VAR" id="v_dir">Direction</field></block></value>
                     <next>
                       <block type="variables_set" id="bp_direct_save_tick">
                         <field name="VAR" id="v_lt">Last Tick</field>
@@ -499,7 +510,7 @@
                                                           <value name="IF">
                                                             <block type="logic_compare" id="bp_direct_journal_entry_call">
                                                               <field name="OP">EQ</field>
-                                                              <value name="A"><block type="variables_get" id="bp_direct_journal_entry_signal"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                           <value name="A"><block type="variables_get" id="bp_direct_journal_entry_signal"><field name="VAR" id="v_dir">Direction</field></block></value>
                                                               <value name="B"><block type="text" id="bp_direct_journal_entry_call_text"><field name="TEXT">CALL</field></block></value>
                                                             </block>
                                                           </value>
@@ -533,13 +544,13 @@
                                              <value name="A">
                                                <block type="logic_compare" id="bp_direct_call_cmp">
                                                  <field name="OP">EQ</field>
-                                                 <value name="A"><block type="variables_get" id="bp_direct_call_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                  <value name="A"><block type="variables_get" id="bp_direct_call_a"><field name="VAR" id="v_dir">Direction</field></block></value>
                                                  <value name="B"><block type="text" id="bp_direct_call_b"><field name="TEXT">CALL</field></block></value>
                                                </block>
                                              </value>
                                              <value name="B">
                                                 <block type="signal_confidence_gate" id="bp_direct_call_confidence_gate">
-                                                  <value name="SIGNAL"><block type="variables_get" id="bp_direct_call_confidence_signal"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                   <value name="SIGNAL"><block type="variables_get" id="bp_direct_call_confidence_signal"><field name="VAR" id="v_dir">Direction</field></block></value>
                                                   <value name="COUNT"><block type="variables_get" id="bp_direct_call_confidence_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
                                                   <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_direct_call_confidence_minimum"><field name="NUM">55</field></block></value>
                                                </block>
@@ -557,13 +568,13 @@
                                                  <value name="A">
                                                    <block type="logic_compare" id="bp_direct_put_cmp">
                                                      <field name="OP">EQ</field>
-                                                     <value name="A"><block type="variables_get" id="bp_direct_put_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                      <value name="A"><block type="variables_get" id="bp_direct_put_a"><field name="VAR" id="v_dir">Direction</field></block></value>
                                                      <value name="B"><block type="text" id="bp_direct_put_b"><field name="TEXT">PUT</field></block></value>
                                                    </block>
                                                  </value>
                                                  <value name="B">
                                                     <block type="signal_confidence_gate" id="bp_direct_put_confidence_gate">
-                                                      <value name="SIGNAL"><block type="variables_get" id="bp_direct_put_confidence_signal"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                                       <value name="SIGNAL"><block type="variables_get" id="bp_direct_put_confidence_signal"><field name="VAR" id="v_dir">Direction</field></block></value>
                                                       <value name="COUNT"><block type="variables_get" id="bp_direct_put_confidence_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
                                                       <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_direct_put_confidence_minimum"><field name="NUM">55</field></block></value>
                                                    </block>
@@ -792,22 +803,19 @@
                     <statement name="DO0">
                       <block type="variables_set" id="bp_apply_signal">
                         <field name="VAR" id="v_dir">Direction</field>
-                        <value name="VALUE"><block type="variables_get" id="bp_apply_signal_v"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                        <value name="VALUE"><block type="variables_get" id="bp_apply_signal_v"><field name="VAR" id="v_dir">Direction</field></block></value>
                     <next>
 
-                  REMOVED: Store current tick as Last Tick for next cycle
                   <block type="variables_set" id="bp_save_lt">
                     <field name="VAR" id="v_lt">Last Tick</field>
                     <value name="VALUE"><block type="tick" id="bp_tick_now2"></block></value>
                     <next>
 
-                      REMOVED: Clear Just Flipped flag
                       <block type="variables_set" id="bp_clear_flip">
                         <field name="VAR" id="v_flip">Just Flipped</field>
                         <value name="VALUE"><block type="text" id="bp_clear_flip_v"><field name="TEXT">no</field></block></value>
                         <next>
 
-                          REMOVED: Log
                           <block type="text_join" id="tj_bp">
                             <field name="VARIABLE" id="v_msg">Journal</field>
                             <statement name="STACK">
@@ -845,13 +853,12 @@
                                   <block type="variables_get" id="n_bp_v"><field name="VAR" id="v_msg">Journal</field></block>
                                 </value>
                                 <next>
-                                   REMOVED: BUY only on a confirmed CALL/PUT signal; WAIT stays out
                                    <block type="controls_if" id="bp_dir_if">
                                      <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                                     <value name="IF0">
                                       <block type="logic_compare" id="bp_signal_call_cmp">
                                         <field name="OP">EQ</field>
-                                        <value name="A"><block type="variables_get" id="bp_signal_call_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                         <value name="A"><block type="variables_get" id="bp_signal_call_a"><field name="VAR" id="v_dir">Direction</field></block></value>
                                         <value name="B"><block type="text" id="bp_signal_call_b"><field name="TEXT">CALL</field></block></value>
                                       </block>
                                     </value>
@@ -863,7 +870,7 @@
                                         <value name="IF0">
                                           <block type="logic_compare" id="bp_signal_put_cmp">
                                             <field name="OP">EQ</field>
-                                            <value name="A"><block type="variables_get" id="bp_signal_put_a"><field name="VAR" id="v_signal">Model Signal</field></block></value>
+                                             <value name="A"><block type="variables_get" id="bp_signal_put_a"><field name="VAR" id="v_dir">Direction</field></block></value>
                                             <value name="B"><block type="text" id="bp_signal_put_b"><field name="TEXT">PUT</field></block></value>
                                           </block>
                                         </value>

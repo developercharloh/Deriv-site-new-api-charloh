@@ -13,9 +13,6 @@ import {
 import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 import { observer as globalObserver } from '../../../utils/observer';
 
-let delayIndex = 0;
-let purchase_reference;
-
 export const getPurchaseTradeOptions = (tradeOptions, prediction, contractType) => {
     if (['DIGITEVEN', 'DIGITODD'].includes(contractType)) {
         const { prediction: _ignoredPrediction, ...parityTradeOptions } = tradeOptions;
@@ -210,7 +207,7 @@ export default Engine =>
                     );
                 }
 
-                delayIndex = 0;
+                this.purchaseDelayIndex = 0;
                 log(LogTypes.PURCHASE, { transaction_id: buy.transaction_id });
                 info({
                     accountID: this.accountInfo.loginid,
@@ -266,7 +263,7 @@ export default Engine =>
                         });
                     },
                     ['PriceMoved', 'InvalidContractProposal'],
-                    delayIndex++
+                    this.getNextPurchaseDelayIndex()
                 ).then(onSuccess).catch(error => {
                     releasePurchaseLease();
                     throw error;
@@ -310,14 +307,19 @@ export default Engine =>
                     });
                 },
                 ['PriceMoved', 'InvalidContractProposal'],
-                delayIndex++
+                this.getNextPurchaseDelayIndex()
             ).then(onSuccess).catch(error => {
                 releasePurchaseLease();
                 throw error;
             });
         }
-        getPurchaseReference = () => purchase_reference;
+        getPurchaseReference = () => this.purchaseReference;
         regeneratePurchaseReference = () => {
-            purchase_reference = getUUID();
+            this.purchaseReference = getUUID();
+        };
+        getNextPurchaseDelayIndex = () => {
+            const currentIndex = Number.isFinite(this.purchaseDelayIndex) ? this.purchaseDelayIndex : 0;
+            this.purchaseDelayIndex = currentIndex + 1;
+            return currentIndex;
         };
     };

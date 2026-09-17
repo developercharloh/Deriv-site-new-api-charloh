@@ -259,6 +259,11 @@ describe('Rise/Fall Master Bot XML', () => {
          expect(workspace.getBlockById('ts_w1v')?.getFieldValue('TEXT')).toBe('WIN | Signal settled | Direction: ');
          expect(workspace.getBlockById('ts_l1v')?.getFieldValue('TEXT')).toBe('LOSS | Signal settled | Flipped to: ');
         expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
+         expect(workspace.getBlockById('bp_apply_scanned_direction_if')?.type).toBe('controls_if');
+         expect(workspace.getBlockById('bp_apply_scanned_direction')?.getFieldValue('VAR')).toBe('v_dir');
+         expect(workspace.getBlockById('bp_conf_signal')?.getFieldValue('VAR')).toBe('v_dir');
+         expect(workspace.getBlockById('bp_direct_call_a')?.getFieldValue('VAR')).toBe('v_dir');
+         expect(workspace.getBlockById('bp_direct_put_a')?.getFieldValue('VAR')).toBe('v_dir');
         expect(workspace.getBlockById('bp_direct_call_gate')?.getFieldValue('OP')).toBe('AND');
         expect(workspace.getBlockById('bp_direct_call_confidence_gate')?.type).toBe('signal_confidence_gate');
         expect(
