@@ -6,6 +6,7 @@ import { fastRearm, openContractReceived, sell } from './state/actions';
 import { releaseBotContractGate } from '@/utils/bot-contract-gate';
 import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 import { observer as globalObserver } from '../../../utils/observer';
+import { getFastLatencyNow } from '../utils/fast-latency';
 
 export default Engine =>
     class OpenContract extends Engine {
@@ -116,6 +117,9 @@ export default Engine =>
                             executionSpeed === 'fast' &&
                             !hasOtherActiveContracts &&
                             ['CALL', 'PUT'].includes(this.volatilitySelectionLock?.signal);
+                        if (settlementDrivenFast) {
+                            this.fastSettlementHandoffStartedAt = getFastLatencyNow();
+                        }
                         if (!hasOtherActiveContracts) this.prepareVolatilityRescan?.();
                         const clockPacedFast = executionSpeed === 'fast' && this.fastClockActive;
                         const canFastRearm = releaseBotContractGate(

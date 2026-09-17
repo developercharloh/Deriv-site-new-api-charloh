@@ -3,6 +3,7 @@ import { thunk } from 'redux-thunk';
 import TradeEngine, { watchScope } from '..';
 import * as constants from '../state/constants';
 import rootReducer from '../state/reducers';
+import { observer as globalObserver } from '../../../../utils/observer';
 
 const watchBefore = store =>
     watchScope({
@@ -257,6 +258,34 @@ describe('shared trade-cycle restart', () => {
         expect(engine.makeDirectPurchaseDecision).toHaveBeenCalledTimes(1);
         expect(engine.purchaseFastLocked).toHaveBeenCalledWith('CALL');
         await expect(engine.watch('before')).resolves.toBe(false);
+    });
+
+    it('measures the settlement handoff at the broker request without adding a timer', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+
+        const engine: any = Object.create(TradeEngine.prototype);
+        engine.fastSettlementHandoffStartedAt = 100;
+        engine.volatilitySelectionLock = { signal: 'CALL' };
+        const nowSpy = jest.spyOn(performance, 'now').mockReturnValue(100.25);
+        const latencyListener = jest.fn();
+        globalObserver.register('bot.fast.latency', latencyListener);
+
+        try {
+            engine.recordFastPurchaseRequest('CALL');
+        } finally {
+            globalObserver.unregister('bot.fast.latency', latencyListener);
+            nowSpy.mockRestore();
+        }
+
+        expect(engine.lastFastHandoffLatencyMs).toBeCloseTo(0.25, 5);
+        expect(engine.fastSettlementHandoffStartedAt).toBeNull();
+        expect(latencyListener).toHaveBeenCalledWith(
+            expect.objectContaining({
+                event: 'settlement_to_purchase_request',
+                contractType: 'CALL',
+                lockedDirection: 'CALL',
+            })
+        );
     });
 
     it('stores the settlement-derived stake before prewarming the next proposal', () => {

@@ -135,6 +135,8 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.fastClock = null;
         this.fastClockActive = false;
         this.fastSettlementHandoffPending = false;
+        this.fastSettlementHandoffStartedAt = null;
+        this.lastFastHandoffLatencyMs = null;
         this.fastDirectPurchaseCycle = false;
         this.paused = false;
         this.hasStarted = false;

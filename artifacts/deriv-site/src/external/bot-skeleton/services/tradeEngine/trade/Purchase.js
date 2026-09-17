@@ -12,6 +12,7 @@ import {
 } from '@/utils/bot-contract-gate';
 import { getBotExecutionSpeed } from '@/constants/bot-execution-speed';
 import { observer as globalObserver } from '../../../utils/observer';
+import { getFastLatencyNow } from '../utils/fast-latency';
 
 export const getPurchaseTradeOptions = (tradeOptions, prediction, contractType) => {
     if (['DIGITEVEN', 'DIGITODD'].includes(contractType)) {
@@ -42,6 +43,27 @@ const getPurchaseMappingLabel = (contractType, prediction) => {
 
 export default Engine =>
     class Purchase extends Engine {
+        recordFastPurchaseRequest(contractType) {
+            if (
+                getBotExecutionSpeed() !== 'fast' ||
+                !Number.isFinite(this.fastSettlementHandoffStartedAt)
+            ) {
+                return;
+            }
+
+            const purchaseRequestAt = getFastLatencyNow();
+            const latencyMs = Math.max(0, purchaseRequestAt - this.fastSettlementHandoffStartedAt);
+            this.lastFastHandoffLatencyMs = latencyMs;
+            this.fastSettlementHandoffStartedAt = null;
+            globalObserver.emit('bot.fast.latency', {
+                event: 'settlement_to_purchase_request',
+                latencyMs,
+                market: this.tradeOptions?.symbol || this.options?.symbol || this.symbol,
+                contractType,
+                lockedDirection: this.volatilitySelectionLock?.signal || null,
+            });
+        }
+
         getContractState(contractId) {
             return this.activeContracts?.get(String(contractId));
         }
@@ -256,7 +278,10 @@ export default Engine =>
                 }
                 const { id, askPrice } = selectedProposal;
 
-                const action = () => api_base.api.send({ buy: id, price: askPrice });
+                const action = () => {
+                    this.recordFastPurchaseRequest(contract_type);
+                    return api_base.api.send({ buy: id, price: askPrice });
+                };
 
                 this.isSold = false;
 
@@ -304,7 +329,10 @@ export default Engine =>
                 releasePurchaseLease();
                 throw error;
             }
-            const action = () => api_base.api.send(trade_option);
+            const action = () => {
+                this.recordFastPurchaseRequest(contract_type);
+                return api_base.api.send(trade_option);
+            };
 
             this.isSold = false;
 
