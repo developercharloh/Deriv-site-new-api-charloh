@@ -1,4 +1,4 @@
-export const FAST_EXECUTION_INTERVAL_MS = 800;
+export const FAST_EXECUTION_INTERVAL_MS = 300;
 export const FAST_SETTLEMENT_REST_MS = 0;
 
 export class FastExecutionClock {

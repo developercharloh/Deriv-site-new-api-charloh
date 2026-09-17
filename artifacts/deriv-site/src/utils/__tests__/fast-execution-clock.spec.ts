@@ -13,8 +13,8 @@ describe('FastExecutionClock', () => {
         jest.useRealTimers();
     });
 
-    it('keeps an 800 ms safety interval with no settlement rest', () => {
-        expect(FAST_EXECUTION_INTERVAL_MS).toBe(800);
+    it('keeps a 300 ms safety interval with no settlement rest', () => {
+        expect(FAST_EXECUTION_INTERVAL_MS).toBe(300);
         expect(FAST_SETTLEMENT_REST_MS).toBe(0);
     });
 
@@ -25,10 +25,10 @@ describe('FastExecutionClock', () => {
         clock.start();
         expect(onSlot).toHaveBeenCalledTimes(1);
 
-        // Slot zero is immediate, then slots 1..74 are 800 ms apart.
-        // This is 75 purchase slots in [start, start + 60 seconds).
-        jest.advanceTimersByTime(74 * FAST_EXECUTION_INTERVAL_MS);
-        expect(onSlot).toHaveBeenCalledTimes(75);
+        // Slot zero is immediate, then slots 1..199 are 300 ms apart.
+        // This is 200 purchase slots in [start, start + 60 seconds).
+        jest.advanceTimersByTime(199 * FAST_EXECUTION_INTERVAL_MS);
+        expect(onSlot).toHaveBeenCalledTimes(200);
 
         clock.stop();
         jest.advanceTimersByTime(5_000);
