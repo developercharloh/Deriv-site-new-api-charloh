@@ -2,7 +2,7 @@ import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
 import { contractStatus, info, log, notify } from '../utils/broadcast';
 import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../utils/helpers';
-import { purchaseSuccessful } from './state/actions';
+import { consumeFastReady, fastRearm, purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
 import {
     getBotContractSessionId,
@@ -78,6 +78,34 @@ export default Engine =>
                 this.isSellAvailable = false;
                 this.isExpired = true;
             }
+        }
+
+        async purchaseFastLocked(contractType, prediction) {
+            if (
+                getBotExecutionSpeed() !== 'fast' ||
+                !this.fastClockActive ||
+                this.paused ||
+                !['CALL', 'PUT'].includes(contractType) ||
+                !this.volatilitySelectionLock ||
+                this.getActiveContractIds().length > 0
+            ) {
+                return false;
+            }
+
+            // Re-enter the normal purchase path with a fresh FAST slot. This
+            // keeps the existing contract gate, proposal selection, and broker
+            // error handling in one place while avoiding the generated
+            // before-purchase analysis stack.
+            this.store.dispatch(fastRearm());
+            this.store.dispatch(consumeFastReady());
+
+            if (this.is_proposal_subscription_required) {
+                const proposalsReady = await this.waitForProposalsReady();
+                if (!proposalsReady) return false;
+            }
+
+            await this.purchase(contractType, prediction);
+            return true;
         }
 
         purchase(contract_type, prediction) {

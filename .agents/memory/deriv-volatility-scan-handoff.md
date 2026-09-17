@@ -26,3 +26,9 @@ FAST execution must also preserve the selected direction after settlement and re
 **Why:** The reference execution repeatedly bought the same direction immediately after one-second settlements, while the bot's loss handler alternated CALL/PUT and its next Blockly cycle added a fresh history request.
 
 **How to apply:** Treat direction as part of the session lock, make loss handling stake-only, and let the FAST path use the locked market, direction, indicators, and cached execution input until reset or an explicit live failure.
+
+For locked Rise/Fall FAST sessions, the settlement event should release the generated during-purchase cycle, let the existing after-purchase stack apply stake and stop rules, and have the next `start()` submit the locked direction directly while skipping only the redundant before-purchase stack.
+
+**Why:** The reference engine's rapid cadence comes from settlement-to-next-purchase handoff, not from allowing uncontrolled overlapping contracts or waiting for another analysis pass.
+
+**How to apply:** Keep the normal proposal refresh, contract gate, and broker purchase implementation; use an explicit settlement handoff flag and preserve the during-purchase watcher for the newly submitted contract.

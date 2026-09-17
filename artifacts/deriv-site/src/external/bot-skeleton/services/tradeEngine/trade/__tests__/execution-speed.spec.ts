@@ -234,6 +234,31 @@ describe('shared trade-cycle restart', () => {
         expect(engine.makeDirectPurchaseDecision).toHaveBeenCalledTimes(1);
     });
 
+    it('starts the locked-direction purchase from the settlement handoff', async () => {
+        window.localStorage.setItem('dbot_execution_speed', 'fast');
+
+        const engine: any = Object.create(TradeEngine.prototype);
+        engine.options = { symbol: 'R_25' };
+        engine.store = createStore(rootReducer, applyMiddleware(thunk));
+        engine.hasStarted = true;
+        engine.fastClockActive = true;
+        engine.fastClock = { isRunning: () => true };
+        engine.fastSettlementHandoffPending = true;
+        engine.volatilitySelectionLock = { code: 'R_25', signal: 'CALL' };
+        engine.activeContracts = new Map();
+        engine.validateTradeOptions = options => options;
+        engine.checkLimits = jest.fn();
+        engine.makeDirectPurchaseDecision = jest.fn();
+        engine.purchaseFastLocked = jest.fn(() => Promise.resolve(true));
+
+        engine.start({ amount: 0.5, currency: 'USD', contractTypes: ['CALL'] });
+        await Promise.resolve();
+
+        expect(engine.makeDirectPurchaseDecision).toHaveBeenCalledTimes(1);
+        expect(engine.purchaseFastLocked).toHaveBeenCalledWith('CALL');
+        await expect(engine.watch('before')).resolves.toBe(false);
+    });
+
     it('stores the settlement-derived stake before prewarming the next proposal', () => {
         window.localStorage.setItem('dbot_execution_speed', 'fast');
 

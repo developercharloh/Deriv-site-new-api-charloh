@@ -112,6 +112,10 @@ export default Engine =>
                         }
 
                         const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
+                        const settlementDrivenFast =
+                            executionSpeed === 'fast' &&
+                            !hasOtherActiveContracts &&
+                            ['CALL', 'PUT'].includes(this.volatilitySelectionLock?.signal);
                         if (!hasOtherActiveContracts) this.prepareVolatilityRescan?.();
                         const clockPacedFast = executionSpeed === 'fast' && this.fastClockActive;
                         const canFastRearm = releaseBotContractGate(
@@ -121,19 +125,14 @@ export default Engine =>
                             executionSpeed === 'fast' && !clockPacedFast,
                         );
                         if (clockPacedFast) {
-                            // Close the generated cycle as soon as settlement is
-                            // authoritative. The clock still owns the next
-                            // purchase slot, so this does not buy immediately;
-                            // it only releases watch('during') and lets the
-                            // generated trade_again path prepare for the next
-                            // The settlement path releases the generated cycle,
-                            // then the clock schedules the next purchase in a
-                            // settlement microtask. Leaving Redux in
-                            // DURING_PURCHASE
-                            // here can make the interpreter wait forever after
-                            // the first FAST contract settles.
+                            // Close the generated during-purchase cycle as soon
+                            // as settlement is authoritative. Leaving Redux in
+                            // DURING_PURCHASE here can make the interpreter wait
+                            // forever after the first FAST contract settles.
                             if (!hasOtherActiveContracts) this.store.dispatch(sell());
-                            if (!hasOtherActiveContracts) this.scheduleFastSlotAfterSettlement?.();
+                            if (!hasOtherActiveContracts && !settlementDrivenFast) {
+                                this.scheduleFastSlotAfterSettlement?.();
+                            }
                         } else if (canFastRearm) {
                             this.store.dispatch(fastRearm());
                         } else if (!hasOtherActiveContracts) {
@@ -154,6 +153,7 @@ export default Engine =>
 
                         this.activeContracts?.delete(String(contract.contract_id));
                         if (hasOtherActiveContracts) this.selectLatestActiveContract?.();
+                        this.fastSettlementHandoffPending = settlementDrivenFast;
 
                         const publishSettlement = () => {
                             if (executionSpeed === 'fast') {

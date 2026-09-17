@@ -134,6 +134,8 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.is_proposal_requested_for_accumulators = false;
         this.fastClock = null;
         this.fastClockActive = false;
+        this.fastSettlementHandoffPending = false;
+        this.fastDirectPurchaseCycle = false;
         this.paused = false;
         this.hasStarted = false;
         this.store = createStore(rootReducer, applyMiddleware(thunk));
@@ -187,6 +189,10 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const validated_trade_options = this.validateTradeOptions(tradeOptions);
         const executionSpeed = getBotExecutionSpeed();
         const fastClockAlreadyRunning = this.fastClock?.isRunning() === true;
+        const settlementDrivenFast =
+            executionSpeed === 'fast' &&
+            this.fastSettlementHandoffPending === true &&
+            ['CALL', 'PUT'].includes(this.volatilitySelectionLock?.signal);
         const isNewBotSession = !this.hasStarted;
         this.hasStarted = true;
         if (isNewBotSession) this.resetVolatilitySelection?.();
@@ -207,7 +213,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                 : {}),
             symbol: this.options.symbol,
         };
-        this.requiresSignalConfidence = true;
+        this.requiresSignalConfidence = !settlementDrivenFast;
         this.fastClockActive = executionSpeed === 'fast';
         // Bot.start is called again at the beginning of each generated trade
         // cycle. Only clear the previous result for a genuinely new session;
@@ -248,7 +254,27 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         // of each trade cycle. Do not restart the FAST clock there: its
         // immediate first slot would recursively restart the cycle and lock
         // the browser after the first settlement.
-        if (this.fastClockActive && !fastClockAlreadyRunning) this.startFastClock();
+        if (this.fastClockActive && !fastClockAlreadyRunning && !settlementDrivenFast) this.startFastClock();
+
+        if (settlementDrivenFast) {
+            this.fastSettlementHandoffPending = false;
+            this.fastDirectPurchaseCycle = true;
+            // The generated after-purchase stack has already updated the
+            // stake and evaluated stop conditions. Rebuild proposals from the
+            // new trade options, then buy the locked direction directly.
+            this.makeDirectPurchaseDecision();
+            this.purchaseFastLocked(this.volatilitySelectionLock.signal)
+                .then(result => {
+                    if (result) return;
+                    throw new Error('FAST settlement handoff could not prepare the next purchase');
+                })
+                .catch(error => {
+                    this.fastDirectPurchaseCycle = false;
+                    globalObserver.emit('Error', error);
+                    this.store.dispatch({ type: constants.SELL });
+                });
+            return;
+        }
 
         this.makeDirectPurchaseDecision();
     }
@@ -445,6 +471,14 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
     }
 
     watch(watchName) {
+        if (watchName === 'before' && this.fastDirectPurchaseCycle) {
+            // The settlement-driven FAST path already submitted the next
+            // locked-direction contract. Skip only the redundant generated
+            // before-purchase stack; watch('during') must still wait for the
+            // new contract to open and settle.
+            this.fastDirectPurchaseCycle = false;
+            return Promise.resolve(false);
+        }
         if (watchName === 'before') {
             return watchBefore(this.store);
         }
