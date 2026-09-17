@@ -30,4 +30,10 @@ describe('Free Bots template catalog', () => {
             expect(document.querySelectorAll('block').length).toBeGreaterThan(0);
         }
     });
+
+    it('keeps Rise/Fall journal variables out of the Apex AI template', () => {
+        const apexXml = fs.readFileSync(path.join(publicBotsPath, 'Apex_AI.xml'), 'utf8');
+
+        expect(apexXml).not.toMatch(/journal|v_msg|previous direction|indicator candles|model signal/i);
+    });
 });

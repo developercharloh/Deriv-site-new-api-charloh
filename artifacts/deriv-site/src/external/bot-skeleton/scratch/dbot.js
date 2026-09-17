@@ -111,6 +111,10 @@ class DBot {
         strategy_xml.includes('Model confluence settled') &&
         !strategy_xml.includes('INDICATORS | ADX:');
 
+    isRiseFallWorkspace = workspace =>
+        typeof workspace?.name === 'string' &&
+        workspace.name.replace(/\.[^/.]+$/, '').toLowerCase() === 'rise_fall_master_bot';
+
     loadCurrentRiseFallTemplate = async () => {
         try {
             const response = await fetch('/bots/Rise_Fall_Master_Bot.xml', { cache: 'no-store' });
@@ -218,6 +222,7 @@ class DBot {
         if (
             recent_files &&
             recent_files.length &&
+            this.isRiseFallWorkspace(recent_files[0]) &&
             this.hasUsableSavedWorkspace(recent_files[0]?.xml) &&
             this.isStaleRiseFallWorkspace(recent_files[0]?.xml)
         ) {
@@ -297,6 +302,7 @@ class DBot {
                 if (
                     recent_files &&
                     recent_files.length &&
+                    this.isRiseFallWorkspace(recent_files[0]) &&
                     this.hasUsableSavedWorkspace(recent_files[0]?.xml) &&
                     this.isStaleRiseFallWorkspace(recent_files[0]?.xml)
                 ) {
