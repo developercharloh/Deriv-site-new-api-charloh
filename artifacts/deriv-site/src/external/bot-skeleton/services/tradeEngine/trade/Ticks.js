@@ -718,7 +718,14 @@ export default Engine =>
                 this.volatilityMarketSnapshots.set(record.code, record);
             }
         }
-        emitVolatilityMarketRecord(record, marketIndex, marketTotal, qualifiedCount, minimumAdx) {
+        emitVolatilityMarketRecord(
+            record,
+            marketIndex,
+            marketTotal,
+            qualifiedCount,
+            minimumAdx,
+            { diagnostic = false } = {}
+        ) {
             globalObserver.emit('bot.volatility.scan', {
                 event: 'market',
                 market: record.code,
@@ -739,6 +746,7 @@ export default Engine =>
                 marketIndex,
                 marketTotal,
                 qualifiedCount,
+                diagnostic,
             });
         }
         async scanRemainingVolatilityMarkets(scanOrder, startIndex, options, token) {
@@ -752,7 +760,8 @@ export default Engine =>
                     index + 1,
                     scanOrder.length,
                     0,
-                    options.adxMinimum
+                    options.adxMinimum,
+                    { diagnostic: true }
                 );
                 if (index < scanOrder.length - 1) {
                     await wait(this.volatilityScanRequestGapMs ?? VOLATILITY_SCAN_REQUEST_GAP_MS);

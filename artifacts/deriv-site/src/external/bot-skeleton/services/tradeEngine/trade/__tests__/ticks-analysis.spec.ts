@@ -459,6 +459,10 @@ describe('Ticks last-digit analysis events', () => {
         expect(marketEvents.every(event => Number.isFinite(event.adx))).toBe(true);
         expect(marketEvents.every(event => Number.isFinite(event.rsi))).toBe(true);
         expect(marketEvents.every(event => Number.isFinite(event.macd))).toBe(true);
+        expect(marketEvents.filter(event => event.diagnostic && event.qualifies)).not.toHaveLength(0);
+        expect(marketEvents.filter(event => !event.diagnostic && event.qualifies)).toEqual([
+            expect.objectContaining({ market: '1HZ100V' }),
+        ]);
         expect(request.mock.calls[0][0]).toEqual(
             expect.objectContaining({
                 symbol: '1HZ100V',

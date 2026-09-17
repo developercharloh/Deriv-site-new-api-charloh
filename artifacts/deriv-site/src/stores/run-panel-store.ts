@@ -1107,6 +1107,7 @@ export default class RunPanelStore {
         }>;
         market?: string;
         label?: string;
+        diagnostic?: boolean;
         signal?: string;
         confidence?: number;
         adx?: number;
@@ -1235,7 +1236,14 @@ export default class RunPanelStore {
 
         if (event.event === 'market') {
             const signal = String(event.signal || 'WAIT').toUpperCase();
-            const recommendation = event.qualifies === true ? '✅ RECOMMENDED' : '⏭️ SKIP';
+            const recommendation =
+                event.diagnostic === true
+                    ? event.qualifies === true
+                        ? '✅ QUALIFIED · DIAGNOSTIC ONLY'
+                        : '⏭️ SKIP · DIAGNOSTIC'
+                    : event.qualifies === true
+                      ? '✅ FIRST QUALIFIED · LOCKED'
+                      : '⏭️ SKIP';
             journal.pushMessage(
                 `[Volatility Scan] Market ${event.marketIndex ?? 0}/${event.marketTotal ?? 0} · ` +
                     `${event.label || event.market || 'market'} · ${recommendation} · ` +
