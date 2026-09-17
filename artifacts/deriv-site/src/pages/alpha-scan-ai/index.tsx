@@ -1557,6 +1557,215 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const capturedAt = lastUpdated
         ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '—';
+    const activeDecision = autoVolatilityMode ? autoMomentumDecision : primaryDecision || explicitPrimaryDecision;
+    const modelProbability = modelPick ? Math.round(modelPick.baselineProbability * 100) : 0;
+    const modelGate = modelPick?.validationGate || 'insufficient-evidence';
+    const modelGateLabel = modelGate === 'validated'
+        ? 'VALIDATED'
+        : modelGate === 'failed'
+            ? 'REJECTED'
+            : 'EVIDENCE NEEDED';
+    const modelGateTone = modelGate === 'validated' ? 'positive' : modelGate === 'failed' ? 'negative' : 'neutral';
+    const visibleRows = rows.slice(0, 10);
+    const runLabel = executionLeg !== 'idle'
+        ? executionLeg.includes('recovery') ? 'RECOVERY ACTIVE' : 'PRIMARY ACTIVE'
+        : autoVolatilityMode ? 'START AUTO RUN' : 'RUN MODEL PICK';
+    return (
+        <main
+            className='alpha-tool alpha-tool--model-cockpit'
+            data-testid='alpha-tool'
+            data-status={status}
+            data-scan-source={scanSource}
+            data-sample-size={sampleSize}
+            data-discovered-count={discoveredCount}
+            data-model-row-count={rows.length}
+            data-model-version={MODEL_VERSION}
+            data-scan-count={scanCount}
+            data-error={errorMessage}
+            data-failed-symbols={JSON.stringify(failedSymbols)}
+            data-digit-window={digitWindow}
+            data-recovery-digit-window={recoveryDigitWindow}
+            data-primary-condition={primaryCondition}
+            data-primary-market={marketConditionLabel(primaryCondition)}
+            data-primary-purchase-market={primaryPurchaseMarket}
+            data-primary-purchase={purchaseMarketLabel(primaryPurchaseMarket)}
+            data-recovery-condition={recoveryCondition}
+            data-recovery-market={marketConditionLabel(recoveryCondition)}
+            data-recovery-purchase-market={recoveryPurchaseMarket}
+            data-recovery-purchase={purchaseMarketLabel(recoveryPurchaseMarket)}
+            data-execution-leg={executionLeg}
+            data-auto-volatility-mode={autoVolatilityMode}
+            data-execution-fixture={executionFixtureMode}
+            data-journal-count={journalRows.length}
+            data-auto-trades={autoRiskRef.current.trades}
+            data-payout-floor={payoutFloor}
+            data-payout-skip-count={payoutSkipCount}
+            data-last-payout-skip={lastPayoutSkipMessage}
+        >
+            <header className='alpha-cockpit__topbar'>
+                <div className='alpha-cockpit__brand'>
+                    <span className='alpha-cockpit__brand-mark' aria-hidden='true'>A</span>
+                    <div>
+                        <span className='alpha-cockpit__overline'>ALPHA SCAN AI</span>
+                        <strong>Model execution terminal</strong>
+                    </div>
+                </div>
+                <div className='alpha-cockpit__topbar-actions'>
+                    <span className={`alpha-cockpit__connection alpha-cockpit__connection--${status}`}>
+                        <span aria-hidden='true' />
+                        {status === 'ready' ? 'FEED READY' : statusCopy[status].toUpperCase()}
+                    </span>
+                    <span className='alpha-cockpit__timestamp'>MODEL {MODEL_VERSION} · {capturedAt}</span>
+                    <button type='button' className='alpha-cockpit__refresh' onClick={() => { setLiveFeedback(null); onScan(); }} disabled={isBusy} data-testid='button-run-scan'>
+                        {isBusy ? 'SYNCING' : 'REFRESH DATA'}
+                    </button>
+                </div>
+            </header>
+
+            <section className='alpha-cockpit__headline'>
+                <div>
+                    <span className='alpha-cockpit__overline'>Decision layer / {autoVolatilityMode ? 'adaptive momentum' : 'calibrated signal'}</span>
+                    <h1>Find the edge.<br /><em>Prove it before entry.</em></h1>
+                    <p>Alpha Scan ranks synthetic markets from live and historical observations, then keeps execution behind a visible validation gate.</p>
+                </div>
+                <div className={`alpha-cockpit__gate alpha-cockpit__gate--${modelGateTone}`}>
+                    <span className='alpha-cockpit__gate-label'>CURRENT MODEL GATE</span>
+                    <strong>{modelGateLabel}</strong>
+                    <small>{rows.length ? `${validatedRows} of ${rows.length} markets passed validation` : 'Run a scan to build evidence'}</small>
+                </div>
+            </section>
+
+            <section className='alpha-cockpit__decision-grid' aria-label='Current model decision'>
+                <article className='alpha-cockpit__decision-panel alpha-cockpit__decision-panel--signal'>
+                    <div className='alpha-cockpit__panel-topline'>
+                        <span className='alpha-cockpit__overline'>PRIMARY SIGNAL</span>
+                        <span className={`alpha-cockpit__status-tag alpha-cockpit__status-tag--${modelGateTone}`}>{modelGateLabel}</span>
+                    </div>
+                    <div className='alpha-cockpit__signal-main'>
+                        <div>
+                            <span className='alpha-cockpit__label'>Selected market</span>
+                            <h2>{modelPick?.displayName || 'Waiting for scan'}</h2>
+                            <strong className='alpha-cockpit__symbol'>{modelPick?.symbol || '—'}</strong>
+                        </div>
+                        <div className='alpha-cockpit__probability'>
+                            <span>BASELINE P</span>
+                            <strong>{modelPick ? `${modelProbability}%` : '—'}</strong>
+                        </div>
+                    </div>
+                    {modelPick ? <Sparkline prices={modelPick.prices} symbol={modelPick.symbol} /> : <div className='alpha-cockpit__empty-chart'>No observation window loaded</div>}
+                    <div className='alpha-cockpit__signal-stats'>
+                        <div><span>OOS accuracy</span><strong>{Math.round(modelPick?.walkForwardAccuracy * 100 || 0)}%</strong></div>
+                        <div><span>Brier score</span><strong>{modelPick?.brierScore?.toFixed(3) || '—'}</strong></div>
+                        <div><span>Sample</span><strong>{modelPick?.validationSamples || 0}</strong></div>
+                        <div><span>Regime</span><strong>{modelPick?.regime || '—'}</strong></div>
+                    </div>
+                </article>
+
+                <article className='alpha-cockpit__decision-panel alpha-cockpit__decision-panel--execution'>
+                    <div className='alpha-cockpit__panel-topline'>
+                        <span className='alpha-cockpit__overline'>EXECUTION CONTROL</span>
+                        <span className={`alpha-cockpit__live-state alpha-cockpit__live-state--${liveStatus}`}>{liveStatus.toUpperCase()}</span>
+                    </div>
+                    <div className='alpha-cockpit__execution-row'>
+                        <div>
+                            <span className='alpha-cockpit__label'>Proposed contract</span>
+                            <strong className='alpha-cockpit__contract'>{activeDecision?.contractType || 'WAIT'}</strong>
+                            <small>{activeDecision?.label || 'No qualified contract selected'}</small>
+                        </div>
+                        <div className='alpha-cockpit__direction'>
+                            <span>MODEL DIRECTION</span>
+                            <strong>{activeDecision?.contractType === 'PUT' ? 'DOWN' : activeDecision?.contractType === 'CALL' ? 'UP' : '—'}</strong>
+                        </div>
+                    </div>
+                    <div className='alpha-cockpit__execution-reason'>
+                        <span className='alpha-cockpit__label'>Why this candidate</span>
+                        <p>{activeDecision?.reason || modelPick?.gateReasons?.[0] || 'No decision is available until the model has enough evidence.'}</p>
+                    </div>
+                    <div className='alpha-cockpit__execution-controls'>
+                        <label>STAKE<input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Stake' /></label>
+                        <label>MIN PAYOUT<select value={payoutFloor} onChange={event => setPayoutFloor(event.target.value)} aria-label='Minimum payout'><option value='1.5'>1.50x</option><option value='1.8'>1.80x</option><option value='2'>2.00x</option></select></label>
+                        <label>SESSION STOP<select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option></select></label>
+                    </div>
+                    <div className='alpha-cockpit__execution-actions'>
+                        <button
+                            type='button'
+                            className='alpha-cockpit__run'
+                            onClick={runTrade}
+                            disabled={!liveAuthorized || !liveMode || (autoVolatilityMode ? !autoMomentumDecision : !explicitPrimaryDecision) || isBusy || executionLeg !== 'idle'}
+                            data-testid='button-run-trade'
+                        >
+                            <span>{runLabel}</span><span aria-hidden='true'>↗</span>
+                        </button>
+                        <button type='button' className={`alpha-cockpit__mode ${autoVolatilityMode ? 'alpha-cockpit__mode--active' : ''}`} onClick={() => setAutoVolatilityMode(value => {
+                            if (!value) autoRiskRef.current = { sessionProfit: 0, trades: 0, consecutiveLosses: 0 };
+                            return !value;
+                        })} aria-pressed={autoVolatilityMode} data-testid='toggle-auto-volatility'>
+                            <span className='alpha-cockpit__mode-dot' />{autoVolatilityMode ? 'AUTO RUNNER ON' : 'MANUAL MODE'}
+                        </button>
+                    </div>
+                    {liveFeedback ? <div className={`alpha-cockpit__feedback alpha-cockpit__feedback--${liveFeedback.kind}`} role={liveFeedback.kind === 'error' ? 'alert' : 'status'} data-testid='live-trade-feedback'>{liveFeedback.message}</div> : null}
+                    {!liveAuthorized && !executionFixtureMode ? <small className='alpha-cockpit__auth-note'>Connect a Deriv account to enable execution. Model analysis remains read-only.</small> : null}
+                </article>
+            </section>
+
+            <section className='alpha-cockpit__metric-strip' aria-label='Model metrics'>
+                <div><span>MARKETS COVERED</span><strong>{rows.length || '—'}</strong><small>{discoveredCount || rows.length || 0} discovered</small></div>
+                <div><span>VALIDATED</span><strong>{validatedRows || '—'}</strong><small>{rows.length ? `${Math.round((validatedRows / rows.length) * 100)}% of sample` : 'Awaiting scan'}</small></div>
+                <div><span>OOS ACCURACY</span><strong>{oosAccuracy ? `${oosAccuracy}%` : '—'}</strong><small>{averageVolatility ? `${formatPercent(averageVolatility)} realized vol` : 'Model pending'}</small></div>
+                <div><span>EXECUTION</span><strong>{liveTrade ? 'OPEN' : 'FLAT'}</strong><small>{journalRows.length} journal events · {payoutSkipCount} payout skips</small></div>
+            </section>
+
+            <section className='alpha-cockpit__workspace-grid'>
+                <article className='alpha-cockpit__data-panel'>
+                    <div className='alpha-cockpit__section-head'>
+                        <div><span className='alpha-cockpit__overline'>MARKET RANKING</span><h2>Evidence across the universe</h2></div>
+                        <span className='alpha-cockpit__count'>{rows.length} / {discoveredCount || rows.length} markets</span>
+                    </div>
+                    <div className='alpha-cockpit__table-wrap'>
+                        <table className='alpha-cockpit__table'>
+                            <thead><tr><th>Market</th><th>Model</th><th>OOS</th><th>Volatility</th><th>Gate</th></tr></thead>
+                            <tbody>
+                                {visibleRows.length ? visibleRows.map(row => (
+                                    <tr key={row.symbol} className={row.symbol === modelPick?.symbol ? 'alpha-cockpit__table-row--selected' : ''} data-symbol={row.symbol} data-selected={row.symbol === modelPick?.symbol} data-qualified={row.validationGate === 'validated'}>
+                                        <td><strong>{row.symbol}</strong><small>{row.displayName}</small></td>
+                                        <td><span className='alpha-cockpit__table-number'>{Math.round(row.baselineProbability * 100)}%</span><small>{row.regime}</small></td>
+                                        <td>{Math.round(row.walkForwardAccuracy * 100)}%</td>
+                                        <td>{formatPercent(row.realizedVolatility)}</td>
+                                        <td><span className={`alpha-cockpit__row-gate alpha-cockpit__row-gate--${row.validationGate}`}>{row.validationGate === 'validated' ? 'PASS' : row.validationGate === 'failed' ? 'BLOCK' : 'HOLD'}</span></td>
+                                    </tr>
+                                )) : <tr><td colSpan={5} className='alpha-cockpit__table-empty'>{isBusy ? 'Collecting market observations…' : 'Run Refresh Data to load the model universe.'}</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+
+                <aside className='alpha-cockpit__side-stack'>
+                    <article className='alpha-cockpit__data-panel alpha-cockpit__rules-panel'>
+                        <div className='alpha-cockpit__section-head'><div><span className='alpha-cockpit__overline'>STRATEGY RULES</span><h2>What enters the gate</h2></div></div>
+                        <label>PRIMARY WINDOW<select value={digitWindow} onChange={event => setDigitWindow(Number(event.target.value))} aria-label='Market 1 last digit count' data-testid='select-primary-digit-window'>{Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1} latest digits</option>)}</select></label>
+                        <label>PRIMARY CONDITION<MarketConditionSelect value={primaryCondition} onChange={setPrimaryCondition} label='Market 1 condition' testId='select-primary-market' /></label>
+                        <label>PURCHASE TYPE<PurchaseMarketSelect value={primaryPurchaseMarket} onChange={setPrimaryPurchaseMarket} label='Market 1 purchase option' testId='select-primary-purchase' /></label>
+                        <div className='alpha-cockpit__rule-divider' />
+                        <label>RECOVERY CONDITION<MarketConditionSelect value={recoveryCondition} onChange={setRecoveryCondition} label='Recovery market condition' testId='select-recovery-market' /></label>
+                        <label>RECOVERY TYPE<PurchaseMarketSelect value={recoveryPurchaseMarket} onChange={setRecoveryPurchaseMarket} label='Recovery market purchase option' testId='select-recovery-purchase' /></label>
+                        <button type='button' className={`alpha-cockpit__scan-toggle ${multiMarketScanning ? 'alpha-cockpit__scan-toggle--on' : ''}`} onClick={() => setMultiMarketScanning(value => !value)} aria-pressed={multiMarketScanning} data-testid='toggle-multi-market'><span />{multiMarketScanning ? 'Multi-market selection active' : 'Single-market selection active'}</button>
+                    </article>
+                </aside>
+            </section>
+
+            <section className='alpha-cockpit__journal-panel' data-testid='tool-journal'>
+                <div className='alpha-cockpit__section-head'><div><span className='alpha-cockpit__overline'>AUDIT TRAIL</span><h2>Execution journal</h2></div><span className='alpha-cockpit__count'>{liveTrade ? '1 open' : `${journalRows.length} recorded`}</span></div>
+                <div className='alpha-cockpit__table-wrap'>
+                    <table className='alpha-cockpit__table alpha-cockpit__table--journal'>
+                        <thead><tr><th>Time</th><th>Market</th><th>Leg</th><th>Strategy</th><th>State</th><th>Result</th></tr></thead>
+                        <tbody>
+                            {liveTrade ? <tr><td>{liveTrade.purchaseTime}</td><td><strong>{liveTrade.symbol}</strong></td><td>{liveTradeLeg === 'recovery' ? 'Recovery' : 'Primary'}</td><td>{liveTradeDecision?.label || liveTrade.contractType}</td><td><span className='alpha-cockpit__row-gate alpha-cockpit__row-gate--validated'>OPEN</span></td><td>Live</td></tr> : journalRows.length ? journalRows.map(entry => <tr key={entry.contractId} data-contract-id={entry.contractId}><td>{entry.time}</td><td><strong>{entry.symbol}</strong></td><td>{entry.leg}</td><td>{entry.strategy}</td><td><span className={`alpha-cockpit__row-gate alpha-cockpit__row-gate--${entry.gate.toLowerCase()}`}>{entry.gate.toUpperCase()}</span></td><td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-cockpit__gain' : 'alpha-cockpit__loss'}>{entry.profit === null ? `Open · ${formatMoney(entry.payout)}` : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)}`}</td></tr>) : <tr><td colSpan={6} className='alpha-cockpit__table-empty'>{liveFeedback?.message || 'No executions recorded. The journal will keep every approved attempt and settlement.'}</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    );
     return (
         <main
             className='alpha-tool'
