@@ -94,12 +94,15 @@ export default Engine =>
                         // not from a later rendered win/loss notification.
                         this.updateTotals(contract, executionSpeed === 'fast');
                         this.applyBinaryMatrixSettlement(contract);
+                        const selectedVolatility = this.volatilitySelectionLock;
                         globalObserver.emit('bot.volatility.scan', {
                             event: 'settlement',
                             market: contract.underlying || this.symbol || this.options?.symbol,
                             contractId: contract.contract_id,
                             outcome: contract.status || (Number(contract.profit) >= 0 ? 'won' : 'lost'),
                             profit: contract.profit,
+                            continuesOnSelectedMarket: Boolean(selectedVolatility?.code),
+                            selectedMarket: selectedVolatility?.code || null,
                         });
                         if (executionSpeed === 'fast') {
                             // The settlement determines the next Binary Matrix

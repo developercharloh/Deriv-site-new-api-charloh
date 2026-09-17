@@ -1322,9 +1322,12 @@ export default class RunPanelStore {
         }
 
         if (event.event === 'settlement') {
+            const continuationMessage = event.continuesOnSelectedMarket
+                ? `next contract will re-arm on ${event.selectedMarket || 'the selected market'}`
+                : 'selection released · next scan will begin';
             journal.pushMessage(
                 `[Volatility Scan] Settlement ${event.market || 'selected market'} · ` +
-                    `${event.outcome || 'result'} · profit ${number(event.profit, 2)} · next scan will begin`,
+                    `${event.outcome || 'result'} · profit ${number(event.profit, 2)} · ${continuationMessage}`,
                 MessageTypes.NOTIFY,
                 'journal__text'
             );
