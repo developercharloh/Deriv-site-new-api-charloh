@@ -32,3 +32,9 @@ For locked Rise/Fall FAST sessions, the settlement event should release the gene
 **Why:** The reference engine's rapid cadence comes from settlement-to-next-purchase handoff, not from allowing uncontrolled overlapping contracts or waiting for another analysis pass.
 
 **How to apply:** Keep the normal proposal refresh, contract gate, and broker purchase implementation; use an explicit settlement handoff flag and preserve the during-purchase watcher for the newly submitted contract.
+
+The FAST scheduler's 300 ms interval is an earliest eligibility check, not a promise that contracts settle every 300 ms; the no-overlap gate must remain authoritative until Deriv reports settlement.
+
+**Why:** The broker controls one-tick contract settlement and does not provide a fractional 0.3-second duration for this market.
+
+**How to apply:** Keep one-tick contract options, use 300 ms only to reduce scheduler polling latency, and never bypass the active-contract gate to chase a wall-clock cadence.

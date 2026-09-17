@@ -5,7 +5,7 @@ export const BOT_EXECUTION_SPEED_CHANGED_EVENT = 'dbot-execution-speed-changed';
 /**
  * Deriv does not offer a 1-second duration for this synthetic digit market;
  * its supported one-second-equivalent is one broker tick. The FAST scheduler
- * remains wall-clock based and opens one slot every 800 ms. Authoritative
+ * remains wall-clock based and opens one slot every 300 ms. Authoritative
  * settlement re-arms the next slot in a microtask with no timer clamp.
  */
 export const FAST_CONTRACT_DURATION_VALUE = 1;
@@ -52,7 +52,7 @@ export const getBotExecutionDelayMs = (
 /**
  * SLOW follows the normal event-driven DBot loop: generated sleep calls wait
  * for the next broker tick rather than adding a timer. FAST is paced by the
- * trade engine's 800 ms wall-clock scheduler with no artificial
+ * trade engine's 300 ms wall-clock scheduler with no artificial
  * post-settlement rest.
  */
 export const shouldWaitForNextTick = (seconds: number | string | undefined, speed: BotExecutionSpeed): boolean =>

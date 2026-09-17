@@ -18,7 +18,7 @@ describe('FastExecutionClock', () => {
         expect(FAST_SETTLEMENT_REST_MS).toBe(0);
     });
 
-    it('opens 75 slots in the first minute window', () => {
+    it('opens 200 slots in the first minute window', () => {
         const onSlot = jest.fn();
         const clock = new FastExecutionClock(onSlot);
 
@@ -32,7 +32,7 @@ describe('FastExecutionClock', () => {
 
         clock.stop();
         jest.advanceTimersByTime(5_000);
-        expect(onSlot).toHaveBeenCalledTimes(75);
+        expect(onSlot).toHaveBeenCalledTimes(200);
     });
 
     it('re-arms the next slot immediately after settlement', async () => {

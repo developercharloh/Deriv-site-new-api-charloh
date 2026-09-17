@@ -26,7 +26,7 @@ export class FastExecutionClock {
         };
 
         // The first slot is immediate. Subsequent slots remain aligned to the
-        // 800 ms wall-clock schedule rather than drifting after network
+        // 300 ms wall-clock schedule rather than drifting after network
         // work, unless settlement explicitly resets the next slot.
         this.releaseSlot();
     }
