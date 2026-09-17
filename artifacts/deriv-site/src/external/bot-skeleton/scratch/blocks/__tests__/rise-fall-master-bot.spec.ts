@@ -199,7 +199,8 @@ describe('Rise/Fall Master Bot XML', () => {
         ['aroon_value', 'model_signal', 'adx_value', 'rsi_value', 'macd_value', 'purchase'].forEach(type =>
             expect(blockTypes).toContain(type)
         );
-         expect(blockTypes).toContain('signal_confidence');
+         expect(blockTypes).not.toContain('signal_confidence');
+         expect(blockTypes).not.toContain('signal_confidence_gate');
         expect(blockTypes).not.toContain('adaptive_momentum_signal');
         [
             'indicator_ready',
@@ -235,11 +236,8 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(workspace.getBlockById('bp_indicator_adx_value')?.type).toBe('adx_value');
         expect(workspace.getBlockById('bp_indicator_rsi_value')?.type).toBe('rsi_value');
         expect(workspace.getBlockById('bp_indicator_macd_value')?.type).toBe('macd_value');
-         expect(workspace.getBlockById('bp_signal_confidence')?.type).toBe('signal_confidence');
-         expect(workspace.getBlockById('i_conf_ticks')?.getInputTargetBlock('VALUE')?.getFieldValue('NUM')).toBe(60);
-         expect(workspace.getBlockById('bp_signal_confidence')?.getInputTargetBlock('COUNT')?.id).toBe(
-             'bp_conf_ticks'
-         );
+         expect(workspace.getBlockById('bp_signal_confidence')).toBeNull();
+         expect(workspace.getBlockById('i_conf_ticks')).toBeNull();
         expect(workspace.getBlockById('tj_start')).toBeNull();
         expect(workspace.getBlockById('bp_direct_journal_1')?.getInputTargetBlock('TEXT')?.getFieldValue('TEXT')).toBe(
             'INDICATORS | ADX: '
@@ -261,20 +259,11 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
          expect(workspace.getBlockById('bp_apply_scanned_direction_if')?.type).toBe('controls_if');
          expect(workspace.getBlockById('bp_apply_scanned_direction')?.getFieldValue('VAR')).toBe('v_dir');
-         expect(workspace.getBlockById('bp_conf_signal')?.getFieldValue('VAR')).toBe('v_dir');
          expect(workspace.getBlockById('bp_direct_call_a')?.getFieldValue('VAR')).toBe('v_dir');
          expect(workspace.getBlockById('bp_direct_put_a')?.getFieldValue('VAR')).toBe('v_dir');
-        expect(workspace.getBlockById('bp_direct_call_gate')?.getFieldValue('OP')).toBe('AND');
-        expect(workspace.getBlockById('bp_direct_call_confidence_gate')?.type).toBe('signal_confidence_gate');
-        expect(
-            workspace.getBlockById('bp_direct_call_confidence_gate')?.getInputTargetBlock('MINIMUM_CONFIDENCE')?.getFieldValue('NUM')
-        ).toBe(55);
-        expect(workspace.getBlockById('bp_direct_put_gate')?.getFieldValue('OP')).toBe('AND');
-        expect(workspace.getBlockById('bp_direct_put_confidence_gate')?.type).toBe('signal_confidence_gate');
-        expect(
-            workspace.getBlockById('bp_direct_put_confidence_gate')?.getInputTargetBlock('MINIMUM_CONFIDENCE')?.getFieldValue('NUM')
-        ).toBe(55);
-        expect(workspace.getBlockById('bp_volatility_scan')?.type).toBe('scan_volatility_until_qualified');
+         expect(workspace.getBlockById('bp_direct_call_gate')?.type).toBe('logic_compare');
+         expect(workspace.getBlockById('bp_direct_put_gate')?.type).toBe('logic_compare');
+         expect(workspace.getBlockById('bp_volatility_scan')?.type).toBe('scan_volatility_until_indicators_pass');
         expect(workspace.getBlockById('i_msg')?.type).toBe('variables_set');
         expect(workspace.getBlockById('i_msg')?.getInputTargetBlock('VALUE')?.getFieldValue('TEXT')).toBe('');
         expect(workspace.getBlockById('bp_direct_call')?.type).toBe('purchase');

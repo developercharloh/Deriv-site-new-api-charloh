@@ -129,6 +129,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.lastSettledContract = null;
         this.purchaseReference = undefined;
         this.purchaseDelayIndex = 0;
+        this.requiresSignalConfidence = true;
         this.subscription_id_for_accumulators = null;
         this.is_proposal_requested_for_accumulators = false;
         this.fastClock = null;
@@ -206,6 +207,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                 : {}),
             symbol: this.options.symbol,
         };
+        this.requiresSignalConfidence = true;
         this.fastClockActive = executionSpeed === 'fast';
         // Bot.start is called again at the beginning of each generated trade
         // cycle. Only clear the previous result for a genuinely new session;

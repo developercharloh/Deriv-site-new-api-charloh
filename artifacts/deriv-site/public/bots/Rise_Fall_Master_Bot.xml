@@ -20,8 +20,6 @@
     <variable id="v_closes">Indicator Closes</variable>
     <variable id="v_bull">Bullish Score</variable>
     <variable id="v_bear">Bearish Score</variable>
-    <variable id="v_conf">Signal Confidence</variable>
-    <variable id="v_conf_ticks">Confidence Ticks</variable>
     <variable id="v_adx">ADX Indicator</variable>
     <variable id="v_rsi">RSI Indicator</variable>
     <variable id="v_macd">MACD Histogram</variable>
@@ -109,16 +107,12 @@
                                 <next><block type="variables_set" id="i_flip">
                                   <field name="VAR" id="v_flip">Just Flipped</field>
                                   <value name="VALUE"><block type="text" id="i_flip_v"><field name="TEXT">no</field></block></value>
-                                  <next><block type="variables_set" id="i_conf_ticks">
-                                    <field name="VAR" id="v_conf_ticks">Confidence Ticks</field>
-                                    <value name="VALUE"><block type="math_number" id="i_conf_ticks_v"><field name="NUM">60</field></block></value>
-                                   <next>
-                                     <block type="variables_set" id="i_msg">
-                                       <field name="VAR" id="v_msg">Journal</field>
-                                       <value name="VALUE"><block type="text" id="i_msg_v"><field name="TEXT"></field></block></value>
-                                     </block>
-                                   </next>
-                                  </block></next>
+                                  <next>
+                                    <block type="variables_set" id="i_msg">
+                                      <field name="VAR" id="v_msg">Journal</field>
+                                      <value name="VALUE"><block type="text" id="i_msg_v"><field name="TEXT"></field></block></value>
+                                    </block>
+                                  </next>
                                 </block></next>
                               </block></next>
                             </block></next>
@@ -161,9 +155,7 @@
       <!-- Scan the full volatility universe before evaluating the selected market. -->
       <block type="controls_if" id="bp_volatility_scan_if">
         <value name="IF0">
-          <block type="scan_volatility_until_qualified" id="bp_volatility_scan">
-            <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_volatility_scan_confidence"><field name="NUM">55</field></block></value>
-            <value name="COUNT"><block type="variables_get" id="bp_volatility_scan_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
+          <block type="scan_volatility_until_indicators_pass" id="bp_volatility_scan">
             <value name="MINIMUM_ADX"><block type="math_number" id="bp_volatility_scan_adx"><field name="NUM">20</field></block></value>
           </block>
         </value>
@@ -257,16 +249,7 @@
                                     <value name="VALUE"><block type="volatility_signal" id="bp_scanned_signal"></block></value>
                                   </block>
                                 </statement>
-                                <next>
-                              <block type="variables_set" id="bp_conf">
-                                <field name="VAR" id="v_conf">Signal Confidence</field>
-                                <value name="VALUE">
-                                  <block type="signal_confidence" id="bp_signal_confidence">
-                                    <value name="SIGNAL"><block type="variables_get" id="bp_conf_signal"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                    <value name="COUNT"><block type="variables_get" id="bp_conf_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
-                                  </block>
-                                </value>
-                                <next>
+                              <next>
       <!-- 3. Compute Tick Trend from current vs Last Tick -->
       <block type="controls_if" id="bp_trend_if">
         <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
@@ -393,9 +376,6 @@
                                       </block>
                                     </value>
                                     <value name="B">
-                                      <block type="logic_operation" id="bp_confidence_and">
-                                        <field name="OP">AND</field>
-                                        <value name="A">
                                       <block type="logic_operation" id="bp_direction_indicator_match">
                                         <field name="OP">OR</field>
                                         <value name="A">
@@ -462,15 +442,6 @@
                                         </value>
                                       </block>
                                         </value>
-                                        <value name="B">
-                                          <block type="logic_compare" id="bp_confidence_threshold">
-                                            <field name="OP">GTE</field>
-                                            <value name="A"><block type="variables_get" id="bp_confidence_value"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
-                                            <value name="B"><block type="math_number" id="bp_confidence_minimum"><field name="NUM">55</field></block></value>
-                                          </block>
-                                        </value>
-                                      </block>
-                                    </value>
                                   </block>
                                 </value>
                                 <statement name="DO0">
@@ -539,23 +510,11 @@
                                       <block type="controls_if" id="bp_direct_direction">
                                         <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                                         <value name="IF0">
-                                           <block type="logic_operation" id="bp_direct_call_gate">
-                                             <field name="OP">AND</field>
-                                             <value name="A">
-                                               <block type="logic_compare" id="bp_direct_call_cmp">
-                                                 <field name="OP">EQ</field>
-                                                  <value name="A"><block type="variables_get" id="bp_direct_call_a"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                                 <value name="B"><block type="text" id="bp_direct_call_b"><field name="TEXT">CALL</field></block></value>
-                                               </block>
-                                             </value>
-                                             <value name="B">
-                                                <block type="signal_confidence_gate" id="bp_direct_call_confidence_gate">
-                                                   <value name="SIGNAL"><block type="variables_get" id="bp_direct_call_confidence_signal"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                                  <value name="COUNT"><block type="variables_get" id="bp_direct_call_confidence_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
-                                                  <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_direct_call_confidence_minimum"><field name="NUM">55</field></block></value>
-                                               </block>
-                                             </value>
-                                          </block>
+                                           <block type="logic_compare" id="bp_direct_call_gate">
+                                             <field name="OP">EQ</field>
+                                             <value name="A"><block type="variables_get" id="bp_direct_call_a"><field name="VAR" id="v_dir">Direction</field></block></value>
+                                             <value name="B"><block type="text" id="bp_direct_call_b"><field name="TEXT">CALL</field></block></value>
+                                           </block>
                                         </value>
                                         <statement name="DO0">
                                           <block type="purchase" id="bp_direct_call"><field name="PURCHASE_LIST">CALL</field></block>
@@ -563,23 +522,11 @@
                                         <statement name="ELSE">
                                           <block type="controls_if" id="bp_direct_put">
                                             <value name="IF0">
-                                               <block type="logic_operation" id="bp_direct_put_gate">
-                                                 <field name="OP">AND</field>
-                                                 <value name="A">
-                                                   <block type="logic_compare" id="bp_direct_put_cmp">
-                                                     <field name="OP">EQ</field>
-                                                      <value name="A"><block type="variables_get" id="bp_direct_put_a"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                                     <value name="B"><block type="text" id="bp_direct_put_b"><field name="TEXT">PUT</field></block></value>
-                                                   </block>
-                                                 </value>
-                                                 <value name="B">
-                                                    <block type="signal_confidence_gate" id="bp_direct_put_confidence_gate">
-                                                       <value name="SIGNAL"><block type="variables_get" id="bp_direct_put_confidence_signal"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                                      <value name="COUNT"><block type="variables_get" id="bp_direct_put_confidence_ticks"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
-                                                      <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_direct_put_confidence_minimum"><field name="NUM">55</field></block></value>
-                                                   </block>
-                                                 </value>
-                                              </block>
+                                               <block type="logic_compare" id="bp_direct_put_gate">
+                                                 <field name="OP">EQ</field>
+                                                 <value name="A"><block type="variables_get" id="bp_direct_put_a"><field name="VAR" id="v_dir">Direction</field></block></value>
+                                                 <value name="B"><block type="text" id="bp_direct_put_b"><field name="TEXT">PUT</field></block></value>
+                                               </block>
                                             </value>
                                             <statement name="DO0">
                                                <block type="purchase" id="bp_direct_put_purchase"><field name="PURCHASE_LIST">PUT</field></block>
@@ -657,7 +604,6 @@
                                           <block type="logic_operation" id="bp_gate_6">
                                             <field name="OP">AND</field>
                                             <value name="A">
-                                              <block type="model_confidence_gate" id="bp_conf_gate">
                                                 <value name="BULLISH_SCORE"><block type="variables_get" id="bp_conf_gate_bull"><field name="VAR" id="v_bull">Bullish Score</field></block></value>
                                                 <value name="BEARISH_SCORE"><block type="variables_get" id="bp_conf_gate_bear"><field name="VAR" id="v_bear">Bearish Score</field></block></value>
                                                 <value name="MINIMUM_CONFIDENCE"><block type="math_number" id="bp_conf_min"><field name="NUM">20</field></block></value>
@@ -827,18 +773,12 @@
                                     <value name="TEXT"><shadow type="text" id="ts_bp3s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp3v"><field name="TEXT"> | Adaptive: </field></block></value>
                                     <next><block type="text_statement" id="ts_bp4">
                                       <value name="TEXT"><shadow type="text" id="ts_bp4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp4v"><field name="VAR" id="v_adaptive">Adaptive Momentum Signal</field></block></value>
-                                      <next><block type="text_statement" id="ts_bp5">
-                                        <value name="TEXT"><shadow type="text" id="ts_bp5s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp5v"><field name="TEXT"> | Confidence: </field></block></value>
-                                        <next><block type="text_statement" id="ts_bp6">
-                                          <value name="TEXT"><shadow type="text" id="ts_bp6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp6v"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
-                                          <next><block type="text_statement" id="ts_bp7">
+                                      <next><block type="text_statement" id="ts_bp7">
                                             <value name="TEXT"><shadow type="text" id="ts_bp7s"><field name="TEXT"></field></shadow><block type="text" id="ts_bp7v"><field name="TEXT"> | Stake: $</field></block></value>
                                             <next><block type="text_statement" id="ts_bp8">
                                               <value name="TEXT"><shadow type="text" id="ts_bp8s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_bp8v"><field name="VAR" id="v_stake">Stake</field></block></value>
                                             </block></next>
                                           </block></next>
-                                        </block></next>
-                                      </block></next>
                                     </block></next>
                                   </block></next>
                                 </block></next>
@@ -912,12 +852,9 @@
                                 <value name="TEXT"><shadow type="text" id="ts_gate_skip_3s"><field name="TEXT"></field></shadow><block type="text" id="ts_gate_skip_3v"><field name="TEXT"> | Adaptive: </field></block></value>
                                 <next><block type="text_statement" id="ts_gate_skip_4">
                                   <value name="TEXT"><shadow type="text" id="ts_gate_skip_4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_gate_skip_4v"><field name="VAR" id="v_adaptive">Adaptive Momentum Signal</field></block></value>
-                                  <next><block type="text_statement" id="ts_gate_skip_5">
-                                    <value name="TEXT"><shadow type="text" id="ts_gate_skip_5s"><field name="TEXT"></field></shadow><block type="text" id="ts_gate_skip_5v"><field name="TEXT"> | Confidence: </field></block></value>
-                                    <next><block type="text_statement" id="ts_gate_skip_6">
-                                      <value name="TEXT"><shadow type="text" id="ts_gate_skip_6s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_gate_skip_6v"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
-                                    </block></next>
-                                  </block></next>
+                                   <next><block type="text_statement" id="ts_gate_skip_5">
+                                     <value name="TEXT"><shadow type="text" id="ts_gate_skip_5s"><field name="TEXT"></field></shadow><block type="text" id="ts_gate_skip_5v"><field name="TEXT"> | Stake: </field></block></value>
+                                   </block></next>
                                 </block></next>
                               </block></next>
                             </block></next>
@@ -940,9 +877,6 @@
 
             </next>
           </block>
-
-        </next>
-      </block>
 
         </next>
       </block>
@@ -1034,15 +968,7 @@
                                                 <value name="TEXT"><shadow type="text" id="ts_w_macd_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_w_macd_label_v"><field name="TEXT"> | MACD Histogram: </field></block></value>
                                                 <next><block type="text_statement" id="ts_w_macd">
                                                   <value name="TEXT"><shadow type="text" id="ts_w_macd_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w_macd_v"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
-                                                  <next><block type="text_statement" id="ts_w_conf_label">
-                                                    <value name="TEXT"><shadow type="text" id="ts_w_conf_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_w_conf_label_v"><field name="TEXT"> | Confidence (last </field></block></value>
-                                                    <next><block type="text_statement" id="ts_w_conf_ticks">
-                                                      <value name="TEXT"><shadow type="text" id="ts_w_conf_ticks_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w_conf_ticks_v"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
-                                                      <next><block type="text_statement" id="ts_w_conf_ticks_label">
-                                                        <value name="TEXT"><shadow type="text" id="ts_w_conf_ticks_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_w_conf_ticks_label_v"><field name="TEXT"> ticks): </field></block></value>
-                                                        <next><block type="text_statement" id="ts_w_conf">
-                                                          <value name="TEXT"><shadow type="text" id="ts_w_conf_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w_conf_v"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
-                                                          <next><block type="text_statement" id="ts_w3">
+                                                   <next><block type="text_statement" id="ts_w3">
                                                             <value name="TEXT"><shadow type="text" id="ts_w3s"><field name="TEXT"></field></shadow><block type="text" id="ts_w3v"><field name="TEXT"> | Stake reset: $</field></block></value>
                                                             <next><block type="text_statement" id="ts_w4">
                                                               <value name="TEXT"><shadow type="text" id="ts_w4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_w4v"><field name="VAR" id="v_stake">Stake</field></block></value>
@@ -1050,10 +976,7 @@
                                                                 <value name="TEXT"><shadow type="text" id="ts_w5s"><field name="TEXT"></field></shadow><block type="text" id="ts_w5v"><field name="TEXT"> | P/L: $</field></block></value>
                                                                 <next><block type="text_statement" id="ts_w6">
                                                                   <value name="TEXT"><shadow type="text" id="ts_w6s"><field name="TEXT"></field></shadow><block type="total_profit" id="ts_w6v"></block></value>
-                                                                </block></next>
-                                                              </block></next>
-                                                            </block></next>
-                                                          </block></next>
+                                                         </block></next>
                                                         </block></next>
                                                       </block></next>
                                                     </block></next>
@@ -1064,7 +987,6 @@
                                           </block></next>
                                         </block></next>
                                       </block></next>
-                                    </block></next>
                                   </block>
                                 </statement>
                                 <next>
@@ -1184,15 +1106,7 @@
                                                         <value name="TEXT"><shadow type="text" id="ts_l_macd_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_l_macd_label_v"><field name="TEXT"> | MACD Histogram: </field></block></value>
                                                         <next><block type="text_statement" id="ts_l_macd">
                                                           <value name="TEXT"><shadow type="text" id="ts_l_macd_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l_macd_v"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
-                                                          <next><block type="text_statement" id="ts_l_conf_label">
-                                                            <value name="TEXT"><shadow type="text" id="ts_l_conf_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_l_conf_label_v"><field name="TEXT"> | Confidence (last </field></block></value>
-                                                            <next><block type="text_statement" id="ts_l_conf_ticks">
-                                                              <value name="TEXT"><shadow type="text" id="ts_l_conf_ticks_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l_conf_ticks_v"><field name="VAR" id="v_conf_ticks">Confidence Ticks</field></block></value>
-                                                              <next><block type="text_statement" id="ts_l_conf_ticks_label">
-                                                                <value name="TEXT"><shadow type="text" id="ts_l_conf_ticks_label_s"><field name="TEXT"></field></shadow><block type="text" id="ts_l_conf_ticks_label_v"><field name="TEXT"> ticks): </field></block></value>
-                                                                <next><block type="text_statement" id="ts_l_conf">
-                                                                  <value name="TEXT"><shadow type="text" id="ts_l_conf_s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l_conf_v"><field name="VAR" id="v_conf">Signal Confidence</field></block></value>
-                                                                  <next><block type="text_statement" id="ts_l3">
+                                                       <next><block type="text_statement" id="ts_l3">
                                                                     <value name="TEXT"><shadow type="text" id="ts_l3s"><field name="TEXT"></field></shadow><block type="text" id="ts_l3v"><field name="TEXT"> | Next stake: $</field></block></value>
                                                                     <next><block type="text_statement" id="ts_l4">
                                                                       <value name="TEXT"><shadow type="text" id="ts_l4s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l4v"><field name="VAR" id="v_stake">Stake</field></block></value>
@@ -1204,10 +1118,7 @@
                                                                             <value name="TEXT"><shadow type="text" id="ts_l7s"><field name="TEXT"></field></shadow><block type="text" id="ts_l7v"><field name="TEXT"> of 5 | P/L: $</field></block></value>
                                                                             <next><block type="text_statement" id="ts_l8">
                                                                               <value name="TEXT"><shadow type="text" id="ts_l8s"><field name="TEXT"></field></shadow><block type="total_profit" id="ts_l8v"></block></value>
-                                                                            </block></next>
-                                                                          </block></next>
-                                                                        </block></next>
-                                                                      </block></next>
+                                                               </block></next>
                                                                     </block></next>
                                                                   </block></next>
                                                                 </block></next>
@@ -1219,7 +1130,6 @@
                                                     </block></next>
                                                   </block></next>
                                                 </block></next>
-                                              </block></next>
                                             </block></next>
                                           </block>
                                         </statement>

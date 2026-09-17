@@ -440,9 +440,14 @@ export default Engine =>
 
             const signal = String(contractType || confidence?.signal || lock?.signal || '').toUpperCase();
             const isPut = signal === 'PUT';
+            const confidenceRequired = this.requiresSignalConfidence !== false;
             const finiteOrNull = value => (Number.isFinite(Number(value)) ? Number(value) : null);
-            const availableConfidence = finiteOrNull(confidence?.confidence ?? lock?.confidence);
-            const minimumConfidence = finiteOrNull(confidence?.minimum ?? lock?.minimumConfidence ?? 55);
+            const availableConfidence = confidenceRequired
+                ? finiteOrNull(confidence?.confidence ?? lock?.confidence)
+                : null;
+            const minimumConfidence = confidenceRequired
+                ? finiteOrNull(confidence?.minimum ?? lock?.minimumConfidence ?? 55)
+                : null;
             const availableAdx = finiteOrNull(indicators?.adx ?? lock?.adx);
             const minimumAdx = finiteOrNull(lock?.minimumAdx ?? 20);
             const availableRsi = finiteOrNull(indicators?.rsi ?? lock?.rsi);
@@ -462,9 +467,10 @@ export default Engine =>
                 macdOperator: isPut ? '<' : '>',
                 conditionsPassed:
                     signal !== 'WAIT' &&
-                    availableConfidence !== null &&
-                    minimumConfidence !== null &&
-                    availableConfidence >= minimumConfidence &&
+                    (!confidenceRequired ||
+                        (availableConfidence !== null &&
+                            minimumConfidence !== null &&
+                            availableConfidence >= minimumConfidence)) &&
                     availableAdx !== null &&
                     minimumAdx !== null &&
                     availableAdx >= minimumAdx &&
@@ -476,10 +482,12 @@ export default Engine =>
         isPurchaseConditionValuesGateOpen(contractType) {
             if (!['CALL', 'PUT'].includes(contractType)) return true;
 
-            const confidence = this.lastSignalConfidenceEvaluation;
-            if (!confidence) return true;
-
-            if (confidence.signal !== contractType || confidence.confidence < confidence.minimum) return false;
+            if (this.requiresSignalConfidence !== false) {
+                const confidence = this.lastSignalConfidenceEvaluation;
+                if (confidence && (confidence.signal !== contractType || confidence.confidence < confidence.minimum)) {
+                    return false;
+                }
+            }
 
             const indicators = this.purchaseIndicatorEvaluation;
             if (!indicators) return true;
@@ -504,18 +512,36 @@ export default Engine =>
             const purchaseSymbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
             if (lockedSymbol && (purchaseSymbol !== lockedSymbol || this.symbol !== lockedSymbol)) return false;
 
-            const confidence = this.lastSignalConfidenceEvaluation;
-            if (!confidence) return true;
-
             const currentTick = this.getPurchaseConditionTick();
             const evaluationTick = this.purchaseConditionEvaluationTick ?? currentTick;
-            if (confidence.tick !== null && evaluationTick !== null && confidence.tick !== evaluationTick) return false;
+            const confidence = this.lastSignalConfidenceEvaluation;
+            if (
+                this.requiresSignalConfidence !== false &&
+                confidence?.tick !== null &&
+                confidence?.tick !== undefined &&
+                evaluationTick !== null &&
+                confidence.tick !== evaluationTick
+            ) {
+                return false;
+            }
             const indicators = this.purchaseIndicatorEvaluation;
-            if (indicators?.tick !== null && evaluationTick !== null && indicators.tick !== evaluationTick) return false;
+            if (
+                indicators?.tick !== null &&
+                indicators?.tick !== undefined &&
+                evaluationTick !== null &&
+                indicators.tick !== evaluationTick
+            ) {
+                return false;
+            }
 
             return this.isPurchaseConditionValuesGateOpen(contractType);
         }
-        async scanVolatilityUntilQualified(minimumConfidence = 55, count = 60, minimumAdx = 20) {
+        async scanVolatilityUntilQualified(
+            minimumConfidence = 55,
+            count = 60,
+            minimumAdx = 20,
+            requireConfidence = true
+        ) {
             if (this.volatilityScanPromise) return this.volatilityScanPromise;
 
             if (this.volatilitySelectionLock) {
@@ -540,7 +566,10 @@ export default Engine =>
                 }
             }
 
-            const minimum = Math.max(0, Math.min(100, Number(minimumConfidence) || 55));
+            const confidenceRequired = requireConfidence !== false;
+            const minimum = confidenceRequired
+                ? Math.max(0, Math.min(100, Number(minimumConfidence) || 55))
+                : null;
             const windowSize = Math.max(2, Math.floor(Number(count) || 60));
             const adxMinimum = Math.max(0, Number(minimumAdx) || 20);
             const scan = async () => {
@@ -602,7 +631,7 @@ export default Engine =>
                             const rises = (moves.filter(move => move > 0).length / moves.length) * 100;
                             const falls = (moves.filter(move => move < 0).length / moves.length) * 100;
                             const signal = rises >= falls ? 'CALL' : 'PUT';
-                            const confidence = signal === 'CALL' ? rises : falls;
+                             const confidence = signal === 'CALL' ? rises : falls;
                             const pipSize = Number(api_base.pip_sizes?.[volatility.code]) || 0;
                             const adx = adxSnapshot(prices, { periods: 14, pipSize })?.adx ?? 0;
                             const rsi = rsiSnapshot(prices, { periods: 14, pipSize }) ?? 0;
@@ -617,7 +646,7 @@ export default Engine =>
                                 (signal === 'CALL'
                                     ? Number(rsi) > 50 && Number(macd) > 0
                                     : Number(rsi) < 50 && Number(macd) < 0);
-                            const qualifies = confidence >= minimum && indicatorsPass;
+                             const qualifies = indicatorsPass && (!confidenceRequired || confidence >= minimum);
 
                             record = {
                                 ...volatility,
@@ -629,7 +658,7 @@ export default Engine =>
                                 qualifies,
                                 reason: qualifies
                                     ? 'qualified'
-                                    : confidence < minimum
+                                     : confidenceRequired && confidence < minimum
                                       ? 'confidence_below_threshold'
                                       : 'indicator_confirmation_failed',
                             };
@@ -662,7 +691,11 @@ export default Engine =>
                 const records = this.volatilityScanRecords;
                 const qualified = records
                     .filter(record => record.qualifies)
-                    .sort((left, right) => right.confidence - left.confidence || right.adx - left.adx);
+                     .sort(
+                         (left, right) =>
+                             (confidenceRequired ? right.confidence - left.confidence : 0) ||
+                             right.adx - left.adx
+                     );
                 const selected = qualified[0] || null;
                 this.volatilityScanIndex = 0;
                 this.volatilityScanRecords = [];
@@ -670,7 +703,7 @@ export default Engine =>
                     event: 'scan',
                     marketCount: records.length,
                     qualifiedCount: qualified.length,
-                    minimumConfidence: minimum,
+                               minimumConfidence: confidenceRequired ? minimum : null,
                     windowSize,
                     minimumAdx: adxMinimum,
                     selected: selected
@@ -733,6 +766,10 @@ export default Engine =>
                 this.volatilityScanPromise = null;
             });
             return this.volatilityScanPromise;
+        }
+        async scanVolatilityUntilIndicatorsPass(minimumAdx = 20) {
+            this.requiresSignalConfidence = false;
+            return this.scanVolatilityUntilQualified(undefined, 60, minimumAdx, false);
         }
         checkLastNTicksDirection(direction, count = 5) {
             const size = Math.max(1, Math.floor(Number(count) || 5));

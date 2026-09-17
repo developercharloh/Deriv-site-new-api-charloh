@@ -440,6 +440,20 @@ registerBoolean({
     ],
 });
 
+registerBoolean({
+    type: 'scan_volatility_until_indicators_pass',
+    message0: 'Scan volatility until ADX %1, RSI and MACD all pass',
+    args0: [numberInput('MINIMUM_ADX', 20)],
+    category: window.Blockly.Categories.Before_Purchase,
+    tooltip:
+        'Scans the supported Volatility Index universe and selects the strongest market whose ADX, RSI, and MACD conditions pass. Signal confidence is not used.',
+    meta: 'Scan volatility until indicators pass',
+    generatorCode: block => [
+        `Bot.scanVolatilityUntilIndicatorsPass(${valueCode(block, 'MINIMUM_ADX', '20')})`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
+});
+
 registerOutput({
     type: 'volatility_signal',
     message0: 'Selected volatility signal',

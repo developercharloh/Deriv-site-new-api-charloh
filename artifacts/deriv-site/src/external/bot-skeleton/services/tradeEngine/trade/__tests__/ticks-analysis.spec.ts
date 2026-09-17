@@ -273,6 +273,33 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(true);
     });
 
+    it('keeps the purchase gate open when confidence is disabled and indicators pass', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.requiresSignalConfidence = false;
+        engine.store = {
+            getState: () => ({ newTick: 123 }),
+        };
+        engine.lastSignalConfidenceEvaluation = {
+            signal: 'CALL',
+            confidence: 20,
+            minimum: 55,
+            tick: 123,
+        };
+        engine.recordIndicatorValue('adx', 30);
+        engine.recordIndicatorValue('rsi', 60);
+        engine.recordIndicatorValue('macd', 1);
+
+        expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(true);
+        expect(engine.getVolatilityConditionSnapshot('CALL')).toEqual(
+            expect.objectContaining({
+                availableConfidence: null,
+                minimumConfidence: null,
+                conditionsPassed: true,
+            })
+        );
+    });
+
     it('keeps one before-purchase evaluation valid when a new tick arrives during analysis', () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
