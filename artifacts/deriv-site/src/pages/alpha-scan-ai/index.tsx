@@ -876,7 +876,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                 isWin: settlement.isWin,
                 exitSpot: settlement.isWin ? '100.45' : '100.35',
             });
-        }, this.riskFixtureMode ? 20 : 260);
+        }, this.riskFixtureMode ? 20 : 500);
     }
 }
 
@@ -1566,7 +1566,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             ? 'REJECTED'
             : 'EVIDENCE NEEDED';
     const modelGateTone = modelGate === 'validated' ? 'positive' : modelGate === 'failed' ? 'negative' : 'neutral';
-    const visibleRows = rows.slice(0, 10);
     const runLabel = executionLeg !== 'idle'
         ? executionLeg.includes('recovery') ? 'RECOVERY ACTIVE' : 'PRIMARY ACTIVE'
         : autoVolatilityMode ? 'START AUTO RUN' : 'RUN MODEL PICK';
@@ -1630,13 +1629,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
                 <div className={`alpha-cockpit__gate alpha-cockpit__gate--${modelGateTone}`}>
                     <span className='alpha-cockpit__gate-label'>CURRENT MODEL GATE</span>
-                    <strong>{modelGateLabel}</strong>
+                    <strong data-testid='tool-model-status'>{modelLabel}</strong>
                     <small>{rows.length ? `${validatedRows} of ${rows.length} markets passed validation` : 'Run a scan to build evidence'}</small>
                 </div>
             </section>
 
             <section className='alpha-cockpit__decision-grid' aria-label='Current model decision'>
-                <article className='alpha-cockpit__decision-panel alpha-cockpit__decision-panel--signal'>
+                <article className='alpha-cockpit__decision-panel alpha-cockpit__decision-panel--signal' data-testid='tool-model-pick' data-symbol={modelPick?.symbol || ''}>
                     <div className='alpha-cockpit__panel-topline'>
                         <span className='alpha-cockpit__overline'>PRIMARY SIGNAL</span>
                         <span className={`alpha-cockpit__status-tag alpha-cockpit__status-tag--${modelGateTone}`}>{modelGateLabel}</span>
@@ -1716,7 +1715,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             </section>
 
             <section className='alpha-cockpit__workspace-grid'>
-                <article className='alpha-cockpit__data-panel'>
+                <article className='alpha-cockpit__data-panel' data-testid='scan-coverage'>
                     <div className='alpha-cockpit__section-head'>
                         <div><span className='alpha-cockpit__overline'>MARKET RANKING</span><h2>Evidence across the universe</h2></div>
                         <span className='alpha-cockpit__count'>{rows.length} / {discoveredCount || rows.length} markets</span>
@@ -1725,7 +1724,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         <table className='alpha-cockpit__table'>
                             <thead><tr><th>Market</th><th>Model</th><th>OOS</th><th>Volatility</th><th>Gate</th></tr></thead>
                             <tbody>
-                                {visibleRows.length ? visibleRows.map(row => (
+                                {rows.length ? rows.map(row => (
                                     <tr key={row.symbol} className={row.symbol === modelPick?.symbol ? 'alpha-cockpit__table-row--selected' : ''} data-symbol={row.symbol} data-selected={row.symbol === modelPick?.symbol} data-qualified={row.validationGate === 'validated'}>
                                         <td><strong>{row.symbol}</strong><small>{row.displayName}</small></td>
                                         <td><span className='alpha-cockpit__table-number'>{Math.round(row.baselineProbability * 100)}%</span><small>{row.regime}</small></td>
@@ -1759,7 +1758,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <table className='alpha-cockpit__table alpha-cockpit__table--journal'>
                         <thead><tr><th>Time</th><th>Market</th><th>Leg</th><th>Strategy</th><th>State</th><th>Result</th></tr></thead>
                         <tbody>
-                            {liveTrade ? <tr><td>{liveTrade.purchaseTime}</td><td><strong>{liveTrade.symbol}</strong></td><td>{liveTradeLeg === 'recovery' ? 'Recovery' : 'Primary'}</td><td>{liveTradeDecision?.label || liveTrade.contractType}</td><td><span className='alpha-cockpit__row-gate alpha-cockpit__row-gate--validated'>OPEN</span></td><td>Live</td></tr> : journalRows.length ? journalRows.map(entry => <tr key={entry.contractId} data-contract-id={entry.contractId}><td>{entry.time}</td><td><strong>{entry.symbol}</strong></td><td>{entry.leg}</td><td>{entry.strategy}</td><td><span className={`alpha-cockpit__row-gate alpha-cockpit__row-gate--${entry.gate.toLowerCase()}`}>{entry.gate.toUpperCase()}</span></td><td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-cockpit__gain' : 'alpha-cockpit__loss'}>{entry.profit === null ? `Open · ${formatMoney(entry.payout)}` : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)}`}</td></tr>) : <tr><td colSpan={6} className='alpha-cockpit__table-empty'>{liveFeedback?.message || 'No executions recorded. The journal will keep every approved attempt and settlement.'}</td></tr>}
+                            {liveTrade ? <tr data-symbol={liveTrade.symbol}><td>{liveTrade.purchaseTime}</td><td><strong>{liveTrade.symbol}</strong></td><td>{liveTradeLeg === 'recovery' ? 'Recovery' : 'Primary'}</td><td>{liveTradeDecision?.label || liveTrade.contractType}</td><td><span className='alpha-cockpit__row-gate alpha-cockpit__row-gate--validated'>OPEN</span></td><td>Live</td></tr> : journalRows.length ? journalRows.map(entry => <tr key={entry.contractId} data-contract-id={entry.contractId}><td>{entry.time}</td><td><strong>{entry.symbol}</strong></td><td>{entry.leg}</td><td>{entry.strategy}</td><td><span className={`alpha-cockpit__row-gate alpha-cockpit__row-gate--${entry.gate.toLowerCase()}`}>{entry.gate.toUpperCase()}</span></td><td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-cockpit__gain' : 'alpha-cockpit__loss'}>{entry.profit === null ? `Open · ${formatMoney(entry.payout)}` : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)}`}</td></tr>) : <tr><td colSpan={6} className='alpha-cockpit__table-empty'>{liveFeedback?.message || 'No executions recorded. The journal will keep every approved attempt and settlement.'}</td></tr>}
                         </tbody>
                     </table>
                 </div>

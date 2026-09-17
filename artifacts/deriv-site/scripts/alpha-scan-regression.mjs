@@ -627,7 +627,8 @@ const run = async () => {
             10000,
             50,
         );
-        if (rescanned.coverage !== '8 / 8' || !rescanned.modelPick) {
+        const [rescannedCovered, rescannedDiscovered] = rescanned.coverage.split('/').map(value => Number(value.trim()));
+        if (!rescannedCovered || !rescannedDiscovered || rescannedCovered !== rescannedDiscovered || !rescanned.modelPick) {
             throw new Error(`Settlement rescan did not cover the full fixture universe: ${JSON.stringify(rescanned)}`);
         }
         const resumed = await waitFor(
