@@ -1,5 +1,6 @@
 import { observer } from '@/external/bot-skeleton/utils/observer';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import Ticks from '../Ticks';
 import {
     getAdaptiveMomentumContractType,
@@ -428,6 +429,7 @@ describe('Ticks last-digit analysis events', () => {
             code: '1HZ100V',
             label: 'Volatility 100 (1s) Index',
         };
+        engine.volatilityScanRequestGapMs = 0;
         engine.$scope = { ticksService: { request } };
         engine.watchTicks = jest.fn(async symbol => {
             engine.symbol = symbol;
@@ -436,10 +438,24 @@ describe('Ticks last-digit analysis events', () => {
 
         (api_base as any).active_symbols = [];
         (api_base as any).pip_sizes = { '1HZ100V': 2 };
+        const marketEvents: any[] = [];
+        const emit = jest.spyOn(observer, 'emit').mockImplementation((event, payload) => {
+            if (event === 'bot.volatility.scan' && payload?.event === 'market') {
+                marketEvents.push(payload);
+            }
+        });
 
         const scanResult = await engine.scanVolatilityUntilIndicatorsPass(20);
         expect(scanResult).toBe(true);
 
+        expect(request).toHaveBeenCalledTimes(DERIV_VOLATILITIES.length);
+        expect(request.mock.calls.map(([options]) => options.symbol)).toEqual(
+            expect.arrayContaining(DERIV_VOLATILITIES.map(({ code }) => code))
+        );
+        expect(marketEvents).toHaveLength(DERIV_VOLATILITIES.length);
+        expect(marketEvents.every(event => Number.isFinite(event.adx))).toBe(true);
+        expect(marketEvents.every(event => Number.isFinite(event.rsi))).toBe(true);
+        expect(marketEvents.every(event => Number.isFinite(event.macd))).toBe(true);
         expect(request.mock.calls[0][0]).toEqual(
             expect.objectContaining({
                 symbol: '1HZ100V',
@@ -453,6 +469,7 @@ describe('Ticks last-digit analysis events', () => {
                 signal: 'PUT',
             })
         );
+        emit.mockRestore();
     });
 
     it('releases a selected volatility after live conditions fail', () => {
