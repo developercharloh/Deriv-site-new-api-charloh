@@ -277,23 +277,11 @@
           <!-- 3. SMART ENTRY: if first trade AND we have a Last Tick, follow trend -->
           <block type="controls_if" id="bp_smart_if">
             <value name="IF0">
-              <block type="logic_operation" id="bp_smart_and">
-                <field name="OP">AND</field>
-                <value name="A">
-                  <block type="logic_compare" id="bp_smart_a">
+                  <block type="logic_compare" id="bp_smart_wait_for_scan">
                     <field name="OP">EQ</field>
-                    <value name="A"><block type="variables_get" id="bp_smart_done"><field name="VAR" id="v_done">Trades Done</field></block></value>
-                    <value name="B"><block type="math_number" id="bp_smart_zero"><field name="NUM">0</field></block></value>
+                    <value name="A"><block type="volatility_signal" id="bp_smart_scan_signal"></block></value>
+                    <value name="B"><block type="text" id="bp_smart_wait_text"><field name="TEXT">WAIT</field></block></value>
                   </block>
-                </value>
-                <value name="B">
-                  <block type="logic_compare" id="bp_smart_b">
-                    <field name="OP">NEQ</field>
-                    <value name="A"><block type="variables_get" id="bp_smart_lt"><field name="VAR" id="v_lt">Last Tick</field></block></value>
-                    <value name="B"><block type="math_number" id="bp_smart_lt0"><field name="NUM">0</field></block></value>
-                  </block>
-                </value>
-              </block>
             </value>
             <statement name="DO0">
               <block type="variables_set" id="bp_smart_set">

@@ -39,3 +39,4 @@
 - [Rise/Fall template isolation](rise-fall-template-isolation.md) — scope stale workspace refreshes by saved bot identity so Rise/Fall Journal blocks cannot contaminate another template.
 - [Signal confidence semantics](deriv-signal-confidence.md) — confidence is recent directional agreement over a configurable 60-tick default and remains informational.
 - [Purchase evaluation cycle](deriv-purchase-evaluation-cycle.md) — bind asynchronous confidence and indicator checks to one before-purchase cycle, not the moving current tick.
+- [Rise/Fall volatility scan observability](rise-fall-volatility-scan-observability.md) — preserve scanner direction and keep per-market indicator results visible while scanning.

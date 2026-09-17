@@ -1112,6 +1112,9 @@ export default class RunPanelStore {
         adx?: number;
         rsi?: number;
         macd?: number;
+        qualifies?: boolean;
+        minimumRsi?: number;
+        minimumMacd?: number;
             availableConfidence?: number | null;
             minimumConfidence?: number | null;
             availableAdx?: number | null;
@@ -1181,23 +1184,41 @@ export default class RunPanelStore {
 
         if (event.event === 'checking') {
             journal.updateVolatilityScanMessage(
-                `[Volatility Scan] Checking market ${event.marketIndex ?? 0}/${event.marketTotal ?? 0} · ` +
+                `[Volatility Scan] Status · Checking market ${event.marketIndex ?? 0}/${event.marketTotal ?? 0} · ` +
                     `${event.label || event.market || 'next market'}`
             );
             return;
         }
 
         if (event.event === 'market') {
-            journal.updateVolatilityScanMessage(
-                `[Volatility Scan] Checked ${event.marketIndex ?? 0}/${event.marketTotal ?? 0} · ` +
-                    `${event.label || event.market || 'market'} · ${reasonLabel(event.reason)} · moving to the next market`
+            const signal = String(event.signal || 'WAIT').toUpperCase();
+            const recommendation = event.qualifies === true ? '✅ RECOMMENDED' : '⏭️ SKIP';
+            journal.pushMessage(
+                `[Volatility Scan] Market ${event.marketIndex ?? 0}/${event.marketTotal ?? 0} · ` +
+                    `${event.label || event.market || 'market'} · ${recommendation} · ` +
+                    `${conditionSummary({
+                        signal,
+                        availableConfidence: event.confidence,
+                        minimumConfidence: null,
+                        availableAdx: event.adx,
+                        minimumAdx: event.minimumAdx,
+                        availableRsi: event.rsi,
+                        minimumRsi: event.minimumRsi ?? 50,
+                        rsiOperator: event.rsiOperator,
+                        availableMacd: event.macd,
+                        minimumMacd: event.minimumMacd ?? 0,
+                        macdOperator: event.macdOperator,
+                        conditionsPassed: event.conditionsPassed ?? event.qualifies,
+                    })} · ${reasonLabel(event.reason)}`,
+                MessageTypes.NOTIFY,
+                'journal__text'
             );
             return;
         }
 
         if (event.event === 'rejected') {
             journal.updateVolatilityScanMessage(
-                `[Volatility Scan] Rejected ${event.label || event.market || 'selected market'} · ` +
+                `[Volatility Scan] Status · Rejected ${event.label || event.market || 'selected market'} · ` +
                     `${conditionSummary(event)} · ${reasonLabel(event.reason)} · rescanning for another market`,
             );
             return;
@@ -1265,7 +1286,7 @@ export default class RunPanelStore {
               })} · executing after fresh confirmation`
             : `No market met the ${number(event.minimumConfidence, 0)}% confidence and indicator gates`;
         journal.updateVolatilityScanMessage(
-            `[Volatility Scan] Finished ${event.marketCount ?? 0} markets · ` +
+            `[Volatility Scan] Status · Finished ${event.marketCount ?? 0} markets · ` +
                 `${event.qualifiedCount ?? 0} qualified · window ${event.windowSize ?? 0} ticks · ` +
                 selectedText
         );

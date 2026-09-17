@@ -299,7 +299,7 @@ export default class JournalStore {
     }
 
     updateVolatilityScanMessage(message: string) {
-        const scanPrefix = '[Volatility Scan]';
+        const scanPrefix = '[Volatility Scan] Status';
         const existingIndex = this.unfiltered_messages.findIndex(
             item => item.message_type === MessageTypes.NOTIFY && typeof item.message === 'string' && item.message.startsWith(scanPrefix)
         );

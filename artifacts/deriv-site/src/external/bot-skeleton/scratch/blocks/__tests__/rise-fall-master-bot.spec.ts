@@ -259,6 +259,8 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
          expect(workspace.getBlockById('bp_apply_scanned_direction_if')?.type).toBe('controls_if');
          expect(workspace.getBlockById('bp_apply_scanned_direction')?.getFieldValue('VAR')).toBe('v_dir');
+          expect(workspace.getBlockById('bp_smart_wait_for_scan')?.getFieldValue('OP')).toBe('EQ');
+          expect(workspace.getBlockById('bp_smart_scan_signal')?.type).toBe('volatility_signal');
          expect(workspace.getBlockById('bp_direct_call_a')?.getFieldValue('VAR')).toBe('v_dir');
          expect(workspace.getBlockById('bp_direct_put_a')?.getFieldValue('VAR')).toBe('v_dir');
          expect(workspace.getBlockById('bp_direct_call_gate')?.type).toBe('logic_compare');
