@@ -1,4 +1,5 @@
 import { observer } from '@/external/bot-skeleton/utils/observer';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import Ticks from '../Ticks';
 import {
     getAdaptiveMomentumContractType,
@@ -415,6 +416,43 @@ describe('Ticks last-digit analysis events', () => {
         await expect(engine.scanVolatilityUntilQualified()).resolves.toBe(true);
         expect(engine.$scope.ticksService.request).not.toHaveBeenCalled();
         expect(engine.watchTicks).toHaveBeenCalledTimes(1);
+    });
+
+    it('checks the previously selected market first after a settlement rescan', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const history = Array.from({ length: 61 }, (_, index) => ({ quote: 100 - index * index * 0.01 }));
+        const request = jest.fn().mockResolvedValue(history);
+
+        engine.volatilityPreferredMarket = {
+            code: '1HZ100V',
+            label: 'Volatility 100 (1s) Index',
+        };
+        engine.$scope = { ticksService: { request } };
+        engine.watchTicks = jest.fn(async symbol => {
+            engine.symbol = symbol;
+        });
+        engine.makeProposals = jest.fn();
+
+        (api_base as any).active_symbols = [];
+        (api_base as any).pip_sizes = { '1HZ100V': 2 };
+
+        const scanResult = await engine.scanVolatilityUntilIndicatorsPass(20);
+        expect(scanResult).toBe(true);
+
+        expect(request.mock.calls[0][0]).toEqual(
+            expect.objectContaining({
+                symbol: '1HZ100V',
+                force: false,
+                subscribe: false,
+            })
+        );
+        expect(engine.volatilitySelectionLock).toEqual(
+            expect.objectContaining({
+                code: '1HZ100V',
+                signal: 'PUT',
+            })
+        );
     });
 
     it('releases a selected volatility after live conditions fail', () => {

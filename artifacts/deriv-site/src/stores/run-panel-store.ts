@@ -1217,6 +1217,8 @@ export default class RunPanelStore {
                 market_closed: 'closed',
                 insufficient_history: 'not enough ticks',
                 history_request_failed: 'history unavailable',
+                history_refresh_failed: 'refresh unavailable · cached values shown',
+                recently_rejected: 'switching to another market',
                 confidence_below_threshold: 'confidence below threshold',
                 indicator_confirmation_failed: 'ADX/RSI/MACD failed',
                 live_conditions_failed: 'fresh confirmation failed',

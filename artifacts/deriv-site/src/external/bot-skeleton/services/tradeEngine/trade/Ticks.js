@@ -13,7 +13,7 @@ import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { adxSnapshot, macdSnapshot, rsiSnapshot } from '@/external/indicators';
 import { adaptiveMomentumLog } from '../utils/broadcast';
 
-const VOLATILITY_SCAN_REQUEST_GAP_MS = 250;
+const VOLATILITY_SCAN_REQUEST_GAP_MS = 750;
 const VOLATILITY_SCAN_HISTORY_RETRIES = 2;
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -109,6 +109,8 @@ export default Engine =>
             this.tickListenerKey = null;
             this.latestTick = null;
             this.volatilitySelectionLock = null;
+            this.volatilityPreferredMarket = null;
+            this.volatilityExcludedMarket = null;
             this.volatilityScanIndex = 0;
             this.volatilityScanRecords = [];
             this.purchaseConditionEvaluationTick = null;
@@ -381,8 +383,34 @@ export default Engine =>
         getPurchaseConditionTick() {
             return this.store?.getState?.().newTick ?? this.latestTick?.epoch ?? null;
         }
-        resetVolatilitySelection() {
+        getVolatilityScanOrder() {
+            const preferredCode = this.volatilityPreferredMarket?.code;
+            const excludedCode = this.volatilityExcludedMarket?.code;
+            const preferred = DERIV_VOLATILITIES.find(volatility => volatility.code === preferredCode);
+            const excluded = DERIV_VOLATILITIES.find(volatility => volatility.code === excludedCode);
+            const remaining = DERIV_VOLATILITIES.filter(
+                volatility => volatility.code !== preferredCode && volatility.code !== excludedCode
+            );
+
+            return [
+                ...(preferred ? [preferred] : []),
+                ...remaining,
+                ...(excluded && excluded.code !== preferred?.code ? [excluded] : []),
+            ];
+        }
+        prepareVolatilityRescan() {
+            const locked = this.volatilitySelectionLock;
+            if (locked?.code) {
+                this.volatilityPreferredMarket = {
+                    code: locked.code,
+                    label: locked.label,
+                };
+            }
+            this.resetVolatilitySelection({ preservePreferred: true });
+        }
+        resetVolatilitySelection({ preservePreferred = false } = {}) {
             this.volatilitySelectionLock = null;
+            if (!preservePreferred) this.volatilityPreferredMarket = null;
             this.lastSignalConfidenceEvaluation = null;
             this.purchaseIndicatorEvaluation = null;
             this.purchaseConditionEvaluationTick = null;
@@ -395,6 +423,7 @@ export default Engine =>
         releaseVolatilitySelection(reason = 'conditions_failed') {
             const locked = this.volatilitySelectionLock;
             if (!locked) return;
+            const rejectedCode = locked.code;
 
             const conditionSnapshot = this.getVolatilityConditionSnapshot?.(locked.signal);
             globalObserver.emit('bot.volatility.scan', {
@@ -410,6 +439,12 @@ export default Engine =>
                 reason,
             });
             this.resetVolatilitySelection();
+            if (['live_conditions_failed', 'proposals_not_ready'].includes(reason) && rejectedCode) {
+                this.volatilityExcludedMarket = {
+                    code: rejectedCode,
+                    label: locked.label,
+                };
+            }
         }
         async restoreLockedVolatilitySelection() {
             const locked = this.volatilitySelectionLock;
@@ -575,10 +610,11 @@ export default Engine =>
                 : null;
             const windowSize = Math.max(2, Math.floor(Number(count) || 60));
             const adxMinimum = Math.max(0, Number(minimumAdx) || 20);
+            const scanOrder = this.getVolatilityScanOrder();
             const scan = async () => {
                 const activeSymbols = Array.isArray(api_base.active_symbols) ? api_base.active_symbols : [];
                 const marketIndex = this.volatilityScanIndex;
-                const volatility = DERIV_VOLATILITIES[marketIndex];
+                const volatility = scanOrder[marketIndex];
                 if (!volatility) {
                     this.volatilityScanIndex = 0;
                     this.volatilityScanRecords = [];
@@ -619,10 +655,19 @@ export default Engine =>
                                 ticks = await this.$scope.ticksService.request({
                                     symbol: volatility.code,
                                     subscribe: false,
-                                    force: attempt === 0,
+                                    // Use the service cache first. Forcing every
+                                    // market into a new history request at the
+                                    // start of a cycle causes broker rate-limit
+                                    // failures and hides otherwise usable data.
+                                    force: attempt > 0,
                                     count: windowSize + 1,
                                 });
-                                break;
+                                const numericTickCount = Array.isArray(ticks)
+                                    ? ticks.filter(tick => Number.isFinite(Number(tick?.quote))).length
+                                    : 0;
+                                if (numericTickCount >= windowSize + 1 || attempt === VOLATILITY_SCAN_HISTORY_RETRIES) {
+                                    break;
+                                }
                             } catch (error) {
                                 historyError = error;
                                 if (attempt < VOLATILITY_SCAN_HISTORY_RETRIES) {
@@ -661,7 +706,11 @@ export default Engine =>
                              const rsiPass = signal === 'CALL' ? Number(rsi) > 50 : Number(rsi) < 50;
                              const macdPass = signal === 'CALL' ? Number(macd) > 0 : Number(macd) < 0;
                              const indicatorsPass = macdPass && (adxPass || rsiPass);
-                             const qualifies = indicatorsPass && (!confidenceRequired || confidence >= minimum);
+                            const isRecentlyRejected = this.volatilityExcludedMarket?.code === volatility.code;
+                            const qualifies =
+                                !isRecentlyRejected &&
+                                indicatorsPass &&
+                                (!confidenceRequired || confidence >= minimum);
 
                             record = {
                                 ...volatility,
@@ -671,27 +720,45 @@ export default Engine =>
                                 rsi: Number(rsi),
                                 macd: Number(macd),
                                 qualifies,
-                                reason: qualifies
-                                    ? 'qualified'
-                                     : confidenceRequired && confidence < minimum
-                                      ? 'confidence_below_threshold'
-                                      : 'indicator_confirmation_failed',
+                                reason: isRecentlyRejected
+                                    ? 'recently_rejected'
+                                    : qualifies
+                                      ? 'qualified'
+                                      : confidenceRequired && confidence < minimum
+                                        ? 'confidence_below_threshold'
+                                        : 'indicator_confirmation_failed',
                             };
                         }
                     } catch {
-                        record = {
-                            ...volatility,
-                            qualifies: false,
-                            reason: 'history_request_failed',
-                        };
+                        const cachedRecord = this.volatilityMarketSnapshots?.get?.(volatility.code);
+                        record = cachedRecord
+                            ? {
+                                  ...cachedRecord,
+                                  ...volatility,
+                                  qualifies: false,
+                                  reason: 'history_refresh_failed',
+                              }
+                            : {
+                                  ...volatility,
+                                  qualifies: false,
+                                  reason: 'history_request_failed',
+                              };
                     }
                 }
 
+                if (!this.volatilityMarketSnapshots) this.volatilityMarketSnapshots = new Map();
+                if (
+                    record.reason !== 'history_request_failed' &&
+                    record.reason !== 'history_refresh_failed' &&
+                    record.reason !== 'insufficient_history'
+                ) {
+                    this.volatilityMarketSnapshots.set(volatility.code, record);
+                }
                 this.volatilityScanRecords.push(record);
                 this.volatilityScanIndex += 1;
                 const selectedImmediately = record.qualifies === true;
 
-                if (this.volatilityScanIndex < DERIV_VOLATILITIES.length) {
+                if (this.volatilityScanIndex < scanOrder.length) {
                     await wait(VOLATILITY_SCAN_REQUEST_GAP_MS);
                     globalObserver.emit('bot.volatility.scan', {
                         event: 'market',
@@ -711,7 +778,7 @@ export default Engine =>
                         qualifies: record.qualifies,
                         reason: record.reason,
                         marketIndex: this.volatilityScanIndex,
-                        marketTotal: DERIV_VOLATILITIES.length,
+                        marketTotal: scanOrder.length,
                         qualifiedCount: this.volatilityScanRecords.filter(item => item.qualifies).length,
                     });
                     // A qualified market must hand control back to the Blockly
@@ -732,6 +799,16 @@ export default Engine =>
                 const selected = qualified[0] || null;
                 this.volatilityScanIndex = 0;
                 this.volatilityScanRecords = [];
+                if (selected) {
+                    this.volatilityPreferredMarket = {
+                        code: selected.code,
+                        label: selected.label,
+                    };
+                    this.volatilityExcludedMarket = null;
+                } else {
+                    this.volatilityPreferredMarket = null;
+                    this.volatilityExcludedMarket = null;
+                }
                 globalObserver.emit('bot.volatility.scan', {
                     event: 'scan',
                     marketCount: records.length,

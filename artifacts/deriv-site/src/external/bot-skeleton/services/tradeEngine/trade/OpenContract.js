@@ -109,7 +109,7 @@ export default Engine =>
                         }
 
                         const hasOtherActiveContracts = this.getActiveContractIds().length > 0;
-                        if (!hasOtherActiveContracts) this.resetVolatilitySelection?.();
+                        if (!hasOtherActiveContracts) this.prepareVolatilityRescan?.();
                         const clockPacedFast = executionSpeed === 'fast' && this.fastClockActive;
                         const canFastRearm = releaseBotContractGate(
                             this,
