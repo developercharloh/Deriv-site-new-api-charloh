@@ -38,3 +38,4 @@
 - [Bot template refresh](deriv-bot-template-workspaces.md) — published Blockly template changes do not rewrite saved/open workspaces; users must load a fresh workspace to receive them.
 - [Rise/Fall template isolation](rise-fall-template-isolation.md) — scope stale workspace refreshes by saved bot identity so Rise/Fall Journal blocks cannot contaminate another template.
 - [Signal confidence semantics](deriv-signal-confidence.md) — confidence is recent directional agreement over a configurable 60-tick default and remains informational.
+- [Purchase evaluation cycle](deriv-purchase-evaluation-cycle.md) — bind asynchronous confidence and indicator checks to one before-purchase cycle, not the moving current tick.

@@ -107,6 +107,7 @@ export default Engine =>
             this.volatilitySelectionLock = null;
             this.volatilityScanIndex = 0;
             this.volatilityScanRecords = [];
+            this.purchaseConditionEvaluationTick = null;
         }
 
         async watchTicks(symbol) {
@@ -353,7 +354,7 @@ export default Engine =>
                     signal: normalizedSignal,
                     confidence: Number(confidence) || 0,
                     minimum,
-                    tick: this.getPurchaseConditionTick(),
+                    tick: this.purchaseConditionEvaluationTick ?? this.getPurchaseConditionTick(),
                 };
                 return confidence;
             };
@@ -380,8 +381,12 @@ export default Engine =>
             this.volatilitySelectionLock = null;
             this.lastSignalConfidenceEvaluation = null;
             this.purchaseIndicatorEvaluation = null;
+            this.purchaseConditionEvaluationTick = null;
             this.volatilityScanIndex = 0;
             this.volatilityScanRecords = [];
+        }
+        beginPurchaseConditionEvaluation() {
+            this.purchaseConditionEvaluationTick = this.getPurchaseConditionTick();
         }
         releaseVolatilitySelection(reason = 'conditions_failed') {
             const locked = this.volatilitySelectionLock;
@@ -423,7 +428,7 @@ export default Engine =>
             this.purchaseIndicatorEvaluation = {
                 ...(this.purchaseIndicatorEvaluation || {}),
                 [indicator]: Number(value),
-                tick: this.getPurchaseConditionTick(),
+                tick: this.purchaseConditionEvaluationTick ?? this.getPurchaseConditionTick(),
             };
             return value;
         }
@@ -503,9 +508,10 @@ export default Engine =>
             if (!confidence) return true;
 
             const currentTick = this.getPurchaseConditionTick();
-            if (confidence.tick !== null && currentTick !== null && confidence.tick !== currentTick) return false;
+            const evaluationTick = this.purchaseConditionEvaluationTick ?? currentTick;
+            if (confidence.tick !== null && evaluationTick !== null && confidence.tick !== evaluationTick) return false;
             const indicators = this.purchaseIndicatorEvaluation;
-            if (indicators?.tick !== null && currentTick !== null && indicators.tick !== currentTick) return false;
+            if (indicators?.tick !== null && evaluationTick !== null && indicators.tick !== evaluationTick) return false;
 
             return this.isPurchaseConditionValuesGateOpen(contractType);
         }
@@ -521,7 +527,9 @@ export default Engine =>
                 ) {
                     this.releaseVolatilitySelection('live_conditions_failed');
                 } else {
-                    return this.restoreLockedVolatilitySelection();
+                    await this.restoreLockedVolatilitySelection();
+                    this.beginPurchaseConditionEvaluation();
+                    return true;
                 }
             }
 
@@ -703,6 +711,7 @@ export default Engine =>
                     minimumConfidence: minimum,
                     minimumAdx: adxMinimum,
                 };
+                this.beginPurchaseConditionEvaluation();
                 return true;
             };
 
