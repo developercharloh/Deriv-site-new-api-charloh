@@ -1,0 +1,829 @@
+You are a senior quantitative developer, AI engineer,
+algorithmic trading architect, data scientist, and
+professional full-stack developer.
+
+I want you to build an advanced, intelligent Deriv
+Synthetic Indices AI Trading System.
+
+The goal is to create a sophisticated system that analyzes
+all available Deriv synthetic markets, discovers statistical
+patterns, evaluates trading opportunities, generates
+strategies, and executes trades based on configurable
+rules and risk management.
+
+I want a serious, professional-grade system, not a basic
+trading bot with random signals or simple indicators.
+
+The system must be data-driven, adaptive, transparent,
+and capable of learning from historical and live market
+data.
+
+Do not promise guaranteed profits. Focus on building the
+most technically robust and statistically validated system
+possible.
+
+==================================================
+1. PROJECT OBJECTIVE
+==================================================
+
+Build a multi-market AI trading platform that can:
+
+- Scan all available Deriv synthetic indices.
+- Collect and analyze historical tick data.
+- Monitor live tick movements.
+- Analyze digit distributions.
+- Analyze Rise/Fall behavior.
+- Analyze Over/Under contracts.
+- Analyze Matches/Differs contracts.
+- Analyze Higher/Lower contracts.
+- Analyze Only Ups and Only Downs where supported.
+- Analyze Multipliers.
+- Analyze Accumulators.
+- Generate market-specific strategies.
+- Estimate contract probabilities.
+- Calculate expected value.
+- Evaluate market conditions.
+- Execute configurable trading strategies.
+- Monitor performance.
+- Manage risk.
+- Learn from trading outcomes.
+- Support demo and real-account execution through
+  properly configured Deriv API integration.
+
+Use current official Deriv API documentation and verify
+available contracts, symbols, and account requirements.
+
+==================================================
+2. TECHNOLOGY STACK
+==================================================
+
+Frontend:
+- React
+- TypeScript strict mode
+- Vite
+- Tailwind CSS
+- Zustand
+- Recharts
+- Responsive mobile-first design
+
+Backend:
+- Node.js
+- TypeScript
+- PostgreSQL
+- Prisma or Drizzle ORM
+
+AI/ML:
+- Python
+- FastAPI
+- Pandas
+- NumPy
+- Scikit-learn
+- XGBoost where justified
+- Statistical modeling
+- Probability calibration
+
+Testing:
+- Vitest
+- Pytest
+- React Testing Library
+- Playwright
+
+Deployment:
+- Vercel for frontend
+- Suitable backend hosting
+- PostgreSQL database
+- Secure environment variables
+- Monitoring and logging
+
+==================================================
+3. DERIV API INTEGRATION
+==================================================
+
+Integrate with the current official Deriv API.
+
+Implement:
+
+- Active symbol discovery
+- Historical tick retrieval
+- Live tick streaming
+- Contract discovery
+- Proposal requests
+- Buy requests
+- Open contract monitoring
+- Contract result monitoring
+- Account balance retrieval where authorized
+- Transaction history where authorized
+- WebSocket heartbeat
+- Reconnection
+- Subscription management
+- API error handling
+- Request validation
+
+Support properly configured demo and real-account
+environments.
+
+Separate account credentials securely from frontend code.
+
+Never hardcode unsupported symbols or contract types.
+
+Verify all API endpoints and request formats before
+implementation.
+
+==================================================
+4. MULTI-MARKET SCANNER
+==================================================
+
+Create a market scanner for all available synthetic indices.
+
+Discover markets dynamically.
+
+Categories may include:
+
+- Volatility Indices
+- 1-Second Volatility Indices
+- Step Indices
+- Jump Indices
+- Range Break Indices
+- Boom/Crash Indices
+- Other Synthetic Indices
+
+Display:
+
+- Market name
+- Symbol
+- Current price
+- Latest tick
+- Market category
+- Data availability
+- Tick frequency
+- Historical sample size
+- Active contract types
+- Market analysis status
+
+Allow users to select:
+- One market
+- Multiple markets
+- All supported markets
+
+==================================================
+5. HISTORICAL DATA COLLECTION
+==================================================
+
+Build a high-quality historical data engine.
+
+Collect:
+
+- Symbol
+- Timestamp
+- Tick ID where available
+- Price
+- Last digit
+- Pip size
+- Tick interval
+- Data source
+- Collection status
+
+Support:
+
+- 20 ticks
+- 50 ticks
+- 100 ticks
+- 200 ticks
+- 500 ticks
+- 1,000 ticks
+- 5,000 ticks
+- Custom data windows
+
+Create long-term datasets covering:
+- Minutes
+- Hours
+- Days
+- Weeks
+- Months
+
+Where historical data availability permits.
+
+Implement:
+- FIFO buffers
+- Duplicate detection
+- Missing-data detection
+- Data validation
+- Dataset versioning
+- Chronological storage
+- Database indexing
+
+Do not fabricate unavailable historical data.
+
+==================================================
+6. DIGIT ANALYSIS ENGINE
+==================================================
+
+Analyze digits 0–9.
+
+Calculate:
+
+- Digit frequency
+- Relative frequency
+- Even/Odd distribution
+- Over/Under distribution
+- Matches/Differs statistics
+- Digit transitions
+- Repeated digits
+- Consecutive sequences
+- Rolling distributions
+- Distribution changes
+- Historical baseline comparisons
+
+Use multiple windows:
+20, 50, 100, 200, 500, 1,000 ticks.
+
+Display:
+- Digit distribution charts
+- Frequency tables
+- Rolling statistics
+- Sample sizes
+- Confidence intervals
+- Historical comparisons
+
+Do not assume that a recent frequency imbalance
+guarantees a future outcome.
+
+Test whether observed patterns provide
+out-of-sample predictive value.
+
+==================================================
+7. RISE/FALL ANALYSIS
+==================================================
+
+Build a directional tick analysis engine.
+
+Analyze:
+- Rising ticks
+- Falling ticks
+- Consecutive rises
+- Consecutive falls
+- Directional proportions
+- Price changes
+- Tick sequences
+- Market-specific directional statistics
+- Multiple time windows
+
+Calculate:
+
+- Rise percentage
+- Fall percentage
+- Directional imbalance
+- Baseline comparison
+- Predictive accuracy
+- Out-of-sample performance
+
+Evaluate whether the features provide reliable
+predictive information.
+
+Do not treat a recent directional streak as
+proof that the next tick will reverse.
+
+==================================================
+8. CONTRACT STRATEGY ENGINE
+==================================================
+
+Support all currently available relevant Deriv
+contract types.
+
+Research and implement:
+
+- Rise/Fall
+- Over/Under
+- Matches/Differs
+- Even/Odd where available
+- Higher/Lower
+- Only Ups
+- Only Downs
+- Multipliers
+- Accumulators
+
+For each contract:
+
+- Verify current contract specifications.
+- Verify barriers.
+- Verify expiry.
+- Retrieve current proposal.
+- Retrieve actual payout.
+- Calculate break-even probability.
+- Calculate expected value.
+- Evaluate historical performance.
+- Evaluate execution conditions.
+
+Do not assume that a strategy works equally across
+different contract types.
+
+==================================================
+9. AI FEATURE ENGINEERING
+==================================================
+
+Build an advanced feature pipeline.
+
+Features may include:
+
+- Digit frequencies
+- Rolling distributions
+- Even/Odd statistics
+- Over/Under statistics
+- Digit sequences
+- Price movements
+- Tick intervals
+- Volatility measures
+- Historical baselines
+- Market-specific statistics
+- Time-based features
+- Contract-specific information
+
+Prevent:
+- Look-ahead bias
+- Data leakage
+- Future information entering training
+- Incorrect labels
+- Duplicate samples
+
+Build feature importance analysis.
+
+Use feature selection and regularization.
+
+==================================================
+10. MACHINE LEARNING SYSTEM
+==================================================
+
+Create multiple models and compare them.
+
+Models:
+
+1. Historical frequency baseline
+2. Logistic Regression
+3. Random Forest
+4. Gradient Boosting
+5. XGBoost where justified
+6. Calibrated probability models
+
+Train separately by:
+- Market
+- Contract
+- Barrier
+- Forecast horizon
+
+Output:
+
+- Estimated probability
+- Prediction
+- Model confidence
+- Calibration score
+- Sample size
+- Model version
+- Training period
+- Testing period
+- Uncertainty estimate
+
+Compare models against suitable baseline models.
+
+Do not manufacture predictions or profitability claims.
+
+==================================================
+11. ADVANCED STRATEGY GENERATOR
+==================================================
+
+Create an AI strategy-generation engine.
+
+The engine should:
+
+- Analyze available market data.
+- Identify candidate strategies.
+- Generate strategy parameters.
+- Evaluate historical performance.
+- Compare strategy variations.
+- Test on unseen data.
+- Calculate expected value.
+- Identify weaknesses.
+- Recommend whether a strategy should be
+  activated, reviewed, or rejected.
+
+Generate strategies for:
+
+- Over/Under
+- Matches/Differs
+- Even/Odd
+- Rise/Fall
+- Higher/Lower
+- Multipliers
+- Accumulators
+
+Every strategy must include:
+
+- Market
+- Contract
+- Barrier
+- Expiry
+- Entry conditions
+- Exit conditions
+- Stake method
+- Risk settings
+- Expected value
+- Validation results
+- Strategy version
+
+The AI must not simply generate strategies that
+look profitable in historical data.
+
+==================================================
+12. MULTI-MARKET SELECTION
+==================================================
+
+Create an intelligent market-selection engine.
+
+Scan all supported markets and evaluate:
+
+- Data quality
+- Model performance
+- Probability calibration
+- Out-of-sample results
+- Expected value
+- Drawdown
+- Stability
+- Contract payout
+- Sample size
+
+Allow the system to select a market based on
+configurable criteria.
+
+Do not rank markets solely by recent win rate.
+
+Show the reasons behind every selection.
+
+==================================================
+13. EXECUTION ENGINE
+==================================================
+
+Build a configurable Deriv execution engine.
+
+Support:
+
+- Strategy activation
+- Market selection
+- Contract selection
+- Proposal retrieval
+- Payout verification
+- Purchase request
+- Open contract monitoring
+- Contract settlement
+- Execution logging
+- Error handling
+- Reconnection
+- Execution status
+
+Execution modes:
+
+- Manual confirmation
+- Automated execution
+- Paper trading
+- Demo account
+- Real-account configuration
+
+Allow users to configure execution permissions.
+
+Before purchase:
+- Validate market.
+- Validate contract.
+- Validate proposal.
+- Validate stake.
+- Validate risk limits.
+- Validate account settings.
+- Confirm that the strategy is active.
+
+Record every execution attempt and result.
+
+==================================================
+14. RISK MANAGEMENT
+==================================================
+
+Build a comprehensive risk-management engine.
+
+Configurable settings:
+
+- Stake amount
+- Stake percentage
+- Maximum daily loss
+- Maximum consecutive losses
+- Maximum exposure
+- Maximum number of trades
+- Maximum drawdown
+- Trading session limits
+- Automatic pause
+- Manual emergency stop
+
+Support stake methods:
+
+- Fixed stake
+- Percentage of balance
+- Fixed fractional sizing
+
+Include a martingale simulator for research purposes.
+
+Do not assume martingale creates an edge.
+
+The risk manager must be able to stop execution
+when configured limits are reached.
+
+==================================================
+15. MARKET 1 AND RECOVERY MARKET
+==================================================
+
+Implement a two-stage strategy framework.
+
+Market 1:
+- Analyze selected market.
+- Generate candidate contract.
+- Evaluate probability.
+- Verify expected value.
+- Execute according to configuration.
+
+Recovery Market:
+- Scan independently.
+- Analyze current market conditions.
+- Generate a new candidate.
+- Evaluate risk and payout.
+- Check exposure limits.
+- Require an independently validated signal.
+
+Do not automatically increase stakes after losses.
+
+Allow the user to configure whether recovery
+strategies are enabled.
+
+Display the reasoning and risk implications.
+
+==================================================
+16. BACKTESTING ENGINE
+==================================================
+
+Create a complete backtesting framework.
+
+Support:
+
+- Historical tick replay
+- Time-based splits
+- Walk-forward validation
+- Multiple markets
+- Multiple contracts
+- Different barriers
+- Different stake methods
+- Payout-based calculations
+- Drawdown analysis
+
+Metrics:
+
+- Win rate
+- Net profit/loss
+- Expected value
+- Profit factor
+- Maximum drawdown
+- Maximum losing streak
+- Average win
+- Average loss
+- Number of trades
+- Calibration
+- Confidence intervals
+
+Include transaction and execution assumptions
+where applicable.
+
+Do not use future information during testing.
+
+==================================================
+17. PAPER TRADING
+==================================================
+
+Build a paper-trading engine that uses live or
+historical data.
+
+Track:
+
+- Simulated balance
+- Stake
+- Contract
+- Entry
+- Expiry
+- Outcome
+- Payout
+- Profit/loss
+- Drawdown
+- Strategy version
+
+Allow users to compare paper-trading results
+with backtesting results.
+
+Clearly distinguish simulated results from
+actual account results.
+
+==================================================
+18. PERFORMANCE JOURNAL
+==================================================
+
+Create a detailed journal.
+
+Record:
+
+- Date
+- Time
+- Market
+- Contract
+- Barrier
+- Strategy
+- Model version
+- Estimated probability
+- Actual outcome
+- Stake
+- Payout
+- Profit/loss
+- Execution status
+- Risk status
+- Reason for trade
+- Reason for skipped trade
+
+Include:
+- Search
+- Filters
+- CSV export
+- Daily summaries
+- Weekly summaries
+- Monthly summaries
+
+==================================================
+19. MOBILE-FIRST UI
+==================================================
+
+Create a professional mobile execution interface.
+
+Pages:
+
+1. Dashboard
+2. Market Scanner
+3. Market Details
+4. AI Strategy Centre
+5. Contract Analysis
+6. Execution Centre
+7. Backtesting
+8. Paper Trading
+9. Risk Management
+10. Trading Journal
+11. Model Performance
+12. Settings
+
+Dashboard cards:
+
+- Account balance where authorized
+- Selected market
+- Current price
+- Market condition
+- Active strategy
+- Model probability
+- Contract payout
+- Risk status
+- Recent outcomes
+- Execution status
+
+Use a polished dark theme, professional typography,
+responsive layouts, and clear visual hierarchy.
+
+==================================================
+20. DATABASE
+==================================================
+
+Create tables for:
+
+- Markets
+- Ticks
+- Historical datasets
+- Features
+- Models
+- Predictions
+- Contract specifications
+- Proposals
+- Strategies
+- Backtest runs
+- Backtest results
+- Paper trades
+- Executions
+- Account snapshots
+- Risk settings
+- Journal entries
+- System events
+
+Use:
+- Foreign keys
+- Indexes
+- Validation
+- Timestamps
+- Versioning
+- Database migrations
+
+==================================================
+21. SECURITY
+==================================================
+
+Implement:
+
+- Secure credential handling
+- Environment variables
+- Backend-only secret storage
+- Input validation
+- Authorization
+- Rate limiting
+- API error handling
+- Audit logging
+- WebSocket reconnection
+
+Do not expose sensitive API credentials
+in frontend code.
+
+==================================================
+22. TESTING
+==================================================
+
+Write tests for:
+
+- Digit extraction
+- Frequency calculations
+- Contract calculations
+- Expected value
+- Data validation
+- Probability calibration
+- Backtesting
+- Risk limits
+- Execution requests
+- Proposal validation
+- API errors
+- WebSocket reconnection
+- Database operations
+
+Create known test scenarios and verify outputs.
+
+==================================================
+23. DEVELOPMENT PROCESS
+==================================================
+
+Build in phases:
+
+Phase 1:
+Project setup, database, market discovery,
+historical data collection.
+
+Phase 2:
+Digit analysis, directional analysis,
+contract analysis, charts.
+
+Phase 3:
+Feature engineering, baseline models,
+machine learning, validation.
+
+Phase 4:
+Strategy generator, expected value,
+market selection, backtesting.
+
+Phase 5:
+Execution engine, risk manager,
+paper trading, journal.
+
+Phase 6:
+Security, testing, deployment,
+performance optimization.
+
+Implement each phase incrementally.
+
+Explain the architecture before writing code.
+
+Provide complete, working code rather than
+unimplemented placeholders.
+
+==================================================
+24. FINAL REQUIREMENTS
+==================================================
+
+Build a professional, maintainable system.
+
+The system must:
+
+- Analyze real market data.
+- Use accurate contract specifications.
+- Provide transparent predictions.
+- Track actual performance.
+- Support configurable execution.
+- Enforce risk settings.
+- Avoid fabricated results.
+- Allow strategy experimentation.
+- Support multiple markets and contracts.
+- Provide clear error messages.
+- Be mobile responsive.
+
+Start by creating the complete architecture,
+project structure, database schema, and
+implementation roadmap.
+
+Then implement the project step by step.
