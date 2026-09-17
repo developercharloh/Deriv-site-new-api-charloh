@@ -488,6 +488,16 @@ describe('Ticks last-digit analysis events', () => {
             engine.symbol = symbol;
         });
         engine.makeProposals = jest.fn();
+        engine.getVolatilityMarketRecord = jest.fn(async volatility => ({
+            ...volatility,
+            signal: 'PUT',
+            confidence: volatility.code === '1HZ75V' ? 1 : volatility.code === '1HZ100V' ? 99 : 0,
+            adx: 25,
+            rsi: 40,
+            macd: -0.1,
+            qualifies: true,
+            reason: 'qualified',
+        }));
         engine.getVolatilityRecordStrength = jest.fn(record => {
             if (record.code === '1HZ100V') {
                 return {

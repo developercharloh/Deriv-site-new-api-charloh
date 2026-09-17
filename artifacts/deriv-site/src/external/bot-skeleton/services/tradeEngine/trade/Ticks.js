@@ -908,7 +908,6 @@ export default Engine =>
             const adxMinimum = Math.max(0, Number(minimumAdx) || 20);
             const scanOrder = this.getVolatilityScanOrder();
             const scan = async () => {
-                const activeSymbols = Array.isArray(api_base.active_symbols) ? api_base.active_symbols : [];
                 const marketIndex = this.volatilityScanIndex;
                 const volatility = scanOrder[marketIndex];
                 if (!volatility) {
@@ -927,120 +926,12 @@ export default Engine =>
                     qualifiedCount: this.volatilityScanRecords.filter(record => record.qualifies).length,
                 });
 
-                const activeRecord = activeSymbols.find(record => record?.symbol === volatility.code);
-                let record;
-                if (
-                    activeRecord &&
-                    (activeRecord.exchange_is_open === false ||
-                        activeRecord.is_trading_suspended === 1 ||
-                        activeRecord.is_trading_suspended === true)
-                ) {
-                    record = {
-                        ...volatility,
-                        qualifies: false,
-                        reason: 'market_closed',
-                    };
-                } else {
-                    try {
-                        // Scan one market at a time with a small history-only request.
-                        // The selected market is the only one that gets a live stream.
-                        let ticks;
-                        let historyError;
-                        for (let attempt = 0; attempt <= VOLATILITY_SCAN_HISTORY_RETRIES; attempt += 1) {
-                            try {
-                                ticks = await this.$scope.ticksService.request({
-                                    symbol: volatility.code,
-                                    subscribe: false,
-                                    // Use the service cache first. Forcing every
-                                    // market into a new history request at the
-                                    // start of a cycle causes broker rate-limit
-                                    // failures and hides otherwise usable data.
-                                    force: attempt > 0,
-                                    count: windowSize + 1,
-                                });
-                                const numericTickCount = Array.isArray(ticks)
-                                    ? ticks.filter(tick => Number.isFinite(Number(tick?.quote))).length
-                                    : 0;
-                                if (numericTickCount >= windowSize + 1 || attempt === VOLATILITY_SCAN_HISTORY_RETRIES) {
-                                    break;
-                                }
-                            } catch (error) {
-                                historyError = error;
-                                if (attempt < VOLATILITY_SCAN_HISTORY_RETRIES) {
-                                    await wait(350 * (attempt + 1));
-                                }
-                            }
-                        }
-                        if (!ticks) throw historyError || new Error('History response was empty');
-                        const prices = ticks.map(tick => Number(tick.quote)).filter(Number.isFinite);
-                        const recent = prices.slice(-(windowSize + 1));
-                        if (recent.length < windowSize + 1) {
-                            record = {
-                                ...volatility,
-                                qualifies: false,
-                                reason: 'insufficient_history',
-                            };
-                        } else {
-                            const moves = recent.slice(1).map((price, index) => {
-                                const previous = recent[index];
-                                return price > previous ? 1 : price < previous ? -1 : 0;
-                            });
-                            const rises = (moves.filter(move => move > 0).length / moves.length) * 100;
-                            const falls = (moves.filter(move => move < 0).length / moves.length) * 100;
-                            const signal = rises >= falls ? 'CALL' : 'PUT';
-                             const confidence = signal === 'CALL' ? rises : falls;
-                            const pipSize = Number(api_base.pip_sizes?.[volatility.code]) || 0;
-                            const adx = adxSnapshot(prices, { periods: 14, pipSize })?.adx ?? 0;
-                            const rsi = rsiSnapshot(prices, { periods: 14, pipSize }) ?? 0;
-                            const macd = macdSnapshot(prices, {
-                                fastEmaPeriod: 12,
-                                slowEmaPeriod: 26,
-                                signalEmaPeriod: 9,
-                                pipSize,
-                            })?.histogram ?? 0;
-                             const adxPass = Number(adx) >= adxMinimum;
-                             const rsiPass = signal === 'CALL' ? Number(rsi) > 50 : Number(rsi) < 50;
-                             const macdPass = signal === 'CALL' ? Number(macd) > 0 : Number(macd) < 0;
-                             const indicatorsPass = macdPass && (adxPass || rsiPass);
-                            const isRecentlyRejected = this.volatilityExcludedMarket?.code === volatility.code;
-                            const qualifies =
-                                !isRecentlyRejected &&
-                                indicatorsPass &&
-                                (!confidenceRequired || confidence >= minimum);
-
-                            record = {
-                                ...volatility,
-                                signal,
-                                confidence,
-                                adx: Number(adx),
-                                rsi: Number(rsi),
-                                macd: Number(macd),
-                                qualifies,
-                                reason: isRecentlyRejected
-                                    ? 'recently_rejected'
-                                    : qualifies
-                                      ? 'qualified'
-                                      : confidenceRequired && confidence < minimum
-                                        ? 'confidence_below_threshold'
-                                        : 'indicator_confirmation_failed',
-                            };
-                        }
-                    } catch {
-                        const cachedRecord = this.volatilityMarketSnapshots?.get?.(volatility.code);
-                        record = cachedRecord
-                            ? {
-                                  ...cachedRecord,
-                                  ...volatility,
-                                  qualifies: false,
-                                  reason: 'history_refresh_failed',
-                              }
-                            : {
-                                  ...volatility,
-                                  qualifies: false,
-                                  reason: 'history_request_failed',
-                              };
-                    }
-                }
+                const record = await this.getVolatilityMarketRecord(volatility, {
+                    windowSize,
+                    adxMinimum,
+                    confidenceRequired,
+                    minimum,
+                });
 
                 if (!this.volatilityMarketSnapshots) this.volatilityMarketSnapshots = new Map();
                 if (
