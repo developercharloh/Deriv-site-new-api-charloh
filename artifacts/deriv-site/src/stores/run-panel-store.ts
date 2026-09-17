@@ -1094,6 +1094,7 @@ export default class RunPanelStore {
                 rsiOperator?: string;
                 macdOperator?: string;
                 conditionsPassed?: boolean;
+            indicatorPassCount?: number;
         } | null;
         selectionPolicy?: string;
         rejected?: Array<{
@@ -1155,6 +1156,7 @@ export default class RunPanelStore {
                 minimumMacd?: number | null;
                 macdOperator?: string;
                 conditionsPassed?: boolean;
+                   indicatorPassCount?: number;
             }) => {
                 const signal = String(values.signal || 'WAIT').toUpperCase();
                 const directionalOperator = signal === 'PUT' ? '<' : signal === 'CALL' ? '>' : '—';
@@ -1244,9 +1246,9 @@ export default class RunPanelStore {
                         : '⏭️ SKIP · DIAGNOSTIC'
                     : event.candidate === true && event.qualifies === true
                       ? '✅ QUALIFIED · CANDIDATE'
-                    : event.qualifies === true
-                      ? '✅ QUALIFIED'
-                      : '⏭️ SKIP';
+                      : event.qualifies === true
+                        ? '✅ QUALIFIED'
+                        : '⏭️ SKIP';
             journal.pushMessage(
                 `[Volatility Scan] Market ${event.marketIndex ?? 0}/${event.marketTotal ?? 0} · ` +
                     `${event.label || event.market || 'market'} · ${recommendation} · ` +
@@ -1332,6 +1334,7 @@ export default class RunPanelStore {
         const selected = event.selected;
         const selectedText = selected
             ? `Selected ${selected.label || selected.symbol} (${selected.symbol}) · ${selected.signal} · ` +
+              `${selected.indicatorPassCount ?? 'N/A'}/3 indicators passed · ` +
               `${conditionSummary({
                   signal: selected.signal,
                   availableConfidence: selected.confidence,
@@ -1345,7 +1348,7 @@ export default class RunPanelStore {
                   minimumMacd: selected.minimumMacd ?? 0,
                   macdOperator: selected.macdOperator,
                   conditionsPassed: selected.conditionsPassed ?? true,
-              })} · executing after fresh confirmation`
+              })} · strongest qualified signal · executing after fresh confirmation`
             : `No market met the ${number(event.minimumConfidence, 0)}% confidence and indicator gates`;
         journal.updateVolatilityScanMessage(
             `[Volatility Scan] Status · Finished ${event.marketCount ?? 0} markets · ` +

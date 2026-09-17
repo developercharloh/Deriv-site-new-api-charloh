@@ -1072,6 +1072,7 @@ export default Engine =>
                     marketIndex: this.volatilityScanIndex,
                     marketTotal: scanOrder.length,
                     qualifiedCount: this.volatilityScanRecords.filter(item => item.qualifies).length,
+                    candidate: true,
                 });
 
                 if (this.volatilityScanIndex < scanOrder.length) {

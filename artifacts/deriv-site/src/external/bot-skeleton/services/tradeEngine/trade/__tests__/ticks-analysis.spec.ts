@@ -419,7 +419,7 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.watchTicks).toHaveBeenCalledTimes(1);
     });
 
-    it('checks the previously selected market first after a settlement rescan', async () => {
+    it('scans every market and selects the strongest qualified market', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const history = Array.from({ length: 61 }, (_, index) => ({ quote: 100 - index * index * 0.01 }));
@@ -447,10 +447,6 @@ describe('Ticks last-digit analysis events', () => {
 
         const scanResult = await engine.scanVolatilityUntilIndicatorsPass(20);
         expect(scanResult).toBe(true);
-        expect(engine.volatilityDiagnosticsPromise).toBeInstanceOf(Promise);
-        expect(request.mock.calls.length).toBeLessThan(DERIV_VOLATILITIES.length);
-        await engine.volatilityDiagnosticsPromise;
-
         expect(request).toHaveBeenCalledTimes(DERIV_VOLATILITIES.length);
         expect(request.mock.calls.map(([options]) => options.symbol)).toEqual(
             expect.arrayContaining(DERIV_VOLATILITIES.map(({ code }) => code))
@@ -459,10 +455,8 @@ describe('Ticks last-digit analysis events', () => {
         expect(marketEvents.every(event => Number.isFinite(event.adx))).toBe(true);
         expect(marketEvents.every(event => Number.isFinite(event.rsi))).toBe(true);
         expect(marketEvents.every(event => Number.isFinite(event.macd))).toBe(true);
-        expect(marketEvents.filter(event => event.diagnostic && event.qualifies)).not.toHaveLength(0);
-        expect(marketEvents.filter(event => !event.diagnostic && event.qualifies)).toEqual([
-            expect.objectContaining({ market: '1HZ100V' }),
-        ]);
+        expect(marketEvents.every(event => event.candidate === true)).toBe(true);
+        expect(marketEvents.every(event => event.diagnostic !== true)).toBe(true);
         expect(request.mock.calls[0][0]).toEqual(
             expect.objectContaining({
                 symbol: '1HZ100V',
@@ -472,11 +466,68 @@ describe('Ticks last-digit analysis events', () => {
         );
         expect(engine.volatilitySelectionLock).toEqual(
             expect.objectContaining({
-                code: '1HZ100V',
                 signal: 'PUT',
             })
         );
         emit.mockRestore();
+    });
+
+    it('ranks all qualified markets by indicator count before confidence', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const history = Array.from({ length: 61 }, (_, index) => ({ quote: 100 - index * index * 0.01 }));
+        const request = jest.fn().mockResolvedValue(history);
+
+        engine.volatilityPreferredMarket = {
+            code: '1HZ100V',
+            label: 'Volatility 100 (1s) Index',
+        };
+        engine.volatilityScanRequestGapMs = 0;
+        engine.$scope = { ticksService: { request } };
+        engine.watchTicks = jest.fn(async symbol => {
+            engine.symbol = symbol;
+        });
+        engine.makeProposals = jest.fn();
+        engine.getVolatilityRecordStrength = jest.fn(record => {
+            if (record.code === '1HZ100V') {
+                return {
+                    indicatorPassCount: 2,
+                    confidence: 99,
+                    adxMargin: 1,
+                    rsiMargin: 20,
+                    macdMagnitude: 1,
+                };
+            }
+            if (record.code === '1HZ75V') {
+                return {
+                    indicatorPassCount: 3,
+                    confidence: 1,
+                    adxMargin: 4,
+                    rsiMargin: 17,
+                    macdMagnitude: 2,
+                };
+            }
+            return {
+                indicatorPassCount: 0,
+                confidence: 0,
+                adxMargin: 0,
+                rsiMargin: 0,
+                macdMagnitude: 0,
+            };
+        });
+
+        (api_base as any).active_symbols = [];
+        (api_base as any).pip_sizes = { '1HZ100V': 2, '1HZ75V': 2 };
+
+        await expect(engine.scanVolatilityUntilIndicatorsPass(20)).resolves.toBe(true);
+
+        expect(engine.volatilitySelectionLock).toEqual(
+            expect.objectContaining({
+                code: '1HZ75V',
+                confidence: 1,
+            })
+        );
+        expect(engine.makeProposals).toHaveBeenCalled();
     });
 
     it('releases a selected volatility after live conditions fail', () => {
