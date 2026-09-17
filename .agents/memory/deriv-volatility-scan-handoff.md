@@ -20,3 +20,9 @@ Once the scan has selected a market, do not run a second refresh-dependent indic
 **Why:** The Journal could show a fully qualified selected market and then submit no order because a duplicate post-scan Blockly gate silently evaluated refreshed OHLC data and stopped before `purchase()`.
 
 **How to apply:** Keep the symbol lock and contract gate as safety barriers, but preserve the selected scan values for the cycle and let the generated purchase path proceed once the selection resolves successfully.
+
+FAST execution must also preserve the selected direction after settlement and reuse the selected scan's candle input instead of requesting fresh OHLC data before every same-session purchase.
+
+**Why:** The reference execution repeatedly bought the same direction immediately after one-second settlements, while the bot's loss handler alternated CALL/PUT and its next Blockly cycle added a fresh history request.
+
+**How to apply:** Treat direction as part of the session lock, make loss handling stake-only, and let the FAST path use the locked market, direction, indicators, and cached execution input until reset or an explicit live failure.

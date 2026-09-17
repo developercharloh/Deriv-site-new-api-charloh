@@ -333,6 +333,26 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(true);
     });
 
+    it('reuses the selected scan candles during FAST execution', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.fastClockActive = true;
+        engine.volatilitySelectionLock = {
+            executionPrices: [100, 101, 100.5],
+        };
+        engine.options = { candleInterval: 60 };
+        engine.$scope = {
+            ticksService: {
+                request: jest.fn(() => {
+                    throw new Error('FAST execution must not request fresh OHLC data');
+                }),
+            },
+        };
+
+        await expect(engine.getOhlc({ granularity: 60, field: 'close' })).resolves.toEqual([100, 101, 100.5]);
+        expect(engine.$scope.ticksService.request).not.toHaveBeenCalled();
+    });
+
     it('requires MACD and accepts either ADX or directional RSI', () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

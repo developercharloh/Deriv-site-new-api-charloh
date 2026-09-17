@@ -1,4 +1,4 @@
-<!-- RISE_FALL_MASTER_BOT_EXECUTION_VERSION:2 -->
+<!-- RISE_FALL_MASTER_BOT_EXECUTION_VERSION:3 -->
 <xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
   <variables>
     <variable id="v_dir">Direction</variable>
@@ -986,13 +986,13 @@
                                 <statement name="DO0">
                                   <block type="variables_set" id="ap_set_put">
                                     <field name="VAR" id="v_dir">Direction</field>
-                                    <value name="VALUE"><block type="text" id="ap_set_put_v"><field name="TEXT">PUT</field></block></value>
+                                     <value name="VALUE"><block type="volatility_signal" id="ap_set_put_v"></block></value>
                                   </block>
                                 </statement>
                                 <statement name="ELSE">
                                   <block type="variables_set" id="ap_set_call">
                                     <field name="VAR" id="v_dir">Direction</field>
-                                    <value name="VALUE"><block type="text" id="ap_set_call_v"><field name="TEXT">CALL</field></block></value>
+                                     <value name="VALUE"><block type="volatility_signal" id="ap_set_call_v"></block></value>
                                   </block>
                                 </statement>
                                 <next>
@@ -1000,7 +1000,7 @@
                                   <!-- Mark Just Flipped = yes (so before_purchase can do re-entry confirm) -->
                                   <block type="variables_set" id="ap_mark_flip">
                                     <field name="VAR" id="v_flip">Just Flipped</field>
-                                    <value name="VALUE"><block type="text" id="ap_mark_flip_v"><field name="TEXT">yes</field></block></value>
+                                      <value name="VALUE"><block type="text" id="ap_mark_flip_v"><field name="TEXT">no</field></block></value>
                                     <next>
 
                                       <!-- Log LOSS -->
@@ -1008,7 +1008,7 @@
                                         <field name="VARIABLE" id="v_msg">Journal</field>
                                         <statement name="STACK">
                                           <block type="text_statement" id="ts_l1">
-                                             <value name="TEXT"><shadow type="text" id="ts_l1s"><field name="TEXT"></field></shadow><block type="text" id="ts_l1v"><field name="TEXT">LOSS | Signal settled | Flipped to: </field></block></value>
+                                             <value name="TEXT"><shadow type="text" id="ts_l1s"><field name="TEXT"></field></shadow><block type="text" id="ts_l1v"><field name="TEXT">LOSS | Signal settled | Continuing: </field></block></value>
                                             <next><block type="text_statement" id="ts_l2">
                                               <value name="TEXT"><shadow type="text" id="ts_l2s"><field name="TEXT"></field></shadow><block type="variables_get" id="ts_l2v"><field name="VAR" id="v_dir">Direction</field></block></value>
                                               <next><block type="text_statement" id="ts_l_adx_label">

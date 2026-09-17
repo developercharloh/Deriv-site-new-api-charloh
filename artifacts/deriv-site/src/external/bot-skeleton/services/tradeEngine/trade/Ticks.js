@@ -494,7 +494,8 @@ export default Engine =>
                 this.requiresSignalConfidence === false &&
                 this.purchaseIndicatorEvaluation
             ) {
-                return value;
+                const selectedValue = Number(this.purchaseIndicatorEvaluation[indicator]);
+                return Number.isFinite(selectedValue) ? selectedValue : value;
             }
             this.purchaseIndicatorEvaluation = {
                 ...(this.purchaseIndicatorEvaluation || {}),
@@ -694,6 +695,7 @@ export default Engine =>
 
                 return {
                     ...volatility,
+                    executionPrices: recent,
                     signal,
                     confidence,
                     adx: Number(adx),
@@ -884,6 +886,7 @@ export default Engine =>
             this.volatilitySelectionLock = {
                 code: selected.code,
                 label: selected.label,
+                executionPrices: selected.executionPrices,
                 signal: selected.signal,
                 confidence: selected.confidence,
                 adx: selected.adx,
@@ -1077,6 +1080,7 @@ export default Engine =>
                 this.volatilitySelectionLock = {
                     code: selected.code,
                     label: selected.label,
+                    executionPrices: selected.executionPrices,
                     signal: selected.signal,
                     confidence: selected.confidence,
                     adx: selected.adx,
@@ -1181,6 +1185,16 @@ export default Engine =>
 
         getOhlc(args) {
             const { granularity = this.options.candleInterval || 60, field } = args || {};
+            const locked = this.volatilitySelectionLock;
+            if (this.fastClockActive && locked?.executionPrices?.length && Number(granularity) === 60) {
+                const ohlc = locked.executionPrices.map(quote => ({
+                    open: quote,
+                    high: quote,
+                    low: quote,
+                    close: quote,
+                }));
+                return Promise.resolve(field ? ohlc.map(candle => candle[field]) : ohlc);
+            }
 
             return new Promise(resolve =>
                 this.$scope.ticksService

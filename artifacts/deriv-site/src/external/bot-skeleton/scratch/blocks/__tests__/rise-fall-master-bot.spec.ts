@@ -253,7 +253,10 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(workspace.getBlockById('bp_direct_journal_entry_rise')?.getFieldValue('TEXT')).toBe('BUYING RISE');
         expect(workspace.getBlockById('bp_direct_journal_entry_fall')?.getFieldValue('TEXT')).toBe('BUYING FALL');
          expect(workspace.getBlockById('ts_w1v')?.getFieldValue('TEXT')).toBe('WIN | Signal settled | Direction: ');
-         expect(workspace.getBlockById('ts_l1v')?.getFieldValue('TEXT')).toBe('LOSS | Signal settled | Flipped to: ');
+         expect(workspace.getBlockById('ts_l1v')?.getFieldValue('TEXT')).toBe('LOSS | Signal settled | Continuing: ');
+         expect(workspace.getBlockById('ap_set_put_v')?.type).toBe('volatility_signal');
+         expect(workspace.getBlockById('ap_set_call_v')?.type).toBe('volatility_signal');
+         expect(workspace.getBlockById('ap_mark_flip_v')?.getFieldValue('TEXT')).toBe('no');
         expect(workspace.getBlockById('bp_direct_apply_signal')?.type).toBe('variables_set');
          expect(workspace.getBlockById('bp_apply_scanned_direction_if')?.type).toBe('controls_if');
          expect(workspace.getBlockById('bp_apply_scanned_direction')?.getFieldValue('VAR')).toBe('v_dir');
