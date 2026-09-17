@@ -1,4 +1,5 @@
 import getBotInterface from '../BotInterface';
+import getTicksInterface from '../TicksInterface';
 
 describe('Bot payout lookup', () => {
     const createTradeEngine = () => ({
@@ -24,5 +25,15 @@ describe('Bot payout lookup', () => {
         const bot = getBotInterface(tradeEngine);
 
         expect(bot.getPayout('')).toBe(0);
+    });
+});
+
+describe('Bot volatility scan interface', () => {
+    it('exposes the confidence-free scanner to generated Blockly programs', async () => {
+        const scanVolatilityUntilIndicatorsPass = jest.fn().mockResolvedValue(true);
+        const ticks = getTicksInterface({ scanVolatilityUntilIndicatorsPass });
+
+        await expect(ticks.scanVolatilityUntilIndicatorsPass(20)).resolves.toBe(true);
+        expect(scanVolatilityUntilIndicatorsPass).toHaveBeenCalledWith(20);
     });
 });
