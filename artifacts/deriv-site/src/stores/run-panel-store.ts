@@ -1108,6 +1108,7 @@ export default class RunPanelStore {
         market?: string;
         label?: string;
         diagnostic?: boolean;
+        candidate?: boolean;
         signal?: string;
         confidence?: number;
         adx?: number;
@@ -1241,8 +1242,10 @@ export default class RunPanelStore {
                     ? event.qualifies === true
                         ? '✅ QUALIFIED · DIAGNOSTIC ONLY'
                         : '⏭️ SKIP · DIAGNOSTIC'
+                    : event.candidate === true && event.qualifies === true
+                      ? '✅ QUALIFIED · CANDIDATE'
                     : event.qualifies === true
-                      ? '✅ FIRST QUALIFIED · LOCKED'
+                      ? '✅ QUALIFIED'
                       : '⏭️ SKIP';
             journal.pushMessage(
                 `[Volatility Scan] Market ${event.marketIndex ?? 0}/${event.marketTotal ?? 0} · ` +

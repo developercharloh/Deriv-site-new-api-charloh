@@ -747,7 +747,28 @@ export default Engine =>
                 marketTotal,
                 qualifiedCount,
                 diagnostic,
+                candidate: !diagnostic,
             });
+        }
+        getVolatilityRecordStrength(record, minimumAdx = 20) {
+            const signal = String(record?.signal || '').toUpperCase();
+            const adx = Number(record?.adx);
+            const rsi = Number(record?.rsi);
+            const macd = Number(record?.macd);
+            const confidence = Number(record?.confidence);
+            const adxPass = Number.isFinite(adx) && adx >= minimumAdx;
+            const rsiPass =
+                Number.isFinite(rsi) && (signal === 'PUT' ? rsi < 50 : signal === 'CALL' ? rsi > 50 : false);
+            const macdPass =
+                Number.isFinite(macd) && (signal === 'PUT' ? macd < 0 : signal === 'CALL' ? macd > 0 : false);
+
+            return {
+                indicatorPassCount: [adxPass, rsiPass, macdPass].filter(Boolean).length,
+                confidence: Number.isFinite(confidence) ? confidence : 0,
+                adxMargin: Number.isFinite(adx) ? adx - minimumAdx : Number.NEGATIVE_INFINITY,
+                rsiMargin: Number.isFinite(rsi) ? Math.abs(rsi - 50) : Number.NEGATIVE_INFINITY,
+                macdMagnitude: Number.isFinite(macd) ? Math.abs(macd) : Number.NEGATIVE_INFINITY,
+            };
         }
         async scanRemainingVolatilityMarkets(scanOrder, startIndex, options, token) {
             for (let index = startIndex; index < scanOrder.length; index += 1) {
@@ -790,6 +811,7 @@ export default Engine =>
                 label: selected.label,
             };
             this.volatilityExcludedMarket = null;
+            const strength = this.getVolatilityRecordStrength(selected, adxMinimum);
             globalObserver.emit('bot.volatility.scan', {
                 event: 'scan',
                 marketCount,
@@ -812,8 +834,9 @@ export default Engine =>
                     rsiOperator: selected.signal === 'PUT' ? '<' : '>',
                     macdOperator: selected.signal === 'PUT' ? '<' : '>',
                     conditionsPassed: true,
+                    indicatorPassCount: strength.indicatorPassCount,
                 },
-                selectionPolicy: 'first_qualified',
+                selectionPolicy: 'strongest_qualified',
             });
 
             if (
@@ -1051,31 +1074,6 @@ export default Engine =>
                     qualifiedCount: this.volatilityScanRecords.filter(item => item.qualifies).length,
                 });
 
-                if (record.qualifies) {
-                    const marketCount = this.volatilityScanIndex;
-                    const qualifiedCount = this.volatilityScanRecords.filter(item => item.qualifies).length;
-                    const remainingStartIndex = this.volatilityScanIndex;
-                    this.volatilityScanIndex = 0;
-                    this.volatilityScanRecords = [];
-                    const activated = await this.activateVolatilitySelection(record, {
-                        minimum,
-                        adxMinimum,
-                        confidenceRequired,
-                        windowSize,
-                        marketCount,
-                        qualifiedCount,
-                    });
-                    if (activated && remainingStartIndex < scanOrder.length) {
-                        this.startVolatilityDiagnostics(scanOrder, remainingStartIndex, {
-                            windowSize,
-                            adxMinimum,
-                            confidenceRequired,
-                            minimum,
-                        });
-                    }
-                    return activated;
-                }
-
                 if (this.volatilityScanIndex < scanOrder.length) {
                     await wait(this.volatilityScanRequestGapMs ?? VOLATILITY_SCAN_REQUEST_GAP_MS);
                     return scan();
@@ -1085,11 +1083,16 @@ export default Engine =>
                 const qualified = records
                     .filter(record => record.qualifies)
                     .sort((left, right) => {
-                        // The scan order is meaningful: it puts the previously
-                        // successful market first, so keep the first qualifying
-                        // market rather than switching to a later one just
-                        // because its confidence is marginally higher.
-                        return records.indexOf(left) - records.indexOf(right);
+                        const leftStrength = this.getVolatilityRecordStrength(left, adxMinimum);
+                        const rightStrength = this.getVolatilityRecordStrength(right, adxMinimum);
+                        return (
+                            rightStrength.indicatorPassCount - leftStrength.indicatorPassCount ||
+                            rightStrength.confidence - leftStrength.confidence ||
+                            rightStrength.adxMargin - leftStrength.adxMargin ||
+                            rightStrength.rsiMargin - leftStrength.rsiMargin ||
+                            rightStrength.macdMagnitude - leftStrength.macdMagnitude ||
+                            records.indexOf(left) - records.indexOf(right)
+                        );
                     });
                 const selected = qualified[0] || null;
                 this.volatilityScanIndex = 0;
@@ -1126,10 +1129,12 @@ export default Engine =>
                               minimumMacd: 0,
                               rsiOperator: selected.signal === 'PUT' ? '<' : '>',
                               macdOperator: selected.signal === 'PUT' ? '<' : '>',
-                              conditionsPassed: true,
+                               conditionsPassed: true,
+                               indicatorPassCount: this.getVolatilityRecordStrength(selected, adxMinimum)
+                                   .indicatorPassCount,
                           }
                         : null,
-                    selectionPolicy: 'first_qualified',
+                    selectionPolicy: 'strongest_qualified',
                 });
                 if (!selected) {
                     return false;
