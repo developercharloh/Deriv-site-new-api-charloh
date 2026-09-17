@@ -195,6 +195,7 @@ describe('Rise/Fall Master Bot XML', () => {
         window.Blockly.derivWorkspace = workspace;
         expect(() => Blockly.Xml.domToWorkspace(importDom, workspace)).not.toThrow();
 
+        restoreDependentSelections(workspace);
         const blockTypes = new Set(workspace.getAllBlocks(false).map(block => block.type));
         ['aroon_value', 'model_signal', 'adx_value', 'rsi_value', 'macd_value', 'purchase'].forEach(type =>
             expect(blockTypes).toContain(type)
@@ -221,6 +222,11 @@ describe('Rise/Fall Master Bot XML', () => {
         (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
         const generatedBeforePurchaseCode = javascriptGenerator.blockToCode(workspace.getBlockById('bp_root') as any);
         expect(String(generatedBeforePurchaseCode)).not.toContain('undefined');
+        expect(String(generatedBeforePurchaseCode)).toContain("Bot.purchase('CALL');");
+        expect(String(generatedBeforePurchaseCode)).toContain("Bot.purchase('PUT');");
+        expect(String(generatedBeforePurchaseCode).indexOf('Bot.scanVolatilityUntilIndicatorsPass')).toBeLessThan(
+            String(generatedBeforePurchaseCode).indexOf("Bot.purchase('CALL');")
+        );
         expect(workspace.getBlockById('bp_gate_if')).toBeNull();
         expect(workspace.getBlockById('bp_macd_gate')?.type).toBe('controls_if');
         expect(workspace.getBlockById('bp_all_indicators_match')?.getFieldValue('OP')).toBe('AND');

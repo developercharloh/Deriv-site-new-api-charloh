@@ -59,7 +59,7 @@ When downloading the Vercel CLI is blocked by the package firewall, an already-p
 
 **Why:** The deployment retry succeeded from the cached CLI after a fresh `npx` download was rejected by the package firewall.
 
-**How to apply:** Search the pnpm dlx cache for `node_modules/vercel/dist/vc.js`, invoke it with Node from the artifact directory, and keep `--prebuilt` enabled. Run `vercel build` first when `.vercel/output` may be older than `dist`; if using the REST fallback, explicitly sync `dist` into `.vercel/output/static` before uploading or it can publish a stale bundle even when the source build is current.
+**How to apply:** Search the pnpm dlx cache for the cached `node_modules/vercel` package and invoke its `dist/index.js` with Node from the artifact directory, supplying `VERCEL_ORG_ID` from `.vercel/project.json` and keeping `--prebuilt` enabled. Run `vercel build` first when `.vercel/output` may be older than `dist`; if using the REST fallback, explicitly sync `dist` into `.vercel/output/static` before uploading or it can publish a stale bundle even when the source build is current.
 ## Upload quota constraint
 
 The Vercel REST upload endpoint can exhaust an account-wide 5,000-file quota even when a later deployment needs only a few changed files. Once exhausted, both full and differential prebuilt publishes are rejected until the quota reset.

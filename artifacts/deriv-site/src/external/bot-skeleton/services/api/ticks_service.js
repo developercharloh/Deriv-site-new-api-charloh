@@ -272,12 +272,12 @@ export default class TicksService {
         const { symbol, granularity, style, subscribe = true, count = 1000 } = options;
         const request_object = {
             ticks_history: symbol === 'na' ? 'R_100' : symbol,
-            subscribe: subscribe === false ? 0 : 1,
             end: 'latest',
             count: Math.max(1, Math.floor(Number(count) || 1000)),
             granularity: granularity ? Number(granularity) : undefined,
             style,
         };
+        if (subscribe !== false) request_object.subscribe = 1;
         return new Promise((resolve, reject) => {
             if (!api_base.api) resolve([]);
             const requestPromise =

@@ -36,8 +36,8 @@ describe('TicksService subscription recovery', () => {
 
         expect(tickRequests[0]).toMatchObject({
             ticks_history: 'R_25',
-            subscribe: 0,
         });
+        expect(tickRequests[0]).not.toHaveProperty('subscribe');
     });
 
     it('opens a live subscription when monitoring history previously scanned without one', async () => {
@@ -63,7 +63,7 @@ describe('TicksService subscription recovery', () => {
         await service.request({ symbol: 'R_25', subscribe: false });
         await service.monitor({ symbol: 'R_25', callback: jest.fn() });
 
-        expect(tickRequests.map(request => request.subscribe)).toEqual([0, 1]);
+        expect(tickRequests.map(request => request.subscribe)).toEqual([undefined, 1]);
     });
 
     it('clears a stale tick stream and retries once instead of looping', async () => {
