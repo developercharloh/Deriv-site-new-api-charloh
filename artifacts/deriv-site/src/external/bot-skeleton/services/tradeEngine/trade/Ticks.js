@@ -429,7 +429,21 @@ export default Engine =>
             this.volatilityScanRecords = [];
         }
         beginPurchaseConditionEvaluation() {
-            this.purchaseConditionEvaluationTick = this.getPurchaseConditionTick();
+            const evaluationTick = this.getPurchaseConditionTick();
+            this.purchaseConditionEvaluationTick = evaluationTick;
+            const selected = this.volatilitySelectionLock;
+            if (selected && this.requiresSignalConfidence === false) {
+                // The volatility scan already evaluated the selected market with
+                // the authoritative MACD + ADX/RSI criteria. Keep those values
+                // for this purchase cycle instead of letting a second OHLC
+                // refresh silently veto the order before purchase() is called.
+                this.purchaseIndicatorEvaluation = {
+                    adx: Number(selected.adx),
+                    rsi: Number(selected.rsi),
+                    macd: Number(selected.macd),
+                    tick: evaluationTick,
+                };
+            }
         }
         releaseVolatilitySelection(reason = 'conditions_failed') {
             const locked = this.volatilitySelectionLock;
@@ -475,6 +489,13 @@ export default Engine =>
             return true;
         }
         recordIndicatorValue(indicator, value) {
+            if (
+                this.volatilitySelectionLock &&
+                this.requiresSignalConfidence === false &&
+                this.purchaseIndicatorEvaluation
+            ) {
+                return value;
+            }
             this.purchaseIndicatorEvaluation = {
                 ...(this.purchaseIndicatorEvaluation || {}),
                 [indicator]: Number(value),
@@ -530,6 +551,10 @@ export default Engine =>
         }
         isPurchaseConditionValuesGateOpen(contractType) {
             if (!['CALL', 'PUT'].includes(contractType)) return true;
+
+            if (this.volatilitySelectionLock && this.requiresSignalConfidence === false) {
+                return true;
+            }
 
             if (this.requiresSignalConfidence !== false) {
                 const confidence = this.lastSignalConfidenceEvaluation;

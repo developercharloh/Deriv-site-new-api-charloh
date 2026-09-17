@@ -14,3 +14,9 @@ Background diagnostic results may still retain `qualifies: true` for telemetry, 
 **Why:** A later diagnostic result was displayed with the same recommendation label as the locked market, making a correct first-market lock look like multiple executable selections.
 
 **How to apply:** Keep selection state on the engine lock, and distinguish first-qualified versus diagnostic-only states in every user-facing scan event.
+
+Once the scan has selected a market, do not run a second refresh-dependent indicator gate before the generated purchase block. The scan's MACD plus ADX/RSI result is authoritative for that purchase cycle; later refreshed values can change without invalidating the completed handoff.
+
+**Why:** The Journal could show a fully qualified selected market and then submit no order because a duplicate post-scan Blockly gate silently evaluated refreshed OHLC data and stopped before `purchase()`.
+
+**How to apply:** Keep the symbol lock and contract gate as safety barriers, but preserve the selected scan values for the cycle and let the generated purchase path proceed once the selection resolves successfully.

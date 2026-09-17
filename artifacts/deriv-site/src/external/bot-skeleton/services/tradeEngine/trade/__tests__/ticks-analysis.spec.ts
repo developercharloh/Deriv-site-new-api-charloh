@@ -302,6 +302,37 @@ describe('Ticks last-digit analysis events', () => {
         );
     });
 
+    it('keeps the completed volatility scan authoritative for the purchase cycle', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.requiresSignalConfidence = false;
+        engine.store = {
+            getState: () => ({ newTick: 456 }),
+        };
+        engine.symbol = '1HZ10V';
+        engine.tradeOptions = { symbol: '1HZ10V' };
+        engine.volatilitySelectionLock = {
+            code: '1HZ10V',
+            signal: 'CALL',
+            adx: 29.6,
+            rsi: 69.6,
+            macd: 0.02,
+        };
+
+        engine.beginPurchaseConditionEvaluation();
+        engine.recordIndicatorValue('adx', 12);
+        engine.recordIndicatorValue('rsi', 45);
+        engine.recordIndicatorValue('macd', -0.1);
+
+        expect(engine.purchaseIndicatorEvaluation).toEqual({
+            adx: 29.6,
+            rsi: 69.6,
+            macd: 0.02,
+            tick: 456,
+        });
+        expect(engine.isPurchaseConditionGateOpen('CALL')).toBe(true);
+    });
+
     it('requires MACD and accepts either ADX or directional RSI', () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

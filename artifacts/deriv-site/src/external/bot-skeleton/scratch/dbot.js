@@ -108,8 +108,7 @@ class DBot {
 
     isStaleRiseFallWorkspace = strategy_xml =>
         typeof strategy_xml === 'string' &&
-        strategy_xml.includes('Model confluence settled') &&
-        !strategy_xml.includes('INDICATORS | ADX:');
+        !strategy_xml.includes('RISE_FALL_MASTER_BOT_EXECUTION_VERSION:2');
 
     isRiseFallWorkspace = workspace =>
         typeof workspace?.name === 'string' &&
