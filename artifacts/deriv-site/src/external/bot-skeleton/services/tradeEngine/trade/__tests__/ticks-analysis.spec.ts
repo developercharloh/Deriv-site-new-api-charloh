@@ -419,6 +419,47 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.watchTicks).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps the strongest selected volatility locked after settlement', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.symbol = '1HZ75V';
+        engine.options = { symbol: '1HZ75V' };
+        engine.tradeOptions = { symbol: '1HZ75V' };
+        engine.store = {
+            getState: () => ({ newTick: 123 }),
+        };
+        engine.volatilitySelectionLock = {
+            code: '1HZ75V',
+            label: 'Volatility 75 (1s) Index',
+            signal: 'CALL',
+            confidence: 1,
+        };
+        engine.volatilityPreferredMarket = {
+            code: '1HZ75V',
+            label: 'Volatility 75 (1s) Index',
+        };
+        engine.watchTicks = jest.fn();
+        engine.makeProposals = jest.fn();
+        engine.$scope = {
+            ticksService: {
+                request: jest.fn(),
+            },
+        };
+
+        engine.prepareVolatilityRescan();
+
+        expect(engine.volatilitySelectionLock).toEqual(
+            expect.objectContaining({
+                code: '1HZ75V',
+            })
+        );
+        expect(engine.lastSignalConfidenceEvaluation).toBeNull();
+        expect(engine.purchaseIndicatorEvaluation).toBeNull();
+        await expect(engine.scanVolatilityUntilIndicatorsPass(20)).resolves.toBe(true);
+        expect(engine.$scope.ticksService.request).not.toHaveBeenCalled();
+        expect(engine.watchTicks).not.toHaveBeenCalled();
+    });
+
     it('scans every market and selects the strongest qualified market', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

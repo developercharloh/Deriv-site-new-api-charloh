@@ -408,12 +408,19 @@ export default Engine =>
                     code: locked.code,
                     label: locked.label,
                 };
+                // A settlement starts the next execution cycle, not a new
+                // market-selection cycle. Keep the strongest selected market
+                // locked so FAST can continue buying it without rescanning or
+                // pausing between contracts. A live condition failure or an
+                // explicit reset still releases this lock.
+                this.resetVolatilitySelection({ preservePreferred: true, preserveSelection: true });
+                return;
             }
             this.resetVolatilitySelection({ preservePreferred: true });
         }
-        resetVolatilitySelection({ preservePreferred = false } = {}) {
+        resetVolatilitySelection({ preservePreferred = false, preserveSelection = false } = {}) {
             this.volatilityDiagnosticsToken += 1;
-            this.volatilitySelectionLock = null;
+            if (!preserveSelection) this.volatilitySelectionLock = null;
             if (!preservePreferred) this.volatilityPreferredMarket = null;
             this.lastSignalConfidenceEvaluation = null;
             this.purchaseIndicatorEvaluation = null;
