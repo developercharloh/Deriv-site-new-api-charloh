@@ -366,83 +366,107 @@
                             <next>
                               <block type="controls_if" id="bp_macd_gate">
                                 <value name="IF0">
-                                  <block type="logic_operation" id="bp_all_indicators_match">
-                                    <field name="OP">AND</field>
-                                    <value name="A">
-                                      <block type="logic_compare" id="bp_adx_threshold">
-                                        <field name="OP">GTE</field>
-                                        <value name="A"><block type="variables_get" id="bp_adx_threshold_value"><field name="VAR" id="v_adx">ADX Indicator</field></block></value>
-                                        <value name="B"><block type="math_number" id="bp_adx_threshold_number"><field name="NUM">20</field></block></value>
-                                      </block>
-                                    </value>
-                                    <value name="B">
-                                      <block type="logic_operation" id="bp_direction_indicator_match">
-                                        <field name="OP">OR</field>
-                                        <value name="A">
-                                          <block type="logic_operation" id="bp_call_indicator_match">
-                                            <field name="OP">AND</field>
-                                            <value name="A">
-                                              <block type="logic_compare" id="bp_call_signal_match">
-                                                <field name="OP">EQ</field>
-                                                 <value name="A"><block type="variables_get" id="bp_call_signal_value"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                                <value name="B"><block type="text" id="bp_call_signal_text"><field name="TEXT">CALL</field></block></value>
-                                              </block>
-                                            </value>
-                                            <value name="B">
-                                              <block type="logic_operation" id="bp_call_macd_rsi_match">
-                                                <field name="OP">AND</field>
-                                                <value name="A">
-                                                  <block type="logic_compare" id="bp_call_macd_match">
-                                                    <field name="OP">GT</field>
-                                                    <value name="A"><block type="variables_get" id="bp_call_macd_value"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
-                                                    <value name="B"><block type="math_number" id="bp_call_macd_zero"><field name="NUM">0</field></block></value>
-                                                  </block>
-                                                </value>
-                                                <value name="B">
-                                                  <block type="logic_compare" id="bp_call_rsi_match">
-                                                    <field name="OP">GT</field>
-                                                    <value name="A"><block type="variables_get" id="bp_call_rsi_value"><field name="VAR" id="v_rsi">RSI Indicator</field></block></value>
-                                                    <value name="B"><block type="math_number" id="bp_call_rsi_midline"><field name="NUM">50</field></block></value>
-                                                  </block>
-                                                </value>
-                                              </block>
-                                            </value>
-                                          </block>
-                                        </value>
-                                        <value name="B">
-                                          <block type="logic_operation" id="bp_put_indicator_match">
-                                            <field name="OP">AND</field>
-                                            <value name="A">
-                                              <block type="logic_compare" id="bp_put_signal_match">
-                                                <field name="OP">EQ</field>
-                                                 <value name="A"><block type="variables_get" id="bp_put_signal_value"><field name="VAR" id="v_dir">Direction</field></block></value>
-                                                <value name="B"><block type="text" id="bp_put_signal_text"><field name="TEXT">PUT</field></block></value>
-                                              </block>
-                                            </value>
-                                            <value name="B">
-                                              <block type="logic_operation" id="bp_put_macd_rsi_match">
-                                                <field name="OP">AND</field>
-                                                <value name="A">
-                                                  <block type="logic_compare" id="bp_put_macd_match">
-                                                    <field name="OP">LT</field>
-                                                    <value name="A"><block type="variables_get" id="bp_put_macd_value"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
-                                                    <value name="B"><block type="math_number" id="bp_put_macd_zero"><field name="NUM">0</field></block></value>
-                                                  </block>
-                                                </value>
-                                                <value name="B">
-                                                  <block type="logic_compare" id="bp_put_rsi_match">
-                                                    <field name="OP">LT</field>
-                                                    <value name="A"><block type="variables_get" id="bp_put_rsi_value"><field name="VAR" id="v_rsi">RSI Indicator</field></block></value>
-                                                    <value name="B"><block type="math_number" id="bp_put_rsi_midline"><field name="NUM">50</field></block></value>
-                                                  </block>
-                                                </value>
-                                              </block>
-                                            </value>
-                                          </block>
-                                        </value>
-                                      </block>
-                                        </value>
-                                  </block>
+                                    <block type="logic_operation" id="bp_all_indicators_match">
+                                      <field name="OP">AND</field>
+                                      <value name="A">
+                                        <block type="logic_operation" id="bp_secondary_indicator_match">
+                                          <field name="OP">OR</field>
+                                          <value name="A">
+                                            <block type="logic_compare" id="bp_adx_threshold">
+                                              <field name="OP">GTE</field>
+                                              <value name="A"><block type="variables_get" id="bp_adx_threshold_value"><field name="VAR" id="v_adx">ADX Indicator</field></block></value>
+                                              <value name="B"><block type="math_number" id="bp_adx_threshold_number"><field name="NUM">20</field></block></value>
+                                            </block>
+                                          </value>
+                                          <value name="B">
+                                            <block type="logic_operation" id="bp_direction_indicator_match">
+                                              <field name="OP">OR</field>
+                                              <value name="A">
+                                                <block type="logic_operation" id="bp_call_rsi_indicator_match">
+                                                  <field name="OP">AND</field>
+                                                  <value name="A">
+                                                    <block type="logic_compare" id="bp_call_rsi_signal_match">
+                                                      <field name="OP">EQ</field>
+                                                      <value name="A"><block type="variables_get" id="bp_call_rsi_signal_value"><field name="VAR" id="v_dir">Direction</field></block></value>
+                                                      <value name="B"><block type="text" id="bp_call_rsi_signal_text"><field name="TEXT">CALL</field></block></value>
+                                                    </block>
+                                                  </value>
+                                                  <value name="B">
+                                                    <block type="logic_compare" id="bp_call_rsi_match">
+                                                      <field name="OP">GT</field>
+                                                      <value name="A"><block type="variables_get" id="bp_call_rsi_value"><field name="VAR" id="v_rsi">RSI Indicator</field></block></value>
+                                                      <value name="B"><block type="math_number" id="bp_call_rsi_midline"><field name="NUM">50</field></block></value>
+                                                    </block>
+                                                  </value>
+                                                </block>
+                                              </value>
+                                              <value name="B">
+                                                <block type="logic_operation" id="bp_put_rsi_indicator_match">
+                                                  <field name="OP">AND</field>
+                                                  <value name="A">
+                                                    <block type="logic_compare" id="bp_put_rsi_signal_match">
+                                                      <field name="OP">EQ</field>
+                                                      <value name="A"><block type="variables_get" id="bp_put_rsi_signal_value"><field name="VAR" id="v_dir">Direction</field></block></value>
+                                                      <value name="B"><block type="text" id="bp_put_rsi_signal_text"><field name="TEXT">PUT</field></block></value>
+                                                    </block>
+                                                  </value>
+                                                  <value name="B">
+                                                    <block type="logic_compare" id="bp_put_rsi_match">
+                                                      <field name="OP">LT</field>
+                                                      <value name="A"><block type="variables_get" id="bp_put_rsi_value"><field name="VAR" id="v_rsi">RSI Indicator</field></block></value>
+                                                      <value name="B"><block type="math_number" id="bp_put_rsi_midline"><field name="NUM">50</field></block></value>
+                                                    </block>
+                                                  </value>
+                                                </block>
+                                              </value>
+                                            </block>
+                                          </value>
+                                        </block>
+                                      </value>
+                                      <value name="B">
+                                        <block type="logic_operation" id="bp_macd_direction_match">
+                                          <field name="OP">OR</field>
+                                          <value name="A">
+                                            <block type="logic_operation" id="bp_call_indicator_match">
+                                              <field name="OP">AND</field>
+                                              <value name="A">
+                                                <block type="logic_compare" id="bp_call_signal_match">
+                                                  <field name="OP">EQ</field>
+                                                  <value name="A"><block type="variables_get" id="bp_call_signal_value"><field name="VAR" id="v_dir">Direction</field></block></value>
+                                                  <value name="B"><block type="text" id="bp_call_signal_text"><field name="TEXT">CALL</field></block></value>
+                                                </block>
+                                              </value>
+                                              <value name="B">
+                                                <block type="logic_compare" id="bp_call_macd_match">
+                                                  <field name="OP">GT</field>
+                                                  <value name="A"><block type="variables_get" id="bp_call_macd_value"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
+                                                  <value name="B"><block type="math_number" id="bp_call_macd_zero"><field name="NUM">0</field></block></value>
+                                                </block>
+                                              </value>
+                                            </block>
+                                          </value>
+                                          <value name="B">
+                                            <block type="logic_operation" id="bp_put_indicator_match">
+                                              <field name="OP">AND</field>
+                                              <value name="A">
+                                                <block type="logic_compare" id="bp_put_signal_match">
+                                                  <field name="OP">EQ</field>
+                                                  <value name="A"><block type="variables_get" id="bp_put_signal_value"><field name="VAR" id="v_dir">Direction</field></block></value>
+                                                  <value name="B"><block type="text" id="bp_put_signal_text"><field name="TEXT">PUT</field></block></value>
+                                                </block>
+                                              </value>
+                                              <value name="B">
+                                                <block type="logic_compare" id="bp_put_macd_match">
+                                                  <field name="OP">LT</field>
+                                                  <value name="A"><block type="variables_get" id="bp_put_macd_value"><field name="VAR" id="v_macd">MACD Histogram</field></block></value>
+                                                  <value name="B"><block type="math_number" id="bp_put_macd_zero"><field name="NUM">0</field></block></value>
+                                                </block>
+                                              </value>
+                                            </block>
+                                          </value>
+                                        </block>
+                                      </value>
+                                    </block>
                                 </value>
                                 <statement name="DO0">
                   <block type="variables_set" id="bp_direct_apply_signal">

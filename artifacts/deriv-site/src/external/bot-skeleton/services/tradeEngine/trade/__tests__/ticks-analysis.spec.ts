@@ -300,6 +300,22 @@ describe('Ticks last-digit analysis events', () => {
         );
     });
 
+    it('requires MACD and accepts either ADX or directional RSI', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.requiresSignalConfidence = false;
+
+        const evaluate = indicators => {
+            engine.purchaseIndicatorEvaluation = indicators;
+            return engine.isPurchaseConditionValuesGateOpen('CALL');
+        };
+
+        expect(evaluate({ adx: 25, rsi: 45, macd: 1 })).toBe(true);
+        expect(evaluate({ adx: 10, rsi: 60, macd: 1 })).toBe(true);
+        expect(evaluate({ adx: 25, rsi: 60, macd: -1 })).toBe(false);
+        expect(evaluate({ adx: 10, rsi: 45, macd: 1 })).toBe(false);
+    });
+
     it('keeps one before-purchase evaluation valid when a new tick arrives during analysis', () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

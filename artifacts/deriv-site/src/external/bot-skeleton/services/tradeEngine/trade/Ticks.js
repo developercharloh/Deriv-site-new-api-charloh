@@ -452,6 +452,9 @@ export default Engine =>
             const minimumAdx = finiteOrNull(lock?.minimumAdx ?? 20);
             const availableRsi = finiteOrNull(indicators?.rsi ?? lock?.rsi);
             const availableMacd = finiteOrNull(indicators?.macd ?? lock?.macd);
+            const adxPass = availableAdx !== null && minimumAdx !== null && availableAdx >= minimumAdx;
+            const rsiPass = availableRsi !== null && (isPut ? availableRsi < 50 : availableRsi > 50);
+            const macdPass = availableMacd !== null && (isPut ? availableMacd < 0 : availableMacd > 0);
 
             return {
                 signal: signal || 'WAIT',
@@ -471,12 +474,8 @@ export default Engine =>
                         (availableConfidence !== null &&
                             minimumConfidence !== null &&
                             availableConfidence >= minimumConfidence)) &&
-                    availableAdx !== null &&
-                    minimumAdx !== null &&
-                    availableAdx >= minimumAdx &&
-                    availableRsi !== null &&
-                    availableMacd !== null &&
-                    (isPut ? availableRsi < 50 && availableMacd < 0 : availableRsi > 50 && availableMacd > 0),
+                    macdPass &&
+                    (adxPass || rsiPass),
             };
         }
         isPurchaseConditionValuesGateOpen(contractType) {
@@ -495,15 +494,15 @@ export default Engine =>
             const hasAnyIndicator = ['adx', 'rsi', 'macd'].some(indicator => Number.isFinite(indicators[indicator]));
             if (!hasAnyIndicator) return true;
 
-            return (
-                Number.isFinite(indicators.adx) &&
+            const adxPass = Number.isFinite(indicators.adx) && indicators.adx >= 20;
+            const rsiPass =
                 Number.isFinite(indicators.rsi) &&
+                (contractType === 'CALL' ? indicators.rsi > 50 : indicators.rsi < 50);
+            const macdPass =
                 Number.isFinite(indicators.macd) &&
-                indicators.adx >= 20 &&
-                (contractType === 'CALL'
-                    ? indicators.rsi > 50 && indicators.macd > 0
-                    : indicators.rsi < 50 && indicators.macd < 0)
-            );
+                (contractType === 'CALL' ? indicators.macd > 0 : indicators.macd < 0);
+
+            return macdPass && (adxPass || rsiPass);
         }
         isPurchaseConditionGateOpen(contractType) {
             if (!['CALL', 'PUT'].includes(contractType)) return true;
@@ -641,11 +640,10 @@ export default Engine =>
                                 signalEmaPeriod: 9,
                                 pipSize,
                             })?.histogram ?? 0;
-                            const indicatorsPass =
-                                Number(adx) >= adxMinimum &&
-                                (signal === 'CALL'
-                                    ? Number(rsi) > 50 && Number(macd) > 0
-                                    : Number(rsi) < 50 && Number(macd) < 0);
+                             const adxPass = Number(adx) >= adxMinimum;
+                             const rsiPass = signal === 'CALL' ? Number(rsi) > 50 : Number(rsi) < 50;
+                             const macdPass = signal === 'CALL' ? Number(macd) > 0 : Number(macd) < 0;
+                             const indicatorsPass = macdPass && (adxPass || rsiPass);
                              const qualifies = indicatorsPass && (!confidenceRequired || confidence >= minimum);
 
                             record = {

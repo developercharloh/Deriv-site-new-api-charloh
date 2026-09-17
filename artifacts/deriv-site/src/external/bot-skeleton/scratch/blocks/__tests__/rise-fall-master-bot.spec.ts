@@ -264,6 +264,9 @@ describe('Rise/Fall Master Bot XML', () => {
          expect(workspace.getBlockById('bp_direct_call_gate')?.type).toBe('logic_compare');
          expect(workspace.getBlockById('bp_direct_put_gate')?.type).toBe('logic_compare');
          expect(workspace.getBlockById('bp_volatility_scan')?.type).toBe('scan_volatility_until_indicators_pass');
+         expect(workspace.getBlockById('bp_secondary_indicator_match')?.getFieldValue('OP')).toBe('OR');
+         expect(workspace.getBlockById('bp_direction_indicator_match')?.getFieldValue('OP')).toBe('OR');
+         expect(workspace.getBlockById('bp_macd_direction_match')?.getFieldValue('OP')).toBe('OR');
         expect(workspace.getBlockById('i_msg')?.type).toBe('variables_set');
         expect(workspace.getBlockById('i_msg')?.getInputTargetBlock('VALUE')?.getFieldValue('TEXT')).toBe('');
         expect(workspace.getBlockById('bp_direct_call')?.type).toBe('purchase');
