@@ -1137,8 +1137,10 @@ export default class RunPanelStore {
     }) => {
         const journal = this.root_store.journal;
         const number = (value: unknown, digits = 1) =>
-            Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : 'N/A';
-            const conditionSummary = (values: {
+            value === null || value === undefined || value === '' || !Number.isFinite(Number(value))
+                ? 'N/A'
+                : Number(value).toFixed(digits);
+        const conditionSummary = (values: {
                 signal?: string;
                 availableConfidence?: number | null;
                 minimumConfidence?: number | null;
@@ -1152,23 +1154,62 @@ export default class RunPanelStore {
                 macdOperator?: string;
                 conditionsPassed?: boolean;
             }) => {
-                const signal = String(values.signal || 'CALL').toUpperCase();
-                const operator = signal === 'PUT' ? '<' : '>';
+                const signal = String(values.signal || 'WAIT').toUpperCase();
+                const directionalOperator = signal === 'PUT' ? '<' : signal === 'CALL' ? '>' : '—';
+                const minimum = (value: unknown, digits = 1) =>
+                    value === null || value === undefined || value === '' || !Number.isFinite(Number(value))
+                        ? 'N/A'
+                        : Number(value).toFixed(digits);
+                const result = (
+                    available: unknown,
+                    required: unknown,
+                    operator: '>' | '<' | '>=' | '—',
+                    digits = 1
+                ) => {
+                    const availableNumber = Number(available);
+                    const requiredNumber = Number(required);
+                    if (
+                        !Number.isFinite(availableNumber) ||
+                        !Number.isFinite(requiredNumber) ||
+                        operator === '—'
+                    ) {
+                        return `${number(available, digits)} / ${minimum(required, digits)} —`;
+                    }
+                    const passed =
+                        operator === '<'
+                            ? availableNumber < requiredNumber
+                            : operator === '>'
+                              ? availableNumber > requiredNumber
+                              : availableNumber >= requiredNumber;
+                    return `${number(available, digits)} / ${operator}${minimum(required, digits)} ${
+                        passed ? '✅' : '❌'
+                    }`;
+                };
+                const isAvailable = (value: unknown) =>
+                    value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+                const hasUnavailableIndicator =
+                    !isAvailable(values.availableAdx) ||
+                    !isAvailable(values.availableRsi) ||
+                    !isAvailable(values.availableMacd);
                 const status =
-                    values.conditionsPassed === true
-                        ? '✅ ALL CONDITIONS MET · '
-                        : values.conditionsPassed === false
-                          ? '❌ CONDITIONS NOT MET · '
-                          : '';
+                    hasUnavailableIndicator
+                        ? '⏳ DATA UNAVAILABLE · '
+                        : values.conditionsPassed === true
+                          ? '✅ ALL CONDITIONS MET · '
+                          : values.conditionsPassed === false
+                            ? '❌ CONDITIONS NOT MET · '
+                            : '';
                 return (
                     status +
-                    `Confidence ${number(values.availableConfidence)}% available / ` +
-                    `${number(values.minimumConfidence, 0)}% minimum · ` +
-                    `ADX ${number(values.availableAdx)} available / ${number(values.minimumAdx)} minimum · ` +
-                    `RSI ${number(values.availableRsi)} available / ` +
-                    `${values.rsiOperator || operator}${number(values.minimumRsi)} required · ` +
-                    `MACD ${number(values.availableMacd, 3)} available / ` +
-                    `${values.macdOperator || operator}${number(values.minimumMacd, 3)} required`
+                    `Confidence ${number(values.availableConfidence)}% / ` +
+                    `${
+                        values.minimumConfidence === null || values.minimumConfidence === undefined
+                            ? 'not required'
+                            : `${minimum(values.minimumConfidence, 0)}% ${Number(values.availableConfidence) >= Number(values.minimumConfidence) ? '✅' : '❌'}`
+                    } · ` +
+                    `ADX ${result(values.availableAdx, values.minimumAdx, '>=')} · ` +
+                    `RSI ${result(values.availableRsi, values.minimumRsi, values.rsiOperator || directionalOperator)} · ` +
+                    `MACD ${result(values.availableMacd, values.minimumMacd, values.macdOperator || directionalOperator, 3)}`
                 );
             };
         const reasonLabel = (reason?: string) =>

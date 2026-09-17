@@ -13,6 +13,10 @@ import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { adxSnapshot, macdSnapshot, rsiSnapshot } from '@/external/indicators';
 import { adaptiveMomentumLog } from '../utils/broadcast';
 
+const VOLATILITY_SCAN_REQUEST_GAP_MS = 250;
+const VOLATILITY_SCAN_HISTORY_RETRIES = 2;
+const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
 export const getAdaptiveMomentumAnalysisFromPrices = (
     prices,
     warmup = 30,
@@ -608,12 +612,25 @@ export default Engine =>
                     try {
                         // Scan one market at a time with a small history-only request.
                         // The selected market is the only one that gets a live stream.
-                        const ticks = await this.$scope.ticksService.request({
-                            symbol: volatility.code,
-                            subscribe: false,
-                            force: true,
-                            count: windowSize + 1,
-                        });
+                        let ticks;
+                        let historyError;
+                        for (let attempt = 0; attempt <= VOLATILITY_SCAN_HISTORY_RETRIES; attempt += 1) {
+                            try {
+                                ticks = await this.$scope.ticksService.request({
+                                    symbol: volatility.code,
+                                    subscribe: false,
+                                    force: attempt === 0,
+                                    count: windowSize + 1,
+                                });
+                                break;
+                            } catch (error) {
+                                historyError = error;
+                                if (attempt < VOLATILITY_SCAN_HISTORY_RETRIES) {
+                                    await wait(350 * (attempt + 1));
+                                }
+                            }
+                        }
+                        if (!ticks) throw historyError || new Error('History response was empty');
                         const prices = ticks.map(tick => Number(tick.quote)).filter(Number.isFinite);
                         const recent = prices.slice(-(windowSize + 1));
                         if (recent.length < windowSize + 1) {
@@ -674,6 +691,7 @@ export default Engine =>
                 this.volatilityScanIndex += 1;
 
                 if (this.volatilityScanIndex < DERIV_VOLATILITIES.length) {
+                    await wait(VOLATILITY_SCAN_REQUEST_GAP_MS);
                     globalObserver.emit('bot.volatility.scan', {
                         event: 'market',
                         market: record.code,
