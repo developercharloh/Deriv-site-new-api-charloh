@@ -803,7 +803,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                             ...prices,
                             ...Array.from({ length: 9 }, (_, index) => latestPrice - (index + 1) * 0.01),
                         ];
-                    } else if (routeChange && confirmation === 1) {
+                    } else if (routeChange && confirmation === 2) {
                         const latestPrice = prices[prices.length - 1];
                         prices = [
                             ...prices,
@@ -1846,13 +1846,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     decision: liveFallback,
                     confirmationMode: 'digit',
                     seeded: true,
-                    confirmations: 0,
+                    confirmations: pending.confirmations,
                     lastPrice: latestPrice,
                 };
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: 'info',
-                    message: `Live digit route changed for ${pending.decision.displayName}. Reconfirming the current ${liveFallback.label} route before purchase.`,
+                    message: `Live digit route changed for ${pending.decision.displayName}. Continuing fresh confirmation on ${liveFallback.label}.`,
                 });
                 return;
             }
