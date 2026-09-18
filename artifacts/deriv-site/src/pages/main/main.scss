@@ -448,12 +448,73 @@
     &--rate { color: #2ddcff; }
 }
 
+// The Nexus AI reference is the complete visual surface. Keep it as one
+// responsive image so its typography, spacing, colors, and artwork remain
+// identical to the supplied design.
+.nexus-ai {
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    background: #020a29;
+
+    &__reference-surface {
+        position: relative;
+        width: min(100%, 1022px);
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid #263fc1;
+        border-top-color: #5b36ff;
+        border-radius: 18px 18px 0 0;
+        background: #020a29;
+        box-shadow: 0 0 30px rgba(42, 47, 197, 0.28);
+
+        > img {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-width: none;
+        }
+    }
+
+    &__launch-hitbox {
+        position: absolute;
+        top: 76.5%;
+        left: 4%;
+        width: 92%;
+        height: 8.5%;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+
+        &:focus-visible {
+            outline: 2px solid #fff;
+            outline-offset: 3px;
+            border-radius: 12px;
+        }
+    }
+}
+
+.main.main--nexus-ai {
+    display: block;
+    height: auto;
+    min-height: calc(100vh - 9rem);
+    overflow: visible;
+}
+
 @media (max-width: 560px) {
+    .main.main--nexus-ai {
+        height: auto;
+        max-height: none;
+        min-height: calc(100vh - 6rem);
+        overflow: visible;
+    }
+
     .nexus-ai {
         min-height: calc(100vh - 6rem);
 
-        &__shell {
-            min-height: calc(100vh - 6rem);
+        &__reference-surface {
             border-right: 0;
             border-left: 0;
             border-radius: 0;
