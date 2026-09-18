@@ -153,6 +153,7 @@ export type MarketDecision = {
     label: string;
     contractType: StrategyContractType;
     barrier: string | null;
+    purchaseMarket?: PurchaseMarket;
     digits: number[];
     strength: number;
     reason: string;
@@ -321,11 +322,26 @@ export const withPurchaseMarket = (
 
     return {
         ...decision,
+        purchaseMarket: market,
         label: purchaseMarketLabel(market),
         contractType,
         barrier,
     };
 };
+
+export const purchaseMarketFromDecision = (
+    decision: RankedMarketDecision,
+): PurchaseMarket | null => decision.purchaseMarket || (
+    decision.contractType === 'DIGITEVEN'
+        ? 'even'
+        : decision.contractType === 'DIGITODD'
+            ? 'odd'
+            : decision.contractType === 'DIGITOVER'
+                ? `over-${decision.barrier ?? 0}`
+                : decision.contractType === 'DIGITUNDER'
+                    ? `under-${decision.barrier ?? 0}`
+                    : null
+);
 
 export type AdaptiveDigitMarketPlan = {
     primary: RankedMarketDecision;
@@ -342,7 +358,7 @@ const adaptiveDigitDecision = (
     market: PurchaseMarket,
     hitRate: number,
     windowSize: number,
-    role: 'primary' | 'recovery',
+    role: 'primary' | 'recovery' | 'fallback',
 ): RankedMarketDecision => {
     const condition = market === 'even'
         ? 'all-even'
@@ -362,7 +378,7 @@ const adaptiveDigitDecision = (
         barrier: market.match(/^(?:over|under)-(\d+)$/)?.[1] || null,
         digits: source.lastDigits.slice(-windowSize),
         strength: hitRate * 100,
-        reason: `${role === 'primary' ? 'Primary' : 'Recovery'} ${purchaseMarketLabel(market)} estimated hit rate ${(
+        reason: `${role === 'primary' ? 'Primary' : role === 'recovery' ? 'Recovery' : 'Fallback'} ${purchaseMarketLabel(market)} estimated hit rate ${(
             hitRate * 100
         ).toFixed(0)}% across the latest ${Math.min(windowSize, source.lastDigits.length)} digits.`,
         symbol: source.symbol,
@@ -420,6 +436,39 @@ export const selectAdaptiveDigitMarketPlan = (
         primaryMarket: best.market,
         recoveryMarket: recovery.market,
     };
+};
+
+/**
+ * Pick the strongest supported digit route after the broker rejects the
+ * currently selected one. This deliberately excludes the rejected route and
+ * any route cached as unsupported for the same symbol.
+ */
+export const selectBestAvailableDigitFallback = (
+    source: StrategySource,
+    rejectedMarket: PurchaseMarket,
+    windowSize = 20,
+    unavailableMarkets: ReadonlySet<PurchaseMarket> = new Set(),
+): RankedMarketDecision | null => {
+    const digits = source.lastDigits
+        .slice(-Math.max(3, Math.floor(windowSize)))
+        .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+    if (!digits.length) return null;
+
+    const candidates: Array<{ market: PurchaseMarket; hitRate: number; priority: number }> = [
+        { market: 'over-2', hitRate: digitHitRate(digits, digit => digit > 2), priority: 4 },
+        { market: 'under-7', hitRate: digitHitRate(digits, digit => digit < 7), priority: 4 },
+        { market: 'over-4', hitRate: digitHitRate(digits, digit => digit > 4), priority: 3 },
+        { market: 'under-5', hitRate: digitHitRate(digits, digit => digit < 5), priority: 3 },
+        { market: 'even', hitRate: digitHitRate(digits, digit => digit % 2 === 0), priority: 2 },
+        { market: 'odd', hitRate: digitHitRate(digits, digit => digit % 2 !== 0), priority: 2 },
+    ].filter(candidate => candidate.market !== rejectedMarket && !unavailableMarkets.has(candidate.market));
+
+    const best = candidates.sort((left, right) =>
+        right.hitRate - left.hitRate || right.priority - left.priority,
+    )[0];
+    return best
+        ? adaptiveDigitDecision(source, best.market, best.hitRate, digits.length, 'fallback')
+        : null;
 };
 
 /**

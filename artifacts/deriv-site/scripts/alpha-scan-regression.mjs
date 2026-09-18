@@ -286,6 +286,7 @@ const getSnapshot = evaluate => evaluate(`(() => {
         settledRows: Number(root?.dataset.journalCount || 0),
         autoTrades: Number(root?.dataset.autoTrades || 0),
         payoutSkipCount: Number(root?.dataset.payoutSkipCount || 0),
+         digitFallbackCount: Number(root?.dataset.digitFallbackCount || 0),
         lastPayoutSkip: root?.dataset.lastPayoutSkip || '',
         loading: ['discovering', 'collecting'].includes(root?.dataset.status || ''),
         errorState: ['empty', 'timeout', 'connection-error'].includes(root?.dataset.status || ''),
@@ -386,13 +387,14 @@ const run = async () => {
         await client.call('Page.enable');
         await client.call('Network.enable');
         await client.call('Runtime.enable');
-        const fixtureUrl = (sampleSize, executionFixture = false, riskFixture = '', confirmationFixture = '') => {
+        const fixtureUrl = (sampleSize, executionFixture = false, riskFixture = '', confirmationFixture = '', unavailableContract = false) => {
             const url = new URL(TARGET_URL);
             url.searchParams.set('alpha_scan_sample', String(sampleSize));
             url.searchParams.set('alpha_scan_fixture', '1');
             if (executionFixture) url.searchParams.set('alpha_scan_execution_fixture', '1');
             if (riskFixture) url.searchParams.set('alpha_scan_risk_fixture', riskFixture);
             if (confirmationFixture) url.searchParams.set('alpha_scan_confirmation_fixture', confirmationFixture);
+            if (unavailableContract) url.searchParams.set('alpha_scan_unavailable_contract', '1');
             return url.toString();
         };
         const liveUrl = sampleSize => {
@@ -657,6 +659,60 @@ const run = async () => {
             },
         };
         runReport.fixture.autoRunner = autoRunner;
+
+        await client.call('Page.navigate', {
+            url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', '', true),
+        });
+        await waitFor(
+            () => client.evaluate('new URLSearchParams(window.location.search).get("alpha_scan_unavailable_contract") === "1"'),
+            'unavailable-contract fallback fixture Alpha Tool',
+        );
+        const unavailableScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return ['ready', 'partial-data'].includes(next.status) ? next : false;
+            },
+            'unavailable-contract fallback fixture scan',
+            90000,
+        );
+        assertScan(unavailableScan, SAMPLE_WINDOWS[0], 'fixture');
+        await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
+        let fallbackNotice;
+        try {
+            fallbackNotice = await waitFor(
+                async () => {
+                    const next = await getSnapshot(client.evaluate);
+                    return next.digitFallbackCount >= 1
+                        ? next
+                        : false;
+                },
+                'digit contract availability fallback',
+                5000,
+                25,
+            );
+        } catch (error) {
+            const lastSnapshot = await getSnapshot(client.evaluate);
+            throw new Error(`${error.message} Last fallback snapshot: ${JSON.stringify(lastSnapshot)}`);
+        }
+        const fallbackRunning = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.runningRows === 1 ? next : false;
+            },
+            'fallback contract after unavailable digit route',
+            10000,
+            25,
+        );
+        if (fallbackNotice.runningRows !== 0 || fallbackRunning.runningRows !== 1) {
+            throw new Error(
+                `Unavailable digit contract did not fall back cleanly: ${JSON.stringify({ fallbackNotice, fallbackRunning })}`,
+            );
+        }
+        runReport.fixture.unavailableContractFallback = {
+            status: 'passed',
+            notice: fallbackNotice.feedback,
+            runningRows: fallbackRunning.runningRows,
+        };
 
         await client.call('Page.navigate', {
             url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'reverse'),
@@ -938,6 +994,7 @@ const run = async () => {
                 status: 'passed',
                 scans: fixtureResults,
                 autoRunner,
+                unavailableContractFallback: runReport.fixture.unavailableContractFallback,
                 confirmationRecovery,
                 riskBoundaries: runReport.fixture.riskBoundaries || [],
             },

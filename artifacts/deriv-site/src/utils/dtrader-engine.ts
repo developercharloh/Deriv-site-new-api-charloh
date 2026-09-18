@@ -42,6 +42,8 @@ export interface DTBuyFeedback {
     seq:     number;       // monotonic — used by UI to detect new feedback
     kind:    'success' | 'error';
     message: string;
+    code?: string;
+    contractType?: DTContractType;
 }
 
 export interface DTProposal {
@@ -645,7 +647,10 @@ export class DTraderEngine {
                 // otherwise the user wonders why their tap did nothing.
                 if (this.pendingBuy) {
                     this.pendingBuy = false;
-                    this.emitBuyError(`Couldn't price your trade: ${m}`);
+                    this.emitBuyError(`Couldn't price your trade: ${m}`, {
+                        code: msg.error.code,
+                        contractType: this.cfg?.contractType,
+                    });
                 }
             }
             if (msg.msg_type === 'buy') {
@@ -656,7 +661,10 @@ export class DTraderEngine {
                 // instant-buy path.
                 this.currentProposal = null;
                 this.currentProposalCfgKey = null;
-                this.emitBuyError(m);
+                this.emitBuyError(m, {
+                    code: msg.error.code,
+                    contractType: this.cfg?.contractType,
+                });
                 // Likely a stale proposal id — refresh immediately so the next
                 // tap has a fresh price ready.
                 if (/proposal|invalid|expired/i.test(m)) this.refreshProposal();
@@ -1047,9 +1055,12 @@ export class DTraderEngine {
         if (hardFail) this.setStatus('error');
     }
 
-    private emitBuyError(message: string): void {
+    private emitBuyError(
+        message: string,
+        details: Pick<DTBuyFeedback, 'code' | 'contractType'> = {},
+    ): void {
         this.log(message, 'error');
-        this.onBuyFeedback({ seq: ++this.feedbackSeq, kind: 'error', message });
+        this.onBuyFeedback({ seq: ++this.feedbackSeq, kind: 'error', message, ...details });
     }
 
     private emitBuySuccess(message: string): void {

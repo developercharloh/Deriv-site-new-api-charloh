@@ -24,7 +24,9 @@ import {
     marketConditionLabel,
     purchaseMarketLabel,
     selectAdaptiveDigitMarketPlan,
+    selectBestAvailableDigitFallback,
     selectBestQualifiedMomentumMarket,
+    purchaseMarketFromDecision,
     type MarketCondition,
     type MomentumMarketEvaluation,
     type PurchaseMarket,
@@ -58,6 +60,12 @@ const FEATURE_LEARNING_RATE = 0.08;
 const FEATURE_L2_PENALTY = 0.02;
 const FEATURE_WINDOWS = [3, 5, 10, 20, 50];
 const MAX_NOISE_FRACTION = 0.65;
+const UNAVAILABLE_MARKET_TTL_MS = 5 * 60_000;
+const UNAVAILABLE_DIGIT_CONTRACT_PATTERN = /contract(?:notallowed|notallowed|validation|forbidden)|market(?:closed|unavailable)|not permitted|contract type.*(?:not|unavailable)|invalid contract/i;
+
+const isUnavailableDigitContractFeedback = (feedback: DTBuyFeedback): boolean =>
+    Boolean(feedback.code && /contract|market/i.test(feedback.code)) ||
+    UNAVAILABLE_DIGIT_CONTRACT_PATTERN.test(feedback.message);
 
 type SampleSize = 300 | 600 | 1200;
 type ScanStatus =
@@ -695,6 +703,7 @@ type AlphaExecutionEngine = {
 
 type AlphaRiskFixture = 'target' | 'stop-loss' | 'consecutive-losses' | 'trade-count';
 type AlphaConfirmationFixture = 'reverse' | null;
+type AlphaUnavailableContractFixture = 'once' | null;
 /**
  * The browser regression runs without a Deriv account. This deterministic
  * engine exercises the same Alpha Scan callbacks as DTraderEngine, including
@@ -712,16 +721,20 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
     private timers = new Set<ReturnType<typeof setTimeout>>();
     private readonly riskFixtureMode: AlphaRiskFixture | null;
     private readonly confirmationFixtureMode: AlphaConfirmationFixture;
+    private readonly unavailableContractFixture: AlphaUnavailableContractFixture;
     private confirmationReversalUsed = false;
+    private unavailableContractUsed = false;
     private buyGuard: DTBuyGuard = () => null;
     private lowPayoutProposalUsed = false;
 
     constructor(
         riskFixtureMode: AlphaRiskFixture | null = null,
         confirmationFixtureMode: AlphaConfirmationFixture = null,
+        unavailableContractFixture: AlphaUnavailableContractFixture = null,
     ) {
         this.riskFixtureMode = riskFixtureMode;
         this.confirmationFixtureMode = confirmationFixtureMode;
+        this.unavailableContractFixture = unavailableContractFixture;
     }
 
     private schedule(callback: () => void, delay: number): void {
@@ -797,6 +810,18 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         }
 
         const config = { ...this.config, ...patch };
+        const isDigitContract = config.contractType.startsWith('DIGIT');
+        if (isDigitContract && this.unavailableContractFixture === 'once' && !this.unavailableContractUsed) {
+            this.unavailableContractUsed = true;
+            this.onBuyFeedback({
+                seq: Date.now(),
+                kind: 'error',
+                code: 'ContractNotAllowed',
+                contractType: config.contractType,
+                message: 'Contract type is unavailable for this market.',
+            });
+            return;
+        }
         const payoutMultiplier = this.lowPayoutProposalUsed ? 1.8 : 1.6;
         const proposal = {
             id: `fixture-proposal-${this.contractSequence + 1}`,
@@ -943,6 +968,7 @@ type AlphaToolSurfaceProps = {
     scanSource: DiscoverySource;
     executionFixtureMode: boolean;
     confirmationFixtureMode: AlphaConfirmationFixture;
+    unavailableContractFixture: AlphaUnavailableContractFixture;
     riskFixtureMode: AlphaRiskFixture | null;
     isBusy: boolean;
     lastUpdated: Date | null;
@@ -1010,6 +1036,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     scanSource,
     executionFixtureMode,
     confirmationFixtureMode,
+    unavailableContractFixture,
     riskFixtureMode,
     isBusy,
     lastUpdated,
@@ -1029,7 +1056,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const liveEngineRef = useRef<AlphaExecutionEngine | null>(null);
     if (liveEngineRef.current === null) {
         liveEngineRef.current = executionFixtureMode
-            ? new FixtureAlphaExecutionEngine(riskFixtureMode, confirmationFixtureMode)
+            ? new FixtureAlphaExecutionEngine(riskFixtureMode, confirmationFixtureMode, unavailableContractFixture)
             : new DTraderEngine();
     }
     const liveEngine = liveEngineRef.current;
@@ -1055,12 +1082,15 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [liveTrade, setLiveTrade] = useState<DTPosition | null>(null);
     const [liveTradeLeg, setLiveTradeLeg] = useState<'primary' | 'recovery' | null>(null);
     const [liveTradeDecision, setLiveTradeDecision] = useState<RankedMarketDecision | null>(null);
+    const [digitFallbackCount, setDigitFallbackCount] = useState(0);
     const [journalRows, setJournalRows] = useState<AlphaTradeJournalEntry[]>([]);
     const [executionLeg, setExecutionLeg] = useState<'idle' | 'primary-pending' | 'primary-running' | 'recovery-pending' | 'recovery-running'>('idle');
     const [primaryDecision, setPrimaryDecision] = useState<RankedMarketDecision | null>(null);
     const [recoveryDecision, setRecoveryDecision] = useState<RankedMarketDecision | null>(null);
     const activeLegRef = useRef<'primary' | 'recovery' | null>(null);
     const activeDecisionRef = useRef<RankedMarketDecision | null>(null);
+    const unavailableDigitMarketsRef = useRef(new Map<string, number>());
+    const fallbackAttemptedRef = useRef(false);
     const pendingAutoEntryRef = useRef<{
         decision: RankedMarketDecision;
         seeded: boolean;
@@ -1280,7 +1310,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         activeLegRef.current = leg;
         activeDecisionRef.current = decision;
         setExecutionLeg(leg === 'primary' ? 'primary-pending' : 'recovery-pending');
-        setLiveFeedback(null);
+        if (!fallbackAttemptedRef.current) setLiveFeedback(null);
         if (runtime.autoVolatilityMode && leg === 'primary') {
             pendingAutoEntryRef.current = {
                 decision,
@@ -1349,6 +1379,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             return;
         }
         recoveryUsedRef.current = false;
+        fallbackAttemptedRef.current = false;
         setLiveFeedback(null);
         executeDecision(decision, 'primary');
     }, [autoPrimaryDecision, autoVolatilityMode, executeDecision, executionLeg, explicitPrimaryDecision, liveAuthorized, primaryDecision, stopLoss, targetProfit]);
@@ -1391,6 +1422,59 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     useEffect(() => {
         liveEngine.onStatus = setLiveStatus;
         liveEngine.onBuyFeedback = feedback => {
+            const activeDecision = activeDecisionRef.current;
+            const activeLeg = activeLegRef.current;
+            const runtime = runtimeRef.current;
+            const rejectedMarket = activeDecision
+                ? purchaseMarketFromDecision(activeDecision)
+                : null;
+            if (
+                feedback.kind === 'error' &&
+                runtime.autoVolatilityMode &&
+                !fallbackAttemptedRef.current &&
+                activeDecision &&
+                activeLeg &&
+                rejectedMarket &&
+                activeDecision.contractType.startsWith('DIGIT') &&
+                isUnavailableDigitContractFeedback(feedback)
+            ) {
+                const source = runtime.rows.find(row => row.symbol === activeDecision.symbol);
+                const cacheKey = `${activeDecision.symbol}|${rejectedMarket}`;
+                const now = Date.now();
+                for (const [key, expiresAt] of unavailableDigitMarketsRef.current) {
+                    if (expiresAt <= now) unavailableDigitMarketsRef.current.delete(key);
+                }
+                unavailableDigitMarketsRef.current.set(cacheKey, now + UNAVAILABLE_MARKET_TTL_MS);
+                const unavailableMarkets = new Set<PurchaseMarket>();
+                for (const [key, expiresAt] of unavailableDigitMarketsRef.current) {
+                    if (key.startsWith(`${activeDecision.symbol}|`) && expiresAt > now) {
+                        unavailableMarkets.add(key.slice(activeDecision.symbol.length + 1) as PurchaseMarket);
+                    }
+                }
+                const fallback = source
+                    ? selectBestAvailableDigitFallback(
+                        source,
+                        rejectedMarket,
+                        activeLeg === 'recovery' ? runtime.recoveryDigitWindow : runtime.digitWindow,
+                        unavailableMarkets,
+                    )
+                    : null;
+                if (fallback) {
+                    fallbackAttemptedRef.current = true;
+                    setDigitFallbackCount(count => count + 1);
+                    pendingAutoEntryRef.current = null;
+                    setExecutionLeg('idle');
+                    activeLegRef.current = null;
+                    activeDecisionRef.current = null;
+                    setLiveFeedback({
+                        seq: Date.now(),
+                        kind: 'info',
+                        message: `${purchaseMarketLabel(rejectedMarket)} is unavailable on ${activeDecision.displayName}. Retrying once with ${fallback.label} on the same market.`,
+                    });
+                    setTimeout(() => executeDecisionRef.current(fallback, activeLeg), 0);
+                    return;
+                }
+            }
             setLiveFeedback(feedback);
             if (feedback.kind === 'error') {
                 pendingAutoEntryRef.current = null;
@@ -1415,6 +1499,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setLiveTradeDecision(null);
 
             if (runtimeRef.current.autoVolatilityMode && leg === 'primary') {
+                const settledDecision = activeDecisionRef.current;
+                const settledSymbol = settledDecision?.symbol || position.symbol;
                 const risk = autoRiskRef.current;
                 risk.sessionProfit += Number(position.profit) || 0;
                 risk.trades += 1;
@@ -1441,7 +1527,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 if (position.isWin === false && !recoveryUsedRef.current) {
                     recoveryUsedRef.current = true;
                     const recoverySource = runtimeRef.current.rows.find(row =>
-                        row.symbol === activeDecisionRef.current?.symbol,
+                        row.symbol === settledSymbol,
                     );
                     const recovery = recoverySource
                         ? selectAdaptiveDigitMarketPlan(
@@ -1450,6 +1536,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         )?.recovery || null
                         : null;
                     if (recovery) {
+                        fallbackAttemptedRef.current = false;
                         setRecoveryDecision(recovery);
                         setExecutionLeg('recovery-pending');
                         setLiveFeedback({
@@ -1609,6 +1696,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '—';
     const activeDecision = autoVolatilityMode ? autoPrimaryDecision : primaryDecision || explicitPrimaryDecision;
+    const effectivePrimaryPurchaseMarket = autoVolatilityMode
+        ? autoDigitMarketPlan?.primaryMarket || primaryPurchaseMarket
+        : primaryPurchaseMarket;
+    const effectiveRecoveryPurchaseMarket = autoVolatilityMode
+        ? autoDigitMarketPlan?.recoveryMarket || recoveryPurchaseMarket
+        : recoveryPurchaseMarket;
     const modelProbability = modelPick ? Math.round(modelPick.baselineProbability * 100) : 0;
     const modelGate = modelPick?.validationGate || 'insufficient-evidence';
     const modelGateLabel = modelGate === 'validated'
@@ -1637,12 +1730,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-recovery-digit-window={recoveryDigitWindow}
             data-primary-condition={primaryCondition}
             data-primary-market={marketConditionLabel(primaryCondition)}
-            data-primary-purchase-market={primaryPurchaseMarket}
-            data-primary-purchase={purchaseMarketLabel(primaryPurchaseMarket)}
+            data-primary-purchase-market={effectivePrimaryPurchaseMarket}
+            data-primary-purchase={purchaseMarketLabel(effectivePrimaryPurchaseMarket)}
             data-recovery-condition={recoveryCondition}
             data-recovery-market={marketConditionLabel(recoveryCondition)}
-            data-recovery-purchase-market={recoveryPurchaseMarket}
-            data-recovery-purchase={purchaseMarketLabel(recoveryPurchaseMarket)}
+            data-recovery-purchase-market={effectiveRecoveryPurchaseMarket}
+            data-recovery-purchase={purchaseMarketLabel(effectiveRecoveryPurchaseMarket)}
             data-execution-leg={executionLeg}
             data-auto-volatility-mode={autoVolatilityMode}
             data-execution-fixture={executionFixtureMode}
@@ -1650,6 +1743,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-auto-trades={autoRiskRef.current.trades}
             data-payout-floor={payoutFloor}
             data-payout-skip-count={payoutSkipCount}
+            data-digit-fallback-count={digitFallbackCount}
             data-last-payout-skip={lastPayoutSkipMessage}
         >
             <header className='alpha-cockpit__topbar'>
@@ -1833,12 +1927,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-recovery-digit-window={recoveryDigitWindow}
             data-primary-condition={primaryCondition}
             data-primary-market={marketConditionLabel(primaryCondition)}
-            data-primary-purchase-market={primaryPurchaseMarket}
-            data-primary-purchase={purchaseMarketLabel(primaryPurchaseMarket)}
+            data-primary-purchase-market={effectivePrimaryPurchaseMarket}
+            data-primary-purchase={purchaseMarketLabel(effectivePrimaryPurchaseMarket)}
             data-recovery-condition={recoveryCondition}
             data-recovery-market={marketConditionLabel(recoveryCondition)}
-            data-recovery-purchase-market={recoveryPurchaseMarket}
-            data-recovery-purchase={purchaseMarketLabel(recoveryPurchaseMarket)}
+            data-recovery-purchase-market={effectiveRecoveryPurchaseMarket}
+            data-recovery-purchase={purchaseMarketLabel(effectiveRecoveryPurchaseMarket)}
             data-execution-leg={executionLeg}
             data-auto-volatility-mode={autoVolatilityMode}
             data-execution-fixture={executionFixtureMode}
@@ -1846,6 +1940,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-auto-trades={autoRiskRef.current.trades}
             data-payout-floor={payoutFloor}
             data-payout-skip-count={payoutSkipCount}
+            data-digit-fallback-count={digitFallbackCount}
             data-last-payout-skip={lastPayoutSkipMessage}
         >
             <header className='alpha-tool__hero'>
@@ -2127,6 +2222,10 @@ const AlphaScanWorkspace: React.FC = () => {
     const confirmationFixtureMode: AlphaConfirmationFixture = typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).get('alpha_scan_confirmation_fixture') === 'reverse'
         ? 'reverse'
+        : null;
+    const unavailableContractFixture: AlphaUnavailableContractFixture = typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('alpha_scan_unavailable_contract') === '1'
+        ? 'once'
         : null;
     const requestedRiskFixture = typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search).get('alpha_scan_risk_fixture')
@@ -2569,6 +2668,7 @@ const AlphaScanWorkspace: React.FC = () => {
             scanSource={discoverySource}
             executionFixtureMode={executionFixtureMode}
             confirmationFixtureMode={confirmationFixtureMode}
+            unavailableContractFixture={unavailableContractFixture}
             riskFixtureMode={riskFixtureMode}
             isBusy={isBusy}
             lastUpdated={lastUpdated}

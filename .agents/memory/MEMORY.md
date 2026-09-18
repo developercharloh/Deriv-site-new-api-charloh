@@ -43,3 +43,4 @@
 - [Purchase evaluation cycle](deriv-purchase-evaluation-cycle.md) — bind asynchronous confidence and indicator checks to one before-purchase cycle, not the moving current tick.
 - [Rise/Fall volatility scan observability](rise-fall-volatility-scan-observability.md) — preserve scanner direction and keep per-market indicator results visible while scanning.
 - [Volatility scan purchase handoff](deriv-volatility-scan-handoff.md) — lock market and direction; FAST reuse must not alternate or fetch fresh OHLC before every purchase.
+- [Digit contract availability fallback](deriv-digit-contract-availability.md) — cache broker-rejected digit routes per symbol and retry once with a supported same-symbol route.

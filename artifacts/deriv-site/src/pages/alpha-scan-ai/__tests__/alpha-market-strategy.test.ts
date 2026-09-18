@@ -5,6 +5,7 @@ import {
     AUTO_SIGNAL_CONFIDENCE_WINDOW,
     evaluateMomentumMarket,
     isMomentumDirectionConfirmed,
+    selectBestAvailableDigitFallback,
     selectAdaptiveDigitMarketPlan,
     selectBestQualifiedMomentumMarket,
     selectStrongestMomentumMarket,
@@ -127,5 +128,21 @@ describe('auto volatility momentum selection', () => {
         expect(result?.recoveryMarket).toBe('under-5');
         expect(result?.primary.barrier).toBe('7');
         expect(result?.recovery.barrier).toBe('5');
+    });
+
+    it('skips a broker-rejected route and selects the strongest available fallback', () => {
+        const result = selectBestAvailableDigitFallback(
+            {
+                ...source('FALLBACK', [100, 99, 98, 97, 96, 95]),
+                lastDigits: [0, 1, 2, 3, 4, 6],
+            },
+            'under-7',
+            6,
+            new Set(['under-7', 'under-5']),
+        );
+
+        expect(result?.purchaseMarket).toBe('even');
+        expect(result?.contractType).toBe('DIGITEVEN');
+        expect(result?.reason).toMatch(/fallback/i);
     });
 });
