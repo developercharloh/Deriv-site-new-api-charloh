@@ -494,6 +494,169 @@
             border-radius: 12px;
         }
     }
+
+    &__control-layer {
+        position: absolute;
+        z-index: 2;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    &__hitbox {
+        position: absolute;
+        display: block;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        pointer-events: auto;
+        cursor: pointer;
+
+        &--stake-minus,
+        &--profit-minus,
+        &--loss-minus,
+        &--multiplier-minus {
+            left: 6.5%;
+            width: 9.5%;
+        }
+
+        &--stake-plus,
+        &--profit-plus,
+        &--loss-plus,
+        &--multiplier-plus {
+            left: 34%;
+            width: 7%;
+        }
+
+        &--profit-minus,
+        &--profit-plus,
+        &--multiplier-minus,
+        &--multiplier-plus { left: auto; }
+
+        &--profit-minus { left: 52%; }
+        &--profit-plus { left: 87%; }
+        &--multiplier-minus { left: 52%; }
+        &--multiplier-plus { left: 87%; }
+
+        &--stake-minus,
+        &--stake-plus,
+        &--profit-minus,
+        &--profit-plus { top: 43.2%; height: 5.5%; }
+
+        &--loss-minus,
+        &--loss-plus,
+        &--multiplier-minus,
+        &--multiplier-plus { top: 58.5%; height: 5.5%; }
+
+        &--loss-plus { left: 34%; }
+        &--multiplier-minus { left: 52%; }
+        &--multiplier-plus { left: 87%; }
+
+        &--recovery {
+            top: 66.3%;
+            right: 4.2%;
+            width: 12%;
+            height: 5.5%;
+        }
+
+        &--launch {
+            top: 76%;
+            left: 4%;
+            width: 92%;
+            height: 8%;
+        }
+
+        &:focus-visible {
+            outline: 2px solid #fff;
+            outline-offset: 2px;
+            border-radius: 10px;
+        }
+    }
+
+    &__value-overlay {
+        position: absolute;
+        z-index: 3;
+        width: 17%;
+        color: #fff;
+        font-size: clamp(12px, 2.45vw, 25px);
+        font-weight: 800;
+        line-height: 1;
+        text-align: center;
+        pointer-events: none;
+
+        &--stake,
+        &--profit { top: 45.2%; }
+        &--loss,
+        &--multiplier { top: 60.5%; }
+        &--stake,
+        &--loss { left: 17%; }
+        &--profit,
+        &--multiplier { left: 64%; }
+    }
+
+    &__toggle-overlay {
+        position: absolute;
+        z-index: 3;
+        top: 66.8%;
+        right: 4.2%;
+        width: 11.6%;
+        height: 4.4%;
+        border: 1px solid #267eea;
+        border-radius: 999px;
+        background: #102e79;
+        pointer-events: none;
+
+        span {
+            position: absolute;
+            top: 8%;
+            left: 5%;
+            width: 76%;
+            height: 84%;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 0 8px #b7f8ff;
+        }
+    }
+
+    &__status-overlay {
+        position: absolute;
+        z-index: 3;
+        top: 35.6%;
+        left: 20%;
+        width: 60%;
+        color: #8fffe2;
+        font-size: clamp(9px, 1.5vw, 15px);
+        font-weight: 700;
+        line-height: 1.2;
+        text-align: center;
+        text-shadow: 0 0 8px rgba(66, 255, 213, 0.75);
+        pointer-events: none;
+    }
+
+    &__stats-overlay {
+        position: absolute;
+        z-index: 3;
+        top: 90.2%;
+        left: 5%;
+        display: grid;
+        width: 90%;
+        grid-template-columns: repeat(4, 1fr);
+        color: #fff;
+        font-size: clamp(14px, 3vw, 30px);
+        font-weight: 800;
+        text-align: center;
+        pointer-events: none;
+    }
+
+    &__engine {
+        position: absolute;
+        top: 0;
+        left: -10000px;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+    }
 }
 
 .main.main--nexus-ai {

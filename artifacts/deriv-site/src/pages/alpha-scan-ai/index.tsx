@@ -1171,6 +1171,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         recoveryCondition,
         primaryPurchaseMarket,
         recoveryPurchaseMarket,
+        martingale,
         recoveryEnabled,
         multiMarketScanning,
         autoVolatilityMode,
@@ -1331,7 +1332,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             payoutFloor,
             selectedSymbol,
         };
-    }, [autoVolatilityMode, client?.currency, digitWindow, liveAuthorized, liveMode, multiMarketScanning, payoutFloor, primaryCondition, primaryPurchaseMarket, recoveryCondition, recoveryDigitWindow, recoveryEnabled, recoveryPurchaseMarket, rows, selectedSymbol, stake]);
+    }, [autoVolatilityMode, client?.currency, digitWindow, liveAuthorized, liveMode, martingale, multiMarketScanning, payoutFloor, primaryCondition, primaryPurchaseMarket, recoveryCondition, recoveryDigitWindow, recoveryEnabled, recoveryPurchaseMarket, rows, selectedSymbol, stake]);
 
     const scheduleAutoRescan = useCallback(() => {
         if (!runtimeRef.current.autoVolatilityMode || autoRescanPendingRef.current) return;
@@ -1369,12 +1370,16 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             return;
         }
 
+        const configuredMultiplier = Number(runtime.martingale);
+        const effectiveStake = leg === 'recovery' && Number.isFinite(configuredMultiplier) && configuredMultiplier > 1
+            ? amount * configuredMultiplier
+            : amount;
         const config: DTConfig = {
             symbol: decision.symbol,
             contractType: decision.contractType,
             durationValue: 1,
             durationUnit: 't',
-            stake: amount,
+            stake: effectiveStake,
             barrier: decision.barrier,
             currency: runtime.currency,
         };
@@ -1673,6 +1678,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             }
         };
         liveEngine.onPosition = position => {
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('nexus-ai-position', { detail: position }));
+            }
             const leg = activeLegRef.current;
             upsertJournalEntry(position, leg || 'primary', activeDecisionRef.current);
             if (position.isOpen) {
@@ -2035,8 +2043,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     </div>
                     <div className='alpha-cockpit__execution-controls'>
                         <label>STAKE<input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Stake' /></label>
-                        <label>TARGET PROFIT<select value={targetProfit} onChange={event => setTargetProfit(event.target.value)} aria-label='Target profit'><option value='15'>$15</option><option value='25'>$25</option><option value='50'>$50</option></select></label>
-                        <label>STOP LOSS<select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option></select></label>
+                        <label>TARGET PROFIT<select value={targetProfit} onChange={event => setTargetProfit(event.target.value)} aria-label='Target profit'><option value='10'>$10</option><option value='15'>$15</option><option value='25'>$25</option><option value='50'>$50</option></select></label>
+                        <label>STOP LOSS<select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option><option value='50'>$50</option></select></label>
                         <label>MARTINGALE<select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Martingale'><option value='no'>OFF · 1x</option><option value='2'>ON · 2x</option><option value='3'>ON · 3x</option></select></label>
                         <label>MIN PAYOUT<select value={payoutFloor} onChange={event => setPayoutFloor(event.target.value)} aria-label='Minimum payout'><option value='1.5'>1.50x</option><option value='1.8'>1.80x</option><option value='2'>2.00x</option></select></label>
                     </div>
@@ -2267,8 +2275,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
                 <div className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>◎</span><span>Stake</span><input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Stake' /></div>
                 <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>%</span><span>Min Payout</span><select value={payoutFloor} onChange={event => setPayoutFloor(event.target.value)} aria-label='Minimum payout'><option value='1.5'>1.50x</option><option value='1.8'>1.80x</option><option value='2'>2.00x</option></select></label>
-                <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↗</span><span>Target Profit</span><select value={targetProfit} onChange={event => setTargetProfit(event.target.value)} aria-label='Target profit'><option value='15'>$15</option><option value='25'>$25</option><option value='50'>$50</option></select></label>
-                <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↓</span><span>Stop Loss</span><select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option></select></label>
+                <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↗</span><span>Target Profit</span><select value={targetProfit} onChange={event => setTargetProfit(event.target.value)} aria-label='Target profit'><option value='10'>$10</option><option value='15'>$15</option><option value='25'>$25</option><option value='50'>$50</option></select></label>
+                <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>↓</span><span>Stop Loss</span><select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option><option value='50'>$50</option></select></label>
                 <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>×</span><span>Martingale</span><select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Martingale'><option value='no'>No (1x)</option><option value='2'>2x</option><option value='3'>3x</option></select></label>
                 <div className='alpha-tool__settings-note'>
                     {autoVolatilityMode
