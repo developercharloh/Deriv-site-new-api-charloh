@@ -175,7 +175,12 @@ const NexusAIComingSoon: React.FC = () => {
                 <EditableNumber value={takeProfit} setValue={setTakeProfit} label='Take profit' className='nexus-ai__editable-value--profit' />
                 <EditableNumber value={stopLoss} setValue={setStopLoss} label='Stop loss' className='nexus-ai__editable-value--loss' />
                 <EditableNumber value={multiplier} setValue={setMultiplier} label='Recovery multiplier' className='nexus-ai__editable-value--multiplier' />
-                {!isRecoveryEnabled && <span className='nexus-ai__toggle-overlay' aria-hidden='true'><span /></span>}
+                <span
+                    className={`nexus-ai__toggle-overlay${isRecoveryEnabled ? ' nexus-ai__toggle-overlay--on' : ''}`}
+                    aria-hidden='true'
+                >
+                    <span />
+                </span>
                 {launchMessage && <span className='nexus-ai__status-overlay' role='status'>{launchMessage}</span>}
 
                 {stats.trades > 0 && (
