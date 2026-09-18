@@ -50,7 +50,7 @@ const AnalysisTool      = lazy(() => import('../ai-analysis-tool'));
 const ExecutionPlan     = lazy(() => import('../execution-plan'));
 const FreeBots          = lazy(() => import('../free-bots'));
 const AdvancedDTrader   = lazy(() => import('../advanced-dtrader'));
-const AlphaScanAI       = lazy(() => import('../alpha-scan-ai'));
+const NexusAIComingSoon = lazy(() => import('../alpha-scan-ai-coming-soon'));
 const AiSignalsPage     = lazy(() => import('../ai-signals'));
 
 const AppWrapper = observer(() => {
@@ -433,13 +433,13 @@ const AppWrapper = observer(() => {
                                             width='24px'
                                             fill='var(--text-general)'
                                         />
-                                        <Localize i18n_default_text='Alpha Scan AI' />
+                                        <Localize i18n_default_text='Nexus AI' />
                                     </>
                                 }
                                 id='id-alpha-scan-ai'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Alpha Scan AI...')} />}>
-                                    <AlphaScanAI />
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Nexus AI...')} />}>
+                                    <NexusAIComingSoon />
                                 </Suspense>
                             </div>
                             <div

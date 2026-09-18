@@ -12,13 +12,13 @@ const AlphaScanComingSoon: React.FC = () => (
                 <Localize i18n_default_text='Coming Soon' />
             </span>
             <h2 className='ai-analysis-coming-soon__title' id='alpha-scan-coming-soon-title'>
-                <Localize i18n_default_text='Alpha Scan AI' />
+                <Localize i18n_default_text='Nexus AI' />
             </h2>
             <p className='ai-analysis-coming-soon__sub'>
-                <Localize i18n_default_text='A smarter way to scan the market is on the way.' />
+                <Localize i18n_default_text='Full overview coming soon.' />
             </p>
             <p className='ai-analysis-coming-soon__hint'>
-                <Localize i18n_default_text='We are building this feature now. Check back soon.' />
+                <Localize i18n_default_text='The complete Nexus AI market overview is being prepared. Check back soon.' />
             </p>
         </div>
     </section>

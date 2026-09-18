@@ -1958,7 +1958,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <div className='alpha-cockpit__brand'>
                     <span className='alpha-cockpit__brand-mark' aria-hidden='true'>A</span>
                     <div>
-                        <span className='alpha-cockpit__overline'>ALPHA SCAN AI</span>
+                        <span className='alpha-cockpit__overline'>NEXUS AI</span>
                         <strong>AI Auto Scan</strong>
                     </div>
                 </div>
@@ -2911,7 +2911,7 @@ const AlphaScanWorkspace: React.FC = () => {
                         <span />
                         <span />
                     </span>
-                    Alpha Scan AI <span className='alpha-scan__kicker-divider'>/</span> Research terminal
+                    Nexus AI <span className='alpha-scan__kicker-divider'>/</span> Research terminal
                 </div>
                 <div className='alpha-scan__header-meta'>
                     <span className='alpha-scan__live-indicator' />
