@@ -39,14 +39,14 @@ npx vercel@latest deploy --prebuilt --prod --yes --token=$VERCEL_TOKEN
 
 ## Direct API fallback
 
-If the Vercel CLI cannot be installed because its transitive dependencies are blocked, the REST API can deploy the same prebuilt output. Upload each file to `/v2/files` by SHA, then create the deployment through `/v13/deployments?prebuilt=1`. The file references must retain project-root paths such as `.vercel/output/config.json` and `.vercel/output/static/...`; flattening the output directory makes Vercel run the repository build instead of serving the prebuilt output.
+If the Vercel CLI cannot be installed because its transitive dependencies are blocked, the REST API can deploy the compiled `dist` tree. Upload only hashes returned by the first `/v13/deployments?prebuilt=1` response, then create the production deployment with flat file paths and explicit no-op `projectSettings` (`buildCommand: "echo skip"`, `installCommand: "echo skip"`, `outputDirectory: "."`, `framework: null`).
 
-**Why:** The CLI may be unavailable in a restricted package environment, while the Vercel API remains reachable. Vercel’s prebuilt detector depends on both the manifest and its `.vercel/output/` path.
+**Why:** The CLI may be unavailable in a restricted package environment, while the Vercel API remains reachable. Submitting `.vercel/output/...` paths can produce a `READY` deployment that still inherits the repository build settings and serves no files.
 
-**How to apply:** Use the existing project and team identifiers from `.vercel/project.json`, never expose the deployment token, include the project id in the deployment body, and wait for `READY` before checking the custom domain.
+**How to apply:** Use the existing project and team identifiers from `.vercel/project.json`, never expose the deployment token, include the project id in the deployment body, wait for `READY`, and verify both the custom-domain HTML hash and at least one changed JavaScript asset.
 
 ## Environment note
-The Vercel CLI may be unavailable because Replit's package firewall blocks its transitive `tar` dependency, including older CLI versions. In that case, the REST fallback is validated: upload SHA-1-addressed files to `/v2/files`, then create a production deployment at `/v13/deployments?prebuilt=1` with `.vercel/output/...` file paths and wait for `READY`.
+The Vercel CLI may be unavailable because Replit's package firewall blocks its transitive `tar` dependency, including older CLI versions. In that case, the REST fallback is validated: upload SHA-1-addressed files to `/v2/files`, then create a production deployment at `/v13/deployments?prebuilt=1` with flat `dist` paths, explicit no-op build settings, and wait for `READY`.
 
 **Why:** The application can be fully built and the Vercel API remains reachable even when package installation is restricted.
 
