@@ -276,6 +276,7 @@ const getSnapshot = evaluate => evaluate(`(() => {
         primaryOptions: [...document.querySelectorAll('[data-testid="select-primary-market"] option')].map(option => option.textContent?.trim() || ''),
         purchaseOptions: [...document.querySelectorAll('[data-testid="select-primary-purchase"] option')].map(option => option.textContent?.trim() || ''),
         multiMarketScanning: document.querySelector('[data-testid="toggle-multi-market"]')?.getAttribute('aria-pressed') || '',
+        recoveryEnabled: document.querySelector('[data-testid="toggle-recovery"]')?.getAttribute('aria-pressed') || '',
         autoVolatilityMode: root?.dataset.autoVolatilityMode || '',
         payoutFloor: root?.dataset.payoutFloor || '',
         autoRunnerControls: Boolean(document.querySelector('[data-testid="toggle-auto-volatility"]')) &&
@@ -283,6 +284,8 @@ const getSnapshot = evaluate => evaluate(`(() => {
         executionLeg: root?.dataset.executionLeg || '',
         feedback: document.querySelector('[data-testid="live-trade-feedback"]')?.innerText || '',
         runningRows: document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]').length,
+        journalLegs: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-leg]')]
+            .map(row => row.getAttribute('data-leg') || ''),
         settledRows: Number(root?.dataset.journalCount || 0),
         autoTrades: Number(root?.dataset.autoTrades || 0),
         payoutSkipCount: Number(root?.dataset.payoutSkipCount || 0),
@@ -387,7 +390,7 @@ const run = async () => {
         await client.call('Page.enable');
         await client.call('Network.enable');
         await client.call('Runtime.enable');
-        const fixtureUrl = (sampleSize, executionFixture = false, riskFixture = '', confirmationFixture = '', unavailableContract = false) => {
+        const fixtureUrl = (sampleSize, executionFixture = false, riskFixture = '', confirmationFixture = '', unavailableContract = false, recoveryFixture = false) => {
             const url = new URL(TARGET_URL);
             url.searchParams.set('alpha_scan_sample', String(sampleSize));
             url.searchParams.set('alpha_scan_fixture', '1');
@@ -395,6 +398,7 @@ const run = async () => {
             if (riskFixture) url.searchParams.set('alpha_scan_risk_fixture', riskFixture);
             if (confirmationFixture) url.searchParams.set('alpha_scan_confirmation_fixture', confirmationFixture);
             if (unavailableContract) url.searchParams.set('alpha_scan_unavailable_contract', '1');
+            if (recoveryFixture) url.searchParams.set('alpha_scan_recovery_fixture', 'loss');
             return url.toString();
         };
         const liveUrl = sampleSize => {
@@ -508,6 +512,7 @@ const run = async () => {
         let symbolFailure;
         let blockedFeed;
         let autoRunner;
+        let recoveryOff;
         runReport.fixture = {
             status: 'passed',
             scans: fixtureResults,
@@ -801,6 +806,69 @@ const run = async () => {
         };
         runReport.fixture.confirmationRecovery = confirmationRecovery;
 
+        await client.call('Page.navigate', {
+            url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', '', false, true),
+        });
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+            'recovery-toggle fixture Alpha Tool',
+        );
+        const recoveryOffScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return ['ready', 'partial-data'].includes(next.status) ? next : false;
+            },
+            'recovery-toggle fixture scan',
+            90000,
+        );
+        assertScan(recoveryOffScan, SAMPLE_WINDOWS[0], 'fixture');
+        await client.evaluate('document.querySelector("[data-testid=\\"toggle-recovery\\"]")?.click()');
+        const disabledRecovery = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.recoveryEnabled === 'false' ? next : false;
+            },
+            'Recovery marker disabled',
+        );
+        if (disabledRecovery.recoveryEnabled !== 'false') {
+            throw new Error(`Recovery marker did not turn off: ${JSON.stringify(disabledRecovery)}`);
+        }
+        await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
+        const primaryLoss = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.settledRows >= 1 &&
+                    next.runningRows === 0 &&
+                    next.executionLeg === 'idle' &&
+                    next.feedback.includes('Contract settled')
+                    ? next
+                    : false;
+            },
+            'primary loss with Recovery marker off',
+            10000,
+            25,
+        );
+        if (primaryLoss.journalLegs.includes('recovery') || primaryLoss.feedback.includes('Starting')) {
+            throw new Error(`Recovery marker off still started a recovery contract: ${JSON.stringify(primaryLoss)}`);
+        }
+        await sleep(100);
+        const afterRecoveryOffLoss = await getSnapshot(client.evaluate);
+        if (
+            afterRecoveryOffLoss.journalLegs.includes('recovery') ||
+            afterRecoveryOffLoss.executionLeg === 'recovery-pending' ||
+            afterRecoveryOffLoss.executionLeg === 'recovery-running'
+        ) {
+            throw new Error(`Recovery marker off entered a recovery state after the primary loss: ${JSON.stringify(afterRecoveryOffLoss)}`);
+        }
+        recoveryOff = {
+            status: 'passed',
+            recoveryEnabled: primaryLoss.recoveryEnabled,
+            settledRows: primaryLoss.settledRows,
+            recoveryRows: primaryLoss.journalLegs.filter(leg => leg === 'recovery').length,
+            executionLeg: afterRecoveryOffLoss.executionLeg,
+        };
+        runReport.fixture.recoveryOff = recoveryOff;
+
         const riskBoundaryCases = [
             { mode: 'target', stopMessage: 'Session target reached', settledRows: 2 },
             { mode: 'stop-loss', stopMessage: 'Session stop loss reached', settledRows: 1 },
@@ -996,6 +1064,7 @@ const run = async () => {
                 autoRunner,
                 unavailableContractFallback: runReport.fixture.unavailableContractFallback,
                 confirmationRecovery,
+                recoveryOff,
                 riskBoundaries: runReport.fixture.riskBoundaries || [],
             },
             externalFeed: RUN_LIVE ? {

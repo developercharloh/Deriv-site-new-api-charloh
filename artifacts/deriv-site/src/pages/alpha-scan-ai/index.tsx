@@ -704,6 +704,7 @@ type AlphaExecutionEngine = {
 type AlphaRiskFixture = 'target' | 'stop-loss' | 'consecutive-losses' | 'trade-count';
 type AlphaConfirmationFixture = 'reverse' | null;
 type AlphaUnavailableContractFixture = 'once' | null;
+type AlphaRecoveryFixture = 'loss' | null;
 /**
  * The browser regression runs without a Deriv account. This deterministic
  * engine exercises the same Alpha Scan callbacks as DTraderEngine, including
@@ -722,6 +723,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
     private readonly riskFixtureMode: AlphaRiskFixture | null;
     private readonly confirmationFixtureMode: AlphaConfirmationFixture;
     private readonly unavailableContractFixture: AlphaUnavailableContractFixture;
+    private readonly recoveryFixtureMode: AlphaRecoveryFixture;
     private confirmationReversalUsed = false;
     private unavailableContractUsed = false;
     private buyGuard: DTBuyGuard = () => null;
@@ -731,10 +733,12 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         riskFixtureMode: AlphaRiskFixture | null = null,
         confirmationFixtureMode: AlphaConfirmationFixture = null,
         unavailableContractFixture: AlphaUnavailableContractFixture = null,
+        recoveryFixtureMode: AlphaRecoveryFixture = null,
     ) {
         this.riskFixtureMode = riskFixtureMode;
         this.confirmationFixtureMode = confirmationFixtureMode;
         this.unavailableContractFixture = unavailableContractFixture;
+        this.recoveryFixtureMode = recoveryFixtureMode;
     }
 
     private schedule(callback: () => void, delay: number): void {
@@ -886,7 +890,9 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         }, 45);
         this.schedule(() => {
             if (!this.activePosition || this.activePosition.contractId !== contractId) return;
-            const settlement = this.riskFixtureMode === 'stop-loss'
+            const settlement = this.recoveryFixtureMode === 'loss' && this.contractSequence === 1
+                ? { payout: config.stake - 1, profit: -1, isWin: false }
+                : this.riskFixtureMode === 'stop-loss'
                 ? { payout: config.stake - 5, profit: -5, isWin: false }
                 : this.riskFixtureMode === 'consecutive-losses'
                     ? { payout: config.stake - 1, profit: -1, isWin: false }
@@ -902,7 +908,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                 isWin: settlement.isWin,
                 exitSpot: settlement.isWin ? '100.45' : '100.35',
             });
-        }, this.riskFixtureMode ? 20 : 500);
+        }, this.riskFixtureMode || this.recoveryFixtureMode ? 20 : 500);
     }
 }
 
@@ -969,6 +975,7 @@ type AlphaToolSurfaceProps = {
     executionFixtureMode: boolean;
     confirmationFixtureMode: AlphaConfirmationFixture;
     unavailableContractFixture: AlphaUnavailableContractFixture;
+    recoveryFixtureMode: AlphaRecoveryFixture;
     riskFixtureMode: AlphaRiskFixture | null;
     isBusy: boolean;
     lastUpdated: Date | null;
@@ -1037,6 +1044,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     executionFixtureMode,
     confirmationFixtureMode,
     unavailableContractFixture,
+    recoveryFixtureMode,
     riskFixtureMode,
     isBusy,
     lastUpdated,
@@ -1056,7 +1064,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const liveEngineRef = useRef<AlphaExecutionEngine | null>(null);
     if (liveEngineRef.current === null) {
         liveEngineRef.current = executionFixtureMode
-            ? new FixtureAlphaExecutionEngine(riskFixtureMode, confirmationFixtureMode, unavailableContractFixture)
+            ? new FixtureAlphaExecutionEngine(riskFixtureMode, confirmationFixtureMode, unavailableContractFixture, recoveryFixtureMode)
             : new DTraderEngine();
     }
     const liveEngine = liveEngineRef.current;
@@ -1909,7 +1917,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <table className='alpha-cockpit__table alpha-cockpit__table--journal'>
                         <thead><tr><th>Time</th><th>Market</th><th>Leg</th><th>Strategy</th><th>State</th><th>Result</th></tr></thead>
                         <tbody>
-                            {liveTrade ? <tr data-symbol={liveTrade.symbol}><td>{liveTrade.purchaseTime}</td><td><strong>{liveTrade.symbol}</strong></td><td>{liveTradeLeg === 'recovery' ? 'Recovery' : 'Primary'}</td><td>{liveTradeDecision?.label || liveTrade.contractType}</td><td><span className='alpha-cockpit__row-gate alpha-cockpit__row-gate--validated'>OPEN</span></td><td>Live</td></tr> : journalRows.length ? journalRows.map(entry => <tr key={entry.contractId} data-contract-id={entry.contractId}><td>{entry.time}</td><td><strong>{entry.symbol}</strong></td><td>{entry.leg}</td><td>{entry.strategy}</td><td><span className={`alpha-cockpit__row-gate alpha-cockpit__row-gate--${entry.gate.toLowerCase()}`}>{entry.gate.toUpperCase()}</span></td><td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-cockpit__gain' : 'alpha-cockpit__loss'}>{entry.profit === null ? `Open · ${formatMoney(entry.payout)}` : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)}`}</td></tr>) : <tr><td colSpan={6} className='alpha-cockpit__table-empty'>{liveFeedback?.message || 'No executions recorded. The journal will keep every approved attempt and settlement.'}</td></tr>}
+                            {liveTrade ? <tr data-symbol={liveTrade.symbol} data-leg={liveTradeLeg || 'primary'}><td>{liveTrade.purchaseTime}</td><td><strong>{liveTrade.symbol}</strong></td><td>{liveTradeLeg === 'recovery' ? 'Recovery' : 'Primary'}</td><td>{liveTradeDecision?.label || liveTrade.contractType}</td><td><span className='alpha-cockpit__row-gate alpha-cockpit__row-gate--validated'>OPEN</span></td><td>Live</td></tr> : journalRows.length ? journalRows.map(entry => <tr key={entry.contractId} data-contract-id={entry.contractId} data-leg={entry.leg}><td>{entry.time}</td><td><strong>{entry.symbol}</strong></td><td>{entry.leg}</td><td>{entry.strategy}</td><td><span className={`alpha-cockpit__row-gate alpha-cockpit__row-gate--${entry.gate.toLowerCase()}`}>{entry.gate.toUpperCase()}</span></td><td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-cockpit__gain' : 'alpha-cockpit__loss'}>{entry.profit === null ? `Open · ${formatMoney(entry.payout)}` : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)}`}</td></tr>) : <tr><td colSpan={6} className='alpha-cockpit__table-empty'>{liveFeedback?.message || 'No executions recorded. The journal will keep every approved attempt and settlement.'}</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -2232,6 +2240,10 @@ const AlphaScanWorkspace: React.FC = () => {
     const unavailableContractFixture: AlphaUnavailableContractFixture = typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).get('alpha_scan_unavailable_contract') === '1'
         ? 'once'
+        : null;
+    const recoveryFixtureMode: AlphaRecoveryFixture = typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('alpha_scan_recovery_fixture') === 'loss'
+        ? 'loss'
         : null;
     const requestedRiskFixture = typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search).get('alpha_scan_risk_fixture')
@@ -2675,6 +2687,7 @@ const AlphaScanWorkspace: React.FC = () => {
             executionFixtureMode={executionFixtureMode}
             confirmationFixtureMode={confirmationFixtureMode}
             unavailableContractFixture={unavailableContractFixture}
+            recoveryFixtureMode={recoveryFixtureMode}
             riskFixtureMode={riskFixtureMode}
             isBusy={isBusy}
             lastUpdated={lastUpdated}
