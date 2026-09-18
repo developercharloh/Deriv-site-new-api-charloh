@@ -709,7 +709,21 @@ export const selectBestQualifiedMomentumMarket = (
     longWindow = AUTO_MOMENTUM_LONG_WINDOW,
     minimumConfidence = AUTO_MOMENTUM_CONFIDENCE,
     confidenceWindow = AUTO_SIGNAL_CONFIDENCE_WINDOW,
-): RankedMarketDecision | null => sources
+): RankedMarketDecision | null => selectQualifiedMomentumMarkets(
+    sources,
+    shortWindow,
+    longWindow,
+    minimumConfidence,
+    confidenceWindow,
+)[0] || null;
+
+export const selectQualifiedMomentumMarkets = (
+    sources: StrategySource[],
+    shortWindow = AUTO_MOMENTUM_SHORT_WINDOW,
+    longWindow = AUTO_MOMENTUM_LONG_WINDOW,
+    minimumConfidence = AUTO_MOMENTUM_CONFIDENCE,
+    confidenceWindow = AUTO_SIGNAL_CONFIDENCE_WINDOW,
+): RankedMarketDecision[] => sources
     .filter(source => source.tradable !== false)
     .map(source => evaluateMomentumMarket(source, shortWindow, longWindow, minimumConfidence, confidenceWindow))
     .filter(evaluation => evaluation.qualified && evaluation.signal)
@@ -728,7 +742,7 @@ export const selectBestQualifiedMomentumMarket = (
         digits: [],
         strength: evaluation.confidence,
         reason: `${evaluation.signal} qualified: ${evaluation.confidence.toFixed(0)}% confidence across the last ${evaluation.confidenceWindow} ticks; short/long momentum aligned.`,
-    } satisfies RankedMarketDecision))[0] || null;
+    } satisfies RankedMarketDecision));
 
 /**
  * Select the strongest live Rise/Fall candidate from the complete volatility

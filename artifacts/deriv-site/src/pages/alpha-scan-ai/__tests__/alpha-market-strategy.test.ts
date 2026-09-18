@@ -8,6 +8,7 @@ import {
     selectBestAvailableDigitFallback,
     selectAdaptiveDigitMarketPlan,
     selectBestQualifiedMomentumMarket,
+    selectQualifiedMomentumMarkets,
     selectStrongestMomentumMarket,
     type StrategySource,
 } from '../alpha-market-strategy';
@@ -103,6 +104,30 @@ describe('auto volatility momentum selection', () => {
         expect(result?.symbol).toBe('QUALIFIED');
         expect(result?.contractType).toBe('CALL');
         expect(result?.reason).toContain('60 ticks');
+    });
+
+    it('ranks every qualified market while excluding closed and below-gate markets', () => {
+        const results = selectQualifiedMomentumMarkets([
+            source('QUALIFIED_ONE', pricesFromMoves([
+                ...Array(24).fill(-1),
+                ...Array(22).fill(1),
+                ...Array(14).fill(1),
+            ])),
+            source('QUALIFIED_TWO', pricesFromMoves([
+                ...Array(20).fill(-1),
+                ...Array(26).fill(1),
+                ...Array(14).fill(1),
+            ])),
+            source('BELOW_GATE', pricesFromMoves([
+                ...Array(28).fill(-1),
+                ...Array(18).fill(1),
+                ...Array(14).fill(1),
+            ])),
+            { ...source('CLOSED', pricesFromMoves(Array(60).fill(1))), tradable: false },
+        ]);
+
+        expect(results.map(result => result.symbol)).toEqual(['QUALIFIED_TWO', 'QUALIFIED_ONE']);
+        expect(results.every(result => result.contractType === 'CALL')).toBe(true);
     });
 
     it('pairs the strongest threshold market with its requested recovery barrier', () => {

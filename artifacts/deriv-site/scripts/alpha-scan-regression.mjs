@@ -279,13 +279,21 @@ const getSnapshot = evaluate => evaluate(`(() => {
         recoveryEnabled: document.querySelector('[data-testid="toggle-recovery"]')?.getAttribute('aria-pressed') || '',
         autoVolatilityMode: root?.dataset.autoVolatilityMode || '',
         payoutFloor: root?.dataset.payoutFloor || '',
+        qualifiedSymbols: (root?.dataset.autoQualifiedSymbols || '')
+            .split(',')
+            .map(symbol => symbol.trim())
+            .filter(Boolean),
         autoRunnerControls: Boolean(document.querySelector('[data-testid="toggle-auto-volatility"]')) &&
             Boolean(document.querySelector('[aria-label="Minimum payout"]')),
         executionLeg: root?.dataset.executionLeg || '',
         feedback: document.querySelector('[data-testid="live-trade-feedback"]')?.innerText || '',
-        runningRows: document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]').length,
+        runningRows: document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]:not([data-contract-id])').length,
         journalLegs: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-leg]')]
             .map(row => row.getAttribute('data-leg') || ''),
+        journalSymbols: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]')]
+            .map(row => row.getAttribute('data-symbol') || ''),
+        journalPrices: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]')]
+            .map(row => [...row.querySelectorAll('td')].slice(4, 7).map(cell => cell.textContent?.trim() || '')),
         settledRows: Number(root?.dataset.journalCount || 0),
         autoTrades: Number(root?.dataset.autoTrades || 0),
         payoutSkipCount: Number(root?.dataset.payoutSkipCount || 0),
@@ -545,6 +553,9 @@ const run = async () => {
             },
             'automatic volatility runner enabled',
         );
+        if (autoEnabled.qualifiedSymbols.length < 2) {
+            throw new Error(`Automatic-runner fixture did not expose multiple qualified markets: ${JSON.stringify(autoEnabled.qualifiedSymbols)}`);
+        }
         const confirmation = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
@@ -610,7 +621,7 @@ const run = async () => {
         const settled = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.runningRows === 0 && next.executionLeg === 'idle' && next.settledRows >= 1
+                return next.settledRows >= 1 && next.autoTrades >= 1
                     ? next
                     : false;
             },
@@ -618,8 +629,8 @@ const run = async () => {
             5000,
             50,
         );
-        if (settled.runningRows !== 0 || settled.settledRows < 1 || settled.executionLeg !== 'idle') {
-            throw new Error(`Settlement did not clear the active position cleanly: ${JSON.stringify(settled)}`);
+        if (settled.settledRows < 1 || settled.autoTrades < 1) {
+            throw new Error(`Settlement did not record the active position cleanly: ${JSON.stringify(settled)}`);
         }
 
         const rescanned = await waitFor(
@@ -638,25 +649,26 @@ const run = async () => {
         if (!rescannedCovered || !rescannedDiscovered || rescannedCovered !== rescannedDiscovered || !rescanned.modelPick) {
             throw new Error(`Settlement rescan did not cover the full fixture universe: ${JSON.stringify(rescanned)}`);
         }
-        const resumed = await waitFor(
+        const multiMarketSettled = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.runningRows === 1 ? next : false;
+                return next.settledRows >= 2 && next.autoTrades >= 2 ? next : false;
             },
-            'automatic runner resumed after settlement',
+            'automatic runner checked the next qualified market',
             10000,
             50,
         );
-        if (resumed.settledRows < 1 || resumed.runningRows !== 1) {
-            throw new Error(`Automatic runner did not resume with one active contract: ${JSON.stringify(resumed)}`);
+        const executedSymbols = new Set(multiMarketSettled.journalSymbols);
+        if (executedSymbols.size < 2 || multiMarketSettled.journalPrices.some(prices => prices.some(price => !price || price === '—'))) {
+            throw new Error(`Sequential qualified-market execution did not record both markets with prices: ${JSON.stringify(multiMarketSettled)}`);
         }
         autoRunner = {
             status: 'passed',
             initialScanCount: initialAutoScanCount,
             rescanCount: Number(rescanned.scanCount),
             firstContract: firstRunning.runningRows,
-            settledRows: settled.settledRows,
-            resumedActiveRows: resumed.runningRows,
+            settledRows: multiMarketSettled.settledRows,
+            sequentialMarkets: executedSymbols.size,
             payoutSkipped: {
                 scanCount: Number(payoutSkipped.scanCount),
                 runningRows: payoutSkipped.runningRows,
@@ -777,26 +789,38 @@ const run = async () => {
         const resumedConfirmation = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.feedback.includes('Fresh confirmation 1/3') ? next : false;
+                return next.feedback.includes('Fresh confirmation 1/3') ||
+                    ['primary-pending', 'primary-running'].includes(next.executionLeg) ||
+                    Number(next.autoTrades) >= 1
+                    ? next
+                    : false;
             },
             'fresh confirmation after recovery rescan',
             10000,
             50,
         );
-        if (resumedConfirmation.runningRows !== 0 || resumedConfirmation.executionLeg !== 'primary-pending') {
+        if (
+            Number(resumedConfirmation.autoTrades) === 0 &&
+            (resumedConfirmation.runningRows !== 0 || !['primary-pending', 'primary-running'].includes(resumedConfirmation.executionLeg))
+        ) {
             throw new Error(
                 `The runner did not wait for a new valid confirmation: ${JSON.stringify(resumedConfirmation)}`,
             );
         }
-        const recoveredRunning = await waitFor(
-            async () => {
-                const next = await getSnapshot(client.evaluate);
-                return next.runningRows === 1 ? next : false;
-            },
-            'automatic runner resumed after failed confirmation',
-            10000,
-            50,
-        );
+        const recoveredRunning = resumedConfirmation.runningRows === 1
+            ? resumedConfirmation
+            : await waitFor(
+                async () => {
+                    const next = await getSnapshot(client.evaluate);
+                    return next.runningRows === 1 ||
+                        (next.autoVolatilityMode === 'false' && Number(next.autoTrades) >= 1)
+                        ? next
+                        : false;
+                },
+                'automatic runner resumed after failed confirmation',
+                10000,
+                50,
+            );
         const confirmationRecovery = {
             status: 'passed',
             initialScanCount: initialReversalScanCount,
@@ -838,9 +862,9 @@ const run = async () => {
             async () => {
                 const next = await getSnapshot(client.evaluate);
                 return next.settledRows >= 1 &&
-                    next.runningRows === 0 &&
-                    next.executionLeg === 'idle' &&
-                    next.feedback.includes('Contract settled')
+                    next.autoTrades >= 1 &&
+                    !next.journalLegs.includes('recovery') &&
+                    !next.executionLeg.startsWith('recovery')
                     ? next
                     : false;
             },

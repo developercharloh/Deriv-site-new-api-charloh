@@ -26,6 +26,7 @@ import {
     selectAdaptiveDigitMarketPlan,
     selectBestAvailableDigitFallback,
     selectBestQualifiedMomentumMarket,
+    selectQualifiedMomentumMarkets,
     purchaseMarketFromDecision,
     type MarketCondition,
     type MomentumMarketEvaluation,
@@ -119,6 +120,9 @@ type AlphaTradeJournalEntry = {
     leg: 'primary' | 'recovery';
     time: string;
     symbol: string;
+    price: string | null;
+    entryPrice: string | null;
+    exitPrice: string | null;
     market: string;
     strategy: string;
     gate: 'Running' | 'Won' | 'Lost';
@@ -1106,6 +1110,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         confirmations: number;
         lastPrice: number | null;
     } | null>(null);
+    const autoQualifiedQueueRef = useRef<RankedMarketDecision[]>([]);
+    const autoRescanPendingRef = useRef(false);
     const autoRiskRef = useRef({
         sessionProfit: 0,
         trades: 0,
@@ -1182,6 +1188,16 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         ),
         [strategySources],
     );
+    const autoQualifiedMomentumDecisions = useMemo(
+        () => selectQualifiedMomentumMarkets(
+            strategySources,
+            AUTO_MOMENTUM_SHORT_WINDOW,
+            AUTO_MOMENTUM_LONG_WINDOW,
+            AUTO_MOMENTUM_CONFIDENCE,
+            AUTO_SIGNAL_CONFIDENCE_WINDOW,
+        ),
+        [strategySources],
+    );
     const autoMomentumRow = rows.find(row => row.symbol === autoMomentumDecision?.symbol);
     const autoDigitMarketPlan = useMemo(
         () => autoMomentumRow
@@ -1189,13 +1205,23 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             : null,
         [autoMomentumRow, digitWindow],
     );
-    const autoPrimaryDecision = autoDigitMarketPlan?.primary && autoMomentumDecision
-        ? {
-            ...autoDigitMarketPlan.primary,
-            condition: autoMomentumDecision.condition,
-            reason: `${autoMomentumDecision.reason} Purchase route: ${autoDigitMarketPlan.primary.label}.`,
-        }
-        : null;
+    const autoQualifiedDecisions = useMemo(
+        () => autoQualifiedMomentumDecisions.flatMap(momentumDecision => {
+            const row = rows.find(candidate => candidate.symbol === momentumDecision.symbol);
+            const plan = row
+                ? selectAdaptiveDigitMarketPlan(row, digitWindow)
+                : null;
+            return plan?.primary
+                ? [{
+                    ...plan.primary,
+                    condition: momentumDecision.condition,
+                    reason: `${momentumDecision.reason} Entry point selected from the live ${plan.primary.label} route.`,
+                }]
+                : [];
+        }),
+        [autoQualifiedMomentumDecisions, digitWindow, rows],
+    );
+    const autoPrimaryDecision = autoQualifiedDecisions[0] || null;
     const modelPick = autoVolatilityMode
         ? autoMomentumRow || selectedRow
         : bestModelRow || selectedRow;
@@ -1272,6 +1298,15 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         };
     }, [autoVolatilityMode, client?.currency, digitWindow, liveAuthorized, liveMode, multiMarketScanning, payoutFloor, primaryCondition, primaryPurchaseMarket, recoveryCondition, recoveryDigitWindow, recoveryEnabled, recoveryPurchaseMarket, rows, selectedSymbol, stake]);
 
+    const scheduleAutoRescan = useCallback(() => {
+        if (!runtimeRef.current.autoVolatilityMode || autoRescanPendingRef.current) return;
+        autoRescanPendingRef.current = true;
+        setTimeout(() => {
+            autoRescanPendingRef.current = false;
+            onScan();
+        }, riskFixtureMode ? 50 : 650);
+    }, [onScan, riskFixtureMode]);
+
     const executeDecision = useCallback((decision: RankedMarketDecision, leg: 'primary' | 'recovery') => {
         const runtime = runtimeRef.current;
         if (!runtime.liveMode || !runtime.liveAuthorized) {
@@ -1314,7 +1349,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setPayoutSkipCount(count => count + 1);
                 setLastPayoutSkipMessage(message);
                 setLiveFeedback({ seq: Date.now(), kind: 'error', message });
-                setTimeout(onScan, riskFixtureMode ? 50 : 650);
+                scheduleAutoRescan();
                 return message;
             }
             : null);
@@ -1347,12 +1382,48 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         if (!runtime.autoVolatilityMode || leg !== 'primary') {
             liveEngine.placeBuyNow(config);
         }
-    }, [liveEngine, onScan, riskFixtureMode]);
+    }, [liveEngine, riskFixtureMode, scheduleAutoRescan]);
 
     executeDecisionRef.current = executeDecision;
 
+    const startQueuedAutoPrimary = useCallback((settlementMessage = 'Previous contract settled.') => {
+        if (!runtimeRef.current.autoVolatilityMode || autoRescanPendingRef.current) return;
+        const nextDecision = autoQualifiedQueueRef.current.shift();
+        if (!nextDecision) {
+            setLiveFeedback({
+                seq: Date.now(),
+                kind: 'success',
+                message: `${settlementMessage} All currently qualified markets were checked. Refreshing the market universe for the next entry cycle.`,
+            });
+            scheduleAutoRescan();
+            return;
+        }
+        setLiveFeedback({
+            seq: Date.now(),
+            kind: 'success',
+            message: `${settlementMessage} Next qualified entry: ${nextDecision.displayName} · ${nextDecision.label}.`,
+        });
+        executeDecisionRef.current(nextDecision, 'primary');
+    }, [scheduleAutoRescan]);
+
+    const toggleAutoRunner = useCallback(() => {
+        autoQualifiedQueueRef.current = [];
+        autoRescanPendingRef.current = false;
+        setAutoVolatilityMode(value => {
+            if (!value) {
+                autoRiskRef.current = {
+                    sessionProfit: 0,
+                    trades: 0,
+                    consecutiveLosses: 0,
+                };
+            }
+            return !value;
+        });
+    }, []);
+
     const runTrade = useCallback(() => {
         if (executionLeg !== 'idle') return;
+        if (autoRescanPendingRef.current) return;
         if (!liveAuthorized) {
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before running a real trade.' });
             return;
@@ -1377,7 +1448,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             }
         }
         const decision = autoVolatilityMode
-            ? autoPrimaryDecision
+            ? (() => {
+                if (!autoQualifiedQueueRef.current.length) {
+                    autoQualifiedQueueRef.current = autoQualifiedDecisions.slice();
+                }
+                return autoQualifiedQueueRef.current.shift() || null;
+            })()
             : primaryDecision || explicitPrimaryDecision;
         if (!decision) {
             setLiveFeedback({
@@ -1393,16 +1469,16 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         fallbackAttemptedRef.current = false;
         setLiveFeedback(null);
         executeDecision(decision, 'primary');
-    }, [autoPrimaryDecision, autoVolatilityMode, executeDecision, executionLeg, explicitPrimaryDecision, liveAuthorized, primaryDecision, stopLoss, targetProfit]);
+    }, [autoQualifiedDecisions, autoVolatilityMode, executeDecision, executionLeg, explicitPrimaryDecision, liveAuthorized, primaryDecision, stopLoss, targetProfit]);
 
     useEffect(() => {
-        if (!autoVolatilityMode || !liveMode || !liveAuthorized || isBusy || executionLeg !== 'idle' || !autoPrimaryDecision) {
+        if (!autoVolatilityMode || !liveMode || !liveAuthorized || isBusy || executionLeg !== 'idle' || autoRescanPendingRef.current || !autoPrimaryDecision) {
             return;
         }
 
         const timer = setTimeout(runTrade, riskFixtureMode ? 50 : 450);
         return () => clearTimeout(timer);
-    }, [autoPrimaryDecision, autoVolatilityMode, executionLeg, isBusy, liveAuthorized, liveMode, riskFixtureMode, runTrade]);
+    }, [autoPrimaryDecision, autoVolatilityMode, executionLeg, isBusy, liveAuthorized, liveMode, riskFixtureMode, runTrade, scanCount]);
 
     const upsertJournalEntry = useCallback((position: DTPosition, leg: 'primary' | 'recovery', decision: RankedMarketDecision | null) => {
         const nextEntry: AlphaTradeJournalEntry = {
@@ -1410,6 +1486,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             leg,
             time: position.purchaseTime,
             symbol: position.symbol,
+            price: position.currentSpot,
+            entryPrice: position.entrySpot,
+            exitPrice: position.exitSpot,
             market: leg === 'recovery' ? 'Market 2' : 'Market 1',
             strategy: decision?.label || (position.contractType === 'DIGITEVEN'
                 ? 'Even'
@@ -1562,9 +1641,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: position.isWin ? 'success' : 'info',
-                    message: `${position.isWin ? 'Contract won' : 'Contract settled'}. Rescanning all volatility markets before the next trade.`,
+                    message: `${position.isWin ? 'Contract won' : 'Contract settled'}. Moving to the next qualified volatility market.`,
                 });
-                setTimeout(onScan, riskFixtureMode ? 50 : 650);
+                startQueuedAutoPrimary(`${position.isWin ? 'Contract won' : 'Contract settled'}.`);
                 return;
             }
 
@@ -1575,9 +1654,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: position.isWin ? 'success' : 'info',
-                    message: `Recovery ${position.isWin ? 'won' : 'settled'}. Rescanning all volatility markets before the next trade.`,
+                    message: `Recovery ${position.isWin ? 'won' : 'settled'}. Moving to the next qualified volatility market.`,
                 });
-                setTimeout(onScan, riskFixtureMode ? 50 : 650);
+                startQueuedAutoPrimary(`Recovery ${position.isWin ? 'won' : 'settled'}.`);
                 return;
             }
 
@@ -1664,7 +1743,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     kind: 'error',
                     message: `Fresh confirmation failed for ${pending.decision.displayName}. Pending contract cancelled. Rescanning before another trade.`,
                 });
-                setTimeout(onScan, 350);
+                scheduleAutoRescan();
                 return;
             }
 
@@ -1699,7 +1778,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             liveEngine.onPosition = () => {};
             liveEngine.onPriceWindow = () => {};
         };
-    }, [autoVolatilityMode, liveEngine, onScan, riskFixtureMode, stopLoss, targetProfit, upsertJournalEntry]);
+    }, [autoVolatilityMode, liveEngine, riskFixtureMode, scheduleAutoRescan, startQueuedAutoPrimary, stopLoss, targetProfit, upsertJournalEntry]);
 
     const oosAccuracy = rows.length ? Math.round(averageWalkForwardAccuracy * 100) : 0;
     const modelLabel = isBusy ? 'SYNCING' : modelStatus;
@@ -1752,6 +1831,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-execution-fixture={executionFixtureMode}
             data-journal-count={journalRows.length}
             data-auto-trades={autoRiskRef.current.trades}
+            data-auto-qualified-count={autoQualifiedDecisions.length}
+            data-auto-qualified-symbols={autoQualifiedDecisions.map(decision => decision.symbol).join(',')}
             data-payout-floor={payoutFloor}
             data-payout-skip-count={payoutSkipCount}
             data-digit-fallback-count={digitFallbackCount}
@@ -1853,10 +1934,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         >
                             <span>{runLabel}</span><span aria-hidden='true'>↗</span>
                         </button>
-                        <button type='button' className={`alpha-cockpit__mode ${autoVolatilityMode ? 'alpha-cockpit__mode--active' : ''}`} onClick={() => setAutoVolatilityMode(value => {
-                            if (!value) autoRiskRef.current = { sessionProfit: 0, trades: 0, consecutiveLosses: 0 };
-                            return !value;
-                        })} aria-pressed={autoVolatilityMode} data-testid='toggle-auto-volatility'>
+                         <button type='button' className={`alpha-cockpit__mode ${autoVolatilityMode ? 'alpha-cockpit__mode--active' : ''}`} onClick={toggleAutoRunner} aria-pressed={autoVolatilityMode} data-testid='toggle-auto-volatility'>
                             <span className='alpha-cockpit__mode-dot' />{autoVolatilityMode ? 'AUTO RUNNER ON' : 'MANUAL MODE'}
                         </button>
                     </div>
@@ -1915,9 +1993,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <div className='alpha-cockpit__section-head'><div><span className='alpha-cockpit__overline'>EXECUTION HISTORY</span><h2>Trade journal</h2></div><span className='alpha-cockpit__count'>{liveTrade ? '1 open' : `${journalRows.length} recorded`}</span></div>
                 <div className='alpha-cockpit__table-wrap'>
                     <table className='alpha-cockpit__table alpha-cockpit__table--journal'>
-                        <thead><tr><th>Time</th><th>Market</th><th>Leg</th><th>Strategy</th><th>State</th><th>Result</th></tr></thead>
+                        <thead><tr><th>Time</th><th>Market</th><th>Leg</th><th>Strategy</th><th>Price</th><th>Entry</th><th>Exit</th><th>State</th><th>Result</th></tr></thead>
                         <tbody>
-                            {liveTrade ? <tr data-symbol={liveTrade.symbol} data-leg={liveTradeLeg || 'primary'}><td>{liveTrade.purchaseTime}</td><td><strong>{liveTrade.symbol}</strong></td><td>{liveTradeLeg === 'recovery' ? 'Recovery' : 'Primary'}</td><td>{liveTradeDecision?.label || liveTrade.contractType}</td><td><span className='alpha-cockpit__row-gate alpha-cockpit__row-gate--validated'>OPEN</span></td><td>Live</td></tr> : journalRows.length ? journalRows.map(entry => <tr key={entry.contractId} data-contract-id={entry.contractId} data-leg={entry.leg}><td>{entry.time}</td><td><strong>{entry.symbol}</strong></td><td>{entry.leg}</td><td>{entry.strategy}</td><td><span className={`alpha-cockpit__row-gate alpha-cockpit__row-gate--${entry.gate.toLowerCase()}`}>{entry.gate.toUpperCase()}</span></td><td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-cockpit__gain' : 'alpha-cockpit__loss'}>{entry.profit === null ? `Open · ${formatMoney(entry.payout)}` : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)}`}</td></tr>) : <tr><td colSpan={6} className='alpha-cockpit__table-empty'>{liveFeedback?.message || 'No executions recorded. The journal will keep every approved attempt and settlement.'}</td></tr>}
+                            {liveTrade ? <tr data-symbol={liveTrade.symbol} data-leg={liveTradeLeg || 'primary'}><td>{liveTrade.purchaseTime}</td><td><strong>{liveTrade.symbol}</strong></td><td>{liveTradeLeg === 'recovery' ? 'Recovery' : 'Primary'}</td><td>{liveTradeDecision?.label || liveTrade.contractType}</td><td>{liveTrade.currentSpot || '—'}</td><td>{liveTrade.entrySpot || '—'}</td><td>—</td><td><span className='alpha-cockpit__row-gate alpha-cockpit__row-gate--validated'>OPEN</span></td><td className='alpha-cockpit__gain'>Live · {formatMoney(liveTrade.profit)}</td></tr> : journalRows.length ? journalRows.map(entry => <tr key={entry.contractId} data-contract-id={entry.contractId} data-symbol={entry.symbol} data-leg={entry.leg}><td>{entry.time}</td><td><strong>{entry.symbol}</strong></td><td>{entry.leg}</td><td>{entry.strategy}</td><td>{entry.price || '—'}</td><td>{entry.entryPrice || '—'}</td><td>{entry.exitPrice || '—'}</td><td><span className={`alpha-cockpit__row-gate alpha-cockpit__row-gate--${entry.gate.toLowerCase()}`}>{entry.gate.toUpperCase()}</span></td><td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-cockpit__gain' : 'alpha-cockpit__loss'}>{entry.profit === null ? `Open · ${formatMoney(entry.payout)}` : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)}`}</td></tr>) : <tr><td colSpan={9} className='alpha-cockpit__table-empty'>{liveFeedback?.message || 'No executions recorded. The journal will keep every approved attempt and settlement.'}</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -2062,16 +2140,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <button
                         type='button'
                         className='alpha-tool__scan-mode'
-                        onClick={() => setAutoVolatilityMode(value => {
-                            if (!value) {
-                                autoRiskRef.current = {
-                                    sessionProfit: 0,
-                                    trades: 0,
-                                    consecutiveLosses: 0,
-                                };
-                            }
-                            return !value;
-                        })}
+                        onClick={toggleAutoRunner}
                         aria-pressed={autoVolatilityMode}
                         aria-label='Toggle automatic volatility runner'
                         data-testid='toggle-auto-volatility'
@@ -2132,20 +2201,21 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <span className='alpha-tool__view-label'>{rows.length} / {discoveredCount || rows.length} markets</span>
                 </div>
                 <p className='alpha-tool__scan-coverage-note'>
-                    Every supported volatility index is evaluated against symbol status, momentum alignment, and at least {AUTO_MOMENTUM_CONFIDENCE}% directional confidence across the last {AUTO_SIGNAL_CONFIDENCE_WINDOW} ticks. The best qualified market is confirmed with fresh ticks before execution.
+                    Every supported volatility index is evaluated against symbol status, momentum alignment, and at least {AUTO_MOMENTUM_CONFIDENCE}% directional confidence across the last {AUTO_SIGNAL_CONFIDENCE_WINDOW} ticks. Every qualified market is ranked, confirmed with fresh ticks, and queued for its own entry.
                 </p>
                 <div className='alpha-tool__scan-coverage-list'>
                     {rows.map(row => {
                         const evaluation = autoMomentumEvaluations.get(row.symbol);
                         const isCandidate = row.symbol === autoCandidateSymbol;
                         const wasExecuted = journalRows.some(entry => entry.symbol === row.symbol);
+                        const isQueued = autoQualifiedDecisions.some(decision => decision.symbol === row.symbol);
                         const status = row.status === 'closed'
                             ? 'Symbol closed'
                             : wasExecuted
                                 ? 'Signal executed'
                                 : isCandidate
-                                    ? 'Best qualified'
-                                    : evaluation?.qualified
+                                    ? 'Next entry'
+                                    : isQueued || evaluation?.qualified
                                         ? 'Qualified'
                                         : 'Conditions not met';
                         const conditionSummary = evaluation
@@ -2184,7 +2254,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 </div>
                 <div className='alpha-tool__journal-table-wrap'>
                     <table className='alpha-tool__journal-table'>
-                        <thead><tr><th>Time</th><th>Volatility</th><th>Market</th><th>Strategy</th><th>Gate</th><th>Return</th></tr></thead>
+                        <thead><tr><th>Time</th><th>Volatility</th><th>Market</th><th>Strategy</th><th>Price</th><th>Entry</th><th>Exit</th><th>Gate</th><th>Return</th></tr></thead>
                         <tbody>
                             {liveTrade ? (
                                 <tr data-symbol={liveTrade.symbol}>
@@ -2192,8 +2262,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                     <td><span className='alpha-tool__table-icon'>∿</span>{liveTrade.symbol}</td>
                                     <td>{liveTradeLeg === 'recovery' ? 'Market 2' : 'Market 1'}</td>
                                     <td><span className='alpha-tool__brain'>♧</span>{liveTradeDecision?.label || 'Selected market'}</td>
+                                    <td>{liveTrade.currentSpot || '—'}</td>
+                                    <td>{liveTrade.entrySpot || '—'}</td>
+                                    <td>—</td>
                                     <td><span className='alpha-tool__result alpha-tool__result--validated'>Running</span></td>
-                                    <td className='alpha-tool__gain'>Live</td>
+                                    <td className='alpha-tool__gain'>Live · {formatMoney(liveTrade.profit)}</td>
                                 </tr>
                             ) : (
                                 journalRows.length ? journalRows.map(entry => (
@@ -2202,6 +2275,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                         <td><span className='alpha-tool__table-icon'>∿</span>{entry.symbol}</td>
                                         <td>{entry.market}</td>
                                         <td><span className='alpha-tool__brain'>♧</span>{entry.strategy}</td>
+                                        <td>{entry.price || '—'}</td>
+                                        <td>{entry.entryPrice || '—'}</td>
+                                        <td>{entry.exitPrice || '—'}</td>
                                         <td><span className={`alpha-tool__result alpha-tool__result--${entry.gate.toLowerCase()}`}>{entry.gate}</span></td>
                                         <td className={entry.profit !== null && entry.profit >= 0 ? 'alpha-tool__gain' : 'alpha-tool__loss'}>
                                             {entry.profit === null
@@ -2210,7 +2286,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                         </td>
                                     </tr>
                                 )) : (
-                                    <tr><td colSpan={6} className='alpha-tool__journal-empty'>{isBusy ? 'No trades running · model is scanning…' : liveFeedback?.message || 'No trades running. Run a validated model pick to start.'}</td></tr>
+                                    <tr><td colSpan={9} className='alpha-tool__journal-empty'>{isBusy ? 'No trades running · model is scanning…' : liveFeedback?.message || 'No trades running. Run a validated model pick to start.'}</td></tr>
                                 )
                             )}
                         </tbody>
