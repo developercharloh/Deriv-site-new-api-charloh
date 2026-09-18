@@ -156,6 +156,18 @@ describe('auto volatility momentum selection', () => {
         expect(result?.recovery.barrier).toBe('5');
     });
 
+    it('pairs an Even primary with Odd recovery', () => {
+        const result = selectAdaptiveDigitMarketPlan({
+            ...source('EVEN_BIAS', [100, 101, 102, 103, 104, 105]),
+            lastDigits: [0, 2, 4, 6, 8, 2],
+        }, 6);
+
+        expect(result?.primaryMarket).toBe('even');
+        expect(result?.primary.contractType).toBe('DIGITEVEN');
+        expect(result?.recoveryMarket).toBe('odd');
+        expect(result?.recovery.contractType).toBe('DIGITODD');
+    });
+
     it('skips a broker-rejected route and selects the strongest available fallback', () => {
         const result = selectBestAvailableDigitFallback(
             {

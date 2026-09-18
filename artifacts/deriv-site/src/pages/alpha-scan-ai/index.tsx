@@ -33,6 +33,7 @@ import {
     type PurchaseMarket,
     type RankedMarketDecision,
     type StrategySource,
+    type AdaptiveDigitMarketPlan,
     quotesToLastDigits,
     selectConfiguredMarket,
     selectStrongestMomentumMarket,
@@ -1148,6 +1149,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     } | null>(null);
     const autoQualifiedQueueRef = useRef<RankedMarketDecision[]>([]);
     const autoRescanPendingRef = useRef(false);
+    const nexusAdaptivePlanRef = useRef<AdaptiveDigitMarketPlan | null>(null);
     const autoRiskRef = useRef({
         sessionProfit: 0,
         trades: 0,
@@ -1202,6 +1204,25 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         lastDigits: row.lastDigits,
         tradable: row.status !== 'closed',
     })), [rows]);
+
+    const nexusAdaptivePlan = useMemo<AdaptiveDigitMarketPlan | null>(() => {
+        const candidates = strategySources
+            .filter(source => source.tradable !== false)
+            .map(source => ({
+                source,
+                plan: selectAdaptiveDigitMarketPlan(source, Math.max(20, digitWindow)),
+            }))
+            .filter((candidate): candidate is {
+                source: StrategySource;
+                plan: AdaptiveDigitMarketPlan;
+            } => Boolean(candidate.plan))
+            .sort((left, right) => {
+                const strengthDelta = right.plan.primary.strength - left.plan.primary.strength;
+                if (strengthDelta !== 0) return strengthDelta;
+                return right.plan.primary.digits.length - left.plan.primary.digits.length;
+            });
+        return candidates[0]?.plan || null;
+    }, [digitWindow, strategySources]);
 
     const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
     const autoMomentumEvaluations = useMemo(
@@ -1510,6 +1531,40 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
     startQueuedAutoPrimaryRef.current = startQueuedAutoPrimary;
 
+    useEffect(() => {
+        const handleNexusLaunch = () => {
+            if (activeLegRef.current || autoRescanPendingRef.current) return;
+            const plan = nexusAdaptivePlan;
+            if (!plan) {
+                const feedback: DTBuyFeedback = {
+                    seq: Date.now(),
+                    kind: 'error',
+                    message: 'Launch AI is waiting for a completed market scan before selecting the best volatility.',
+                };
+                setLiveFeedback(feedback);
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('nexus-ai-feedback', { detail: feedback }));
+                }
+                return;
+            }
+
+            nexusAdaptivePlanRef.current = plan;
+            recoveryUsedRef.current = false;
+            fallbackAttemptedRef.current = false;
+            setPrimaryDecision(plan.primary);
+            setRecoveryDecision(plan.recovery);
+            setLiveFeedback({
+                seq: Date.now(),
+                kind: 'info',
+                message: `Best market selected: ${plan.primary.label} on ${plan.primary.displayName}. Recovery: ${plan.recovery.label}.`,
+            });
+            executeDecisionRef.current(plan.primary, 'primary');
+        };
+
+        window.addEventListener('nexus-ai-launch', handleNexusLaunch);
+        return () => window.removeEventListener('nexus-ai-launch', handleNexusLaunch);
+    }, [nexusAdaptivePlan]);
+
     const toggleAutoRunner = useCallback(() => {
         autoQualifiedQueueRef.current = [];
         autoRescanPendingRef.current = false;
@@ -1670,6 +1725,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 }
             }
             setLiveFeedback(feedback);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('nexus-ai-feedback', { detail: feedback }));
+            }
             if (feedback.kind === 'error') {
                 pendingAutoEntryRef.current = null;
                 setExecutionLeg('idle');
@@ -1678,10 +1736,19 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             }
         };
         liveEngine.onPosition = position => {
+            const leg = activeLegRef.current;
+            const decision = activeDecisionRef.current;
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('nexus-ai-position', { detail: position }));
+                window.dispatchEvent(new CustomEvent('nexus-ai-journal', {
+                    detail: {
+                        ...position,
+                        leg: leg || 'primary',
+                        strategy: decision?.label || position.contractType,
+                        market: decision ? purchaseMarketLabel(purchaseMarketFromDecision(decision) || position.contractType) : position.contractType,
+                    },
+                }));
             }
-            const leg = activeLegRef.current;
             upsertJournalEntry(position, leg || 'primary', activeDecisionRef.current);
             if (position.isOpen) {
                 setLiveTrade(position);
@@ -1769,6 +1836,18 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
             if (leg === 'primary' && position.isWin === false && runtimeRef.current.recoveryEnabled && !recoveryUsedRef.current) {
                 recoveryUsedRef.current = true;
+                const nexusRecovery = nexusAdaptivePlanRef.current?.recovery;
+                if (nexusRecovery) {
+                    setRecoveryDecision(nexusRecovery);
+                    setExecutionLeg('recovery-pending');
+                    setLiveFeedback({
+                        seq: Date.now(),
+                        kind: 'info',
+                        message: `Primary loss recorded. Starting ${nexusRecovery.label} recovery on ${nexusRecovery.displayName}.`,
+                    });
+                    setTimeout(() => executeDecisionRef.current(nexusRecovery, 'recovery'), 0);
+                    return;
+                }
                 const runtimeRows = runtimeRef.current.rows.map(row => ({
                     symbol: row.symbol,
                     displayName: row.displayName,
@@ -1817,6 +1896,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setExecutionLeg('idle');
             activeLegRef.current = null;
             activeDecisionRef.current = null;
+            if (leg === 'recovery' || position.isWin) nexusAdaptivePlanRef.current = null;
         };
         liveEngine.onPriceWindow = prices => {
             const pending = pendingAutoEntryRef.current;

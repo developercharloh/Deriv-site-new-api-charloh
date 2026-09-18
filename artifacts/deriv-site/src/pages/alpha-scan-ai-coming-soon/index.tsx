@@ -8,6 +8,21 @@ type NexusStats = {
     losses: number;
 };
 
+type NexusJournalEntry = {
+    contractId: string;
+    purchaseTime?: string;
+    symbol: string;
+    leg: 'primary' | 'recovery';
+    strategy: string;
+    market: string;
+    isOpen?: boolean;
+    isWin?: boolean | null;
+    currentSpot?: string | null;
+    entrySpot?: string | null;
+    exitSpot?: string | null;
+    profit?: number;
+};
+
 type EditableNumberProps = {
     value: number | '';
     setValue: React.Dispatch<React.SetStateAction<number | ''>>;
@@ -64,6 +79,7 @@ const NexusAIComingSoon: React.FC = () => {
     const [multiplier, setMultiplier] = useState<number | ''>(2);
     const [launchMessage, setLaunchMessage] = useState('');
     const [stats, setStats] = useState<NexusStats>({ trades: 0, wins: 0, losses: 0 });
+    const [journal, setJournal] = useState<NexusJournalEntry[]>([]);
 
     const syncHiddenSettings = (): void => {
         const root = controllerRef.current;
@@ -77,6 +93,37 @@ const NexusAIComingSoon: React.FC = () => {
     useEffect(() => {
         const timer = window.setInterval(syncHiddenSettings, 250);
         return () => window.clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        const handleFeedback = (event: Event) => {
+            const feedback = (event as CustomEvent).detail as { kind?: string; message?: string } | undefined;
+            if (feedback?.message) setLaunchMessage(feedback.message);
+            if (feedback?.kind === 'error') setIsLaunched(false);
+        };
+        const handleJournal = (event: Event) => {
+            const entry = (event as CustomEvent).detail as NexusJournalEntry | undefined;
+            if (!entry?.contractId || !entry.symbol) return;
+            setJournal(current => {
+                const existingIndex = current.findIndex(item => item.contractId === entry.contractId);
+                if (existingIndex < 0) return [entry, ...current].slice(0, 20);
+                const next = current.slice();
+                next[existingIndex] = { ...next[existingIndex], ...entry };
+                return next;
+            });
+            if (entry.isOpen) {
+                setLaunchMessage(`${entry.leg === 'recovery' ? 'Recovery' : 'Primary'} open · ${entry.strategy}`);
+            } else {
+                const result = entry.isWin ? 'Won' : 'Lost';
+                setLaunchMessage(`${result} · ${entry.entrySpot || '—'} → ${entry.exitSpot || '—'}`);
+            }
+        };
+        window.addEventListener('nexus-ai-feedback', handleFeedback);
+        window.addEventListener('nexus-ai-journal', handleJournal);
+        return () => {
+            window.removeEventListener('nexus-ai-feedback', handleFeedback);
+            window.removeEventListener('nexus-ai-journal', handleJournal);
+        };
     }, []);
 
     useEffect(() => {
@@ -117,18 +164,13 @@ const NexusAIComingSoon: React.FC = () => {
 
     const launchAI = (): void => {
         syncHiddenSettings();
-        const runButton = controllerRef.current?.querySelector<HTMLButtonElement>('[data-testid="button-run-trade"]');
-        if (!runButton) {
+        if (!controllerRef.current) {
             setLaunchMessage('Connecting to live market');
             return;
         }
-        if (runButton.disabled) {
-            setLaunchMessage('Log in or wait for a ready market');
-            return;
-        }
         setIsLaunched(true);
-        setLaunchMessage('LIVE · Contract requested');
-        runButton.click();
+        setLaunchMessage('LIVE · Selecting the best market');
+        window.dispatchEvent(new CustomEvent('nexus-ai-launch'));
     };
 
     const toggleRecovery = (): void => {
@@ -187,6 +229,53 @@ const NexusAIComingSoon: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            <section className='nexus-ai__journal' aria-labelledby='nexus-ai-journal-title'>
+                <div className='nexus-ai__journal-heading'>
+                    <div>
+                        <span>Live execution</span>
+                        <h2 id='nexus-ai-journal-title'>Journal</h2>
+                    </div>
+                    <small>Entry / exit price action</small>
+                </div>
+                <div className='nexus-ai__journal-table-wrap'>
+                    <table className='nexus-ai__journal-table'>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Market</th>
+                                <th>Leg</th>
+                                <th>Entry</th>
+                                <th>Current</th>
+                                <th>Exit</th>
+                                <th>Price action</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {journal.length ? journal.map(entry => {
+                                const result = entry.isOpen ? 'OPEN' : entry.isWin ? 'WON' : 'LOST';
+                                return (
+                                    <tr key={entry.contractId}>
+                                        <td>{entry.purchaseTime || '—'}</td>
+                                        <td><strong>{entry.market}</strong><small>{entry.symbol} · {entry.strategy}</small></td>
+                                        <td>{entry.leg}</td>
+                                        <td>{entry.entrySpot || '—'}</td>
+                                        <td>{entry.currentSpot || '—'}</td>
+                                        <td>{entry.exitSpot || '—'}</td>
+                                        <td className='nexus-ai__journal-action'>
+                                            {entry.entrySpot || '—'} <span>→</span> {entry.exitSpot || entry.currentSpot || 'LIVE'}
+                                        </td>
+                                        <td className={`nexus-ai__journal-result nexus-ai__journal-result--${result.toLowerCase()}`}>{result}</td>
+                                    </tr>
+                                );
+                            }) : (
+                                <tr><td colSpan={8} className='nexus-ai__journal-empty'>No contracts yet. Launch AI to record the selected market and its price action.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
 
             <div ref={controllerRef} className='nexus-ai__engine' aria-hidden='true'>
                 <Suspense fallback={null}>

@@ -477,6 +477,115 @@
         }
     }
 
+    &__journal {
+        width: min(100%, 1022px);
+        margin: 18px auto 0;
+        padding: 18px;
+        border: 1px solid #2749bd;
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(6, 21, 68, 0.98), rgba(2, 10, 38, 0.98));
+        box-shadow: 0 0 24px rgba(34, 61, 190, 0.2);
+        box-sizing: border-box;
+    }
+
+    &__journal-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+
+        span {
+            color: #54e7ff;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+
+        h2 {
+            margin: 3px 0 0;
+            color: #fff;
+            font-size: 22px;
+            line-height: 1;
+        }
+
+        small {
+            color: #94b5e8;
+            font-size: 11px;
+        }
+    }
+
+    &__journal-table-wrap {
+        overflow-x: auto;
+    }
+
+    &__journal-table {
+        width: 100%;
+        min-width: 760px;
+        border-collapse: collapse;
+        color: #c9ddff;
+        font-size: 11px;
+
+        th {
+            padding: 8px 9px;
+            border-bottom: 1px solid #2a56b8;
+            color: #7da8e8;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-align: left;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 11px 9px;
+            border-bottom: 1px solid rgba(55, 97, 184, 0.35);
+            white-space: nowrap;
+        }
+
+        tr:last-child td { border-bottom: 0; }
+
+        strong {
+            display: block;
+            color: #fff;
+            font-size: 11px;
+        }
+
+        td small {
+            display: block;
+            margin-top: 3px;
+            color: #7e9ed1;
+            font-size: 9px;
+        }
+    }
+
+    &__journal-action {
+        color: #f1c7ff;
+        font-variant-numeric: tabular-nums;
+
+        span {
+            padding: 0 4px;
+            color: #54e7ff;
+        }
+    }
+
+    &__journal-result {
+        font-weight: 800;
+        letter-spacing: 0.08em;
+
+        &--open { color: #54e7ff; }
+        &--won { color: #48f0b1; }
+        &--lost { color: #ff7bba; }
+    }
+
+    &__journal-empty {
+        padding: 24px 9px !important;
+        color: #7895c4;
+        text-align: center;
+    }
+
     &__launch-hitbox {
         position: absolute;
         top: 76.5%;
@@ -758,6 +867,20 @@
             border-right: 0;
             border-left: 0;
             border-radius: 0;
+        }
+
+        &__journal {
+            margin-top: 12px;
+            padding: 14px 10px;
+            border-right: 0;
+            border-left: 0;
+            border-radius: 0;
+        }
+
+        &__journal-heading {
+            align-items: start;
+            flex-direction: column;
+            gap: 5px;
         }
 
         &__parameters { padding: 16px 12px 22px; }

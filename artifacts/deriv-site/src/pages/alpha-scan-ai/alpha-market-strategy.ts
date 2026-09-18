@@ -414,27 +414,26 @@ export const selectAdaptiveDigitMarketPlan = (
     const best = rankedCandidates[0];
     const primary = adaptiveDigitDecision(source, best.market, best.hitRate, digits.length, 'primary');
 
-    const pairedRecoveryMarket: PurchaseMarket | null = best.market === 'over-2'
+    const pairedRecoveryMarket: PurchaseMarket = best.market === 'over-2'
         ? 'over-4'
         : best.market === 'under-7'
             ? 'under-5'
-            : null;
-    const recoveryCandidates: Array<{ market: PurchaseMarket; hitRate: number; priority: number }> = [
-        ...(pairedRecoveryMarket
-            ? [{ market: pairedRecoveryMarket, hitRate: digitHitRate(digits, digit => pairedRecoveryMarket === 'over-4' ? digit > 4 : digit < 5), priority: 5 }]
-            : []),
-        { market: 'over-4', hitRate: digitHitRate(digits, digit => digit > 4), priority: 3 },
-        { market: 'under-5', hitRate: digitHitRate(digits, digit => digit < 5), priority: 3 },
-        { market: 'even', hitRate: digitHitRate(digits, digit => digit % 2 === 0), priority: 1 },
-        { market: 'odd', hitRate: digitHitRate(digits, digit => digit % 2 !== 0), priority: 1 },
-    ].sort((left, right) => right.hitRate - left.hitRate || right.priority - left.priority);
-    const recovery = recoveryCandidates[0];
+            : best.market === 'even'
+                ? 'odd'
+                : 'even';
+    const recoveryHitRate = pairedRecoveryMarket === 'over-4'
+        ? digitHitRate(digits, digit => digit > 4)
+        : pairedRecoveryMarket === 'under-5'
+            ? digitHitRate(digits, digit => digit < 5)
+            : pairedRecoveryMarket === 'even'
+                ? digitHitRate(digits, digit => digit % 2 === 0)
+                : digitHitRate(digits, digit => digit % 2 !== 0);
 
     return {
         primary,
-        recovery: adaptiveDigitDecision(source, recovery.market, recovery.hitRate, digits.length, 'recovery'),
+        recovery: adaptiveDigitDecision(source, pairedRecoveryMarket, recoveryHitRate, digits.length, 'recovery'),
         primaryMarket: best.market,
-        recoveryMarket: recovery.market,
+        recoveryMarket: pairedRecoveryMarket,
     };
 };
 
