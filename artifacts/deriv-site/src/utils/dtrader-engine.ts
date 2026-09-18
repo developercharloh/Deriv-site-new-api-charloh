@@ -152,7 +152,7 @@ export class DTraderEngine {
     /** Rolling window of the last ~120 raw price quotes — used to draw the
      *  Accumulators-style live price chart with barrier overlay. Emitted
      *  once on history seed and once per new tick. */
-    public onPriceWindow: (prices: number[])          => void = () => {};
+    public onPriceWindow: (prices: number[], pipSize?: number) => void = () => {};
     /** Fires once when an open contract reaches a notable end state — used
      *  to drive the full-screen Cash-Out / TP / SL popups. Plain expiry of
      *  binary contracts does NOT fire this event (the position card already
@@ -716,7 +716,7 @@ export class DTraderEngine {
             this.pushPrice(q);
         }
         this.onDigitStats(this.digitCounts.slice());
-        this.onPriceWindow(this.priceBuf.slice());
+        this.onPriceWindow(this.priceBuf.slice(), this.pipSize);
     }
 
     private handleTick(tick: { quote: number; pip_size?: number; epoch?: number } | undefined): void {
@@ -732,7 +732,7 @@ export class DTraderEngine {
         this.pushPrice(tick.quote);
         this.detectBarrierBreach(tick.quote);
         this.onDigitStats(this.digitCounts.slice());
-        this.onPriceWindow(this.priceBuf.slice());
+        this.onPriceWindow(this.priceBuf.slice(), this.pipSize);
     }
 
     private handleProposal(p: any): void {

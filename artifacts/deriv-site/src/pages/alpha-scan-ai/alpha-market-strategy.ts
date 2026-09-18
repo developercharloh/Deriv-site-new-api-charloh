@@ -438,6 +438,19 @@ export const selectAdaptiveDigitMarketPlan = (
     };
 };
 
+export const selectAutoFallbackMarket = (
+    source: StrategySource,
+    windowSize = 20,
+): RankedMarketDecision | null => {
+    const primary = selectAdaptiveDigitMarketPlan(source, windowSize)?.primary;
+    return primary
+        ? {
+            ...primary,
+            reason: `No strict momentum market passed the live confidence gate. Using the strongest available ${primary.label} route on ${source.displayName}; fresh ticks must confirm it before purchase.`,
+        }
+        : null;
+};
+
 /**
  * Pick the strongest supported digit route after the broker rejects the
  * currently selected one. This deliberately excludes the rejected route and

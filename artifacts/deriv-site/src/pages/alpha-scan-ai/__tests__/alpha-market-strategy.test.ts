@@ -7,6 +7,7 @@ import {
     isMomentumDirectionConfirmed,
     selectBestAvailableDigitFallback,
     selectAdaptiveDigitMarketPlan,
+    selectAutoFallbackMarket,
     selectBestQualifiedMomentumMarket,
     selectQualifiedMomentumMarkets,
     selectStrongestMomentumMarket,
@@ -169,5 +170,19 @@ describe('auto volatility momentum selection', () => {
         expect(result?.purchaseMarket).toBe('even');
         expect(result?.contractType).toBe('DIGITEVEN');
         expect(result?.reason).toMatch(/fallback/i);
+    });
+
+    it('provides an actionable adaptive digit route when momentum has no qualified market', () => {
+        const fallback = selectAutoFallbackMarket({
+            ...source('NO_MOMENTUM', [100, 99, 100, 99, 100, 99]),
+            lastDigits: [8, 9, 7, 6, 8, 9],
+        }, 6);
+
+        expect(selectBestQualifiedMomentumMarket([
+            source('NO_MOMENTUM', [100, 99, 100, 99, 100, 99]),
+        ])).toBeNull();
+        expect(fallback?.symbol).toBe('NO_MOMENTUM');
+        expect(fallback?.contractType).toBe('DIGITOVER');
+        expect(fallback?.reason).toMatch(/No strict momentum market/);
     });
 });

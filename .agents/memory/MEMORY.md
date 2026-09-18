@@ -45,3 +45,4 @@
 - [Volatility scan purchase handoff](deriv-volatility-scan-handoff.md) — lock market and direction; FAST reuse must not alternate or fetch fresh OHLC before every purchase.
 - [Digit contract availability fallback](deriv-digit-contract-availability.md) — cache broker-rejected digit routes per symbol and retry once with a supported same-symbol route.
 - [Alpha Scan queued execution](alpha-scan-queued-execution.md) — sequential qualified-market runs can replace transient idle gaps; regressions should assert durable settlements and journal prices.
+- [Alpha Scan auto fallback](alpha-scan-auto-fallback.md) — strict momentum and adaptive-digit entries need separate fresh-confirmation modes and current callback dependencies.

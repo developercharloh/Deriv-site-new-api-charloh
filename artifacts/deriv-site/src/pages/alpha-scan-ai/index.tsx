@@ -24,6 +24,7 @@ import {
     marketConditionLabel,
     purchaseMarketLabel,
     selectAdaptiveDigitMarketPlan,
+    selectAutoFallbackMarket,
     selectBestAvailableDigitFallback,
     selectBestQualifiedMomentumMarket,
     selectQualifiedMomentumMarkets,
@@ -698,7 +699,7 @@ type AlphaExecutionEngine = {
     onStatus: (status: DTStatus) => void;
     onBuyFeedback: (feedback: DTBuyFeedback) => void;
     onPosition: (position: DTPosition) => void;
-    onPriceWindow: (prices: number[]) => void;
+    onPriceWindow: (prices: number[], pipSize?: number) => void;
     start: (config: DTConfig) => boolean;
     stop: () => void;
     placeBuyNow: (patch: Partial<DTConfig>) => void;
@@ -718,7 +719,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
     public onStatus: (status: DTStatus) => void = () => {};
     public onBuyFeedback: (feedback: DTBuyFeedback) => void = () => {};
     public onPosition: (position: DTPosition) => void = () => {};
-    public onPriceWindow: (prices: number[]) => void = () => {};
+    public onPriceWindow: (prices: number[], _pipSize?: number) => void = () => {};
 
     private config: DTConfig | null = null;
     private activePosition: DTPosition | null = null;
@@ -1106,6 +1107,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const fallbackAttemptedRef = useRef(false);
     const pendingAutoEntryRef = useRef<{
         decision: RankedMarketDecision;
+        confirmationMode: 'momentum' | 'digit';
         seeded: boolean;
         confirmations: number;
         lastPrice: number | null;
@@ -1198,30 +1200,46 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         ),
         [strategySources],
     );
-    const autoMomentumRow = rows.find(row => row.symbol === autoMomentumDecision?.symbol);
-    const autoDigitMarketPlan = useMemo(
-        () => autoMomentumRow
-            ? selectAdaptiveDigitMarketPlan(autoMomentumRow, digitWindow)
-            : null,
-        [autoMomentumRow, digitWindow],
+    const autoFallbackRow = useMemo(
+        () => (bestModelRow?.status !== 'closed' ? bestModelRow : rows.find(row => row.status !== 'closed')) || rows[0],
+        [bestModelRow, rows],
     );
+    const autoFallbackDecision = useMemo(() => {
+        if (!autoFallbackRow) return null;
+        return selectAutoFallbackMarket(autoFallbackRow, digitWindow);
+    }, [autoFallbackRow, digitWindow]);
     const autoQualifiedDecisions = useMemo(
-        () => autoQualifiedMomentumDecisions.flatMap(momentumDecision => {
-            const row = rows.find(candidate => candidate.symbol === momentumDecision.symbol);
-            const plan = row
-                ? selectAdaptiveDigitMarketPlan(row, digitWindow)
-                : null;
-            return plan?.primary
-                ? [{
-                    ...plan.primary,
-                    condition: momentumDecision.condition,
-                    reason: `${momentumDecision.reason} Entry point selected from the live ${plan.primary.label} route.`,
-                }]
-                : [];
-        }),
-        [autoQualifiedMomentumDecisions, digitWindow, rows],
+        () => {
+            const momentumDecisions = autoQualifiedMomentumDecisions.flatMap(momentumDecision => {
+                const row = rows.find(candidate => candidate.symbol === momentumDecision.symbol);
+                const plan = row
+                    ? selectAdaptiveDigitMarketPlan(row, digitWindow)
+                    : null;
+                return plan?.primary
+                    ? [{
+                        ...plan.primary,
+                        condition: momentumDecision.condition,
+                        reason: `${momentumDecision.reason} Entry point selected from the live ${plan.primary.label} route.`,
+                    }]
+                    : [];
+            });
+            return momentumDecisions.length
+                ? momentumDecisions
+                : autoFallbackDecision
+                    ? [autoFallbackDecision]
+                    : [];
+        },
+        [autoFallbackDecision, autoQualifiedMomentumDecisions, digitWindow, rows],
     );
+    const autoMomentumRow = rows.find(row => row.symbol === autoMomentumDecision?.symbol);
     const autoPrimaryDecision = autoQualifiedDecisions[0] || null;
+    const autoDecisionRow = rows.find(row => row.symbol === autoPrimaryDecision?.symbol) || autoMomentumRow || autoFallbackRow;
+    const autoDigitMarketPlan = useMemo(
+        () => autoDecisionRow
+            ? selectAdaptiveDigitMarketPlan(autoDecisionRow, digitWindow)
+            : null,
+        [autoDecisionRow, digitWindow],
+    );
     const modelPick = autoVolatilityMode
         ? autoMomentumRow || selectedRow
         : bestModelRow || selectedRow;
@@ -1360,6 +1378,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         if (runtime.autoVolatilityMode && leg === 'primary') {
             pendingAutoEntryRef.current = {
                 decision,
+                confirmationMode: autoQualifiedMomentumDecisions.length ? 'momentum' : 'digit',
                 seeded: false,
                 confirmations: 0,
                 lastPrice: null,
@@ -1382,7 +1401,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         if (!runtime.autoVolatilityMode || leg !== 'primary') {
             liveEngine.placeBuyNow(config);
         }
-    }, [liveEngine, riskFixtureMode, scheduleAutoRescan]);
+    }, [autoQualifiedMomentumDecisions, liveEngine, riskFixtureMode, scheduleAutoRescan]);
 
     executeDecisionRef.current = executeDecision;
 
@@ -1403,6 +1422,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             kind: 'success',
             message: `${settlementMessage} Next qualified entry: ${nextDecision.displayName} · ${nextDecision.label}.`,
         });
+        recoveryUsedRef.current = false;
+        fallbackAttemptedRef.current = false;
         executeDecisionRef.current(nextDecision, 'primary');
     }, [scheduleAutoRescan]);
 
@@ -1711,7 +1732,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             activeLegRef.current = null;
             activeDecisionRef.current = null;
         };
-        liveEngine.onPriceWindow = prices => {
+        liveEngine.onPriceWindow = (prices, pipSize) => {
             const pending = pendingAutoEntryRef.current;
             if (!pending || !prices.length) return;
 
@@ -1725,14 +1746,28 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             if (pending.lastPrice === latestPrice) return;
             pending.lastPrice = latestPrice;
 
-            const freshDecision = selectStrongestMomentumMarket([{
+            const freshSource = {
                 symbol: pending.decision.symbol,
                 displayName: pending.decision.displayName,
                 prices,
-                lastDigits: [],
-            }]);
-            const expectedMomentumDirection = pending.decision.condition === 'all-fall' ? 'PUT' : 'CALL';
-            if (!isMomentumDirectionConfirmed(expectedMomentumDirection, freshDecision)) {
+                lastDigits: quotesToLastDigits(prices, pipSize),
+            };
+            const freshDecision = selectStrongestMomentumMarket([freshSource]);
+            const expectedPurchaseMarket = purchaseMarketFromDecision(pending.decision);
+            const momentumConfirmed = pending.confirmationMode === 'momentum' &&
+                isMomentumDirectionConfirmed(
+                    pending.decision.condition === 'all-fall' ? 'PUT' : 'CALL',
+                    freshDecision,
+                );
+            const digitPlan = pending.confirmationMode === 'digit'
+                ? selectAdaptiveDigitMarketPlan(freshSource, runtimeRef.current.digitWindow)
+                : null;
+            const digitConfirmed = Boolean(
+                pending.confirmationMode === 'digit' &&
+                expectedPurchaseMarket &&
+                digitPlan?.primaryMarket === expectedPurchaseMarket,
+            );
+            if (!momentumConfirmed && !digitConfirmed) {
                 pendingAutoEntryRef.current = null;
                 setExecutionLeg('idle');
                 activeLegRef.current = null;
@@ -1752,7 +1787,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: 'success',
-                    message: `Fresh confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} — ${freshDecision.contractType}.`,
+                    message: `Fresh confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} — ${pending.confirmationMode === 'momentum' ? freshDecision?.contractType : digitPlan?.primaryMarket}.`,
                 });
                 return;
             }
