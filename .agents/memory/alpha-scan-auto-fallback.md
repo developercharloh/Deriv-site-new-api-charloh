@@ -20,3 +20,9 @@ When an adaptive digit fallback changes during confirmation, update the pending 
 **Why:** A stop/start handoff can lose the live confirmation stream or race subscription cleanup, leaving the runner visibly pending without reaching a buy even though the new route is valid.
 
 **How to apply:** Update the expected route while keeping the active leg pending and preserving confirmations already observed on fresh ticks; let the live stream complete the three-tick confirmation before invoking the existing payout and buy guards.
+
+When a fresh proposal fails the payout floor, consume the next qualified queue entry immediately and run a background rescan without clearing the last usable rows.
+
+**Why:** A low-payout proposal is a normal market condition, not a session stop. Clearing the model rows while rescanning can leave Auto Runner enabled but visually stuck at `WAIT` with no next contract.
+
+**How to apply:** Keep payout protection as a hard buy guard, but do not discard the qualified queue; refresh the market universe in parallel while the next candidate goes through its own live confirmation.

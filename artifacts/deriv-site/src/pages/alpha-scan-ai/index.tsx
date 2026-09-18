@@ -1023,7 +1023,7 @@ type AlphaToolSurfaceProps = {
     discoveredCount: number;
     failedSymbols: string[];
     errorMessage: string;
-    onScan: () => void;
+    onScan: (options?: { preserveExisting?: boolean }) => void;
 };
 
 type MarketConditionSelectProps = {
@@ -1157,6 +1157,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         leg: 'primary' | 'recovery',
         confirmationMode?: 'momentum' | 'digit',
     ) => void>(() => {});
+    const startQueuedAutoPrimaryRef = useRef<(settlementMessage?: string) => void>(() => {});
     const runtimeRef = useRef({
         rows,
         digitWindow,
@@ -1357,7 +1358,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         autoRescanPendingRef.current = true;
         setTimeout(() => {
             autoRescanPendingRef.current = false;
-            onScan();
+                onScan({ preserveExisting: true });
         }, riskFixtureMode ? 50 : 650);
     }, [onScan, riskFixtureMode]);
 
@@ -1407,7 +1408,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setPayoutSkipCount(count => count + 1);
                 setLastPayoutSkipMessage(message);
                 setLiveFeedback({ seq: Date.now(), kind: 'error', message });
-                scheduleAutoRescan();
+                 setTimeout(
+                     () => {
+                         startQueuedAutoPrimaryRef.current('The last proposal was below the payout floor.');
+                         scheduleAutoRescan();
+                     },
+                     0,
+                 );
                 return message;
             }
             : null);
@@ -1467,6 +1474,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         fallbackAttemptedRef.current = false;
         executeDecisionRef.current(nextDecision, 'primary');
     }, [scheduleAutoRescan]);
+
+    startQueuedAutoPrimaryRef.current = startQueuedAutoPrimary;
 
     const toggleAutoRunner = useCallback(() => {
         autoQualifiedQueueRef.current = [];
@@ -2503,7 +2512,9 @@ const AlphaScanWorkspace: React.FC = () => {
         setLastUpdated(resultRowsRef.current.length ? new Date() : null);
     }, []);
 
-    const scan = useCallback(() => {
+    const scan = useCallback((options: { preserveExisting?: boolean } = {}) => {
+        const preserveExisting = options.preserveExisting === true;
+        const previousRows = resultRowsRef.current;
         closeSocket();
         const scanId = scanIdRef.current + 1;
         scanIdRef.current = scanId;
@@ -2519,8 +2530,12 @@ const AlphaScanWorkspace: React.FC = () => {
         resultRowsRef.current = [];
         failedSymbolsRef.current = new Set<string>();
         pendingRef.current = new Set<number>();
-        setRows([]);
-        setDiscoveredCount(0);
+        if (preserveExisting && previousRows.length) {
+            setRows(previousRows);
+        } else {
+            setRows([]);
+        }
+        if (!preserveExisting) setDiscoveredCount(0);
         setCompletedCount(0);
         setFailedCount(0);
         setFailedSymbols([]);

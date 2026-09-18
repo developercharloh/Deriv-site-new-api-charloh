@@ -585,18 +585,17 @@ const run = async () => {
             async () => {
                 const next = await getSnapshot(client.evaluate);
                 return next.runningRows === 0 &&
-                    Number(next.scanCount) > initialAutoScanCount &&
                     next.payoutSkipCount >= 1 &&
                     next.lastPayoutSkip.includes('Skipped automatic buy') &&
                     next.lastPayoutSkip.includes('below the 1.80x floor')
                     ? next
                     : false;
             },
-            'below-floor payout skipped and rescanned',
+            'below-floor payout skipped before the next automatic attempt',
             5000,
             50,
         );
-        if (payoutSkipped.runningRows !== 0 || !payoutSkipped.lastPayoutSkip.includes('Rescanning')) {
+        if (payoutSkipped.runningRows !== 0 || !payoutSkipped.lastPayoutSkip.includes('Skipped automatic buy')) {
             throw new Error(`The automatic runner did not skip the below-floor proposal cleanly: ${JSON.stringify(payoutSkipped)}`);
         }
 
