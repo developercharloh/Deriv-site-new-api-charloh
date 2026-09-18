@@ -26,3 +26,9 @@ When a fresh proposal fails the payout floor, consume the next qualified queue e
 **Why:** A low-payout proposal is a normal market condition, not a session stop. Clearing the model rows while rescanning can leave Auto Runner enabled but visually stuck at `WAIT` with no next contract.
 
 **How to apply:** Keep payout protection as a hard buy guard, but do not discard the qualified queue; refresh the market universe in parallel while the next candidate goes through its own live confirmation.
+
+If a digit proposal is below the payout floor, temporarily exclude that route and try another supported digit route on the same qualified symbol before consuming the rest of the queue.
+
+**Why:** Different digit routes can receive materially different broker payouts; rejecting one route should not prevent a protected entry on an available alternative.
+
+**How to apply:** Cache low-payout routes briefly, reuse the existing digit fallback selector, and keep the minimum-payout guard on every replacement proposal.

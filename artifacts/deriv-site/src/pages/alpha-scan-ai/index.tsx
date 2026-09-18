@@ -63,6 +63,7 @@ const FEATURE_L2_PENALTY = 0.02;
 const FEATURE_WINDOWS = [3, 5, 10, 20, 50];
 const MAX_NOISE_FRACTION = 0.65;
 const UNAVAILABLE_MARKET_TTL_MS = 5 * 60_000;
+const LOW_PAYOUT_MARKET_TTL_MS = 60_000;
 const UNAVAILABLE_DIGIT_CONTRACT_PATTERN = /contract(?:notallowed|notallowed|validation|forbidden)|market(?:closed|unavailable)|not permitted|contract type.*(?:not|unavailable)|invalid contract/i;
 
 const isUnavailableDigitContractFeedback = (feedback: DTBuyFeedback): boolean =>
@@ -1136,6 +1137,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const activeLegRef = useRef<'primary' | 'recovery' | null>(null);
     const activeDecisionRef = useRef<RankedMarketDecision | null>(null);
     const unavailableDigitMarketsRef = useRef(new Map<string, number>());
+    const lowPayoutDigitMarketsRef = useRef(new Map<string, number>());
     const fallbackAttemptedRef = useRef(false);
     const pendingAutoEntryRef = useRef<{
         decision: RankedMarketDecision;
@@ -1399,7 +1401,42 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     return null;
                 }
 
-                const message = `Skipped automatic buy: fresh payout ${payoutMultiplier.toFixed(2)}x is below the ${minimumPayout.toFixed(2)}x floor. Rescanning for a qualifying proposal.`;
+                 const rejectedMarket = purchaseMarketFromDecision(decision);
+                 const source = runtimeRef.current.rows.find(row => row.symbol === decision.symbol);
+                 const now = Date.now();
+                 for (const [key, expiresAt] of lowPayoutDigitMarketsRef.current) {
+                     if (expiresAt <= now) lowPayoutDigitMarketsRef.current.delete(key);
+                 }
+                 const unavailableMarkets = new Set<PurchaseMarket>();
+                 for (const [key, expiresAt] of unavailableDigitMarketsRef.current) {
+                     if (expiresAt > now && key.startsWith(`${decision.symbol}|`)) {
+                         unavailableMarkets.add(key.slice(decision.symbol.length + 1) as PurchaseMarket);
+                     }
+                 }
+                 for (const [key, expiresAt] of lowPayoutDigitMarketsRef.current) {
+                     if (expiresAt > now && key.startsWith(`${decision.symbol}|`)) {
+                         unavailableMarkets.add(key.slice(decision.symbol.length + 1) as PurchaseMarket);
+                     }
+                 }
+                 if (rejectedMarket && decision.contractType.startsWith('DIGIT')) {
+                     lowPayoutDigitMarketsRef.current.set(
+                         `${decision.symbol}|${rejectedMarket}`,
+                         now + LOW_PAYOUT_MARKET_TTL_MS,
+                     );
+                     unavailableMarkets.add(rejectedMarket);
+                 }
+                 const payoutFallback = source && rejectedMarket && decision.contractType.startsWith('DIGIT')
+                     ? selectBestAvailableDigitFallback(
+                         source,
+                         rejectedMarket,
+                         runtimeRef.current.digitWindow,
+                         unavailableMarkets,
+                     )
+                     : null;
+                 const baseMessage = `Skipped automatic buy: fresh payout ${payoutMultiplier.toFixed(2)}x is below the ${minimumPayout.toFixed(2)}x floor.`;
+                 const message = payoutFallback
+                     ? `${baseMessage} Trying ${payoutFallback.label} before rescanning.`
+                     : `${baseMessage} Rescanning for a qualifying proposal.`;
                 liveEngine.stop();
                 pendingAutoEntryRef.current = null;
                 activeLegRef.current = null;
@@ -1410,7 +1447,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveFeedback({ seq: Date.now(), kind: 'error', message });
                  setTimeout(
                      () => {
-                         startQueuedAutoPrimaryRef.current('The last proposal was below the payout floor.');
+                          if (payoutFallback) {
+                              fallbackAttemptedRef.current = true;
+                              setDigitFallbackCount(count => count + 1);
+                              executeDecisionRef.current(payoutFallback, 'primary', 'digit');
+                          } else {
+                              startQueuedAutoPrimaryRef.current('The last proposal was below the payout floor.');
+                          }
                          scheduleAutoRescan();
                      },
                      0,
