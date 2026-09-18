@@ -595,6 +595,61 @@
         &--multiplier { left: 64%; }
     }
 
+    &__editable-value {
+        position: absolute;
+        z-index: 4;
+        width: 17%;
+        height: 5.4%;
+        padding: 0 2px;
+        border: 1px solid rgba(94, 180, 255, 0.28);
+        border-radius: 5px;
+        color: #fff;
+        font-size: clamp(12px, 2.45vw, 25px);
+        font-weight: 800;
+        line-height: 1;
+        text-align: center;
+        text-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
+        box-sizing: border-box;
+        outline: none;
+        -webkit-appearance: none;
+
+        &--stake,
+        &--profit {
+            top: 45.1%;
+        }
+
+        &--loss,
+        &--multiplier {
+            top: 60.4%;
+        }
+
+        &--stake,
+        &--loss {
+            left: 17%;
+        }
+
+        &--profit,
+        &--multiplier {
+            left: 64%;
+        }
+
+        &--stake,
+        &--profit,
+        &--multiplier {
+            background: #071a58;
+        }
+
+        &--loss {
+            background: #351b35;
+            border-color: rgba(255, 171, 52, 0.35);
+        }
+
+        &:focus {
+            border-color: #fff;
+            box-shadow: 0 0 0 2px rgba(37, 220, 255, 0.55), 0 0 14px rgba(37, 220, 255, 0.5);
+        }
+    }
+
     &__toggle-overlay {
         position: absolute;
         z-index: 3;

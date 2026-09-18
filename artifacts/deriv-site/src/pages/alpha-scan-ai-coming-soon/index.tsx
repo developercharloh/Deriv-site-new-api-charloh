@@ -8,6 +8,41 @@ type NexusStats = {
     losses: number;
 };
 
+type EditableNumberProps = {
+    value: number | '';
+    setValue: React.Dispatch<React.SetStateAction<number | ''>>;
+    label: string;
+    className: string;
+    minimum?: number;
+};
+
+const EditableNumber: React.FC<EditableNumberProps> = ({
+    value,
+    setValue,
+    label,
+    className,
+    minimum = 1,
+}) => (
+    <input
+        type='text'
+        inputMode='numeric'
+        pattern='[0-9]*'
+        className={`nexus-ai__editable-value ${className}`}
+        aria-label={label}
+        value={value}
+        onChange={event => {
+            const rawValue = event.currentTarget.value.replace(/[^\d]/g, '');
+            setValue(rawValue === '' ? '' : Number(rawValue));
+        }}
+        onBlur={() => {
+            setValue(current => {
+                if (current === '' || !Number.isFinite(current)) return minimum;
+                return Math.max(minimum, current);
+            });
+        }}
+    />
+);
+
 const setNativeControlValue = (element: HTMLInputElement | HTMLSelectElement | null, value: string): void => {
     if (!element || element.value === value) return;
     const prototype = element instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLSelectElement.prototype;
@@ -23,20 +58,20 @@ const NexusAIComingSoon: React.FC = () => {
     const settledContractsRef = useRef(new Set<string>());
     const [isLaunched, setIsLaunched] = useState(false);
     const [isRecoveryEnabled, setIsRecoveryEnabled] = useState(true);
-    const [stake, setStake] = useState(1);
-    const [takeProfit, setTakeProfit] = useState(10);
-    const [stopLoss, setStopLoss] = useState(50);
-    const [multiplier, setMultiplier] = useState(2);
+    const [stake, setStake] = useState<number | ''>(1);
+    const [takeProfit, setTakeProfit] = useState<number | ''>(10);
+    const [stopLoss, setStopLoss] = useState<number | ''>(50);
+    const [multiplier, setMultiplier] = useState<number | ''>(2);
     const [launchMessage, setLaunchMessage] = useState('');
     const [stats, setStats] = useState<NexusStats>({ trades: 0, wins: 0, losses: 0 });
 
     const syncHiddenSettings = (): void => {
         const root = controllerRef.current;
         if (!root) return;
-        setNativeControlValue(root.querySelector('input[aria-label="Stake"]'), `$${stake}`);
-        setNativeControlValue(root.querySelector('select[aria-label="Target profit"]'), String(takeProfit));
-        setNativeControlValue(root.querySelector('select[aria-label="Stop loss"]'), String(stopLoss));
-        setNativeControlValue(root.querySelector('select[aria-label="Martingale"]'), String(multiplier));
+        setNativeControlValue(root.querySelector('input[aria-label="Stake"]'), `$${stake || 1}`);
+        setNativeControlValue(root.querySelector('select[aria-label="Target profit"]'), String(takeProfit || 1));
+        setNativeControlValue(root.querySelector('select[aria-label="Stop loss"]'), String(stopLoss || 1));
+        setNativeControlValue(root.querySelector('select[aria-label="Martingale"]'), String(multiplier || 1));
     };
 
     useEffect(() => {
@@ -105,8 +140,12 @@ const NexusAIComingSoon: React.FC = () => {
         }
     };
 
-    const adjust = (setter: React.Dispatch<React.SetStateAction<number>>, amount: number, minimum = 1): void => {
-        setter(current => Math.max(minimum, current + amount));
+    const adjust = (
+        setter: React.Dispatch<React.SetStateAction<number | ''>>,
+        amount: number,
+        minimum = 1
+    ): void => {
+        setter(current => Math.max(minimum, (typeof current === 'number' ? current : minimum) + amount));
     };
 
     const winRate = stats.trades ? Math.round((stats.wins / stats.trades) * 100) : 0;
@@ -132,10 +171,10 @@ const NexusAIComingSoon: React.FC = () => {
                     <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--launch' aria-label='Launch AI' aria-pressed={isLaunched} onClick={launchAI} />
                 </div>
 
-                {stake !== 1 && <span className='nexus-ai__value-overlay nexus-ai__value-overlay--stake'>{stake}</span>}
-                {takeProfit !== 10 && <span className='nexus-ai__value-overlay nexus-ai__value-overlay--profit'>{takeProfit}</span>}
-                {stopLoss !== 50 && <span className='nexus-ai__value-overlay nexus-ai__value-overlay--loss'>{stopLoss}</span>}
-                {multiplier !== 2 && <span className='nexus-ai__value-overlay nexus-ai__value-overlay--multiplier'>{multiplier}</span>}
+                <EditableNumber value={stake} setValue={setStake} label='Stake amount' className='nexus-ai__editable-value--stake' />
+                <EditableNumber value={takeProfit} setValue={setTakeProfit} label='Take profit' className='nexus-ai__editable-value--profit' />
+                <EditableNumber value={stopLoss} setValue={setStopLoss} label='Stop loss' className='nexus-ai__editable-value--loss' />
+                <EditableNumber value={multiplier} setValue={setMultiplier} label='Recovery multiplier' className='nexus-ai__editable-value--multiplier' />
                 {!isRecoveryEnabled && <span className='nexus-ai__toggle-overlay' aria-hidden='true'><span /></span>}
                 {launchMessage && <span className='nexus-ai__status-overlay' role='status'>{launchMessage}</span>}
 
