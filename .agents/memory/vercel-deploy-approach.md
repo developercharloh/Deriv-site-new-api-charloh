@@ -69,3 +69,11 @@ The Vercel REST upload endpoint can exhaust an account-wide 5,000-file quota eve
 **How to apply:** Compare the local prebuilt manifest against the last READY deployment and upload only new digests. If Vercel still returns `api-upload-free` with `remaining: 0`, keep the code verified locally and do not claim production was updated; retry after the reported reset time.
 
 **Current runtime note:** `npx vercel@latest deploy --prebuilt` can be blocked by the package firewall while fetching `tar`; the REST fallback works by uploading only new SHA-1 digests and creating `/v13/deployments?prebuilt=1`.
+
+## Flat artifact API fallback
+
+When deploying a flat `dist` manifest directly through `/v13/deployments`, Vercel may still inherit the repository's old monorepo build command and fail before serving the files. Passing `buildCommand: "echo skip"`, `installCommand: "echo skip"`, `outputDirectory: "."`, and `framework: null` makes the uploaded root artifact serve as static output.
+
+**Why:** The existing project configuration expects a repository checkout, but a direct API deployment already contains the compiled artifact and has no `artifacts/deriv-site` source directory to build from.
+
+**How to apply:** Upload all referenced SHA-1 files to `/v2/files`, create the production deployment with the flat manifest and explicit no-op build settings, wait for `READY`, then verify the custom domain over HTTPS.
