@@ -24,7 +24,6 @@ import {
     marketConditionLabel,
     purchaseMarketLabel,
     selectAdaptiveDigitMarketPlan,
-    selectAutoFallbackMarket,
     selectBestAvailableDigitFallback,
     selectBestQualifiedMomentumMarket,
     selectQualifiedMomentumMarkets,
@@ -64,6 +63,7 @@ const FEATURE_WINDOWS = [3, 5, 10, 20, 50];
 const MAX_NOISE_FRACTION = 0.65;
 const UNAVAILABLE_MARKET_TTL_MS = 5 * 60_000;
 const LOW_PAYOUT_MARKET_TTL_MS = 60_000;
+const AUTO_EXECUTION_FALLBACK_CONFIDENCE = 50;
 const UNAVAILABLE_DIGIT_CONTRACT_PATTERN = /contract(?:notallowed|notallowed|validation|forbidden)|market(?:closed|unavailable)|not permitted|contract type.*(?:not|unavailable)|invalid contract/i;
 
 const isUnavailableDigitContractFeedback = (feedback: DTBuyFeedback): boolean =>
@@ -1141,7 +1141,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const fallbackAttemptedRef = useRef(false);
     const pendingAutoEntryRef = useRef<{
         decision: RankedMarketDecision;
-        confirmationMode: 'momentum' | 'digit';
+        confirmationMode: 'momentum';
         seeded: boolean;
         confirmations: number;
         lastPrice: number | null;
@@ -1157,7 +1157,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const executeDecisionRef = useRef<(
         decision: RankedMarketDecision,
         leg: 'primary' | 'recovery',
-        confirmationMode?: 'momentum' | 'digit',
     ) => void>(() => {});
     const startQueuedAutoPrimaryRef = useRef<(settlementMessage?: string) => void>(() => {});
     const runtimeRef = useRef({
@@ -1239,50 +1238,29 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         ),
         [strategySources],
     );
-    const autoFallbackRow = useMemo(
-        () => (bestModelRow?.status !== 'closed' ? bestModelRow : rows.find(row => row.status !== 'closed')) || rows[0],
-        [bestModelRow, rows],
+    const autoPriceFallbackDecision = useMemo(
+        () => selectStrongestMomentumMarket(
+            strategySources,
+            AUTO_MOMENTUM_SHORT_WINDOW,
+            AUTO_MOMENTUM_LONG_WINDOW,
+            AUTO_EXECUTION_FALLBACK_CONFIDENCE,
+        ),
+        [strategySources],
     );
-    const autoFallbackDecision = useMemo(() => {
-        if (!autoFallbackRow) return null;
-        return selectAutoFallbackMarket(autoFallbackRow, digitWindow);
-    }, [autoFallbackRow, digitWindow]);
     const autoQualifiedDecisions = useMemo(
-        () => {
-            const momentumDecisions = autoQualifiedMomentumDecisions.flatMap(momentumDecision => {
-                const row = rows.find(candidate => candidate.symbol === momentumDecision.symbol);
-                const plan = row
-                    ? selectAdaptiveDigitMarketPlan(row, digitWindow)
-                    : null;
-                return plan?.primary
-                    ? [{
-                        ...plan.primary,
-                        condition: momentumDecision.condition,
-                        reason: `${momentumDecision.reason} Entry point selected from the live ${plan.primary.label} route.`,
-                    }]
-                    : [];
-            });
-            return momentumDecisions.length
-                ? momentumDecisions
-                : autoFallbackDecision
-                    ? [autoFallbackDecision]
-                    : [];
-        },
-        [autoFallbackDecision, autoQualifiedMomentumDecisions, digitWindow, rows],
+        () => autoQualifiedMomentumDecisions.length
+            ? autoQualifiedMomentumDecisions
+            : autoPriceFallbackDecision
+                ? [autoPriceFallbackDecision]
+                : [],
+        [autoPriceFallbackDecision, autoQualifiedMomentumDecisions],
     );
     const autoMomentumRow = rows.find(row => row.symbol === autoMomentumDecision?.symbol);
     const autoPrimaryDecision = autoQualifiedDecisions[0] || null;
-    const autoDecisionRow = rows.find(row => row.symbol === autoPrimaryDecision?.symbol) || autoMomentumRow || autoFallbackRow;
-    const autoDigitMarketPlan = useMemo(
-        () => autoDecisionRow
-            ? selectAdaptiveDigitMarketPlan(autoDecisionRow, digitWindow)
-            : null,
-        [autoDecisionRow, digitWindow],
-    );
     const modelPick = autoVolatilityMode
         ? autoMomentumRow || selectedRow
         : bestModelRow || selectedRow;
-    const autoCandidateSymbol = autoVolatilityMode ? autoMomentumDecision?.symbol : undefined;
+    const autoCandidateSymbol = autoVolatilityMode ? autoPrimaryDecision?.symbol : undefined;
 
     const calculatedPrimaryDecision = useMemo(() => {
         const source = multiMarketScanning ? bestModelRow : selectedRow;
@@ -1367,11 +1345,19 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const executeDecision = useCallback((
         decision: RankedMarketDecision,
         leg: 'primary' | 'recovery',
-        confirmationModeOverride?: 'momentum' | 'digit',
     ) => {
         const runtime = runtimeRef.current;
         if (!runtime.liveMode || !runtime.liveAuthorized) {
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
+            setExecutionLeg('idle');
+            return;
+        }
+        if (runtime.autoVolatilityMode && leg === 'primary' && !['CALL', 'PUT'].includes(decision.contractType)) {
+            setLiveFeedback({
+                seq: Date.now(),
+                kind: 'error',
+                message: 'Automatic execution only uses price-direction Rise/Fall contracts. Digit execution is disabled.',
+            });
             setExecutionLeg('idle');
             return;
         }
@@ -1450,7 +1436,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                           if (payoutFallback) {
                               fallbackAttemptedRef.current = true;
                               setDigitFallbackCount(count => count + 1);
-                              executeDecisionRef.current(payoutFallback, 'primary', 'digit');
+                              executeDecisionRef.current(payoutFallback, 'primary');
                           } else {
                               startQueuedAutoPrimaryRef.current('The last proposal was below the payout floor.');
                           }
@@ -1468,8 +1454,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         if (runtime.autoVolatilityMode && leg === 'primary') {
             pendingAutoEntryRef.current = {
                 decision,
-                confirmationMode: confirmationModeOverride ||
-                    (autoQualifiedMomentumDecisions.length ? 'momentum' : 'digit'),
+                    confirmationMode: 'momentum',
                 seeded: false,
                 confirmations: 0,
                 lastPrice: null,
@@ -1825,7 +1810,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             activeLegRef.current = null;
             activeDecisionRef.current = null;
         };
-        liveEngine.onPriceWindow = (prices, pipSize) => {
+        liveEngine.onPriceWindow = prices => {
             const pending = pendingAutoEntryRef.current;
             if (!pending || !prices.length) return;
 
@@ -1843,72 +1828,19 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 symbol: pending.decision.symbol,
                 displayName: pending.decision.displayName,
                 prices,
-                lastDigits: quotesToLastDigits(prices, pipSize),
+                lastDigits: [],
             };
-            const freshDecision = selectStrongestMomentumMarket([freshSource]);
-            const expectedPurchaseMarket = purchaseMarketFromDecision(pending.decision);
-            const freshDigitPlan = selectAdaptiveDigitMarketPlan(freshSource, runtimeRef.current.digitWindow);
-            const momentumConfirmed = pending.confirmationMode === 'momentum' &&
-                isMomentumDirectionConfirmed(
-                    pending.decision.condition === 'all-fall' ? 'PUT' : 'CALL',
-                    freshDecision,
-                );
-            const digitPlan = pending.confirmationMode === 'digit' ? freshDigitPlan : null;
-            const digitConfirmed = Boolean(
-                pending.confirmationMode === 'digit' &&
-                expectedPurchaseMarket &&
-                digitPlan?.primaryMarket === expectedPurchaseMarket,
+            const freshDecision = selectStrongestMomentumMarket(
+                [freshSource],
+                AUTO_MOMENTUM_SHORT_WINDOW,
+                AUTO_MOMENTUM_LONG_WINDOW,
+                AUTO_EXECUTION_FALLBACK_CONFIDENCE,
             );
-            if (
-                pending.confirmationMode === 'momentum' &&
-                !momentumConfirmed &&
-                freshSource.prices.length >= AUTO_SIGNAL_CONFIDENCE_WINDOW &&
-                freshDigitPlan?.primary
-            ) {
-                const liveFallback = freshDigitPlan.primary;
-                pendingAutoEntryRef.current = null;
-                setExecutionLeg('idle');
-                activeLegRef.current = null;
-                activeDecisionRef.current = null;
-                liveEngine.stop();
-                setLiveFeedback({
-                    seq: Date.now(),
-                    kind: 'info',
-                    message: `Live momentum changed for ${pending.decision.displayName}. Reconfirming the current ${liveFallback.label} route before purchase.`,
-                });
-                setTimeout(() => executeDecisionRef.current(liveFallback, 'primary', 'digit'), 0);
-                return;
-            }
-            if (
-                pending.confirmationMode === 'digit' &&
-                !digitConfirmed &&
-                freshSource.prices.length >= AUTO_SIGNAL_CONFIDENCE_WINDOW &&
-                freshDigitPlan?.primary &&
-                freshDigitPlan.primaryMarket !== expectedPurchaseMarket
-            ) {
-                const liveFallback = freshDigitPlan.primary;
-                const nextConfig: Partial<DTConfig> = {
-                    symbol: liveFallback.symbol,
-                    contractType: liveFallback.contractType,
-                    barrier: liveFallback.barrier,
-                };
-                liveEngine.updateConfig(nextConfig);
-                activeDecisionRef.current = liveFallback;
-                pendingAutoEntryRef.current = {
-                    decision: liveFallback,
-                    confirmationMode: 'digit',
-                    seeded: true,
-                    confirmations: pending.confirmations,
-                    lastPrice: latestPrice,
-                };
-                setLiveFeedback({
-                    seq: Date.now(),
-                    kind: 'info',
-                    message: `Live digit route changed for ${pending.decision.displayName}. Continuing fresh confirmation on ${liveFallback.label}.`,
-                });
-                return;
-            }
-            if (!momentumConfirmed && !digitConfirmed) {
+            const momentumConfirmed = isMomentumDirectionConfirmed(
+                pending.decision.condition === 'all-fall' ? 'PUT' : 'CALL',
+                freshDecision,
+            );
+            if (!momentumConfirmed) {
                 pendingAutoEntryRef.current = null;
                 setExecutionLeg('idle');
                 activeLegRef.current = null;
@@ -1928,7 +1860,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: 'success',
-                    message: `Fresh confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} — ${pending.confirmationMode === 'momentum' ? freshDecision?.contractType : digitPlan?.primaryMarket}.`,
+                    message: `Fresh price confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} — ${freshDecision?.contractType || 'waiting for direction'}.`,
                 });
                 return;
             }
@@ -1963,10 +1895,18 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         : '—';
     const activeDecision = autoVolatilityMode ? autoPrimaryDecision : primaryDecision || explicitPrimaryDecision;
     const effectivePrimaryPurchaseMarket = autoVolatilityMode
-        ? autoDigitMarketPlan?.primaryMarket || primaryPurchaseMarket
+        ? autoPrimaryDecision?.contractType === 'CALL'
+            ? 'rise'
+            : autoPrimaryDecision?.contractType === 'PUT'
+                ? 'fall'
+                : primaryPurchaseMarket
         : primaryPurchaseMarket;
     const effectiveRecoveryPurchaseMarket = autoVolatilityMode
-        ? autoDigitMarketPlan?.recoveryMarket || recoveryPurchaseMarket
+        ? autoPrimaryDecision?.contractType === 'CALL'
+            ? 'rise'
+            : autoPrimaryDecision?.contractType === 'PUT'
+                ? 'fall'
+                : recoveryPurchaseMarket
         : recoveryPurchaseMarket;
     const modelProbability = modelPick ? Math.round(modelPick.baselineProbability * 100) : 0;
     const modelGate = modelPick?.validationGate || 'insufficient-evidence';

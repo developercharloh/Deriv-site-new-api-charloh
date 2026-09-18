@@ -3,32 +3,20 @@ name: Alpha Scan auto fallback
 description: Durable constraints for keeping Auto Runner actionable when strict momentum produces no candidate
 ---
 
-Auto Runner must fall back to the strongest available adaptive digit route when no strict momentum market qualifies, while keeping the strict momentum route unchanged when candidates exist.
+Auto Runner must use price-direction Rise/Fall contracts only; digit analysis remains available to manual strategy controls but is not an automatic execution fallback.
 
-**Why:** A strict confidence gate can legitimately return no candidate even though the live market has usable digit evidence. Without a fallback, Auto Runner can remain enabled but never submit an entry. The two routes also require different fresh-confirmation semantics.
+**Why:** Last-digit execution repeatedly left the live runner without a buy path when digit routes changed or payouts were rejected. Price movement is the requested execution signal and has a single confirmation model.
 
-**How to apply:** Use momentum confirmation for strict candidates and same-route digit confirmation for fallback candidates. Keep the distinction in the pending-entry state, include every referenced selection value in the callback dependencies, and preserve payout, broker availability, one-position, recovery, and session-risk guards. If a strict scan candidate no longer matches a warm live history, reselect the current digit route and send it through fresh confirmation instead of cancelling back to idle.
+**How to apply:** Select strict momentum CALL/PUT candidates first, then use a price-only momentum fallback when needed. Confirm the same CALL/PUT direction on fresh prices before buying, and preserve payout, broker availability, one-position, recovery, and session-risk guards.
 
-The public scan and live tick history are separate observations. A strict candidate can be valid at scan time but stale when the broker history arrives for execution; this should trigger a live-route handoff, not a journaled trade or an indefinite idle loop.
+The public scan and live tick history are separate observations. A strict price-direction candidate can be valid at scan time but stale when the broker history arrives for execution; cancel and rescan rather than switching execution modes.
 
-**Why:** The live site can show Auto Runner ON, an empty trade journal, and repeated fresh-confirmation failures even though the scan itself passed. The journal is correctly empty because no contract was bought; the real fix is to avoid treating stale scan direction as the only executable route.
+**Why:** The live site can show Auto Runner ON, an empty trade journal, and repeated fresh-confirmation failures even though the scan itself passed. The journal is correctly empty because no contract was bought; changing into a digit route made that failure harder to diagnose.
 
-**How to apply:** Require a warm live window before switching from stale momentum to a current digit route, then restart the pending proposal with an explicit digit confirmation mode so broker payout and contract-availability guards still run.
-
-When an adaptive digit fallback changes during confirmation, update the pending decision and engine configuration in place while preserving the warm subscription; do not reset the engine just to restart confirmation.
-
-**Why:** A stop/start handoff can lose the live confirmation stream or race subscription cleanup, leaving the runner visibly pending without reaching a buy even though the new route is valid.
-
-**How to apply:** Update the expected route while keeping the active leg pending and preserving confirmations already observed on fresh ticks; let the live stream complete the three-tick confirmation before invoking the existing payout and buy guards.
+**How to apply:** Require a warm live price window, confirm the original CALL/PUT direction for three fresh observations, and return to the queue or rescan if direction fails.
 
 When a fresh proposal fails the payout floor, consume the next qualified queue entry immediately and run a background rescan without clearing the last usable rows.
 
 **Why:** A low-payout proposal is a normal market condition, not a session stop. Clearing the model rows while rescanning can leave Auto Runner enabled but visually stuck at `WAIT` with no next contract.
 
 **How to apply:** Keep payout protection as a hard buy guard, but do not discard the qualified queue; refresh the market universe in parallel while the next candidate goes through its own live confirmation.
-
-If a digit proposal is below the payout floor, temporarily exclude that route and try another supported digit route on the same qualified symbol before consuming the rest of the queue.
-
-**Why:** Different digit routes can receive materially different broker payouts; rejecting one route should not prevent a protected entry on an available alternative.
-
-**How to apply:** Cache low-payout routes briefly, reuse the existing digit fallback selector, and keep the minimum-payout guard on every replacement proposal.

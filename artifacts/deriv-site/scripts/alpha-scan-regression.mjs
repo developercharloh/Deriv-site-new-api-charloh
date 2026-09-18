@@ -265,6 +265,7 @@ const getSnapshot = evaluate => evaluate(`(() => {
         recoveryDigitWindow: root?.dataset.recoveryDigitWindow || '',
         primaryCondition: root?.dataset.primaryCondition || '',
         primaryMarket: root?.dataset.primaryMarket || '',
+         primaryPurchase: root?.dataset.primaryPurchase || '',
         recoveryCondition: root?.dataset.recoveryCondition || '',
         recoveryMarket: root?.dataset.recoveryMarket || '',
         marketControls: Boolean(document.querySelector('[data-testid="select-primary-market"]')) &&
@@ -559,13 +560,13 @@ const run = async () => {
         const confirmation = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.feedback.includes('Fresh confirmation') ? next : false;
+                return next.feedback.includes('Fresh price confirmation') ? next : false;
             },
             'fresh confirmation messaging before execution',
             5000,
             50,
         );
-        if (!/Fresh confirmation (?:1|2)\/3/.test(confirmation.feedback)) {
+        if (!/Fresh price confirmation (?:1|2)\/3/.test(confirmation.feedback)) {
             throw new Error(`Expected an in-progress fresh confirmation before execution, received: ${confirmation.feedback}`);
         }
         const passedConfirmation = await waitFor(
@@ -693,41 +694,27 @@ const run = async () => {
         );
         assertScan(unavailableScan, SAMPLE_WINDOWS[0], 'fixture');
         await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
-        let fallbackNotice;
-        try {
-            fallbackNotice = await waitFor(
-                async () => {
-                    const next = await getSnapshot(client.evaluate);
-                    return next.digitFallbackCount >= 1
-                        ? next
-                        : false;
-                },
-                'digit contract availability fallback',
-                5000,
-                25,
-            );
-        } catch (error) {
-            const lastSnapshot = await getSnapshot(client.evaluate);
-            throw new Error(`${error.message} Last fallback snapshot: ${JSON.stringify(lastSnapshot)}`);
-        }
-        const fallbackRunning = await waitFor(
+        const priceDirectionRunning = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
                 return next.runningRows === 1 ? next : false;
             },
-            'fallback contract after unavailable digit route',
+            'automatic price-direction contract',
             10000,
             25,
         );
-        if (fallbackNotice.runningRows !== 0 || fallbackRunning.runningRows !== 1) {
+        if (
+            !['Rise', 'Fall'].includes(priceDirectionRunning.primaryPurchase) ||
+            priceDirectionRunning.digitFallbackCount !== 0
+        ) {
             throw new Error(
-                `Unavailable digit contract did not fall back cleanly: ${JSON.stringify({ fallbackNotice, fallbackRunning })}`,
+                `Automatic execution did not stay on price-direction contracts: ${JSON.stringify(priceDirectionRunning)}`,
             );
         }
-        runReport.fixture.unavailableContractFallback = {
+        runReport.fixture.priceDirectionExecution = {
             status: 'passed',
-            notice: fallbackNotice.feedback,
-            runningRows: fallbackRunning.runningRows,
+            purchase: priceDirectionRunning.primaryPurchase,
+            runningRows: priceDirectionRunning.runningRows,
         };
 
         await client.call('Page.navigate', {
@@ -788,7 +775,7 @@ const run = async () => {
         const resumedConfirmation = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.feedback.includes('Fresh confirmation 1/3') ||
+                return next.feedback.includes('Fresh price confirmation 1/3') ||
                     ['primary-pending', 'primary-running'].includes(next.executionLeg) ||
                     Number(next.autoTrades) >= 1
                     ? next
@@ -828,70 +815,6 @@ const run = async () => {
             resumedActiveRows: recoveredRunning.runningRows,
         };
         runReport.fixture.confirmationRecovery = confirmationRecovery;
-
-        await client.call('Page.navigate', {
-            url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'route-change'),
-        });
-        await waitFor(
-            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
-            'digit-route handoff fixture Alpha Tool',
-        );
-        const routeChangeScan = await waitFor(
-            async () => {
-                const next = await getSnapshot(client.evaluate);
-                return ['ready', 'partial-data'].includes(next.status) ? next : false;
-            },
-            'digit-route handoff fixture scan',
-            90000,
-        );
-        assertScan(routeChangeScan, SAMPLE_WINDOWS[0], 'fixture');
-        await client.evaluate(`(() => {
-            const select = document.querySelector('[aria-label="Minimum payout"]');
-            if (!select) return false;
-            select.value = '1.5';
-            select.dispatchEvent(new Event('change', { bubbles: true }));
-            return true;
-        })()`);
-        await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
-        let routeHandoff;
-        try {
-            routeHandoff = await waitFor(
-                async () => {
-                    const next = await getSnapshot(client.evaluate);
-                    return next.feedback.includes('Live digit route changed') ? next : false;
-                },
-                'live digit route handoff',
-                5000,
-                25,
-            );
-        } catch (error) {
-            throw new Error(`${error.message} Last route-handoff snapshot: ${JSON.stringify(await getSnapshot(client.evaluate))}`);
-        }
-        if (routeHandoff.runningRows !== 0 || routeHandoff.autoTrades !== 0 || routeHandoff.executionLeg !== 'primary-pending') {
-            throw new Error(`The digit-route handoff did not preserve a pending confirmation safely: ${JSON.stringify(routeHandoff)}`);
-        }
-        let routeHandoffRunning;
-        try {
-            routeHandoffRunning = await waitFor(
-                async () => {
-                    const next = await getSnapshot(client.evaluate);
-                    return next.runningRows === 1 ? next : false;
-                },
-                'contract after live digit route handoff',
-                10000,
-                25,
-            );
-        } catch (error) {
-            throw new Error(`${error.message} Last post-handoff snapshot: ${JSON.stringify(await getSnapshot(client.evaluate))}`);
-        }
-        if (routeHandoffRunning.runningRows !== 1 || routeHandoffRunning.autoTrades !== 0) {
-            throw new Error(`The current live digit route was not confirmed before purchase: ${JSON.stringify(routeHandoffRunning)}`);
-        }
-        runReport.fixture.digitRouteHandoff = {
-            status: 'passed',
-            handoffFeedback: routeHandoff.feedback,
-            runningRows: routeHandoffRunning.runningRows,
-        };
 
         await client.call('Page.navigate', {
             url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', '', false, true),
