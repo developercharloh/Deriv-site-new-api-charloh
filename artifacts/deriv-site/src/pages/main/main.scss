@@ -599,7 +599,7 @@
         position: absolute;
         z-index: 4;
         width: 17%;
-        height: 5.4%;
+        height: 4.8%;
         padding: 0 2px;
         border: 1px solid rgba(94, 180, 255, 0.28);
         border-radius: 5px;
@@ -608,6 +608,9 @@
         font-weight: 800;
         line-height: 1;
         text-align: center;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
         text-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
         box-sizing: border-box;
         outline: none;
@@ -615,12 +618,12 @@
 
         &--stake,
         &--profit {
-            top: 45.1%;
+            top: 45.2%;
         }
 
         &--loss,
         &--multiplier {
-            top: 60.4%;
+            top: 60%;
         }
 
         &--stake,
@@ -667,8 +670,9 @@
             position: absolute;
             top: 8%;
             left: 5%;
-            width: 76%;
+            width: 32%;
             height: 84%;
+            aspect-ratio: 1;
             border-radius: 50%;
             background: #fff;
             box-shadow: 0 0 8px #b7f8ff;
