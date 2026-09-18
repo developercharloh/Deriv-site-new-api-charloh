@@ -1120,7 +1120,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         consecutiveLosses: 0,
     });
     const recoveryUsedRef = useRef(false);
-    const executeDecisionRef = useRef<(decision: RankedMarketDecision, leg: 'primary' | 'recovery') => void>(() => {});
+    const executeDecisionRef = useRef<(
+        decision: RankedMarketDecision,
+        leg: 'primary' | 'recovery',
+        confirmationMode?: 'momentum' | 'digit',
+    ) => void>(() => {});
     const runtimeRef = useRef({
         rows,
         digitWindow,
@@ -1325,7 +1329,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         }, riskFixtureMode ? 50 : 650);
     }, [onScan, riskFixtureMode]);
 
-    const executeDecision = useCallback((decision: RankedMarketDecision, leg: 'primary' | 'recovery') => {
+    const executeDecision = useCallback((
+        decision: RankedMarketDecision,
+        leg: 'primary' | 'recovery',
+        confirmationModeOverride?: 'momentum' | 'digit',
+    ) => {
         const runtime = runtimeRef.current;
         if (!runtime.liveMode || !runtime.liveAuthorized) {
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
@@ -1378,7 +1386,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         if (runtime.autoVolatilityMode && leg === 'primary') {
             pendingAutoEntryRef.current = {
                 decision,
-                confirmationMode: autoQualifiedMomentumDecisions.length ? 'momentum' : 'digit',
+                confirmationMode: confirmationModeOverride ||
+                    (autoQualifiedMomentumDecisions.length ? 'momentum' : 'digit'),
                 seeded: false,
                 confirmations: 0,
                 lastPrice: null,
@@ -1754,19 +1763,38 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             };
             const freshDecision = selectStrongestMomentumMarket([freshSource]);
             const expectedPurchaseMarket = purchaseMarketFromDecision(pending.decision);
+            const freshDigitPlan = selectAdaptiveDigitMarketPlan(freshSource, runtimeRef.current.digitWindow);
             const momentumConfirmed = pending.confirmationMode === 'momentum' &&
                 isMomentumDirectionConfirmed(
                     pending.decision.condition === 'all-fall' ? 'PUT' : 'CALL',
                     freshDecision,
                 );
-            const digitPlan = pending.confirmationMode === 'digit'
-                ? selectAdaptiveDigitMarketPlan(freshSource, runtimeRef.current.digitWindow)
-                : null;
+            const digitPlan = pending.confirmationMode === 'digit' ? freshDigitPlan : null;
             const digitConfirmed = Boolean(
                 pending.confirmationMode === 'digit' &&
                 expectedPurchaseMarket &&
                 digitPlan?.primaryMarket === expectedPurchaseMarket,
             );
+            if (
+                pending.confirmationMode === 'momentum' &&
+                !momentumConfirmed &&
+                freshSource.prices.length >= AUTO_SIGNAL_CONFIDENCE_WINDOW &&
+                freshDigitPlan?.primary
+            ) {
+                const liveFallback = freshDigitPlan.primary;
+                pendingAutoEntryRef.current = null;
+                setExecutionLeg('idle');
+                activeLegRef.current = null;
+                activeDecisionRef.current = null;
+                liveEngine.stop();
+                setLiveFeedback({
+                    seq: Date.now(),
+                    kind: 'info',
+                    message: `Live momentum changed for ${pending.decision.displayName}. Reconfirming the current ${liveFallback.label} route before purchase.`,
+                });
+                setTimeout(() => executeDecisionRef.current(liveFallback, 'primary', 'digit'), 0);
+                return;
+            }
             if (!momentumConfirmed && !digitConfirmed) {
                 pendingAutoEntryRef.current = null;
                 setExecutionLeg('idle');
