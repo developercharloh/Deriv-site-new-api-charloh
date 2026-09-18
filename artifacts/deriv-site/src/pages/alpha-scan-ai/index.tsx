@@ -202,7 +202,11 @@ const discoverVolatilitySymbols = (records: Array<Record<string, unknown>>): Syn
     });
 };
 
-const buildFixtureRows = (sampleSize: SampleSize, autoRunnerFixture = false): ScanRow[] => {
+const buildFixtureRows = (
+    sampleSize: SampleSize,
+    autoRunnerFixture = false,
+    confirmationFixtureMode: AlphaConfirmationFixture = null,
+): ScanRow[] => {
     const fixtureSymbols = DERIV_VOLATILITIES.map((index, symbolIndex) => ({
         symbol: index.code,
         displayName: index.label,
@@ -210,10 +214,14 @@ const buildFixtureRows = (sampleSize: SampleSize, autoRunnerFixture = false): Sc
         digitPattern: symbolIndex % 2 === 0 ? [0, 2, 4, 6, 8] : [1, 3, 5, 7, 9],
         status: 'open' as const,
     }));
+    const forceDigitFallback = autoRunnerFixture && confirmationFixtureMode === 'route-change';
 
     return fixtureSymbols.map((fixture, symbolIndex) => {
         const pipSize = 2;
         const prices = Array.from({ length: sampleSize }, (_, index) => {
+            if (forceDigitFallback) {
+                return Number((100 + symbolIndex * 25 + fixture.digitPattern[0] / 100).toFixed(2));
+            }
             if (autoRunnerFixture && symbolIndex === 0 && index >= sampleSize - 40) {
                 return 100 + index * 0.01;
             }
@@ -702,12 +710,13 @@ type AlphaExecutionEngine = {
     onPriceWindow: (prices: number[], pipSize?: number) => void;
     start: (config: DTConfig) => boolean;
     stop: () => void;
+    updateConfig: (patch: Partial<DTConfig>) => void;
     placeBuyNow: (patch: Partial<DTConfig>) => void;
     setBuyGuard: (guard: DTBuyGuard | null) => void;
 };
 
 type AlphaRiskFixture = 'target' | 'stop-loss' | 'consecutive-losses' | 'trade-count';
-type AlphaConfirmationFixture = 'reverse' | null;
+type AlphaConfirmationFixture = 'reverse' | 'route-change' | null;
 type AlphaUnavailableContractFixture = 'once' | null;
 type AlphaRecoveryFixture = 'loss' | null;
 /**
@@ -730,6 +739,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
     private readonly unavailableContractFixture: AlphaUnavailableContractFixture;
     private readonly recoveryFixtureMode: AlphaRecoveryFixture;
     private confirmationReversalUsed = false;
+    private confirmationRouteChangeUsed = false;
     private unavailableContractUsed = false;
     private buyGuard: DTBuyGuard = () => null;
     private lowPayoutProposalUsed = false;
@@ -767,7 +777,14 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         this.stop();
         this.config = { ...config };
         this.onStatus('subscribing');
-        let prices = Array.from({ length: 30 }, (_, index) => 100 + index * 0.01);
+        const routeChangeSeed = this.confirmationFixtureMode === 'route-change';
+        const routeChange = routeChangeSeed && !this.confirmationRouteChangeUsed;
+        if (routeChange) this.confirmationRouteChangeUsed = true;
+        const seedLength = routeChangeSeed ? 80 : 30;
+        const seedOffset = routeChangeSeed && !routeChange ? 0.01 : 0;
+        let prices = Array.from({ length: seedLength }, (_, index) =>
+            Number((100 + index * 0.02 + seedOffset).toFixed(2)),
+        );
         const confirmationDelay = this.riskFixtureMode ? 10 : 70;
         const reverseConfirmation = this.confirmationFixtureMode === 'reverse' && !this.confirmationReversalUsed;
         if (reverseConfirmation) this.confirmationReversalUsed = true;
@@ -776,7 +793,8 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
             if (!this.config) return;
             this.onStatus('ready');
             this.onPriceWindow(prices);
-            for (let confirmation = 1; confirmation <= 3; confirmation += 1) {
+            const confirmationCount = routeChange ? 5 : 3;
+            for (let confirmation = 1; confirmation <= confirmationCount; confirmation += 1) {
                 this.schedule(() => {
                     if (!this.config) return;
                     if (reverseConfirmation && confirmation === 1) {
@@ -785,8 +803,18 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                             ...prices,
                             ...Array.from({ length: 9 }, (_, index) => latestPrice - (index + 1) * 0.01),
                         ];
+                    } else if (routeChange && confirmation === 1) {
+                        const latestPrice = prices[prices.length - 1];
+                        prices = [
+                            ...prices,
+                            ...Array.from({ length: 20 }, (_, index) =>
+                                Number((latestPrice + 0.03 + index * 0.02).toFixed(2)),
+                            ),
+                        ];
                     } else {
-                        prices = [...prices, prices[prices.length - 1] + 0.01];
+                        const latestPrice = prices[prices.length - 1];
+                        const increment = routeChangeSeed ? 1 : 0.01;
+                        prices = [...prices, Number((latestPrice + increment).toFixed(2))];
                     }
                     this.onPriceWindow(prices);
                 }, confirmation * confirmationDelay);
@@ -802,6 +830,10 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
             this.config = null;
             this.onStatus('idle');
         }
+    }
+
+    updateConfig(patch: Partial<DTConfig>): void {
+        if (this.config) this.config = { ...this.config, ...patch };
     }
 
     setBuyGuard(guard: DTBuyGuard | null): void {
@@ -1795,6 +1827,35 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setTimeout(() => executeDecisionRef.current(liveFallback, 'primary', 'digit'), 0);
                 return;
             }
+            if (
+                pending.confirmationMode === 'digit' &&
+                !digitConfirmed &&
+                freshSource.prices.length >= AUTO_SIGNAL_CONFIDENCE_WINDOW &&
+                freshDigitPlan?.primary &&
+                freshDigitPlan.primaryMarket !== expectedPurchaseMarket
+            ) {
+                const liveFallback = freshDigitPlan.primary;
+                const nextConfig: Partial<DTConfig> = {
+                    symbol: liveFallback.symbol,
+                    contractType: liveFallback.contractType,
+                    barrier: liveFallback.barrier,
+                };
+                liveEngine.updateConfig(nextConfig);
+                activeDecisionRef.current = liveFallback;
+                pendingAutoEntryRef.current = {
+                    decision: liveFallback,
+                    confirmationMode: 'digit',
+                    seeded: true,
+                    confirmations: 0,
+                    lastPrice: latestPrice,
+                };
+                setLiveFeedback({
+                    seq: Date.now(),
+                    kind: 'info',
+                    message: `Live digit route changed for ${pending.decision.displayName}. Reconfirming the current ${liveFallback.label} route before purchase.`,
+                });
+                return;
+            }
             if (!momentumConfirmed && !digitConfirmed) {
                 pendingAutoEntryRef.current = null;
                 setExecutionLeg('idle');
@@ -2372,9 +2433,11 @@ const AlphaScanWorkspace: React.FC = () => {
         new URLSearchParams(window.location.search).get('alpha_scan_fixture') === '1';
     const executionFixtureMode = typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).get('alpha_scan_execution_fixture') === '1';
-    const confirmationFixtureMode: AlphaConfirmationFixture = typeof window !== 'undefined' &&
-        new URLSearchParams(window.location.search).get('alpha_scan_confirmation_fixture') === 'reverse'
-        ? 'reverse'
+    const confirmationFixtureMode: AlphaConfirmationFixture = typeof window !== 'undefined'
+        ? (() => {
+            const requested = new URLSearchParams(window.location.search).get('alpha_scan_confirmation_fixture');
+            return requested === 'reverse' || requested === 'route-change' ? requested : null;
+        })()
         : null;
     const unavailableContractFixture: AlphaUnavailableContractFixture = typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).get('alpha_scan_unavailable_contract') === '1'
@@ -2469,7 +2532,7 @@ const AlphaScanWorkspace: React.FC = () => {
         setStatus('discovering');
 
         if (fixtureMode) {
-            const fixtureRows = buildFixtureRows(sampleSize, autoRunnerFixture);
+            const fixtureRows = buildFixtureRows(sampleSize, autoRunnerFixture, confirmationFixtureMode);
             resultRowsRef.current = fixtureRows;
             setRows(fixtureRows);
             setDiscoveredCount(fixtureRows.length);

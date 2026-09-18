@@ -14,3 +14,9 @@ The public scan and live tick history are separate observations. A strict candid
 **Why:** The live site can show Auto Runner ON, an empty trade journal, and repeated fresh-confirmation failures even though the scan itself passed. The journal is correctly empty because no contract was bought; the real fix is to avoid treating stale scan direction as the only executable route.
 
 **How to apply:** Require a warm live window before switching from stale momentum to a current digit route, then restart the pending proposal with an explicit digit confirmation mode so broker payout and contract-availability guards still run.
+
+When an adaptive digit fallback changes during confirmation, update the pending decision and engine configuration in place while preserving the warm subscription; do not reset the engine just to restart confirmation.
+
+**Why:** A stop/start handoff can lose the live confirmation stream or race subscription cleanup, leaving the runner visibly pending without reaching a buy even though the new route is valid.
+
+**How to apply:** Reset only the confirmation counter and expected route, keep the active leg pending, and let subsequent live ticks complete the three-tick confirmation before invoking the existing payout and buy guards.

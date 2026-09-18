@@ -831,6 +831,70 @@ const run = async () => {
         runReport.fixture.confirmationRecovery = confirmationRecovery;
 
         await client.call('Page.navigate', {
+            url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'route-change'),
+        });
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+            'digit-route handoff fixture Alpha Tool',
+        );
+        const routeChangeScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return ['ready', 'partial-data'].includes(next.status) ? next : false;
+            },
+            'digit-route handoff fixture scan',
+            90000,
+        );
+        assertScan(routeChangeScan, SAMPLE_WINDOWS[0], 'fixture');
+        await client.evaluate(`(() => {
+            const select = document.querySelector('[aria-label="Minimum payout"]');
+            if (!select) return false;
+            select.value = '1.5';
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        })()`);
+        await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
+        let routeHandoff;
+        try {
+            routeHandoff = await waitFor(
+                async () => {
+                    const next = await getSnapshot(client.evaluate);
+                    return next.feedback.includes('Live digit route changed') ? next : false;
+                },
+                'live digit route handoff',
+                5000,
+                25,
+            );
+        } catch (error) {
+            throw new Error(`${error.message} Last route-handoff snapshot: ${JSON.stringify(await getSnapshot(client.evaluate))}`);
+        }
+        if (routeHandoff.runningRows !== 0 || routeHandoff.autoTrades !== 0 || routeHandoff.executionLeg !== 'primary-pending') {
+            throw new Error(`The digit-route handoff did not preserve a pending confirmation safely: ${JSON.stringify(routeHandoff)}`);
+        }
+        let routeHandoffRunning;
+        try {
+            routeHandoffRunning = await waitFor(
+                async () => {
+                    const next = await getSnapshot(client.evaluate);
+                    return next.runningRows === 1 ? next : false;
+                },
+                'contract after live digit route handoff',
+                10000,
+                25,
+            );
+        } catch (error) {
+            throw new Error(`${error.message} Last post-handoff snapshot: ${JSON.stringify(await getSnapshot(client.evaluate))}`);
+        }
+        if (routeHandoffRunning.runningRows !== 1 || routeHandoffRunning.autoTrades !== 0) {
+            throw new Error(`The current live digit route was not confirmed before purchase: ${JSON.stringify(routeHandoffRunning)}`);
+        }
+        runReport.fixture.digitRouteHandoff = {
+            status: 'passed',
+            handoffFeedback: routeHandoff.feedback,
+            runningRows: routeHandoffRunning.runningRows,
+        };
+
+        await client.call('Page.navigate', {
             url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', '', false, true),
         });
         await waitFor(
