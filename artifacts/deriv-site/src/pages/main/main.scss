@@ -639,11 +639,11 @@
         &--stake,
         &--profit,
         &--multiplier {
-            background: transparent;
+            background: #071a58;
         }
 
         &--loss {
-            background: transparent;
+            background: #351b35;
         }
 
         &:focus {
@@ -680,11 +680,6 @@
             transition: left 160ms ease;
         }
 
-        &--on {
-            background: linear-gradient(90deg, #1179e8, #10d6ff);
-
-            span { left: 51%; }
-        }
     }
 
     &__status-overlay {
