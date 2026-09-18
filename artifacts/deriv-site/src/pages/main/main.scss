@@ -881,10 +881,10 @@
 
 @media (max-width: 560px) {
     .main.main--nexus-ai {
-        height: calc(100vh - 6rem);
-        max-height: calc(100vh - 6rem);
+        height: auto;
+        max-height: none;
         min-height: calc(100vh - 6rem);
-        overflow: hidden;
+        overflow: visible;
     }
 
     .nexus-ai {
@@ -1850,6 +1850,23 @@
         height: auto;
         min-height: 0;
         overflow: visible;
+    }
+
+    // Nexus is a document-length page. Remove the fixed-height tab chain so
+    // the browser can scroll the artwork and the full Journal as one surface.
+    .main.main--nexus-ai,
+    .main.main--nexus-ai .main__container,
+    .main.main--nexus-ai .main__container > div,
+    .main.main--nexus-ai .dc-tabs,
+    .main.main--nexus-ai .dc-tabs__content,
+    .main.main--nexus-ai .dc-tabs__content-panel,
+    .main.main--nexus-ai #id-alpha-scan-ai {
+        display: block;
+        height: auto !important;
+        max-height: none !important;
+        min-height: 0;
+        overflow: visible !important;
+        touch-action: auto;
     }
 }
 
