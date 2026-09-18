@@ -510,6 +510,7 @@
         background: transparent;
         pointer-events: auto;
         cursor: pointer;
+        touch-action: manipulation;
 
         &--stake-minus,
         &--profit-minus,
@@ -553,8 +554,9 @@
 
         &--recovery {
             top: 66.3%;
-            right: 4.2%;
-            width: 12%;
+            right: auto;
+            left: 74%;
+            width: 21%;
             height: 5.5%;
         }
 
@@ -596,9 +598,10 @@
     &__toggle-overlay {
         position: absolute;
         z-index: 3;
-        top: 66.8%;
-        right: 4.2%;
-        width: 11.6%;
+        top: 66.3%;
+        right: auto;
+        left: 74%;
+        width: 18%;
         height: 4.4%;
         border: 1px solid #267eea;
         border-radius: 999px;
@@ -656,6 +659,18 @@
         overflow: hidden;
         opacity: 0;
         pointer-events: none;
+    }
+
+    > #nexus-ai-title {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
     }
 }
 
