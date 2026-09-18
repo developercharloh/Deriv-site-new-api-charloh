@@ -327,6 +327,101 @@ export const withPurchaseMarket = (
     };
 };
 
+export type AdaptiveDigitMarketPlan = {
+    primary: RankedMarketDecision;
+    recovery: RankedMarketDecision;
+    primaryMarket: PurchaseMarket;
+    recoveryMarket: PurchaseMarket;
+};
+
+const digitHitRate = (digits: number[], predicate: (digit: number) => boolean): number =>
+    digits.length ? digits.filter(predicate).length / digits.length : 0;
+
+const adaptiveDigitDecision = (
+    source: StrategySource,
+    market: PurchaseMarket,
+    hitRate: number,
+    windowSize: number,
+    role: 'primary' | 'recovery',
+): RankedMarketDecision => {
+    const condition = market === 'even'
+        ? 'all-even'
+        : market === 'odd'
+            ? 'all-odd'
+            : market.replace(/^(over|under)-/, '$1-') as MarketCondition;
+    const baseDecision: RankedMarketDecision = {
+        condition,
+        label: purchaseMarketLabel(market),
+        contractType: market === 'even'
+            ? 'DIGITEVEN'
+            : market === 'odd'
+                ? 'DIGITODD'
+                : market.startsWith('over-')
+                    ? 'DIGITOVER'
+                    : 'DIGITUNDER',
+        barrier: market.match(/^(?:over|under)-(\d+)$/)?.[1] || null,
+        digits: source.lastDigits.slice(-windowSize),
+        strength: hitRate * 100,
+        reason: `${role === 'primary' ? 'Primary' : 'Recovery'} ${purchaseMarketLabel(market)} estimated hit rate ${(
+            hitRate * 100
+        ).toFixed(0)}% across the latest ${Math.min(windowSize, source.lastDigits.length)} digits.`,
+        symbol: source.symbol,
+        displayName: source.displayName,
+    };
+    return withPurchaseMarket(baseDecision, market);
+};
+
+/**
+ * Choose a digit contract from the current market evidence instead of
+ * hard-coding parity. Threshold markets are preferred when they have enough
+ * recent support; parity remains the safe fallback when threshold evidence is
+ * weak or unavailable.
+ */
+export const selectAdaptiveDigitMarketPlan = (
+    source: StrategySource,
+    windowSize = 20,
+): AdaptiveDigitMarketPlan | null => {
+    const digits = source.lastDigits
+        .slice(-Math.max(3, Math.floor(windowSize)))
+        .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+    if (!digits.length) return null;
+
+    const candidates: Array<{ market: PurchaseMarket; hitRate: number; priority: number }> = [
+        { market: 'over-2', hitRate: digitHitRate(digits, digit => digit > 2), priority: 4 },
+        { market: 'under-7', hitRate: digitHitRate(digits, digit => digit < 7), priority: 4 },
+        { market: 'even', hitRate: digitHitRate(digits, digit => digit % 2 === 0), priority: 2 },
+        { market: 'odd', hitRate: digitHitRate(digits, digit => digit % 2 !== 0), priority: 2 },
+    ];
+    const rankedCandidates = candidates.sort((left, right) =>
+        right.hitRate - left.hitRate || right.priority - left.priority,
+    );
+    const best = rankedCandidates[0];
+    const primary = adaptiveDigitDecision(source, best.market, best.hitRate, digits.length, 'primary');
+
+    const pairedRecoveryMarket: PurchaseMarket | null = best.market === 'over-2'
+        ? 'over-4'
+        : best.market === 'under-7'
+            ? 'under-5'
+            : null;
+    const recoveryCandidates: Array<{ market: PurchaseMarket; hitRate: number; priority: number }> = [
+        ...(pairedRecoveryMarket
+            ? [{ market: pairedRecoveryMarket, hitRate: digitHitRate(digits, digit => pairedRecoveryMarket === 'over-4' ? digit > 4 : digit < 5), priority: 5 }]
+            : []),
+        { market: 'over-4', hitRate: digitHitRate(digits, digit => digit > 4), priority: 3 },
+        { market: 'under-5', hitRate: digitHitRate(digits, digit => digit < 5), priority: 3 },
+        { market: 'even', hitRate: digitHitRate(digits, digit => digit % 2 === 0), priority: 1 },
+        { market: 'odd', hitRate: digitHitRate(digits, digit => digit % 2 !== 0), priority: 1 },
+    ].sort((left, right) => right.hitRate - left.hitRate || right.priority - left.priority);
+    const recovery = recoveryCandidates[0];
+
+    return {
+        primary,
+        recovery: adaptiveDigitDecision(source, recovery.market, recovery.hitRate, digits.length, 'recovery'),
+        primaryMarket: best.market,
+        recoveryMarket: recovery.market,
+    };
+};
+
 /**
  * Select exactly one market. More specific patterns outrank broad patterns:
  * same-digit > monotonic movement > parity > the tightest valid Over/Under

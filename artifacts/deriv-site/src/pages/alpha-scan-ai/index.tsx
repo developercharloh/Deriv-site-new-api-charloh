@@ -23,6 +23,7 @@ import {
     isMomentumDirectionConfirmed,
     marketConditionLabel,
     purchaseMarketLabel,
+    selectAdaptiveDigitMarketPlan,
     selectBestQualifiedMomentumMarket,
     type MarketCondition,
     type MomentumMarketEvaluation,
@@ -40,7 +41,7 @@ import './alpha-scan-ai.scss';
 const DERIV_WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1';
 const SCAN_TIMEOUT_MS = 35_000;
 const SHORT_RETURN_WINDOW = 20;
-const SYMBOL_PAGE_SIZE = 8;
+const SYMBOL_PAGE_SIZE = 1;
 const MODEL_VERSION = 'feature-logistic-causal-denoise-v1';
 const MIN_VALIDATION_SAMPLES = 200;
 const MIN_ACCURACY = 0.51;
@@ -1038,7 +1039,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [primaryCondition, setPrimaryCondition] = useState<MarketCondition>('all-even');
     const [recoveryCondition, setRecoveryCondition] = useState<MarketCondition>('all-odd');
     const [primaryPurchaseMarket, setPrimaryPurchaseMarket] = useState<PurchaseMarket>('even');
-    const [recoveryPurchaseMarket, setRecoveryPurchaseMarket] = useState<PurchaseMarket>('odd');
+    const [recoveryPurchaseMarket, setRecoveryPurchaseMarket] = useState<PurchaseMarket>('over-4');
     const [multiMarketScanning, setMultiMarketScanning] = useState(true);
     const [autoVolatilityMode, setAutoVolatilityMode] = useState(false);
     const [stake, setStake] = useState('10');
@@ -1142,6 +1143,19 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         [strategySources],
     );
     const autoMomentumRow = rows.find(row => row.symbol === autoMomentumDecision?.symbol);
+    const autoDigitMarketPlan = useMemo(
+        () => autoMomentumRow
+            ? selectAdaptiveDigitMarketPlan(autoMomentumRow, digitWindow)
+            : null,
+        [autoMomentumRow, digitWindow],
+    );
+    const autoPrimaryDecision = autoDigitMarketPlan?.primary && autoMomentumDecision
+        ? {
+            ...autoDigitMarketPlan.primary,
+            condition: autoMomentumDecision.condition,
+            reason: `${autoMomentumDecision.reason} Purchase route: ${autoDigitMarketPlan.primary.label}.`,
+        }
+        : null;
     const modelPick = autoVolatilityMode
         ? autoMomentumRow || selectedRow
         : bestModelRow || selectedRow;
@@ -1322,7 +1336,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             }
         }
         const decision = autoVolatilityMode
-            ? autoMomentumDecision
+            ? autoPrimaryDecision
             : primaryDecision || explicitPrimaryDecision;
         if (!decision) {
             setLiveFeedback({
@@ -1337,16 +1351,16 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         recoveryUsedRef.current = false;
         setLiveFeedback(null);
         executeDecision(decision, 'primary');
-    }, [autoMomentumDecision, autoVolatilityMode, executeDecision, executionLeg, explicitPrimaryDecision, liveAuthorized, primaryDecision, stopLoss, targetProfit]);
+    }, [autoPrimaryDecision, autoVolatilityMode, executeDecision, executionLeg, explicitPrimaryDecision, liveAuthorized, primaryDecision, stopLoss, targetProfit]);
 
     useEffect(() => {
-        if (!autoVolatilityMode || !liveMode || !liveAuthorized || isBusy || executionLeg !== 'idle' || !autoMomentumDecision) {
+        if (!autoVolatilityMode || !liveMode || !liveAuthorized || isBusy || executionLeg !== 'idle' || !autoPrimaryDecision) {
             return;
         }
 
         const timer = setTimeout(runTrade, riskFixtureMode ? 50 : 450);
         return () => clearTimeout(timer);
-    }, [autoMomentumDecision, autoVolatilityMode, executionLeg, isBusy, liveAuthorized, liveMode, riskFixtureMode, runTrade]);
+    }, [autoPrimaryDecision, autoVolatilityMode, executionLeg, isBusy, liveAuthorized, liveMode, riskFixtureMode, runTrade]);
 
     const upsertJournalEntry = useCallback((position: DTPosition, leg: 'primary' | 'recovery', decision: RankedMarketDecision | null) => {
         const nextEntry: AlphaTradeJournalEntry = {
@@ -1424,10 +1438,46 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     setLiveFeedback({ seq: Date.now(), kind: 'error', message: riskMessage });
                     return;
                 }
+                if (position.isWin === false && !recoveryUsedRef.current) {
+                    recoveryUsedRef.current = true;
+                    const recoverySource = runtimeRef.current.rows.find(row =>
+                        row.symbol === activeDecisionRef.current?.symbol,
+                    );
+                    const recovery = recoverySource
+                        ? selectAdaptiveDigitMarketPlan(
+                            recoverySource,
+                            runtimeRef.current.recoveryDigitWindow,
+                        )?.recovery || null
+                        : null;
+                    if (recovery) {
+                        setRecoveryDecision(recovery);
+                        setExecutionLeg('recovery-pending');
+                        setLiveFeedback({
+                            seq: Date.now(),
+                            kind: 'info',
+                            message: `Primary loss on ${recoverySource?.displayName || 'the selected market'}. Starting ${recovery.label} recovery.`,
+                        });
+                        setTimeout(() => executeDecisionRef.current(recovery, 'recovery'), 0);
+                        return;
+                    }
+                }
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: position.isWin ? 'success' : 'info',
                     message: `${position.isWin ? 'Contract won' : 'Contract settled'}. Rescanning all volatility markets before the next trade.`,
+                });
+                setTimeout(onScan, riskFixtureMode ? 50 : 650);
+                return;
+            }
+
+            if (runtimeRef.current.autoVolatilityMode && leg === 'recovery') {
+                setExecutionLeg('idle');
+                activeLegRef.current = null;
+                activeDecisionRef.current = null;
+                setLiveFeedback({
+                    seq: Date.now(),
+                    kind: position.isWin ? 'success' : 'info',
+                    message: `Recovery ${position.isWin ? 'won' : 'settled'}. Rescanning all volatility markets before the next trade.`,
                 });
                 setTimeout(onScan, riskFixtureMode ? 50 : 650);
                 return;
@@ -1504,7 +1554,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 prices,
                 lastDigits: [],
             }]);
-            if (!isMomentumDirectionConfirmed(pending.decision.contractType, freshDecision)) {
+            const expectedMomentumDirection = pending.decision.condition === 'all-fall' ? 'PUT' : 'CALL';
+            if (!isMomentumDirectionConfirmed(expectedMomentumDirection, freshDecision)) {
                 pendingAutoEntryRef.current = null;
                 setExecutionLeg('idle');
                 activeLegRef.current = null;
@@ -1536,11 +1587,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 kind: 'success',
                 message: `Fresh confirmation passed for ${confirmedDecision.displayName}. Buying ${confirmedDecision.contractType}.`,
             });
-            liveEngine.placeBuyNow({
+            setTimeout(() => liveEngine.placeBuyNow({
                 symbol: confirmedDecision.symbol,
                 contractType: confirmedDecision.contractType,
                 barrier: confirmedDecision.barrier,
-            });
+            }), 75);
         };
         return () => {
             liveEngine.stop();
@@ -1557,7 +1608,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const capturedAt = lastUpdated
         ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '—';
-    const activeDecision = autoVolatilityMode ? autoMomentumDecision : primaryDecision || explicitPrimaryDecision;
+    const activeDecision = autoVolatilityMode ? autoPrimaryDecision : primaryDecision || explicitPrimaryDecision;
     const modelProbability = modelPick ? Math.round(modelPick.baselineProbability * 100) : 0;
     const modelGate = modelPick?.validationGate || 'insufficient-evidence';
     const modelGateLabel = modelGate === 'validated'
@@ -1690,7 +1741,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                             type='button'
                             className='alpha-cockpit__run'
                             onClick={runTrade}
-                            disabled={!liveAuthorized || !liveMode || (autoVolatilityMode ? !autoMomentumDecision : !explicitPrimaryDecision) || isBusy || executionLeg !== 'idle'}
+                            disabled={!liveAuthorized || !liveMode || (autoVolatilityMode ? !autoPrimaryDecision : !explicitPrimaryDecision) || isBusy || executionLeg !== 'idle'}
                             data-testid='button-run-trade'
                         >
                             <span>{runLabel}</span><span aria-hidden='true'>↗</span>
@@ -1941,7 +1992,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         type='button'
                         className='alpha-tool__run'
                         onClick={runTrade}
-                        disabled={!liveAuthorized || !liveMode || (autoVolatilityMode ? !autoMomentumDecision : !explicitPrimaryDecision) || isBusy || executionLeg !== 'idle'}
+                        disabled={!liveAuthorized || !liveMode || (autoVolatilityMode ? !autoPrimaryDecision : !explicitPrimaryDecision) || isBusy || executionLeg !== 'idle'}
                         data-testid='button-run-trade'
                         title={liveAuthorized
                             ? autoVolatilityMode

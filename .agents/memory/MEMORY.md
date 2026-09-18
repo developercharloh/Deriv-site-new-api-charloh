@@ -7,6 +7,7 @@
 - [Deriv-site Jest ESM dependency handling](deriv-site-jest-esm.md) — pnpm’s `.pnpm/@deriv-com+ui@…` path needs an explicit transform exception for Jest.
 - [Alpha Scan research gate](alpha-scan-research-scope.md) — Alpha Scan starts as a descriptive public-data cockpit; keep decisions at SKIP until OOS validation exists.
 - [Deriv symbol metadata](deriv-active-symbols-discovery.md) — public active_symbols labels vary; use full metadata plus symbol-family matching for Synthetic Index discovery.
+- [Alpha Scan adaptive execution](alpha-scan-adaptive-execution.md) — pace public history reads and preserve momentum confirmation separately from adaptive digit contracts.
 - [Alpha Scan visual surface](alpha-scan-visual-surface.md) — neon model-powered tool uses live ScanRow values, omits footer navigation, and selects one primary/recovery market from X latest digits.
 - [Alpha Scan live execution](alpha-scan-live-execution.md) — use reactive auth state and keep explicit Run separate from pattern qualification so trades cannot silently remain disabled.
 - [Deriv tick subscription recovery](deriv-tick-subscription-recovery.md) — duplicate symbol streams need one-shot forget-all recovery before retrying ticks.

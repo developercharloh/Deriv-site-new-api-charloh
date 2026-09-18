@@ -5,6 +5,7 @@ import {
     AUTO_SIGNAL_CONFIDENCE_WINDOW,
     evaluateMomentumMarket,
     isMomentumDirectionConfirmed,
+    selectAdaptiveDigitMarketPlan,
     selectBestQualifiedMomentumMarket,
     selectStrongestMomentumMarket,
     type StrategySource,
@@ -101,5 +102,30 @@ describe('auto volatility momentum selection', () => {
         expect(result?.symbol).toBe('QUALIFIED');
         expect(result?.contractType).toBe('CALL');
         expect(result?.reason).toContain('60 ticks');
+    });
+
+    it('pairs the strongest threshold market with its requested recovery barrier', () => {
+        const result = selectAdaptiveDigitMarketPlan({
+            ...source('OVER_BIAS', [100, 101, 102, 103, 104, 105]),
+            lastDigits: [8, 9, 7, 6, 8, 9],
+        }, 6);
+
+        expect(result?.primaryMarket).toBe('over-2');
+        expect(result?.primary.contractType).toBe('DIGITOVER');
+        expect(result?.primary.barrier).toBe('2');
+        expect(result?.recoveryMarket).toBe('over-4');
+        expect(result?.recovery.barrier).toBe('4');
+    });
+
+    it('pairs a low-digit market with Under 5 recovery', () => {
+        const result = selectAdaptiveDigitMarketPlan({
+            ...source('UNDER_BIAS', [100, 99, 98, 97, 96, 95]),
+            lastDigits: [0, 1, 2, 3, 4, 6],
+        }, 6);
+
+        expect(result?.primaryMarket).toBe('under-7');
+        expect(result?.recoveryMarket).toBe('under-5');
+        expect(result?.primary.barrier).toBe('7');
+        expect(result?.recovery.barrier).toBe('5');
     });
 });
