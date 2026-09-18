@@ -385,9 +385,7 @@ const AppWrapper = observer(() => {
     return (
         <React.Fragment>
             <div
-                className={classNames('main', {
-                    'main--alpha-scan': active_tab === DBOT_TABS.ALPHA_SCAN_AI,
-                })}
+                className='main'
             >
                 <div
                     className={classNames('main__container', {
