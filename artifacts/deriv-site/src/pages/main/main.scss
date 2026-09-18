@@ -806,6 +806,22 @@
         pointer-events: none;
     }
 
+    &__launch-state {
+        position: absolute;
+        z-index: 3;
+        top: 78%;
+        left: 24%;
+        width: 52%;
+        color: #fff;
+        font-size: clamp(10px, 2vw, 20px);
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        line-height: 1;
+        text-align: center;
+        text-shadow: 0 0 10px rgba(106, 241, 255, 0.9);
+        pointer-events: none;
+    }
+
     &__stats-overlay {
         position: absolute;
         z-index: 3;
@@ -854,10 +870,10 @@
 
 @media (max-width: 560px) {
     .main.main--nexus-ai {
-        height: auto;
-        max-height: none;
+        height: calc(100vh - 6rem);
+        max-height: calc(100vh - 6rem);
         min-height: calc(100vh - 6rem);
-        overflow: visible;
+        overflow: hidden;
     }
 
     .nexus-ai {
@@ -1749,7 +1765,8 @@
 // tabs (LDP Tool, Free Bots, AI Analysis) need their own scroll context so
 // users can reach all content on mobile.
 @include mobile-or-tablet-screen {
-    .main__container:has(#id-free-bots) {
+    .main__container:has(#id-free-bots),
+    .main__container:has(#id-alpha-scan-ai) {
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -1789,6 +1806,7 @@
     }
 
     #id-free-bots,
+    #id-alpha-scan-ai,
     #id-ai-analysis,
     #id-d-circles,
     #id-advanced-dtrader {
@@ -1798,17 +1816,29 @@
         overscroll-behavior-y: contain;
     }
 
-    #id-free-bots {
+    #id-free-bots,
+    #id-alpha-scan-ai {
         display: flex;
         flex-direction: column;
         min-height: 0;
-        overflow: hidden;
+        overflow-y: auto;
 
-        .free-bots {
+        .free-bots,
+        .nexus-ai {
             flex: 1 1 auto;
             width: 100%;
             min-height: 0;
         }
+    }
+
+    // The Nexus artwork and Journal are one continuous surface inside the
+    // same bounded scrollport used by Free Bots. Keep the visual surface
+    // natural-height so the Journal remains reachable below it.
+    #id-alpha-scan-ai .nexus-ai {
+        flex: 0 0 auto;
+        height: auto;
+        min-height: 0;
+        overflow: visible;
     }
 }
 

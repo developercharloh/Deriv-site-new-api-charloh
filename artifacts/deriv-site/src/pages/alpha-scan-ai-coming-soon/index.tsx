@@ -23,6 +23,11 @@ type NexusJournalEntry = {
     profit?: number;
 };
 
+type NexusSessionState = {
+    active?: boolean;
+    message?: string;
+};
+
 type EditableNumberProps = {
     value: number | '';
     setValue: React.Dispatch<React.SetStateAction<number | ''>>;
@@ -101,6 +106,12 @@ const NexusAIComingSoon: React.FC = () => {
             if (feedback?.message) setLaunchMessage(feedback.message);
             if (feedback?.kind === 'error') setIsLaunched(false);
         };
+        const handleSession = (event: Event) => {
+            const session = (event as CustomEvent).detail as NexusSessionState | undefined;
+            if (!session) return;
+            setIsLaunched(Boolean(session.active));
+            if (session.message) setLaunchMessage(session.message);
+        };
         const handleJournal = (event: Event) => {
             const entry = (event as CustomEvent).detail as NexusJournalEntry | undefined;
             if (!entry?.contractId || !entry.symbol) return;
@@ -119,9 +130,11 @@ const NexusAIComingSoon: React.FC = () => {
             }
         };
         window.addEventListener('nexus-ai-feedback', handleFeedback);
+        window.addEventListener('nexus-ai-session', handleSession);
         window.addEventListener('nexus-ai-journal', handleJournal);
         return () => {
             window.removeEventListener('nexus-ai-feedback', handleFeedback);
+            window.removeEventListener('nexus-ai-session', handleSession);
             window.removeEventListener('nexus-ai-journal', handleJournal);
         };
     }, []);
@@ -155,8 +168,6 @@ const NexusAIComingSoon: React.FC = () => {
                 wins: current.wins + (position.isWin ? 1 : 0),
                 losses: current.losses + (position.isWin === false ? 1 : 0),
             }));
-            setIsLaunched(false);
-            setLaunchMessage('');
         };
         window.addEventListener('nexus-ai-position', handlePosition);
         return () => window.removeEventListener('nexus-ai-position', handlePosition);
@@ -168,9 +179,16 @@ const NexusAIComingSoon: React.FC = () => {
             setLaunchMessage('Connecting to live market');
             return;
         }
+        if (isLaunched) {
+            setLaunchMessage('Stopping Nexus AI');
+            window.dispatchEvent(new CustomEvent('nexus-ai-stop'));
+            return;
+        }
         setIsLaunched(true);
         setLaunchMessage('LIVE · Selecting the best market');
-        window.dispatchEvent(new CustomEvent('nexus-ai-launch'));
+        // Let the hidden Alpha controls consume the latest Nexus values before
+        // the launch handler snapshots its runtime configuration.
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent('nexus-ai-launch')), 0);
     };
 
     const toggleRecovery = (): void => {
@@ -210,7 +228,13 @@ const NexusAIComingSoon: React.FC = () => {
                     <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--multiplier-minus' aria-label='Decrease recovery multiplier' onClick={() => adjust(setMultiplier, -1)} />
                     <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--multiplier-plus' aria-label='Increase recovery multiplier' onClick={() => adjust(setMultiplier, 1)} />
                     <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--recovery' aria-label='Toggle recovery mode' aria-pressed={isRecoveryEnabled} onClick={toggleRecovery} />
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--launch' aria-label='Launch AI' aria-pressed={isLaunched} onClick={launchAI} />
+                    <button
+                        type='button'
+                        className='nexus-ai__hitbox nexus-ai__hitbox--launch'
+                        aria-label={isLaunched ? 'Stop Nexus AI' : 'Launch AI'}
+                        aria-pressed={isLaunched}
+                        onClick={launchAI}
+                    />
                 </div>
 
                 <EditableNumber value={stake} setValue={setStake} label='Stake amount' className='nexus-ai__editable-value--stake' />
@@ -218,6 +242,7 @@ const NexusAIComingSoon: React.FC = () => {
                 <EditableNumber value={stopLoss} setValue={setStopLoss} label='Stop loss' className='nexus-ai__editable-value--loss' />
                 <EditableNumber value={multiplier} setValue={setMultiplier} label='Recovery multiplier' className='nexus-ai__editable-value--multiplier' />
                 {!isRecoveryEnabled && <span className='nexus-ai__toggle-overlay' aria-hidden='true'><span /></span>}
+                {isLaunched && <span className='nexus-ai__launch-state' aria-hidden='true'>STOP AI</span>}
                 {launchMessage && <span className='nexus-ai__status-overlay' role='status'>{launchMessage}</span>}
 
                 {stats.trades > 0 && (

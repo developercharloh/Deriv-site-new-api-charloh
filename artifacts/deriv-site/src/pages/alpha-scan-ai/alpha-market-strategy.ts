@@ -337,9 +337,9 @@ export const purchaseMarketFromDecision = (
         : decision.contractType === 'DIGITODD'
             ? 'odd'
             : decision.contractType === 'DIGITOVER'
-                ? `over-${decision.barrier ?? 0}`
+                ? `over-${Number(decision.barrier ?? 0)}`
                 : decision.contractType === 'DIGITUNDER'
-                    ? `under-${decision.barrier ?? 0}`
+                    ? `under-${Number(decision.barrier ?? 0)}`
                     : null
 );
 
@@ -473,9 +473,12 @@ export const selectBestAvailableDigitFallback = (
         { market: 'under-5', hitRate: digitHitRate(digits, digit => digit < 5), priority: 3 },
         { market: 'even', hitRate: digitHitRate(digits, digit => digit % 2 === 0), priority: 2 },
         { market: 'odd', hitRate: digitHitRate(digits, digit => digit % 2 !== 0), priority: 2 },
-    ].filter(candidate => candidate.market !== rejectedMarket && !unavailableMarkets.has(candidate.market));
+    ];
+    const availableCandidates = candidates.filter(
+        candidate => candidate.market !== rejectedMarket && !unavailableMarkets.has(candidate.market),
+    );
 
-    const best = candidates.sort((left, right) =>
+    const best = availableCandidates.sort((left, right) =>
         right.hitRate - left.hitRate || right.priority - left.priority,
     )[0];
     return best

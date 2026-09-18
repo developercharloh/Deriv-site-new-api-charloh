@@ -721,6 +721,15 @@ type AlphaRiskFixture = 'target' | 'stop-loss' | 'consecutive-losses' | 'trade-c
 type AlphaConfirmationFixture = 'reverse' | 'route-change' | null;
 type AlphaUnavailableContractFixture = 'once' | null;
 type AlphaRecoveryFixture = 'loss' | null;
+type NexusSession = {
+    primary: RankedMarketDecision;
+    recovery: RankedMarketDecision;
+    phase: 'primary' | 'recovery';
+    baseStake: number;
+    currentStake: number;
+    multiplier: number;
+    sessionProfit: number;
+};
 /**
  * The browser regression runs without a Deriv account. This deterministic
  * engine exercises the same Alpha Scan callbacks as DTraderEngine, including
@@ -1137,6 +1146,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [recoveryDecision, setRecoveryDecision] = useState<RankedMarketDecision | null>(null);
     const activeLegRef = useRef<'primary' | 'recovery' | null>(null);
     const activeDecisionRef = useRef<RankedMarketDecision | null>(null);
+    const nexusSessionRef = useRef<NexusSession | null>(null);
     const unavailableDigitMarketsRef = useRef(new Map<string, number>());
     const lowPayoutDigitMarketsRef = useRef(new Map<string, number>());
     const fallbackAttemptedRef = useRef(false);
@@ -1159,6 +1169,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const executeDecisionRef = useRef<(
         decision: RankedMarketDecision,
         leg: 'primary' | 'recovery',
+        stakeOverride?: number,
     ) => void>(() => {});
     const startQueuedAutoPrimaryRef = useRef<(settlementMessage?: string) => void>(() => {});
     const runtimeRef = useRef({
@@ -1179,6 +1190,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         autoVolatilityMode,
         payoutFloor,
         selectedSymbol,
+        targetProfit,
+        stopLoss,
     });
 
     const bestModelRow = useMemo(() => {
@@ -1352,8 +1365,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             autoVolatilityMode,
             payoutFloor,
             selectedSymbol,
+            martingale,
+            targetProfit,
+            stopLoss,
         };
-    }, [autoVolatilityMode, client?.currency, digitWindow, liveAuthorized, liveMode, martingale, multiMarketScanning, payoutFloor, primaryCondition, primaryPurchaseMarket, recoveryCondition, recoveryDigitWindow, recoveryEnabled, recoveryPurchaseMarket, rows, selectedSymbol, stake]);
+    }, [autoVolatilityMode, client?.currency, digitWindow, liveAuthorized, liveMode, martingale, multiMarketScanning, payoutFloor, primaryCondition, primaryPurchaseMarket, recoveryCondition, recoveryDigitWindow, recoveryEnabled, recoveryPurchaseMarket, rows, selectedSymbol, stake, stopLoss, targetProfit]);
 
     const scheduleAutoRescan = useCallback(() => {
         if (!runtimeRef.current.autoVolatilityMode || autoRescanPendingRef.current) return;
@@ -1367,11 +1383,20 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const executeDecision = useCallback((
         decision: RankedMarketDecision,
         leg: 'primary' | 'recovery',
+        stakeOverride?: number,
     ) => {
         const runtime = runtimeRef.current;
         if (!runtime.liveMode || !runtime.liveAuthorized) {
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
             setExecutionLeg('idle');
+            if (nexusSessionRef.current) {
+                nexusSessionRef.current = null;
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                        detail: { active: false, message: 'Log in to a Deriv account before live execution.' },
+                    }));
+                }
+            }
             return;
         }
         if (runtime.autoVolatilityMode && leg === 'primary' && !['CALL', 'PUT'].includes(decision.contractType)) {
@@ -1388,13 +1413,23 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         if (!Number.isFinite(amount) || amount <= 0) {
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Enter a valid stake before executing.' });
             setExecutionLeg('idle');
+            if (nexusSessionRef.current) {
+                nexusSessionRef.current = null;
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                        detail: { active: false, message: 'Enter a valid stake before executing.' },
+                    }));
+                }
+            }
             return;
         }
 
         const configuredMultiplier = Number(runtime.martingale);
-        const effectiveStake = leg === 'recovery' && Number.isFinite(configuredMultiplier) && configuredMultiplier > 1
-            ? amount * configuredMultiplier
-            : amount;
+        const effectiveStake = stakeOverride !== undefined
+            ? stakeOverride
+            : leg === 'recovery' && Number.isFinite(configuredMultiplier) && configuredMultiplier > 1
+                ? amount * configuredMultiplier
+                : amount;
         const config: DTConfig = {
             symbol: decision.symbol,
             contractType: decision.contractType,
@@ -1495,6 +1530,14 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             activeDecisionRef.current = null;
             pendingAutoEntryRef.current = null;
             setExecutionLeg('idle');
+            if (nexusSessionRef.current) {
+                nexusSessionRef.current = null;
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                        detail: { active: false, message: 'Nexus AI could not start the next contract.' },
+                    }));
+                }
+            }
             return;
         }
         // The automatic runner waits for three new ticks after the history
@@ -1533,7 +1576,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
     useEffect(() => {
         const handleNexusLaunch = () => {
-            if (activeLegRef.current || autoRescanPendingRef.current) return;
+            if (activeLegRef.current || nexusSessionRef.current || autoRescanPendingRef.current) return;
             const plan = nexusAdaptivePlan;
             if (!plan) {
                 const feedback: DTBuyFeedback = {
@@ -1549,6 +1592,19 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             }
 
             nexusAdaptivePlanRef.current = plan;
+            const baseStake = Number(runtimeRef.current.stake);
+            const configuredMultiplier = Number(runtimeRef.current.martingale);
+            nexusSessionRef.current = {
+                primary: plan.primary,
+                recovery: plan.recovery,
+                phase: 'primary',
+                baseStake,
+                currentStake: baseStake,
+                multiplier: Number.isFinite(configuredMultiplier) && configuredMultiplier > 1
+                    ? configuredMultiplier
+                    : 1,
+                sessionProfit: 0,
+            };
             recoveryUsedRef.current = false;
             fallbackAttemptedRef.current = false;
             setPrimaryDecision(plan.primary);
@@ -1558,12 +1614,42 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 kind: 'info',
                 message: `Best market selected: ${plan.primary.label} on ${plan.primary.displayName}. Recovery: ${plan.recovery.label}.`,
             });
-            executeDecisionRef.current(plan.primary, 'primary');
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                    detail: { active: true },
+                }));
+            }
+            executeDecisionRef.current(plan.primary, 'primary', baseStake);
+        };
+
+        const handleNexusStop = () => {
+            if (!nexusSessionRef.current && !activeLegRef.current) return;
+            nexusSessionRef.current = null;
+            pendingAutoEntryRef.current = null;
+            recoveryUsedRef.current = false;
+            activeLegRef.current = null;
+            activeDecisionRef.current = null;
+            liveEngine.stop();
+            setExecutionLeg('idle');
+            setLiveFeedback({
+                seq: Date.now(),
+                kind: 'success',
+                message: 'Nexus AI stopped manually. No new contracts will be opened.',
+            });
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                    detail: { active: false, message: 'Nexus AI stopped manually. No new contracts will be opened.' },
+                }));
+            }
         };
 
         window.addEventListener('nexus-ai-launch', handleNexusLaunch);
-        return () => window.removeEventListener('nexus-ai-launch', handleNexusLaunch);
-    }, [nexusAdaptivePlan]);
+        window.addEventListener('nexus-ai-stop', handleNexusStop);
+        return () => {
+            window.removeEventListener('nexus-ai-launch', handleNexusLaunch);
+            window.removeEventListener('nexus-ai-stop', handleNexusStop);
+        };
+    }, [liveEngine, nexusAdaptivePlan]);
 
     const toggleAutoRunner = useCallback(() => {
         autoQualifiedQueueRef.current = [];
@@ -1733,6 +1819,14 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setExecutionLeg('idle');
                 activeLegRef.current = null;
                 activeDecisionRef.current = null;
+                if (nexusSessionRef.current) {
+                    nexusSessionRef.current = null;
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                            detail: { active: false, message: feedback.message },
+                        }));
+                    }
+                }
             }
         };
         liveEngine.onPosition = position => {
@@ -1745,7 +1839,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         ...position,
                         leg: leg || 'primary',
                         strategy: decision?.label || position.contractType,
-                        market: decision ? purchaseMarketLabel(purchaseMarketFromDecision(decision) || position.contractType) : position.contractType,
+                        market: (() => {
+                            const market = decision ? purchaseMarketFromDecision(decision) : null;
+                            return market ? purchaseMarketLabel(market) : position.contractType;
+                        })(),
                     },
                 }));
             }
@@ -1761,6 +1858,99 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setLiveTrade(null);
             setLiveTradeLeg(null);
             setLiveTradeDecision(null);
+
+            const nexusSession = nexusSessionRef.current;
+            if (nexusSession && leg) {
+                const settledProfit = Number(position.profit) || 0;
+                nexusSession.sessionProfit += settledProfit;
+                const target = Number(runtimeRef.current.targetProfit);
+                const stop = Number(runtimeRef.current.stopLoss);
+                const riskMessage = nexusSession.sessionProfit >= target
+                    ? `Take profit reached (+$${nexusSession.sessionProfit.toFixed(2)}). Nexus AI stopped.`
+                    : nexusSession.sessionProfit <= -stop
+                        ? `Stop loss reached ($${nexusSession.sessionProfit.toFixed(2)}). Nexus AI stopped.`
+                        : '';
+
+                setExecutionLeg('idle');
+                activeLegRef.current = null;
+                activeDecisionRef.current = null;
+                if (riskMessage) {
+                    nexusSessionRef.current = null;
+                    liveEngine.stop();
+                    setLiveFeedback({
+                        seq: Date.now(),
+                        kind: 'success',
+                        message: riskMessage,
+                    });
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                            detail: { active: false, message: riskMessage },
+                        }));
+                    }
+                    return;
+                }
+
+                const won = position.isWin === true;
+                const loss = position.isWin === false;
+                const multiplier = nexusSession.multiplier;
+                const canRecover = runtimeRef.current.recoveryEnabled;
+                if (leg === 'primary') {
+                    if (loss && canRecover) {
+                        nexusSession.phase = 'recovery';
+                        nexusSession.currentStake = multiplier > 1
+                            ? nexusSession.currentStake * multiplier
+                            : nexusSession.baseStake;
+                        setRecoveryDecision(nexusSession.recovery);
+                        setLiveFeedback({
+                            seq: Date.now(),
+                            kind: 'info',
+                            message: `Primary loss. Martingale recovery ${nexusSession.recovery.label} at $${nexusSession.currentStake.toFixed(2)}.`,
+                        });
+                        setTimeout(() => {
+                            if (!nexusSessionRef.current) return;
+                            executeDecisionRef.current(nexusSession.recovery, 'recovery', nexusSession.currentStake);
+                        }, 0);
+                    } else {
+                        nexusSession.phase = 'primary';
+                        nexusSession.currentStake = nexusSession.baseStake;
+                        setLiveFeedback({
+                            seq: Date.now(),
+                            kind: won ? 'success' : 'info',
+                            message: `${won ? 'Primary won' : 'Primary settled'}. Repeating ${nexusSession.primary.label}.`,
+                        });
+                        setTimeout(() => {
+                            if (!nexusSessionRef.current) return;
+                            executeDecisionRef.current(nexusSession.primary, 'primary', nexusSession.baseStake);
+                        }, 0);
+                    }
+                } else if (loss) {
+                    nexusSession.currentStake = multiplier > 1
+                        ? nexusSession.currentStake * multiplier
+                        : nexusSession.baseStake;
+                    setLiveFeedback({
+                        seq: Date.now(),
+                        kind: 'info',
+                        message: `Recovery loss. Continuing ${nexusSession.recovery.label} at $${nexusSession.currentStake.toFixed(2)}.`,
+                    });
+                    setTimeout(() => {
+                        if (!nexusSessionRef.current) return;
+                        executeDecisionRef.current(nexusSession.recovery, 'recovery', nexusSession.currentStake);
+                    }, 0);
+                } else {
+                    nexusSession.phase = 'primary';
+                    nexusSession.currentStake = nexusSession.baseStake;
+                    setLiveFeedback({
+                        seq: Date.now(),
+                        kind: 'success',
+                        message: `Recovery won. Resetting to ${nexusSession.primary.label} at $${nexusSession.baseStake.toFixed(2)}.`,
+                    });
+                    setTimeout(() => {
+                        if (!nexusSessionRef.current) return;
+                        executeDecisionRef.current(nexusSession.primary, 'primary', nexusSession.baseStake);
+                    }, 0);
+                }
+                return;
+            }
 
             if (runtimeRef.current.autoVolatilityMode && leg === 'primary') {
                 const settledDecision = activeDecisionRef.current;

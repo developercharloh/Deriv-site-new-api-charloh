@@ -8,3 +8,9 @@ The Alpha Scan must read authorization from the reactive auth observable, not on
 **Why:** The first live execution wiring could silently disable Run when the recent digit trigger did not qualify or when the non-reactive authorization snapshot had not refreshed. Both conditions looked like a broken trading action.
 
 **How to apply:** Keep the Run click explicit, let the selected purchase market determine the contract, return startup/proposal failures to an idle state, and reserve authenticated end-to-end settlement checks for a controlled Deriv demo account.
+
+The Nexus artwork controls synchronize values into the hidden Alpha controller through synthetic DOM events. Launch must be dispatched on the next macrotask so React commits those values before the controller snapshots its runtime configuration.
+
+**Why:** Dispatching launch in the same event handler can start execution with the controller's previous stake, martingale, or risk limits even though the artwork visibly shows the new settings.
+
+**How to apply:** When a visual wrapper drives hidden Alpha controls, update the controls first and defer the launch event; keep manual stop as a separate event that clears the session without discarding journal updates.

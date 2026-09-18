@@ -40,7 +40,7 @@ export interface DTLog { seq: number; time: string; message: string; type: DTLog
 
 export interface DTBuyFeedback {
     seq:     number;       // monotonic — used by UI to detect new feedback
-    kind:    'success' | 'error';
+    kind:    'success' | 'error' | 'info';
     message: string;
     code?: string;
     contractType?: DTContractType;
