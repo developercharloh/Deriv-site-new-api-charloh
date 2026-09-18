@@ -977,6 +977,12 @@
     min-height: calc(100vh - 9rem);
     overflow: visible;
 
+    // Alpha Scan is a standalone tool surface. Hide the surrounding tab rail
+    // so the route opens directly into the tool instead of the app chrome.
+    .main__tabs > div:first-child {
+        display: none !important;
+    }
+
     .main__container,
     .main__container > div,
     .dc-tabs,
@@ -1010,12 +1016,12 @@
         touch-action: pan-y;
         min-height: calc(100vh - 6rem);
 
-        // Keep the whole tab strip purple; only the active tab is a white pill.
+        // Keep the standalone tool full-height on smaller screens.
         .dc-tabs,
         .dc-tabs > div:first-child,
         .dc-tabs__list,
         .dc-themed-scrollbars-wrapper {
-            background: #4a13a8 !important;
+            background: transparent !important;
         }
 
         .dc-tabs__list {

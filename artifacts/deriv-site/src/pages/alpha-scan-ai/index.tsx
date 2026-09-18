@@ -1067,6 +1067,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [recoveryCondition, setRecoveryCondition] = useState<MarketCondition>('all-odd');
     const [primaryPurchaseMarket, setPrimaryPurchaseMarket] = useState<PurchaseMarket>('even');
     const [recoveryPurchaseMarket, setRecoveryPurchaseMarket] = useState<PurchaseMarket>('over-4');
+    const [recoveryEnabled, setRecoveryEnabled] = useState(true);
     const [multiMarketScanning, setMultiMarketScanning] = useState(true);
     const [autoVolatilityMode, setAutoVolatilityMode] = useState(false);
     const [stake, setStake] = useState('10');
@@ -1116,6 +1117,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         recoveryCondition,
         primaryPurchaseMarket,
         recoveryPurchaseMarket,
+        recoveryEnabled,
         multiMarketScanning,
         autoVolatilityMode,
         payoutFloor,
@@ -1254,12 +1256,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             recoveryCondition,
             primaryPurchaseMarket,
             recoveryPurchaseMarket,
+            recoveryEnabled,
             multiMarketScanning,
             autoVolatilityMode,
             payoutFloor,
             selectedSymbol,
         };
-    }, [autoVolatilityMode, client?.currency, digitWindow, liveAuthorized, liveMode, multiMarketScanning, payoutFloor, primaryCondition, primaryPurchaseMarket, recoveryCondition, recoveryDigitWindow, recoveryPurchaseMarket, rows, selectedSymbol, stake]);
+    }, [autoVolatilityMode, client?.currency, digitWindow, liveAuthorized, liveMode, multiMarketScanning, payoutFloor, primaryCondition, primaryPurchaseMarket, recoveryCondition, recoveryDigitWindow, recoveryEnabled, recoveryPurchaseMarket, rows, selectedSymbol, stake]);
 
     const executeDecision = useCallback((decision: RankedMarketDecision, leg: 'primary' | 'recovery') => {
         const runtime = runtimeRef.current;
@@ -1524,7 +1527,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     setLiveFeedback({ seq: Date.now(), kind: 'error', message: riskMessage });
                     return;
                 }
-                if (position.isWin === false && !recoveryUsedRef.current) {
+                if (position.isWin === false && runtimeRef.current.recoveryEnabled && !recoveryUsedRef.current) {
                     recoveryUsedRef.current = true;
                     const recoverySource = runtimeRef.current.rows.find(row =>
                         row.symbol === settledSymbol,
@@ -1570,7 +1573,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 return;
             }
 
-            if (leg === 'primary' && position.isWin === false && !recoveryUsedRef.current) {
+            if (leg === 'primary' && position.isWin === false && runtimeRef.current.recoveryEnabled && !recoveryUsedRef.current) {
                 recoveryUsedRef.current = true;
                 const runtimeRows = runtimeRef.current.rows.map(row => ({
                     symbol: row.symbol,
@@ -1751,7 +1754,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <span className='alpha-cockpit__brand-mark' aria-hidden='true'>A</span>
                     <div>
                         <span className='alpha-cockpit__overline'>ALPHA SCAN AI</span>
-                        <strong>Model execution terminal</strong>
+                        <strong>AI Auto Scan</strong>
                     </div>
                 </div>
                 <div className='alpha-cockpit__topbar-actions'>
@@ -1768,9 +1771,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
             <section className='alpha-cockpit__headline'>
                 <div>
-                    <span className='alpha-cockpit__overline'>Decision layer / {autoVolatilityMode ? 'adaptive momentum' : 'calibrated signal'}</span>
-                    <h1>Find the edge.<br /><em>Prove it before entry.</em></h1>
-                    <p>Alpha Scan ranks synthetic markets from live and historical observations, then keeps execution behind a visible validation gate.</p>
+                    <span className='alpha-cockpit__overline'>AUTOMATED VOLATILITY INDEX EXECUTION</span>
+                    <h1>Scan. Qualify.<br /><em>Execute with rules.</em></h1>
+                    <p>AI Auto Scan evaluates every volatility index, selects qualified markets, and keeps primary and recovery rules visible before execution.</p>
                 </div>
                 <div className={`alpha-cockpit__gate alpha-cockpit__gate--${modelGateTone}`}>
                     <span className='alpha-cockpit__gate-label'>CURRENT MODEL GATE</span>
@@ -1812,7 +1815,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     </div>
                     <div className='alpha-cockpit__execution-row'>
                         <div>
-                            <span className='alpha-cockpit__label'>Proposed contract</span>
+                            <span className='alpha-cockpit__label'>AI proposed contract</span>
                             <strong className='alpha-cockpit__contract'>{activeDecision?.contractType || 'WAIT'}</strong>
                             <small>{activeDecision?.label || 'No qualified contract selected'}</small>
                         </div>
@@ -1827,8 +1830,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     </div>
                     <div className='alpha-cockpit__execution-controls'>
                         <label>STAKE<input value={`$${stake}`} onChange={event => setStake(event.target.value.replace(/\D/g, '').slice(0, 5))} inputMode='numeric' aria-label='Stake' /></label>
+                        <label>TARGET PROFIT<select value={targetProfit} onChange={event => setTargetProfit(event.target.value)} aria-label='Target profit'><option value='15'>$15</option><option value='25'>$25</option><option value='50'>$50</option></select></label>
+                        <label>STOP LOSS<select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option></select></label>
+                        <label>MARTINGALE<select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Martingale'><option value='no'>OFF · 1x</option><option value='2'>ON · 2x</option><option value='3'>ON · 3x</option></select></label>
                         <label>MIN PAYOUT<select value={payoutFloor} onChange={event => setPayoutFloor(event.target.value)} aria-label='Minimum payout'><option value='1.5'>1.50x</option><option value='1.8'>1.80x</option><option value='2'>2.00x</option></select></label>
-                        <label>SESSION STOP<select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option></select></label>
                     </div>
                     <div className='alpha-cockpit__execution-actions'>
                         <button
@@ -1862,7 +1867,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             <section className='alpha-cockpit__workspace-grid'>
                 <article className='alpha-cockpit__data-panel' data-testid='scan-coverage'>
                     <div className='alpha-cockpit__section-head'>
-                        <div><span className='alpha-cockpit__overline'>MARKET RANKING</span><h2>Evidence across the universe</h2></div>
+                        <div><span className='alpha-cockpit__overline'>MARKET UNIVERSE</span><h2>Volatility indices & qualified markets</h2></div>
                         <span className='alpha-cockpit__count'>{rows.length} / {discoveredCount || rows.length} markets</span>
                     </div>
                     <div className='alpha-cockpit__table-wrap'>
@@ -1885,20 +1890,21 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
                 <aside className='alpha-cockpit__side-stack'>
                     <article className='alpha-cockpit__data-panel alpha-cockpit__rules-panel'>
-                        <div className='alpha-cockpit__section-head'><div><span className='alpha-cockpit__overline'>STRATEGY RULES</span><h2>What enters the gate</h2></div></div>
+                        <div className='alpha-cockpit__section-head'><div><span className='alpha-cockpit__overline'>STRATEGY BUILDER</span><h2>Primary rule & recovery marker</h2></div></div>
                         <label>PRIMARY WINDOW<select value={digitWindow} onChange={event => setDigitWindow(Number(event.target.value))} aria-label='Market 1 last digit count' data-testid='select-primary-digit-window'>{Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1} latest digits</option>)}</select></label>
                         <label>PRIMARY CONDITION<MarketConditionSelect value={primaryCondition} onChange={setPrimaryCondition} label='Market 1 condition' testId='select-primary-market' /></label>
                         <label>PURCHASE TYPE<PurchaseMarketSelect value={primaryPurchaseMarket} onChange={setPrimaryPurchaseMarket} label='Market 1 purchase option' testId='select-primary-purchase' /></label>
                         <div className='alpha-cockpit__rule-divider' />
                         <label>RECOVERY CONDITION<MarketConditionSelect value={recoveryCondition} onChange={setRecoveryCondition} label='Recovery market condition' testId='select-recovery-market' /></label>
                         <label>RECOVERY TYPE<PurchaseMarketSelect value={recoveryPurchaseMarket} onChange={setRecoveryPurchaseMarket} label='Recovery market purchase option' testId='select-recovery-purchase' /></label>
-                        <button type='button' className={`alpha-cockpit__scan-toggle ${multiMarketScanning ? 'alpha-cockpit__scan-toggle--on' : ''}`} onClick={() => setMultiMarketScanning(value => !value)} aria-pressed={multiMarketScanning} data-testid='toggle-multi-market'><span />{multiMarketScanning ? 'Multi-market selection active' : 'Single-market selection active'}</button>
+                        <button type='button' className={`alpha-cockpit__scan-toggle ${recoveryEnabled ? 'alpha-cockpit__scan-toggle--on' : ''}`} onClick={() => setRecoveryEnabled(value => !value)} aria-pressed={recoveryEnabled} data-testid='toggle-recovery'><span />Recovery marker {recoveryEnabled ? 'ON' : 'OFF'}</button>
+                        <button type='button' className={`alpha-cockpit__scan-toggle ${multiMarketScanning ? 'alpha-cockpit__scan-toggle--on' : ''}`} onClick={() => setMultiMarketScanning(value => !value)} aria-pressed={multiMarketScanning} data-testid='toggle-multi-market'><span />{multiMarketScanning ? 'All volatility indices active' : 'Single market active'}</button>
                     </article>
                 </aside>
             </section>
 
             <section className='alpha-cockpit__journal-panel' data-testid='tool-journal'>
-                <div className='alpha-cockpit__section-head'><div><span className='alpha-cockpit__overline'>AUDIT TRAIL</span><h2>Execution journal</h2></div><span className='alpha-cockpit__count'>{liveTrade ? '1 open' : `${journalRows.length} recorded`}</span></div>
+                <div className='alpha-cockpit__section-head'><div><span className='alpha-cockpit__overline'>EXECUTION HISTORY</span><h2>Trade journal</h2></div><span className='alpha-cockpit__count'>{liveTrade ? '1 open' : `${journalRows.length} recorded`}</span></div>
                 <div className='alpha-cockpit__table-wrap'>
                     <table className='alpha-cockpit__table alpha-cockpit__table--journal'>
                         <thead><tr><th>Time</th><th>Market</th><th>Leg</th><th>Strategy</th><th>State</th><th>Result</th></tr></thead>

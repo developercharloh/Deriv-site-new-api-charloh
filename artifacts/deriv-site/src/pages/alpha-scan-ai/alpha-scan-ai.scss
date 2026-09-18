@@ -2378,3 +2378,203 @@
     .alpha-cockpit__section-head { align-items: start; flex-direction: column; gap: 0.45rem; }
     .alpha-cockpit__count { align-self: flex-start; }
 }
+
+/* Focused Alpha Scan tool surface */
+.alpha-tool--focused {
+    --cockpit-bg: #070b10;
+    --cockpit-panel: #0d141b;
+    --cockpit-panel-raised: #121c25;
+    max-width: 118rem;
+    padding: 1rem clamp(0.85rem, 3vw, 3.4rem) 3rem;
+    background:
+        linear-gradient(rgba(120, 154, 182, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(120, 154, 182, 0.035) 1px, transparent 1px),
+        radial-gradient(circle at 82% 0%, rgba(66, 215, 160, 0.1), transparent 28rem),
+        var(--cockpit-bg);
+    background-size: 3rem 3rem, 3rem 3rem, auto, auto;
+}
+
+.alpha-tool--focused .alpha-cockpit__topbar,
+.alpha-tool--focused .alpha-cockpit__headline,
+.alpha-tool--focused .alpha-cockpit__decision-grid,
+.alpha-tool--focused .alpha-cockpit__workspace-grid,
+.alpha-tool--focused .alpha-cockpit__journal-panel {
+    width: min(100%, 90rem);
+}
+
+.alpha-tool--focused .alpha-cockpit__topbar {
+    min-height: 3.2rem;
+    padding-bottom: 0.75rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__headline {
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2.2rem 0 1.6rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__headline h1 {
+    max-width: 42rem;
+    margin: 0.6rem 0 0.7rem;
+    font-size: clamp(2.25rem, 5vw, 4.8rem);
+}
+
+.alpha-tool--focused .alpha-cockpit__headline p {
+    max-width: 42rem;
+    font-size: 0.84rem;
+    line-height: 1.55;
+}
+
+.alpha-tool--focused .alpha-cockpit__gate {
+    min-width: 14rem;
+    padding: 0.85rem 1rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__gate strong {
+    margin: 0.35rem 0 0.15rem;
+    font-size: 1.25rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__decision-grid {
+    grid-template-columns: minmax(0, 0.92fr) minmax(25rem, 1.08fr);
+    gap: 0.75rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__decision-panel {
+    min-height: 0;
+    padding: 1rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__signal-main {
+    padding: 1rem 0 0.9rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__decision-panel--signal svg,
+.alpha-tool--focused .alpha-cockpit__empty-chart {
+    height: 5.6rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__execution-row {
+    padding: 0.9rem 0 0.65rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__execution-controls {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-top: 0.8rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__execution-controls input,
+.alpha-tool--focused .alpha-cockpit__execution-controls select {
+    min-height: 2rem;
+    padding-inline: 0.45rem;
+    font-size: 0.68rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__execution-actions {
+    margin-top: 0.8rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__metric-strip {
+    display: none;
+}
+
+.alpha-tool--focused .alpha-cockpit__workspace-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__side-stack {
+    order: -1;
+}
+
+.alpha-tool--focused .alpha-cockpit__data-panel,
+.alpha-tool--focused .alpha-cockpit__journal-panel {
+    padding: 1rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__rules-panel {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__rules-panel .alpha-cockpit__section-head {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+}
+
+.alpha-tool--focused .alpha-cockpit__rules-panel > label {
+    margin-top: 0;
+}
+
+.alpha-tool--focused .alpha-cockpit__rules-panel > label select {
+    min-height: 2rem;
+    font-size: 0.68rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__rule-divider {
+    display: none;
+}
+
+.alpha-tool--focused .alpha-cockpit__rules-panel > button {
+    margin-top: 0;
+}
+
+.alpha-tool--focused .alpha-cockpit__table {
+    min-width: 42rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__journal-panel {
+    margin-top: 0.75rem;
+}
+
+@media (max-width: 900px) {
+    .alpha-tool--focused .alpha-cockpit__decision-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .alpha-tool--focused .alpha-cockpit__rules-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .alpha-tool--focused {
+        padding: 0.7rem 0.6rem 2rem;
+    }
+
+    .alpha-tool--focused .alpha-cockpit__headline {
+        padding: 1.6rem 0 1.2rem;
+    }
+
+    .alpha-tool--focused .alpha-cockpit__headline h1 {
+        font-size: clamp(2rem, 12vw, 3.2rem);
+    }
+
+    .alpha-tool--focused .alpha-cockpit__headline p {
+        font-size: 0.75rem;
+    }
+
+    .alpha-tool--focused .alpha-cockpit__gate {
+        width: 100%;
+    }
+
+    .alpha-tool--focused .alpha-cockpit__execution-controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .alpha-tool--focused .alpha-cockpit__execution-controls label:first-child {
+        grid-column: auto;
+    }
+
+    .alpha-tool--focused .alpha-cockpit__rules-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .alpha-tool--focused .alpha-cockpit__rules-panel .alpha-cockpit__section-head {
+        grid-column: auto;
+    }
+}
