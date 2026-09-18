@@ -51,6 +51,12 @@ The current Vercel API rejects `projectId` as a deployment-body property; bind t
 
 **How to apply:** POST the manifest to `/v13/deployments?prebuilt=1&teamId=...` without `projectId`, upload the returned missing SHA-1 digests to `/v2/files`, POST the same manifest again, then poll the returned deployment until `READY`.
 
+The current API may return the digest list at `error.missing` inside a 400 `missing_files` response rather than at the top level. Treat that response as the expected handshake and read both shapes.
+
+**Why:** The first prebuilt request intentionally asks Vercel which content-addressed files it does not already have; a parser that only checks top-level `missing` will mistake a normal handshake for a failed publish.
+
+**How to apply:** Resolve missing digests from `response.missing ?? response.error?.missing`, upload only those files, then repost the same manifest.
+
 ## Environment note
 The Vercel CLI may be unavailable because Replit's package firewall blocks its transitive `tar` dependency, including older CLI versions. In that case, the REST fallback is validated: upload SHA-1-addressed files to `/v2/files`, then create a production deployment at `/v13/deployments?prebuilt=1` with flat `dist` paths, explicit no-op build settings, and wait for `READY`.
 

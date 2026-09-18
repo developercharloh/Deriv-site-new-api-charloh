@@ -1165,6 +1165,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         trades: 0,
         consecutiveLosses: 0,
     });
+    const nexusLaunchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const nexusLaunchPendingRef = useRef(false);
     const recoveryUsedRef = useRef(false);
     const executeDecisionRef = useRef<(
         decision: RankedMarketDecision,
@@ -1193,6 +1195,17 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         targetProfit,
         stopLoss,
     });
+
+    const emitNexusFeedback = useCallback((
+        message: string,
+        kind: DTBuyFeedback['kind'] = 'info',
+    ): void => {
+        const feedback: DTBuyFeedback = { seq: Date.now(), kind, message };
+        setLiveFeedback(feedback);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('nexus-ai-feedback', { detail: feedback }));
+        }
+    }, []);
 
     const bestModelRow = useMemo(() => {
         if (!rows.length) return undefined;
@@ -1546,7 +1559,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         if (!runtime.autoVolatilityMode || leg !== 'primary') {
             liveEngine.placeBuyNow(config);
         }
-    }, [autoQualifiedMomentumDecisions, liveEngine, riskFixtureMode, scheduleAutoRescan]);
+    }, [autoQualifiedMomentumDecisions, emitNexusFeedback, liveEngine, riskFixtureMode, scheduleAutoRescan]);
 
     executeDecisionRef.current = executeDecision;
 
@@ -1576,54 +1589,70 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
     useEffect(() => {
         const handleNexusLaunch = () => {
-            if (activeLegRef.current || nexusSessionRef.current || autoRescanPendingRef.current) return;
+            if (
+                activeLegRef.current ||
+                nexusSessionRef.current ||
+                nexusLaunchPendingRef.current ||
+                autoRescanPendingRef.current
+            ) return;
             const plan = nexusAdaptivePlan;
-            if (!plan) {
-                const feedback: DTBuyFeedback = {
-                    seq: Date.now(),
-                    kind: 'error',
-                    message: 'Launch AI is waiting for a completed market scan before selecting the best volatility.',
-                };
-                setLiveFeedback(feedback);
-                if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('nexus-ai-feedback', { detail: feedback }));
-                }
-                return;
-            }
-
-            nexusAdaptivePlanRef.current = plan;
-            const baseStake = Number(runtimeRef.current.stake);
-            const configuredMultiplier = Number(runtimeRef.current.martingale);
-            nexusSessionRef.current = {
-                primary: plan.primary,
-                recovery: plan.recovery,
-                phase: 'primary',
-                baseStake,
-                currentStake: baseStake,
-                multiplier: Number.isFinite(configuredMultiplier) && configuredMultiplier > 1
-                    ? configuredMultiplier
-                    : 1,
-                sessionProfit: 0,
-            };
-            recoveryUsedRef.current = false;
-            fallbackAttemptedRef.current = false;
-            setPrimaryDecision(plan.primary);
-            setRecoveryDecision(plan.recovery);
-            setLiveFeedback({
-                seq: Date.now(),
-                kind: 'info',
-                message: `Best market selected: ${plan.primary.label} on ${plan.primary.displayName}. Recovery: ${plan.recovery.label}.`,
-            });
+            nexusLaunchPendingRef.current = true;
+            emitNexusFeedback('Launching Nexus AI…');
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('nexus-ai-session', {
-                    detail: { active: true },
+                    detail: { active: true, message: 'Launching Nexus AI…' },
                 }));
             }
-            executeDecisionRef.current(plan.primary, 'primary', baseStake);
+
+            nexusLaunchTimerRef.current = setTimeout(() => {
+                emitNexusFeedback('Scanning for the best market…');
+                nexusLaunchTimerRef.current = setTimeout(() => {
+                    nexusLaunchPendingRef.current = false;
+                    if (!plan) {
+                        const message = 'No completed market scan is available yet. Run a scan, then launch Nexus AI again.';
+                        emitNexusFeedback(message, 'error');
+                        if (typeof window !== 'undefined') {
+                            window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                                detail: { active: false, message },
+                            }));
+                        }
+                        return;
+                    }
+
+                    nexusAdaptivePlanRef.current = plan;
+                    const baseStake = Number(runtimeRef.current.stake);
+                    const configuredMultiplier = Number(runtimeRef.current.martingale);
+                    nexusSessionRef.current = {
+                        primary: plan.primary,
+                        recovery: plan.recovery,
+                        phase: 'primary',
+                        baseStake,
+                        currentStake: baseStake,
+                        multiplier: Number.isFinite(configuredMultiplier) && configuredMultiplier > 1
+                            ? configuredMultiplier
+                            : 1,
+                        sessionProfit: 0,
+                    };
+                    recoveryUsedRef.current = false;
+                    fallbackAttemptedRef.current = false;
+                    setPrimaryDecision(plan.primary);
+                    setRecoveryDecision(plan.recovery);
+                    emitNexusFeedback(
+                        `Best market found · ${plan.primary.displayName} · ${plan.primary.label}.`,
+                        'success',
+                    );
+                    executeDecisionRef.current(plan.primary, 'primary', baseStake);
+                }, 550);
+            }, 250);
         };
 
         const handleNexusStop = () => {
-            if (!nexusSessionRef.current && !activeLegRef.current) return;
+            if (!nexusSessionRef.current && !activeLegRef.current && !nexusLaunchPendingRef.current) return;
+            if (nexusLaunchTimerRef.current) {
+                clearTimeout(nexusLaunchTimerRef.current);
+                nexusLaunchTimerRef.current = null;
+            }
+            nexusLaunchPendingRef.current = false;
             nexusSessionRef.current = null;
             pendingAutoEntryRef.current = null;
             recoveryUsedRef.current = false;
@@ -1631,11 +1660,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             activeDecisionRef.current = null;
             liveEngine.stop();
             setExecutionLeg('idle');
-            setLiveFeedback({
-                seq: Date.now(),
-                kind: 'success',
-                message: 'Nexus AI stopped manually. No new contracts will be opened.',
-            });
+            emitNexusFeedback('Nexus AI stopped manually. No new contracts will be opened.', 'success');
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('nexus-ai-session', {
                     detail: { active: false, message: 'Nexus AI stopped manually. No new contracts will be opened.' },
@@ -1646,10 +1671,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         window.addEventListener('nexus-ai-launch', handleNexusLaunch);
         window.addEventListener('nexus-ai-stop', handleNexusStop);
         return () => {
+            if (nexusLaunchTimerRef.current) clearTimeout(nexusLaunchTimerRef.current);
             window.removeEventListener('nexus-ai-launch', handleNexusLaunch);
             window.removeEventListener('nexus-ai-stop', handleNexusStop);
         };
-    }, [liveEngine, nexusAdaptivePlan]);
+    }, [emitNexusFeedback, liveEngine, nexusAdaptivePlan]);
 
     const toggleAutoRunner = useCallback(() => {
         autoQualifiedQueueRef.current = [];
@@ -1852,6 +1878,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveTradeLeg(leg);
                 setLiveTradeDecision(activeDecisionRef.current);
                 setExecutionLeg(leg === 'recovery' ? 'recovery-running' : 'primary-running');
+                emitNexusFeedback(
+                    `${leg === 'recovery' ? 'Recovery' : 'Primary'} contract executed · ${decision?.displayName || position.symbol} · tracking live price.`,
+                    'success',
+                );
                 return;
             }
 
@@ -1877,11 +1907,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 if (riskMessage) {
                     nexusSessionRef.current = null;
                     liveEngine.stop();
-                    setLiveFeedback({
-                        seq: Date.now(),
-                        kind: 'success',
-                        message: riskMessage,
-                    });
+                    emitNexusFeedback(riskMessage, 'success');
                     if (typeof window !== 'undefined') {
                         window.dispatchEvent(new CustomEvent('nexus-ai-session', {
                             detail: { active: false, message: riskMessage },
@@ -1901,11 +1927,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                             ? nexusSession.currentStake * multiplier
                             : nexusSession.baseStake;
                         setRecoveryDecision(nexusSession.recovery);
-                        setLiveFeedback({
-                            seq: Date.now(),
-                            kind: 'info',
-                            message: `Primary loss. Martingale recovery ${nexusSession.recovery.label} at $${nexusSession.currentStake.toFixed(2)}.`,
-                        });
+                        emitNexusFeedback(
+                            `Primary lost. Starting martingale recovery · ${nexusSession.recovery.label} at $${nexusSession.currentStake.toFixed(2)}.`,
+                        );
                         setTimeout(() => {
                             if (!nexusSessionRef.current) return;
                             executeDecisionRef.current(nexusSession.recovery, 'recovery', nexusSession.currentStake);
@@ -1913,11 +1937,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     } else {
                         nexusSession.phase = 'primary';
                         nexusSession.currentStake = nexusSession.baseStake;
-                        setLiveFeedback({
-                            seq: Date.now(),
-                            kind: won ? 'success' : 'info',
-                            message: `${won ? 'Primary won' : 'Primary settled'}. Repeating ${nexusSession.primary.label}.`,
-                        });
+                        emitNexusFeedback(
+                            `${won ? 'Primary won' : 'Primary settled'}. Repeating ${nexusSession.primary.label}.`,
+                            won ? 'success' : 'info',
+                        );
                         setTimeout(() => {
                             if (!nexusSessionRef.current) return;
                             executeDecisionRef.current(nexusSession.primary, 'primary', nexusSession.baseStake);
@@ -1927,11 +1950,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     nexusSession.currentStake = multiplier > 1
                         ? nexusSession.currentStake * multiplier
                         : nexusSession.baseStake;
-                    setLiveFeedback({
-                        seq: Date.now(),
-                        kind: 'info',
-                        message: `Recovery loss. Continuing ${nexusSession.recovery.label} at $${nexusSession.currentStake.toFixed(2)}.`,
-                    });
+                    emitNexusFeedback(
+                        `Recovery lost. Continuing ${nexusSession.recovery.label} at $${nexusSession.currentStake.toFixed(2)}.`,
+                    );
                     setTimeout(() => {
                         if (!nexusSessionRef.current) return;
                         executeDecisionRef.current(nexusSession.recovery, 'recovery', nexusSession.currentStake);
@@ -1939,11 +1960,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 } else {
                     nexusSession.phase = 'primary';
                     nexusSession.currentStake = nexusSession.baseStake;
-                    setLiveFeedback({
-                        seq: Date.now(),
-                        kind: 'success',
-                        message: `Recovery won. Resetting to ${nexusSession.primary.label} at $${nexusSession.baseStake.toFixed(2)}.`,
-                    });
+                    emitNexusFeedback(
+                        `Recovery won. Resetting to ${nexusSession.primary.label} at $${nexusSession.baseStake.toFixed(2)}.`,
+                        'success',
+                    );
                     setTimeout(() => {
                         if (!nexusSessionRef.current) return;
                         executeDecisionRef.current(nexusSession.primary, 'primary', nexusSession.baseStake);
