@@ -43,7 +43,13 @@ If the Vercel CLI cannot be installed because its transitive dependencies are bl
 
 **Why:** The CLI may be unavailable in a restricted package environment, while the Vercel API remains reachable. Submitting `.vercel/output/...` paths can produce a `READY` deployment that still inherits the repository build settings and serves no files.
 
-**How to apply:** Use the existing project and team identifiers from `.vercel/project.json`, never expose the deployment token, include the project id in the deployment body, wait for `READY`, and verify both the custom-domain HTML hash and at least one changed JavaScript asset.
+**How to apply:** Use the existing project and team identifiers from `.vercel/project.json`, never expose the deployment token, bind the prebuilt request with the team scope, wait for `READY`, and verify both the custom-domain HTML hash and at least one changed JavaScript asset.
+
+The current Vercel API rejects `projectId` as a deployment-body property; bind the prebuilt request with the team scope query parameter and use the linked project name. A `400 missing_files` response from the first prebuilt request is the normal digest handshake, not a failed deployment.
+
+**Why:** The older fallback example expected `projectId` in the JSON body, but the current endpoint schema rejects it before returning the missing digest list.
+
+**How to apply:** POST the manifest to `/v13/deployments?prebuilt=1&teamId=...` without `projectId`, upload the returned missing SHA-1 digests to `/v2/files`, POST the same manifest again, then poll the returned deployment until `READY`.
 
 ## Environment note
 The Vercel CLI may be unavailable because Replit's package firewall blocks its transitive `tar` dependency, including older CLI versions. In that case, the REST fallback is validated: upload SHA-1-addressed files to `/v2/files`, then create a production deployment at `/v13/deployments?prebuilt=1` with flat `dist` paths, explicit no-op build settings, and wait for `READY`.
