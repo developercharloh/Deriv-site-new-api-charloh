@@ -87,7 +87,7 @@ const AppWrapper = observer(() => {
     const hash = [
         'dashboard',
         'bot_builder',
-        'alpha_scan_ai',
+        'nexus_ai',
         'chart',
         'ai_signals',
         'free_bots',
@@ -142,7 +142,8 @@ const AppWrapper = observer(() => {
     const GetHashedValue = (tab: number) => {
         tab_value = location.hash?.split('#')[1];
         if (!tab_value) return is_preview_mode ? BOT_BUILDER : tab;
-        return Number(hash.indexOf(String(tab_value)));
+        const normalized_tab = tab_value === 'alpha_scan_ai' ? 'nexus_ai' : tab_value;
+        return Number(hash.indexOf(String(normalized_tab)));
     };
     const active_hash_tab = GetHashedValue(active_tab);
 

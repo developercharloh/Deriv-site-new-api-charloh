@@ -144,10 +144,11 @@ const Layout = observer(() => {
     }, [isAuthenticating, isInitialAuthCheckComplete]);
 
     const is_logged_in = store?.client?.is_logged_in;
-    const is_public_alpha_scan = window.location.hash === '#alpha_scan_ai';
+    const is_public_nexus_ai =
+        window.location.hash === '#nexus_ai' || window.location.hash === '#alpha_scan_ai';
 
     // Show landing page for unauthenticated visitors once auth state has settled
-    if (isInitialAuthCheckComplete && !is_logged_in && !isCallbackPage && !is_public_alpha_scan) {
+    if (isInitialAuthCheckComplete && !is_logged_in && !isCallbackPage && !is_public_nexus_ai) {
         return <LandingPage />;
     }
 
@@ -158,11 +159,11 @@ const Layout = observer(() => {
                 'quick-strategy-active': is_quick_strategy_active && !isDesktop,
             })}
         >
-            {!isCallbackPage && !is_public_alpha_scan && <AppHeader isAuthenticating={isAuthenticating || !isInitialAuthCheckComplete} />}
+            {!isCallbackPage && !is_public_nexus_ai && <AppHeader isAuthenticating={isAuthenticating || !isInitialAuthCheckComplete} />}
             <Body>
                 <Outlet />
             </Body>
-            {!isCallbackPage && isDesktop && !is_public_alpha_scan && <Footer />}
+            {!isCallbackPage && isDesktop && !is_public_nexus_ai && <Footer />}
         </div>
     );
 });

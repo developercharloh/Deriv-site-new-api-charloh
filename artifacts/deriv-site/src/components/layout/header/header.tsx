@@ -37,9 +37,11 @@ const AppHeader = observer(() => {
     });
 
     const handleLogout = useLogout();
-    const isPublicAlphaScan = typeof window !== 'undefined' && window.location.hash === '#alpha_scan_ai';
+    const isPublicNexusAI =
+        typeof window !== 'undefined' &&
+        (window.location.hash === '#nexus_ai' || window.location.hash === '#alpha_scan_ai');
     const showPublicDemoAccount =
-        isPublicAlphaScan &&
+        isPublicNexusAI &&
         !isDesktop &&
         !activeLoginid &&
         !is_account_regenerating &&
