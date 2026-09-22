@@ -1,8 +1,8 @@
 // @ts-nocheck
 // Direct paired runner for HL master Bot.
 //
-// One market tick produces two independent one-tick contracts:
-//   Higher (HIGHER, +0.14 barrier) + Lower (LOWER, +0.14 barrier)
+// One market tick produces two paired five-tick contracts:
+//   Higher (HIGHER, +1 barrier) + Lower (LOWER, -1 barrier)
 // The stake is per contract, so a $0.35 pair costs $0.70.
 
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
@@ -155,9 +155,10 @@ export class HLMasterEngine {
                 duration: this.config.duration,
                 duration_unit: 't',
                 underlying_symbol: this.config.symbol,
-                // The live Higher/Lower API uses a positive offset for both
-                // directions; the contract type determines the direction.
-                barrier: '+0.14',
+                // Higher and Lower use opposite signed offsets. A positive
+                // Lower barrier can have no return when it is too far above
+                // spot, so the requested below-offset is explicitly -1.
+                barrier: side === 'HIGHER' ? '+1' : '-1',
             },
             { kind: 'proposal', pairId, side, epoch }
         );

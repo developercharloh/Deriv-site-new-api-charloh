@@ -91,13 +91,13 @@ describe('HL master direct runner', () => {
                 expect.objectContaining({
                     contract_type: 'HIGHER',
                     amount: 0.35,
-                    barrier: '+0.14',
+                    barrier: '+1',
                     duration: 5,
                 }),
                 expect.objectContaining({
                     contract_type: 'LOWER',
                     amount: 0.35,
-                    barrier: '+0.14',
+                    barrier: '-1',
                     duration: 5,
                 }),
             ])
@@ -106,6 +106,7 @@ describe('HL master direct runner', () => {
             expect.objectContaining({ buy: 'HIGHER-proposal', price: 0.35 }),
             expect.objectContaining({ buy: 'LOWER-proposal', price: 0.35 }),
         ]);
+        expect(buys[1].req_id).toBe(buys[0].req_id + 1);
         expect(logs.some(message => message.includes('$0.70 total'))).toBe(true);
 
         engine.stop(false);
