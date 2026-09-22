@@ -2,7 +2,7 @@
 // Direct paired runner for HL master Bot.
 //
 // One market tick produces two independent one-tick contracts:
-//   Higher (CALL, +0.001 barrier) + Lower (PUT, -0.001 barrier)
+//   Higher (HIGHER, +0.14 barrier) + Lower (LOWER, +0.14 barrier)
 // The stake is per contract, so a $0.35 pair costs $0.70.
 
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
@@ -68,7 +68,8 @@ export class HLMasterEngine {
         this.config = {
             ...config,
             stake: Math.max(0.35, Number(config.stake) || 0.35),
-            duration: Math.max(1, Math.min(10, Number(config.duration) || 1)),
+            // Deriv's Higher/Lower contracts require 5–10 ticks.
+            duration: Math.max(5, Math.min(10, Number(config.duration) || 5)),
             currency: config.currency || 'USD',
         };
     }
@@ -149,12 +150,14 @@ export class HLMasterEngine {
                 proposal: 1,
                 amount: this.config.stake,
                 basis: 'stake',
-                contract_type: side === 'HIGHER' ? 'CALL' : 'PUT',
+                contract_type: side,
                 currency: this.config.currency,
                 duration: this.config.duration,
                 duration_unit: 't',
                 underlying_symbol: this.config.symbol,
-                barrier: side === 'HIGHER' ? '+0.001' : '-0.001',
+                // The live Higher/Lower API uses a positive offset for both
+                // directions; the contract type determines the direction.
+                barrier: '+0.14',
             },
             { kind: 'proposal', pairId, side, epoch }
         );

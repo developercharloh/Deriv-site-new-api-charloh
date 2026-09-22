@@ -48,7 +48,7 @@ const HLMasterModal: React.FC<Props> = ({ bot, onClose }) => {
         const config: HLMasterConfig = {
             symbol,
             stake: perContract,
-            duration: 1,
+            duration: 5,
             currency: 'USD',
         };
         const engine = new HLMasterEngine(config);
@@ -103,7 +103,7 @@ const HLMasterModal: React.FC<Props> = ({ bot, onClose }) => {
                     <div>
                         <span className='hl-master-modal__eyebrow'>EVERY TICK</span>
                         <strong>HIGHER + LOWER</strong>
-                        <small>1-tick contracts, opened as one pair</small>
+                        <small>5-tick contracts, opened as one pair</small>
                     </div>
                     <div className='hl-master-modal__total'>
                         <span>Pair total</span>

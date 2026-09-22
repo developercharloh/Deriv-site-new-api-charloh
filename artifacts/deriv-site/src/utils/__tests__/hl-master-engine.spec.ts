@@ -89,20 +89,22 @@ describe('HL master direct runner', () => {
         expect(proposals).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({
-                    contract_type: 'CALL',
+                    contract_type: 'HIGHER',
                     amount: 0.35,
-                    barrier: '+0.001',
+                    barrier: '+0.14',
+                    duration: 5,
                 }),
                 expect.objectContaining({
-                    contract_type: 'PUT',
+                    contract_type: 'LOWER',
                     amount: 0.35,
-                    barrier: '-0.001',
+                    barrier: '+0.14',
+                    duration: 5,
                 }),
             ])
         );
         expect(buys).toEqual([
-            expect.objectContaining({ buy: 'CALL-proposal', price: 0.35 }),
-            expect.objectContaining({ buy: 'PUT-proposal', price: 0.35 }),
+            expect.objectContaining({ buy: 'HIGHER-proposal', price: 0.35 }),
+            expect.objectContaining({ buy: 'LOWER-proposal', price: 0.35 }),
         ]);
         expect(logs.some(message => message.includes('$0.70 total'))).toBe(true);
 
