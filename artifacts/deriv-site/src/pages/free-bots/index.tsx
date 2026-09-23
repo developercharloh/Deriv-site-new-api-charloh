@@ -7,7 +7,6 @@ import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
 import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import type { BotConfig } from './types';
-import HLMasterModal from './HLMasterModal';
 import './free-bots.scss';
 
 const V2_CONFIG_KEY = 'free_bots_v2_config';
@@ -109,26 +108,6 @@ const BOTS: BotConfig[] = [
         ],
         xmlPath: '/bots/Rise_Fall_Master_Bot.xml',
         gradient: 'linear-gradient(135deg, #0a2a0a 0%, #1a5c1a 40%, #10b981 70%, #f59e0b 100%)',
-    },
-    {
-        id: 'hl-master-bot',
-        name: 'HL master Bot',
-        emoji: '↕️',
-        description:
-            'Buys Higher and Lower together on every live tick. Each pair opens one Higher contract and one Lower contract at the same stake, so a $0.35 setting places $0.70 total per pair.',
-        market: 'Volatility 100 (1s) Index (1HZ100V)',
-        strategy: 'Higher + Lower · Paired Contracts · 1 Tick',
-        params: [
-            { label: 'Higher Stake', value: '$0.35' },
-            { label: 'Lower Stake', value: '$0.35' },
-            { label: 'Pair Total', value: '$0.70' },
-            { label: 'Duration', value: '1 Tick' },
-            { label: 'Execution', value: 'Both sides per tick' },
-        ],
-        xmlPath: '/bots/HL_Master_Bot.xml',
-        gradient: 'linear-gradient(135deg, #07152e 0%, #174ea6 48%, #22d3ee 100%)',
-        category: 'HIGHER + LOWER',
-        directMode: 'hl-master',
     },
     {
         id: 'matches-signal',
@@ -408,7 +387,6 @@ const BOTS: BotConfig[] = [
 const CARD_ART: Record<string, string> = {
     'binary-matrix-ai': '/assets/free-bots/mega-mind.jpg',
     'rise-fall-master': '/assets/free-bots/hitnrun.jpg',
-    'hl-master-bot': '/assets/free-bots/blueprint.jpg',
     'matches-signal': '/assets/free-bots/super-bot.jpg',
     'differ-v2': '/assets/free-bots/mentorship.jpg',
     'even-odd-scanner': '/assets/free-bots/odd-autobot.jpg',
@@ -428,7 +406,6 @@ const CARD_ART: Record<string, string> = {
 const CARD_CATEGORY: Record<string, string> = {
     'binary-matrix-ai': 'EVEN / ODD · OVER / UNDER',
     'rise-fall-master': 'RISE / FALL',
-    'hl-master-bot': 'HIGHER / LOWER',
     'matches-signal': 'MATCHES',
     'differ-v2': 'DIFFERS',
     'even-odd-scanner': 'EVEN / ODD',
@@ -448,7 +425,6 @@ const CARD_CATEGORY: Record<string, string> = {
 const CARD_ACCENT: Record<string, string> = {
     'binary-matrix-ai': '#178da8',
     'rise-fall-master': '#0d9959',
-    'hl-master-bot': '#1677d2',
     'matches-signal': '#7027d0',
     'differ-v2': '#1e6bd0',
     'even-odd-scanner': '#bd8300',
@@ -845,7 +821,6 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
     const [status,     setStatus]     = useState<BotStatus>('idle');
     const [errorMsg,   setErrorMsg]   = useState('');
     const [showSignal, setShowSignal] = useState(false);
-    const [showHlMaster, setShowHlMaster] = useState(false);
 
     const signal = useSignal(bot.signalKey);
 
@@ -1033,17 +1008,8 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                     )}
 
                     <div className='free-bots__card-actions'>
-                        {bot.directMode === 'hl-master' && (
-                            <button
-                                className='free-bots__card-btn free-bots__card-btn--custom'
-                                onClick={() => setShowHlMaster(true)}
-                            >
-                                ▶ Run HL master
-                            </button>
-                        )}
-
                         {/* V2 mode: same Load-into-builder flow, also saves parsed config */}
-                        {isV2Mode && !bot.directMode && (
+                        {isV2Mode && (
                             <button
                                 className={`free-bots__card-btn free-bots__card-btn--v2 ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
                                 onClick={loadBot}
@@ -1054,7 +1020,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                         )}
 
                         {/* V1 mode: normal Load Bot button */}
-                        {engineMode !== 'v2' && !bot.directMode && (
+                        {engineMode !== 'v2' && (
                             <button
                                 className={`free-bots__card-btn free-bots__card-btn--load ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
                                 onClick={loadBot}
@@ -1086,10 +1052,6 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                     engineMode={engineMode}
                     onClose={() => setShowSignal(false)}
                 />
-            )}
-
-            {showHlMaster && bot.directMode === 'hl-master' && (
-                <HLMasterModal bot={bot} onClose={() => setShowHlMaster(false)} />
             )}
 
         </>
