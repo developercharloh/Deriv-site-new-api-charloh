@@ -32,6 +32,7 @@
 - [Parity contract barriers](parity-contract-barriers.md) — DIGITEVEN and DIGITODD requests must omit prediction, selected_tick, and barrier; only Over/Under use digit barriers.
 - [AI signal scanner safety](deriv-ai-signals-scanner.md) — settle failed history requests, bound scan latency, and require fresh live confirmation before execution.
 - [Blockly dependent dropdown restoration](deriv-blockly-dropdown-restoration.md) — preserve XML selections before import and replay market parents before child fields after API options load.
+- [Blockly template variable imports](deriv-template-variable-imports.md) — `domToVariables` needs the `<variables>` element, not the full `<xml>` root, or root blocks can be misread as variable declarations.
 - [Blockly custom block validation](deriv-blockly-custom-block-validation.md) — runtime jsonInit smoke tests catch args0/message placeholder mismatches that production builds do not.
 - [Adaptive Momentum safety envelope](adaptive-momentum-safety.md) — keep signal qualification separate from cooldown and session risk-limit guards; do not imply profitability without replay validation.
 - [Adaptive Momentum journaling](adaptive-momentum-journal.md) — refresh one analysis status row; keep signal, skip, entry, settlement, and stop events as separate audit entries.

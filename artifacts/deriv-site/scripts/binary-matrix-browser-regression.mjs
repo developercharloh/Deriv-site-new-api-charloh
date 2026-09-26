@@ -15,6 +15,8 @@ const projectDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const xmlPath = join(projectDir, 'public', 'bots', 'Binary_Matrix_AI.xml');
 const freeBotXmlPath = join(projectDir, 'public', 'bots', 'Over2_Under7_Reversal.xml');
 const riseFallBotXmlPath = join(projectDir, 'public', 'bots', 'Rise_Fall_Master_Bot.xml');
+const overDestroyerXmlPath = join(projectDir, 'public', 'bots', 'Over_Destroyer_Bot.xml');
+const underDestroyerXmlPath = join(projectDir, 'public', 'bots', 'Under_Destroyer_Bot.xml');
 const chromiumPath = process.env.CHROMIUM_PATH || 'chromium';
 const rootLabels = {
     trade_definition: 'Trade Parameters',
@@ -848,6 +850,13 @@ const waitFor = async (cdp, expression, label, timeout = 30_000) => {
                 buyRequests: window.__binaryMatrixInterpreterTest?.buyRequests,
                 analysisEvidence: window.__binaryMatrixInterpreterTest?.analysisEvidence,
                 reanalysisResets: window.__binaryMatrixInterpreterTest?.reanalysisResets,
+                 destroyerImportFailures: window.__destroyerImportFailures,
+                 destroyerImportCalls: window.__destroyerImportCalls,
+                  destroyerVariablesInput: window.__destroyerVariablesInput,
+                 workspaceRoots: window.Blockly?.derivWorkspace?.getTopBlocks?.(true)
+                     ?.map(block => block.type),
+                 workspaceBlocks: window.Blockly?.derivWorkspace?.getAllBlocks?.(true)
+                     ?.map(block => block.type),
                 conditionWindowIndex: window.__binaryMatrixInterpreterTest?.conditionWindowIndex,
                 generatedCode: window.__binaryMatrixInterpreterTest?.generatedCode?.slice(0, 5000),
                 browserErrors: window.__binaryMatrixBrowserErrors,
@@ -1159,10 +1168,13 @@ const assertRiseFallTradeParameters = async cdp => {
         })()`
     );
 
-    if (!state || state.runDisabled !== false) {
+    if (!state || (state.runDisabled !== false && process.env.DESTROYER_BOTS_ONLY !== '1')) {
         throw new Error(`Rise/Fall Run button is unavailable after loading: ${JSON.stringify(state)}`);
     }
-    console.log(`✓ Rise/Fall Trade Parameters populated and Run is enabled: ${JSON.stringify(state)}`);
+    const status = state.runDisabled === false
+        ? 'Rise/Fall Trade Parameters populated and Run is enabled'
+        : 'Rise/Fall Trade Parameters populated (Run state skipped for Destroyer-only regression)';
+    console.log(`✓ ${status}: ${JSON.stringify(state)}`);
 };
 
 const assertMobileWorkspaceOrigin = (snapshot, flowName, phase) => {
@@ -1329,6 +1341,151 @@ const assertFreeBotWorkspace = async (cdp, flowName) => {
                 .map(([type]) => `${type}:${snapshot.allBlockTypes[type]}`)
                 .join(', ')}; total blocks=${totalBlockCount}`
     );
+};
+
+const assertDestroyerBotWorkspace = async (cdp, flowName) => {
+    await waitFor(
+        cdp,
+        `(() => {
+            const workspace = window.Blockly?.derivWorkspace;
+            const roots = workspace?.getTopBlocks?.(true) || [];
+            const types = workspace?.getAllBlocks?.(true) || [];
+            return ['trade_definition', 'before_purchase', 'after_purchase', 'tick_analysis']
+                .every(type => roots.some(block => block.type === type)) &&
+                types.some(block => block.type === 'trade_definition_tradeoptions') &&
+                types.filter(block => block.type === 'purchase').length >= 2;
+        })()`,
+        `${flowName} complete workspace`
+    );
+
+    await evaluate(
+        cdp,
+        `document.querySelector('#scratch_div')?.scrollIntoView({ block: 'start', inline: 'nearest' })`
+    );
+    assertMobileWorkspaceOrigin(await workspaceSnapshot(cdp), flowName, 'after import');
+
+    // The dropdown cascade and the bot's own late field restoration can both
+    // recalculate Blockly metrics. Check again after those asynchronous updates.
+    await sleep(7_000);
+    const snapshot = await workspaceSnapshot(cdp);
+    assertMobileWorkspaceOrigin(snapshot, flowName, 'after dropdown restoration');
+    const view = await evaluate(
+        cdp,
+        `(() => {
+            const viewport = document.querySelector('#scratch_div')?.getBoundingClientRect();
+            const root = window.Blockly?.derivWorkspace?.getTopBlocks?.(true)
+                .find(block => block.type === 'trade_definition')?.getSvgRoot?.()?.getBoundingClientRect();
+            return {
+                viewport: viewport && { top: viewport.top, bottom: viewport.bottom },
+                root: root && { top: root.top, bottom: root.bottom, width: root.width, height: root.height },
+                runDisabled: document.querySelector('#db-animation__run-button')?.disabled ?? null,
+            };
+        })()`
+    );
+    if (
+        !view?.viewport ||
+        !view.root ||
+        view.root.width <= 0 ||
+        view.root.height <= 0 ||
+        view.root.bottom <= view.viewport.top ||
+        view.root.top >= view.viewport.bottom ||
+        view.runDisabled !== false
+    ) {
+        throw new Error(`${flowName}: loaded roots are not visible or runnable on mobile: ${JSON.stringify(view)}`);
+    }
+    console.log(`✓ ${flowName}: required roots visible and Run enabled after mobile dropdown restoration.`);
+};
+
+const runDestroyerMobileRegressions = async cdp => {
+    const hasBuilderGuide = await evaluate(
+        cdp,
+        `Array.from(document.querySelectorAll('button')).some(
+            button => button.getClientRects().length > 0 && button.textContent.trim() === 'Skip'
+        )`
+    );
+    if (hasBuilderGuide) await clickButtonContaining(cdp, 'Skip');
+    await dismissSocialPopup(cdp);
+
+    for (const title of ['Over Destroyer Bot', 'Under Destroyer Bot']) {
+        const isFreeBotsActive = await evaluate(
+            cdp,
+            `document.querySelector('.dc-tabs__item#id-free-bots')?.classList.contains('dc-tabs__active') || false`
+        );
+        if (!isFreeBotsActive) {
+            await evaluate(cdp, `document.querySelector('.dc-tabs__item#id-free-bots')?.click()`);
+            await waitFor(
+                cdp,
+                `Boolean(document.querySelector('.free-bots__card'))`,
+                `${title} Free Bots card`,
+                90_000
+            );
+        }
+        await evaluate(
+            cdp,
+            `(() => {
+                const Blockly = window.Blockly;
+                if (!Blockly?.Xml?.domToBlock) throw new Error('Blockly XML importer is not ready for diagnostics.');
+                window.__destroyerImportFailures = [];
+                window.__destroyerImportCalls = [];
+                window.__destroyerVariablesInput = null;
+                if (!Blockly.Xml.__destroyerImportWrapped) {
+                    const original = Blockly.Xml.domToBlock;
+                    const originalVariables = Blockly.Xml.domToVariables;
+                    Blockly.Xml.domToBlock = function(node, workspace, ...args) {
+                        window.__destroyerImportCalls.push(node?.getAttribute?.('type') || 'unknown');
+                        try {
+                            return original.call(this, node, workspace, ...args);
+                        } catch (error) {
+                            window.__destroyerImportFailures.push({
+                                type: node?.getAttribute?.('type') || null,
+                                message: String(error?.stack || error),
+                            });
+                            throw error;
+                        }
+                    };
+                    Blockly.Xml.domToVariables = function(node, workspace, ...args) {
+                        window.__destroyerImportCalls.push('variables');
+                        window.__destroyerVariablesInput = {
+                            nodeName: node?.localName || node?.tagName,
+                            existingVariables: workspace?.getVariableMap?.()?.getAllVariables?.().map(variable => ({
+                                name: variable.name,
+                                id: variable.getId(),
+                            })),
+                            xmlVariables: Array.from(node?.children || [])
+                                .map(variable => ({ name: variable.textContent, id: variable.getAttribute('id') })),
+                        };
+                        try {
+                            return originalVariables.call(this, node, workspace, ...args);
+                        } catch (error) {
+                            window.__destroyerImportFailures.push({
+                                type: 'variables',
+                                message: String(error?.stack || error),
+                            });
+                            throw error;
+                        }
+                    };
+                    Blockly.Xml.__destroyerImportWrapped = true;
+                }
+                return true;
+            })()`
+        );
+        await seedEmptySavedWorkspace(cdp);
+        await clickButtonInCard(cdp, title, 'Load bot');
+        await waitFor(
+            cdp,
+            `document.querySelector('.dc-tabs__item#id-bot-builder')?.classList.contains('dc-tabs__active') || false`,
+            `visible ${title} Bot Builder`
+        );
+        const skipGuide = await evaluate(
+            cdp,
+            `Array.from(document.querySelectorAll('button')).some(
+                button => button.getClientRects().length > 0 && button.textContent.trim() === 'Skip'
+            )`
+        );
+        if (skipGuide) await clickButtonContaining(cdp, 'Skip');
+        await dismissSocialPopup(cdp);
+        await assertDestroyerBotWorkspace(cdp, title);
+    }
 };
 
 const assertRiseFallMarketSettings = async cdp => {
@@ -1818,6 +1975,10 @@ const run = async () => {
             'visible Rise/Fall Bot Builder'
         );
         await assertRiseFallTradeParameters(cdp);
+        if (process.env.DESTROYER_BOTS_ONLY === '1') {
+            await runDestroyerMobileRegressions(cdp);
+            return;
+        }
         await assertRiseFallMarketSettings(cdp);
         if (process.env.RISE_FALL_DROPDOWNS_ONLY === '1') return;
 

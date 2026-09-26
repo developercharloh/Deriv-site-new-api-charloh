@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { DBot } from '@/external/bot-skeleton';
+import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
 import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
 import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
@@ -900,7 +901,12 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                         .map(field => field.textContent?.trim())
                         .filter((value): value is string => Boolean(value)),
                 };
-                Blockly.Xml.domToVariables(dom, Blockly.derivWorkspace);
+                // Blockly.Xml.domToVariables expects the <variables> element,
+                // not the <xml> root (whose blocks would be misread as variables).
+                const variablesXml = Array.from(dom.children).find(
+                    (node: any) => node.localName === 'variables' || node.tagName?.toLowerCase() === 'variables'
+                );
+                if (variablesXml) Blockly.Xml.domToVariables(variablesXml, Blockly.derivWorkspace);
                  // Some browser XML DOM implementations expose the Blockly
                  // namespace inconsistently through localName/tagName. Root
                  // Blockly elements all carry a type attribute, while the
@@ -967,7 +973,17 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             setStatus('loaded');
 
             // ROOT CAUSE FIX — blank duration/purchase dropdowns:
-            void postLoadReapplyFields(Blockly.derivWorkspace, importedTradeFields);
+            // Restore can wait longer than the Builder's initial mobile reveal
+            // window while the Deriv symbol/contract menus load. Re-anchor the
+            // actual imported workspace only after those async field updates
+            // finish, so a late Blockly metrics refresh cannot leave the roots
+            // scrolled below the mobile viewport.
+            void postLoadReapplyFields(Blockly.derivWorkspace, importedTradeFields)
+                .then(() => scheduleWorkspaceReveal(Blockly.derivWorkspace))
+                .catch(error => {
+                    console.error('[Free Bots] Could not finish restoring bot dropdowns.', error);
+                    scheduleWorkspaceReveal(Blockly.derivWorkspace);
+                });
         } catch (err: any) {
             setStatus('error');
             setErrorMsg(err?.message || 'Failed to load bot.');
