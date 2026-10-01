@@ -477,9 +477,10 @@ const run = async () => {
         const mobileReady = await waitFor(
             async () => client.evaluate(`(() => {
                 const scan = document.querySelector('[data-testid="nexus-scan-button"]');
-                const main = document.querySelector('.main.main--nexus-ai');
-                return scan && !scan.disabled && main
-                    ? { scanCount: Number(document.querySelector('[data-testid="alpha-tool"]')?.dataset.scanCount || 0) }
+                const engine = document.querySelector('[data-testid="alpha-tool"]');
+                const completed = ['ready', 'partial-data'].includes(engine?.dataset.status || '');
+                return scan && !scan.disabled && completed
+                    ? { scanCount: Number(engine?.dataset.scanCount || 0) }
                     : false;
             })()`),
             'completed mobile Nexus market scan',
@@ -490,32 +491,59 @@ const run = async () => {
             const launch = document.querySelector('[data-testid="nexus-launch-button"]');
             const scan = document.querySelector('[data-testid="nexus-scan-button"]');
             if (!main || !journal || !launch || !scan) return null;
+            const page = document.scrollingElement || document.documentElement;
+            const documentMaxScroll = Math.max(0, page.scrollHeight - document.documentElement.clientHeight);
+            const journalDocumentBottom = journal.getBoundingClientRect().bottom + window.scrollY;
+            page.scrollTop = Math.min(documentMaxScroll, Math.max(0, journalDocumentBottom - window.innerHeight + 8));
+            const journalRect = journal.getBoundingClientRect();
             const launchRect = launch.getBoundingClientRect();
             const scanRect = scan.getBoundingClientRect();
-            const maxScroll = Math.max(0, main.scrollHeight - main.clientHeight);
-            main.scrollTop = maxScroll;
-            const journalRect = journal.getBoundingClientRect();
-            const mainRect = main.getBoundingClientRect();
+            const ancestors = [];
+            for (let element = main; element && ancestors.length < 8; element = element.parentElement) {
+                const style = getComputedStyle(element);
+                ancestors.push({
+                    tag: element.tagName,
+                    id: element.id,
+                    className: String(element.className || ''),
+                    display: style.display,
+                    height: style.height,
+                    minHeight: style.minHeight,
+                    overflowY: style.overflowY,
+                    flex: style.flex,
+                    scrollHeight: element.scrollHeight,
+                    clientHeight: element.clientHeight,
+                });
+            }
             const result = {
-                overflowY: getComputedStyle(main).overflowY,
-                clientHeight: main.clientHeight,
-                scrollHeight: main.scrollHeight,
-                maxScroll,
+                mainOverflowY: getComputedStyle(main).overflowY,
+                mainScrollRange: Math.max(0, main.scrollHeight - main.clientHeight),
+                documentClientHeight: document.documentElement.clientHeight,
+                documentScrollHeight: page.scrollHeight,
+                documentMaxScroll,
+                journalReachable: journalRect.bottom > 0 && journalRect.bottom <= window.innerHeight + 8,
                 journalBottom: journalRect.bottom,
-                scrollportBottom: mainRect.bottom,
+                nexusLayoutSelectorMatches: Boolean(document.querySelector('.layout:has(.main.main--nexus-ai)')),
+                rootViewport: {
+                    htmlHeight: getComputedStyle(document.documentElement).height,
+                    htmlOverflowY: getComputedStyle(document.documentElement).overflowY,
+                    bodyHeight: getComputedStyle(document.body).height,
+                    bodyOverflowY: getComputedStyle(document.body).overflowY,
+                },
+                ancestors,
                 launchWidth: launchRect.width,
                 launchHeight: launchRect.height,
                 scanWidth: scanRect.width,
                 scanHeight: scanRect.height,
             };
-            main.scrollTop = 0;
+            page.scrollTop = 0;
             return result;
         })()`);
         if (
             !mobileLayout ||
-            mobileLayout.overflowY !== 'auto' ||
-            mobileLayout.maxScroll <= 0 ||
-            mobileLayout.journalBottom > mobileLayout.scrollportBottom + 4 ||
+            !['visible', 'clip'].includes(mobileLayout.mainOverflowY) ||
+            mobileLayout.mainScrollRange > 1 ||
+            mobileLayout.documentMaxScroll <= 0 ||
+            !mobileLayout.journalReachable ||
             mobileLayout.launchWidth < 44 ||
             mobileLayout.launchHeight < 44 ||
             mobileLayout.scanWidth < 44 ||
@@ -530,20 +558,18 @@ const run = async () => {
             const rect = main.getBoundingClientRect();
             const startY = Math.min(rect.bottom - 20, window.innerHeight - 20);
             return {
-                x: Math.min(120, rect.right - 20),
+                x: 8,
                 startY,
                 endY: Math.max(rect.top + 20, startY - 420),
             };
         })()`);
         if (!swipe || swipe.startY - swipe.endY < 80) {
-            throw new Error(`Nexus scrollport did not expose a usable mobile swipe area: ${JSON.stringify(swipe)}`);
+            throw new Error(`Nexus page did not expose a usable mobile swipe area: ${JSON.stringify(swipe)}`);
         }
         await client.evaluate(`(() => {
-            const main = document.querySelector('.main.main--nexus-ai');
-            if (!main) return;
             window.__nexusMobileTrace = [];
             for (const type of ['touchstart', 'touchmove', 'touchend', 'scroll']) {
-                main.addEventListener(type, event => {
+                document.addEventListener(type, event => {
                     const item = {
                         type: event.type,
                         defaultPrevented: event.defaultPrevented,
@@ -580,24 +606,42 @@ const run = async () => {
             const main = document.querySelector('.main.main--nexus-ai');
             if (!main) return null;
             const rect = main.getBoundingClientRect();
+            const page = document.scrollingElement || document.documentElement;
             const target = document.elementFromPoint(${swipe.x}, ${swipe.startY});
+            const ancestors = [];
+            for (let element = main; element && ancestors.length < 8; element = element.parentElement) {
+                const style = getComputedStyle(element);
+                ancestors.push({
+                    tag: element.tagName,
+                    id: element.id,
+                    className: String(element.className || ''),
+                    touchAction: style.touchAction,
+                    overflowY: style.overflowY,
+                    height: style.height,
+                    scrollHeight: element.scrollHeight,
+                    clientHeight: element.clientHeight,
+                });
+            }
             return {
-                scrollTop: main.scrollTop,
-                scrollHeight: main.scrollHeight,
-                clientHeight: main.clientHeight,
-                overflowY: getComputedStyle(main).overflowY,
-                touchAction: getComputedStyle(main).touchAction,
+                documentScrollTop: page.scrollTop,
+                documentScrollHeight: page.scrollHeight,
+                documentClientHeight: document.documentElement.clientHeight,
+                mainScrollTop: main.scrollTop,
+                mainOverflowY: getComputedStyle(main).overflowY,
+                htmlTouchAction: getComputedStyle(document.documentElement).touchAction,
+                touchAction: getComputedStyle(document.body).touchAction,
+                gestureTargetTouchAction: target ? getComputedStyle(target).touchAction : null,
+                ancestors,
                 rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
                 gestureTarget: target
                     ? { tag: target.tagName, className: String(target.className || ''), id: target.id || '' }
                     : null,
-                documentScrollTop: document.scrollingElement?.scrollTop || 0,
                 touchTrace: window.__nexusMobileTrace || [],
             };
         })()`);
-        const touchScrollTop = Number(touchScrollState?.scrollTop || 0);
+        const touchScrollTop = Number(touchScrollState?.documentScrollTop || 0);
         if (touchScrollTop <= 0) {
-            throw new Error(`A mobile swipe did not scroll the Nexus page: ${JSON.stringify(touchScrollState)}`);
+            throw new Error(`A mobile swipe did not scroll the page document: ${JSON.stringify(touchScrollState)}`);
         }
 
         const scanTarget = await client.evaluate(`(() => {
@@ -676,9 +720,10 @@ const run = async () => {
         }
         const mobileNexusTest = {
             status: 'passed',
-            scrollHeight: mobileLayout.scrollHeight,
-            clientHeight: mobileLayout.clientHeight,
+            documentScrollHeight: mobileLayout.documentScrollHeight,
+            documentClientHeight: mobileLayout.documentClientHeight,
             touchScrollTop,
+            mainInnerScrollRange: mobileLayout.mainScrollRange,
             launchTarget: `${Math.round(mobileLayout.launchWidth)}×${Math.round(mobileLayout.launchHeight)}`,
             scanTarget: `${Math.round(mobileLayout.scanWidth)}×${Math.round(mobileLayout.scanHeight)}`,
             scanCount: afterManualScan.scanCount,

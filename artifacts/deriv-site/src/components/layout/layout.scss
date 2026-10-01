@@ -18,3 +18,11 @@
         }
     }
 }
+
+// Nexus is a public, document-length tool page. Let its layout shell grow
+// with the journal instead of clipping the Outlet to one viewport.
+.layout:has(.main.main--nexus-ai) {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+}

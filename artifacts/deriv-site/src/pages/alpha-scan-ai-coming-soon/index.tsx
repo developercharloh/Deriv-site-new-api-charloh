@@ -2,12 +2,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 
 const AlphaScanAI = lazy(() => import('../alpha-scan-ai'));
 
-type NexusStats = {
-    trades: number;
-    wins: number;
-    losses: number;
-};
-
+type NexusStats = { trades: number; wins: number; losses: number };
 type NexusJournalEntry = {
     contractId: string;
     purchaseTime?: string;
@@ -22,55 +17,55 @@ type NexusJournalEntry = {
     exitSpot?: string | null;
     profit?: number;
 };
+type NexusSessionState = { active?: boolean; message?: string };
+type NexusScanStatus = { busy?: boolean; status?: string; complete?: boolean; hasPlan?: boolean };
+type NumericValue = number | '';
 
-type NexusSessionState = {
-    active?: boolean;
-    message?: string;
-};
-
-type NexusScanStatus = {
-    busy?: boolean;
-    status?: string;
-    complete?: boolean;
-    hasPlan?: boolean;
-};
-
-type EditableNumberProps = {
-    value: number | '';
-    setValue: React.Dispatch<React.SetStateAction<number | ''>>;
+type NumberSettingProps = {
     label: string;
-    className: string;
+    hint: string;
+    prefix?: string;
+    value: NumericValue;
+    onChange: React.Dispatch<React.SetStateAction<NumericValue>>;
     minimum?: number;
+    testId: string;
 };
 
-const EditableNumber: React.FC<EditableNumberProps> = ({
-    value,
-    setValue,
-    label,
-    className,
-    minimum = 1,
+const NumberSetting: React.FC<NumberSettingProps> = ({
+    label, hint, prefix, value, onChange, minimum = 1, testId,
 }) => (
-    <input
-        type='text'
-        inputMode='numeric'
-        pattern='[0-9]*'
-        className={`nexus-ai__editable-value ${className}`}
-        aria-label={label}
-        value={value}
-        onChange={event => {
-            const rawValue = event.currentTarget.value.replace(/[^\d]/g, '');
-            setValue(rawValue === '' ? '' : Number(rawValue));
-        }}
-        onBlur={() => {
-            setValue(current => {
-                if (current === '' || !Number.isFinite(current)) return minimum;
-                return Math.max(minimum, current);
-            });
-        }}
-    />
+    <label className='nexus-ai__setting' data-testid={`setting-${testId}`}>
+        <span className='nexus-ai__setting-copy'>
+            <strong>{label}</strong>
+            <small>{hint}</small>
+        </span>
+        <span className='nexus-ai__input-wrap'>
+            {prefix && <span className='nexus-ai__prefix' aria-hidden='true'>{prefix}</span>}
+            <input
+                type='number'
+                min={minimum}
+                step='1'
+                inputMode='decimal'
+                value={value}
+                aria-label={label}
+                data-testid={`input-${testId}`}
+                onChange={event => {
+                    const raw = event.currentTarget.value;
+                    onChange(raw === '' ? '' : Number(raw));
+                }}
+                onBlur={() => onChange(current => {
+                    if (current === '' || !Number.isFinite(current)) return minimum;
+                    return Math.max(minimum, current);
+                })}
+            />
+        </span>
+    </label>
 );
 
-const setNativeControlValue = (element: HTMLInputElement | HTMLSelectElement | null, value: string): void => {
+const setNativeControlValue = (
+    element: HTMLInputElement | HTMLSelectElement | null,
+    value: string
+): void => {
     if (!element || element.value === value) return;
     const prototype = element instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLSelectElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
@@ -81,16 +76,19 @@ const setNativeControlValue = (element: HTMLInputElement | HTMLSelectElement | n
 
 const NexusAIComingSoon: React.FC = () => {
     const controllerRef = useRef<HTMLDivElement | null>(null);
+    const launchTimerRef = useRef<number | null>(null);
     const seenContractsRef = useRef(new Set<string>());
     const settledContractsRef = useRef(new Set<string>());
     const [isLaunched, setIsLaunched] = useState(false);
-    const [isScanning, setIsScanning] = useState(true);
+    const [isScanning, setIsScanning] = useState(false);
+    const [scanComplete, setScanComplete] = useState(false);
+    const [hasEligiblePlan, setHasEligiblePlan] = useState(false);
     const [isRecoveryEnabled, setIsRecoveryEnabled] = useState(true);
-    const [stake, setStake] = useState<number | ''>(1);
-    const [takeProfit, setTakeProfit] = useState<number | ''>(10);
-    const [stopLoss, setStopLoss] = useState<number | ''>(50);
-    const [multiplier, setMultiplier] = useState<number | ''>(2);
-    const [launchMessage, setLaunchMessage] = useState('');
+    const [stake, setStake] = useState<NumericValue>(1);
+    const [takeProfit, setTakeProfit] = useState<NumericValue>(10);
+    const [stopLoss, setStopLoss] = useState<NumericValue>(50);
+    const [multiplier, setMultiplier] = useState<NumericValue>(2);
+    const [launchMessage, setLaunchMessage] = useState('Run a market scan before launching. No purchase can be staged until an eligible plan is ready.');
     const [stats, setStats] = useState<NexusStats>({ trades: 0, wins: 0, losses: 0 });
     const [journal, setJournal] = useState<NexusJournalEntry[]>([]);
 
@@ -104,9 +102,8 @@ const NexusAIComingSoon: React.FC = () => {
     };
 
     useEffect(() => {
-        const timer = window.setInterval(syncHiddenSettings, 250);
-        return () => window.clearInterval(timer);
-    }, []);
+        syncHiddenSettings();
+    }, [stake, takeProfit, stopLoss, multiplier]);
 
     useEffect(() => {
         const handleFeedback = (event: Event) => {
@@ -125,13 +122,21 @@ const NexusAIComingSoon: React.FC = () => {
             if (!scan) return;
             setIsScanning(Boolean(scan.busy));
             if (scan.busy) {
+                setScanComplete(false);
+                setHasEligiblePlan(false);
                 setLaunchMessage('Scanning live volatility markets…');
-            } else if (scan.complete && scan.hasPlan) {
-                setLaunchMessage('Market scan complete · eligible market ready.');
+                return;
+            }
+            const complete = Boolean(scan.complete);
+            const eligible = Boolean(scan.hasPlan);
+            setScanComplete(complete);
+            setHasEligiblePlan(eligible);
+            if (complete && eligible) {
+                setLaunchMessage('Scan complete. An eligible market plan is ready for review.');
             } else if (scan.status && scan.status !== 'idle') {
                 setLaunchMessage(scan.status === 'ready'
-                    ? 'Scan complete · no eligible market found. No trade was opened.'
-                    : `Market scan ${scan.status.replace(/-/g, ' ')} · no trade was opened.`);
+                    ? 'Scan complete. No eligible market found; no purchase was staged.'
+                    : `Market scan ${scan.status.replace(/-/g, ' ')}. No purchase was staged.`);
             }
         };
         const handleJournal = (event: Event) => {
@@ -145,10 +150,9 @@ const NexusAIComingSoon: React.FC = () => {
                 return next;
             });
             if (entry.isOpen) {
-                setLaunchMessage(`${entry.leg === 'recovery' ? 'Recovery' : 'Primary'} open · ${entry.strategy}`);
+                setLaunchMessage(`${entry.leg === 'recovery' ? 'Recovery' : 'Primary'} contract open · ${entry.strategy}`);
             } else {
-                const result = entry.isWin ? 'Won' : 'Lost';
-                setLaunchMessage(`${result} · ${entry.entrySpot || '—'} → ${entry.exitSpot || '—'}`);
+                setLaunchMessage(`${entry.isWin ? 'Contract won' : 'Contract settled'} · ${entry.entrySpot || '—'} → ${entry.exitSpot || '—'}`);
             }
         };
         window.addEventListener('nexus-ai-feedback', handleFeedback);
@@ -160,6 +164,7 @@ const NexusAIComingSoon: React.FC = () => {
         }, 0);
         return () => {
             window.clearTimeout(scanStatusRequest);
+            if (launchTimerRef.current !== null) window.clearTimeout(launchTimerRef.current);
             window.removeEventListener('nexus-ai-feedback', handleFeedback);
             window.removeEventListener('nexus-ai-session', handleSession);
             window.removeEventListener('nexus-ai-scan-status', handleScanStatus);
@@ -168,17 +173,13 @@ const NexusAIComingSoon: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        syncHiddenSettings();
-    }, [stake, takeProfit, stopLoss, multiplier]);
-
-    useEffect(() => {
         const handlePosition = (event: Event) => {
             const position = (event as CustomEvent).detail as {
                 contractId?: string;
                 isOpen?: boolean;
                 isWin?: boolean | null;
             } | undefined;
-            if (!position || !position.contractId) return;
+            if (!position?.contractId) return;
             if (position.isOpen) {
                 if (seenContractsRef.current.has(position.contractId)) return;
                 seenContractsRef.current.add(position.contractId);
@@ -188,9 +189,7 @@ const NexusAIComingSoon: React.FC = () => {
             if (settledContractsRef.current.has(position.contractId)) return;
             settledContractsRef.current.add(position.contractId);
             const wasSeenOpen = seenContractsRef.current.has(position.contractId);
-            if (!wasSeenOpen) {
-                seenContractsRef.current.add(position.contractId);
-            }
+            if (!wasSeenOpen) seenContractsRef.current.add(position.contractId);
             setStats(current => ({
                 trades: wasSeenOpen ? current.trades : current.trades + 1,
                 wins: current.wins + (position.isWin ? 1 : 0),
@@ -204,23 +203,34 @@ const NexusAIComingSoon: React.FC = () => {
     const launchAI = (): void => {
         syncHiddenSettings();
         if (!controllerRef.current) {
-            setLaunchMessage('Connecting to live market');
+            setLaunchMessage('Connecting to live market controls.');
             return;
         }
         if (isLaunched) {
-            setLaunchMessage('Stopping Nexus AI');
+            if (launchTimerRef.current !== null) {
+                window.clearTimeout(launchTimerRef.current);
+                launchTimerRef.current = null;
+            }
+            setLaunchMessage('Stopping Nexus AI and cancelling any pending launch.');
             window.dispatchEvent(new CustomEvent('nexus-ai-stop'));
             return;
         }
+        if (!scanComplete || !hasEligiblePlan || isScanning) {
+            setLaunchMessage('Launch is locked until a complete scan returns an eligible market plan.');
+            return;
+        }
         setIsLaunched(true);
-        setLaunchMessage('LIVE · Selecting the best market');
-        // Let the hidden Alpha controls consume the latest Nexus values before
-        // the launch handler snapshots its runtime configuration.
-        window.setTimeout(() => window.dispatchEvent(new CustomEvent('nexus-ai-launch')), 0);
+        setLaunchMessage('Plan approved · connecting to the selected live market.');
+        launchTimerRef.current = window.setTimeout(() => {
+            launchTimerRef.current = null;
+            window.dispatchEvent(new CustomEvent('nexus-ai-launch'));
+        }, 0);
     };
 
     const scanMarkets = (): void => {
         if (!controllerRef.current || isScanning || isLaunched) return;
+        setScanComplete(false);
+        setHasEligiblePlan(false);
         setIsScanning(true);
         setLaunchMessage('Scanning live volatility markets…');
         window.dispatchEvent(new CustomEvent('nexus-ai-scan'));
@@ -230,128 +240,141 @@ const NexusAIComingSoon: React.FC = () => {
         const nextValue = !isRecoveryEnabled;
         setIsRecoveryEnabled(nextValue);
         const recoveryButton = controllerRef.current?.querySelector<HTMLButtonElement>('[data-testid="toggle-recovery"]');
-        if (recoveryButton && recoveryButton.getAttribute('aria-pressed') !== String(nextValue)) {
-            recoveryButton.click();
-        }
-    };
-
-    const adjust = (
-        setter: React.Dispatch<React.SetStateAction<number | ''>>,
-        amount: number,
-        minimum = 1
-    ): void => {
-        setter(current => Math.max(minimum, (typeof current === 'number' ? current : minimum) + amount));
+        if (recoveryButton && recoveryButton.getAttribute('aria-pressed') !== String(nextValue)) recoveryButton.click();
     };
 
     const winRate = stats.trades ? Math.round((stats.wins / stats.trades) * 100) : 0;
+    const canLaunch = isLaunched || (scanComplete && hasEligiblePlan && !isScanning);
 
     return (
-        <section className='ai-analysis-coming-soon nexus-ai' aria-labelledby='nexus-ai-title'>
-            <div className='nexus-ai__reference-surface'>
-                <img
-                    src='/assets/nexus-ai-reference.jpg'
-                    alt='Nexus AI adaptive trading engine with trading parameters, recovery mode, Launch AI, and trading statistics'
-                />
+        <section className='ai-analysis-coming-soon nexus-ai' aria-labelledby='nexus-ai-title' data-testid='nexus-interface'>
+            <div className='nexus-ai__layout'>
+                <header className='nexus-ai__masthead'>
+                    <div className='nexus-ai__identity'>
+                        <span className='nexus-ai__mark' aria-hidden='true'>N</span>
+                        <div>
+                            <p className='nexus-ai__eyebrow'>Deriv · Live trading tool</p>
+                            <h1 id='nexus-ai-title'>Nexus <span>AI</span></h1>
+                        </div>
+                    </div>
+                    <div className={`nexus-ai__live-state${isLaunched ? ' is-live' : ''}`} aria-live='polite'>
+                        <span className='nexus-ai__state-dot' />
+                        <span>{isLaunched ? 'SESSION ACTIVE' : isScanning ? 'SCANNING MARKETS' : 'ENGINE STANDBY'}</span>
+                    </div>
+                </header>
 
-                <div className='nexus-ai__control-layer' role='group' aria-label='Nexus AI live controls'>
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--stake-minus' aria-label='Decrease stake' onClick={() => adjust(setStake, -1)} />
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--stake-plus' aria-label='Increase stake' onClick={() => adjust(setStake, 1)} />
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--profit-minus' aria-label='Decrease take profit' onClick={() => adjust(setTakeProfit, -1)} />
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--profit-plus' aria-label='Increase take profit' onClick={() => adjust(setTakeProfit, 1)} />
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--loss-minus' aria-label='Decrease stop loss' onClick={() => adjust(setStopLoss, -1)} />
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--loss-plus' aria-label='Increase stop loss' onClick={() => adjust(setStopLoss, 1)} />
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--multiplier-minus' aria-label='Decrease recovery multiplier' onClick={() => adjust(setMultiplier, -1)} />
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--multiplier-plus' aria-label='Increase recovery multiplier' onClick={() => adjust(setMultiplier, 1)} />
-                    <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--recovery' aria-label='Toggle recovery mode' aria-pressed={isRecoveryEnabled} onClick={toggleRecovery} />
-                    <button
-                        type='button'
-                        className='nexus-ai__hitbox nexus-ai__hitbox--scan'
-                        aria-label={isScanning ? 'Scanning volatility markets' : 'Scan volatility markets'}
-                        data-testid='nexus-scan-button'
-                        disabled={isScanning || isLaunched}
-                        onClick={scanMarkets}
-                    />
-                    <button
-                        type='button'
-                        className='nexus-ai__hitbox nexus-ai__hitbox--launch'
-                        aria-label={isLaunched ? 'Stop Nexus AI' : 'Launch AI'}
-                        aria-pressed={isLaunched}
-                        data-testid='nexus-launch-button'
-                        onClick={launchAI}
-                    />
+                <section className='nexus-ai__overview' aria-label='Session overview'>
+                    <div className='nexus-ai__overview-copy'>
+                        <span className='nexus-ai__kicker'>Synthetic volatility · guarded execution</span>
+                        <h2>Make the plan.<br /><em>Then let it run.</em></h2>
+                        <p>Scan live markets, review the eligible plan, then launch with session limits in place.</p>
+                    </div>
+                    <div className='nexus-ai__telemetry' aria-label='Session results' aria-live='polite'>
+                        <div><span>Contracts</span><strong>{stats.trades}</strong></div>
+                        <div><span>Wins</span><strong className='is-positive'>{stats.wins}</strong></div>
+                        <div><span>Losses</span><strong className='is-negative'>{stats.losses}</strong></div>
+                        <div><span>Win rate</span><strong>{winRate}<small>%</small></strong></div>
+                    </div>
+                </section>
+
+                <div className='nexus-ai__workspace'>
+                    <section className='nexus-ai__panel nexus-ai__controls' aria-labelledby='nexus-settings-title'>
+                        <div className='nexus-ai__panel-heading'>
+                            <div><span className='nexus-ai__step-label'>01 / Configure</span><h2 id='nexus-settings-title'>Session risk</h2></div>
+                            <span className='nexus-ai__panel-mark'>LIMITS</span>
+                        </div>
+                        <div className='nexus-ai__settings-grid'>
+                            <NumberSetting label='Stake' hint='Per contract' prefix='$' value={stake} onChange={setStake} testId='stake' />
+                            <NumberSetting label='Take profit' hint='Stop session at' prefix='$' value={takeProfit} onChange={setTakeProfit} testId='take-profit' />
+                            <NumberSetting label='Stop loss' hint='Stop session at' prefix='$' value={stopLoss} onChange={setStopLoss} testId='stop-loss' />
+                            <NumberSetting label='Recovery multiplier' hint='Next recovery stake' value={multiplier} onChange={setMultiplier} testId='recovery-multiplier' />
+                        </div>
+                        <div className='nexus-ai__recovery-row'>
+                            <span className='nexus-ai__recovery-symbol' aria-hidden='true'>R</span>
+                            <span className='nexus-ai__setting-copy'><strong>Recovery mode</strong><small>Allow a guarded recovery leg after a loss</small></span>
+                            <button
+                                type='button'
+                                className='nexus-ai__switch'
+                                role='switch'
+                                aria-checked={isRecoveryEnabled}
+                                aria-label='Recovery mode'
+                                data-testid='toggle-recovery-mode'
+                                onClick={toggleRecovery}
+                            ><span /></button>
+                        </div>
+                        <p className='nexus-ai__safety-note'><span aria-hidden='true'>!</span> Risk limits are applied to the session. Scan and eligible-plan checks remain required before launch.</p>
+                    </section>
+
+                    <section className='nexus-ai__panel nexus-ai__execution' aria-labelledby='nexus-execution-title'>
+                        <div className='nexus-ai__panel-heading'>
+                            <div><span className='nexus-ai__step-label'>02 / Execute</span><h2 id='nexus-execution-title'>Market control</h2></div>
+                            <span className={`nexus-ai__plan-chip${hasEligiblePlan && scanComplete ? ' is-ready' : ''}`}>
+                                <span />{hasEligiblePlan && scanComplete ? 'PLAN READY' : 'PLAN REQUIRED'}
+                            </span>
+                        </div>
+                        <div className='nexus-ai__market-readout'>
+                            <span className='nexus-ai__readout-orbit' aria-hidden='true'><i /><i /><i /></span>
+                            <div><span>MARKET SELECTION</span><strong>{hasEligiblePlan && scanComplete ? 'Eligible volatility market' : 'Awaiting market scan'}</strong><small>{hasEligiblePlan && scanComplete ? 'Plan confirmed by live scan' : 'No market selected yet'}</small></div>
+                        </div>
+                        <div className='nexus-ai__status-message' role='status' aria-live='polite'>
+                            <span className='nexus-ai__status-icon' aria-hidden='true'>i</span>{launchMessage}
+                        </div>
+                        <div className='nexus-ai__action-row'>
+                            <button
+                                type='button'
+                                className='nexus-ai__scan-button'
+                                data-testid='nexus-scan-button'
+                                disabled={isScanning || isLaunched}
+                                onClick={scanMarkets}
+                            ><span className={isScanning ? 'nexus-ai__scan-glyph is-spinning' : 'nexus-ai__scan-glyph'} aria-hidden='true'>↻</span>{isScanning ? 'Scanning markets' : 'Scan markets'}</button>
+                            <button
+                                type='button'
+                                className={`nexus-ai__launch-button${isLaunched ? ' is-stop' : ''}`}
+                                data-testid='nexus-launch-button'
+                                aria-pressed={isLaunched}
+                                disabled={!canLaunch}
+                                onClick={launchAI}
+                            ><span className='nexus-ai__launch-indicator' aria-hidden='true' />{isLaunched ? 'Stop session' : 'Launch AI'}</button>
+                        </div>
+                        <p className='nexus-ai__guard-copy'>Launch unlocks only after a complete scan finds an eligible plan.</p>
+                    </section>
                 </div>
 
-                <EditableNumber value={stake} setValue={setStake} label='Stake amount' className='nexus-ai__editable-value--stake' />
-                <EditableNumber value={takeProfit} setValue={setTakeProfit} label='Take profit' className='nexus-ai__editable-value--profit' />
-                <EditableNumber value={stopLoss} setValue={setStopLoss} label='Stop loss' className='nexus-ai__editable-value--loss' />
-                <EditableNumber value={multiplier} setValue={setMultiplier} label='Recovery multiplier' className='nexus-ai__editable-value--multiplier' />
-                {!isRecoveryEnabled && <span className='nexus-ai__toggle-overlay' aria-hidden='true'><span /></span>}
-                {isLaunched && <span className='nexus-ai__launch-state' aria-hidden='true'>STOP AI</span>}
-                {launchMessage && <span className='nexus-ai__status-overlay' role='status'>{launchMessage}</span>}
-
-                {stats.trades > 0 && (
-                    <div className='nexus-ai__stats-overlay' aria-live='polite'>
-                        <strong>{stats.trades}</strong>
-                        <strong>{stats.wins}</strong>
-                        <strong>{stats.losses}</strong>
-                        <strong>{winRate}%</strong>
+                <section className='nexus-ai__panel nexus-ai__journal' aria-labelledby='nexus-ai-journal-title'>
+                    <div className='nexus-ai__panel-heading'>
+                        <div><span className='nexus-ai__step-label'>03 / Observe</span><h2 id='nexus-ai-journal-title'>Contract journal</h2></div>
+                        <span className='nexus-ai__journal-count'>{journal.length} {journal.length === 1 ? 'contract' : 'contracts'}</span>
                     </div>
-                )}
-            </div>
-
-            <section className='nexus-ai__journal' aria-labelledby='nexus-ai-journal-title'>
-                <div className='nexus-ai__journal-heading'>
-                    <div>
-                        <span>Live execution</span>
-                        <h2 id='nexus-ai-journal-title'>Journal</h2>
-                    </div>
-                    <small>Entry / exit price action</small>
-                </div>
-                <div className='nexus-ai__journal-table-wrap'>
-                    <table className='nexus-ai__journal-table'>
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Market</th>
-                                <th>Leg</th>
-                                <th>Entry</th>
-                                <th>Current</th>
-                                <th>Exit</th>
-                                <th>Price action</th>
-                                <th>Result</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {journal.length ? journal.map(entry => {
-                                const result = entry.isOpen ? 'OPEN' : entry.isWin ? 'WON' : 'LOST';
-                                return (
-                                    <tr key={entry.contractId}>
+                    {journal.length ? (
+                        <div className='nexus-ai__journal-table-wrap'>
+                            <table className='nexus-ai__journal-table'>
+                                <thead><tr><th>Time</th><th>Market / strategy</th><th>Leg</th><th>Entry</th><th>Current</th><th>Exit</th><th>Price path</th><th>Result</th></tr></thead>
+                                <tbody>{journal.map(entry => {
+                                    const result = entry.isOpen ? 'OPEN' : entry.isWin ? 'WON' : 'LOST';
+                                    return <tr key={entry.contractId} data-testid={`journal-entry-${entry.contractId}`}>
                                         <td>{entry.purchaseTime || '—'}</td>
                                         <td><strong>{entry.market}</strong><small>{entry.symbol} · {entry.strategy}</small></td>
-                                        <td>{entry.leg}</td>
-                                        <td>{entry.entrySpot || '—'}</td>
-                                        <td>{entry.currentSpot || '—'}</td>
-                                        <td>{entry.exitSpot || '—'}</td>
-                                        <td className='nexus-ai__journal-action'>
-                                            {entry.entrySpot || '—'} <span>→</span> {entry.exitSpot || entry.currentSpot || 'LIVE'}
-                                        </td>
-                                        <td className={`nexus-ai__journal-result nexus-ai__journal-result--${result.toLowerCase()}`}>{result}</td>
-                                    </tr>
-                                );
-                            }) : (
-                                <tr><td colSpan={8} className='nexus-ai__journal-empty'>No contracts yet. Launch AI to record the selected market and its price action.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+                                        <td><span className={`nexus-ai__leg nexus-ai__leg--${entry.leg}`}>{entry.leg}</span></td>
+                                        <td>{entry.entrySpot || '—'}</td><td>{entry.currentSpot || '—'}</td><td>{entry.exitSpot || '—'}</td>
+                                        <td className='nexus-ai__price-path'>{entry.entrySpot || '—'} <span>→</span> {entry.exitSpot || entry.currentSpot || 'LIVE'}</td>
+                                        <td><span className={`nexus-ai__result nexus-ai__result--${result.toLowerCase()}`}>{result}</span>{typeof entry.profit === 'number' && <small className={entry.profit >= 0 ? 'is-positive' : 'is-negative'}>{entry.profit >= 0 ? '+' : ''}{entry.profit.toFixed(2)}</small>}</td>
+                                    </tr>;
+                                })}</tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className='nexus-ai__empty-journal' data-testid='journal-empty'>
+                            <span className='nexus-ai__empty-mark' aria-hidden='true'>—</span>
+                            <div><strong>No contracts recorded</strong><p>Completed and open contracts will appear here as the live session reports them.</p></div>
+                        </div>
+                    )}
+                </section>
+                <footer className='nexus-ai__footer'><span>DERIV / NEXUS AI</span><span>Live market data · session controls</span></footer>
+            </div>
 
             <div ref={controllerRef} className='nexus-ai__engine' aria-hidden='true'>
-                <Suspense fallback={null}>
-                    <AlphaScanAI />
-                </Suspense>
+                <Suspense fallback={null}><AlphaScanAI /></Suspense>
             </div>
-            <h1 id='nexus-ai-title' className='sr-only'>Nexus AI</h1>
         </section>
     );
 };
