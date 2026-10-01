@@ -15,6 +15,12 @@ The current production options catalogue exposes 13 open Random Index volatiliti
 
 **How to apply:** Keep volatility pickers and Binary Matrix market handling aligned with the full options-catalogue family, and validate contract support against the options endpoint rather than the legacy `ws.derivws.com/websockets/v3` endpoint.
 
+The working unauthenticated public market-data socket is `wss://api.derivws.com/trading/v1/options/ws/public`. Its `active_symbols` records identify instruments with `underlying_symbol`, provide labels in `underlying_symbol_name`, and expose `exchange_is_open` / `is_trading_suspended` as numeric 0/1 values; `ticks_history` returns usable public tick data on the same socket.
+
+**Why:** The legacy WebSocket host returned Cloudflare 520 errors, while the Options API socket returned the catalogue and history successfully; its metadata shape differs from the legacy `symbol` / `display_name` fields.
+
+**How to apply:** For public Alpha Scan data, support both legacy and Options API field names, interpret numeric availability flags with the correct suspension semantics, and keep trading authorization on its separate authenticated flow.
+
 Dropdown option builders must tolerate an empty or not-yet-hydrated processed-symbol catalogue and return no options or the caller's explicit fallback instead of indexing the catalogue directly.
 
 **Why:** Blockly can create trade-definition blocks before the active-symbol request completes; direct indexing during that window surfaced a user-visible `Cannot read properties of undefined` Journal error.

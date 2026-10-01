@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
+import { discoverVolatilitySymbols, getMetadataSymbolCode, type SyntheticSymbol } from './market-catalog';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
@@ -42,7 +43,7 @@ import {
 } from './alpha-market-strategy';
 import './alpha-scan-ai.scss';
 
-const DERIV_WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1';
+const DERIV_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
 const SCAN_TIMEOUT_MS = 35_000;
 const SHORT_RETURN_WINDOW = 20;
 const SYMBOL_PAGE_SIZE = 1;
@@ -83,15 +84,6 @@ type ScanStatus =
     | 'partial-data';
 type DiscoverySource = 'public-metadata' | 'verified-catalog' | 'fixture';
 type FailurePhase = 'Metadata discovery' | 'History collection' | 'Symbol history';
-
-type SyntheticSymbol = {
-    symbol: string;
-    displayName: string;
-    market: string;
-    submarket: string;
-    pipSize?: number;
-    status?: 'open' | 'closed' | 'unknown';
-};
 
 type ScanRow = SyntheticSymbol & {
     prices: number[];
@@ -150,58 +142,6 @@ type WebSocketMessage = {
     history?: { prices?: Array<number | string> };
     pip_size?: number | string;
     echo_req?: { symbol?: string; active_symbols?: string };
-};
-
-const stringFromRecord = (record: Record<string, unknown>, keys: string[]): string =>
-    keys.map(key => record[key]).find(value => typeof value === 'string' && value.length > 0) as string || '';
-
-const numberFromRecord = (record: Record<string, unknown>, keys: string[]): number | undefined => {
-    const value = keys.map(key => record[key]).find(candidate =>
-        typeof candidate === 'number' || (typeof candidate === 'string' && candidate.length > 0),
-    );
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const getVerifiedCatalogSymbols = (): SyntheticSymbol[] =>
-    DERIV_VOLATILITIES.map(index => ({
-        symbol: index.code,
-        displayName: index.label,
-        market: 'Derived',
-        submarket: index.tickEvery === 1 ? 'Continuous Indices' : 'Standard Indices',
-        status: 'unknown',
-    }));
-
-const symbolStatusFromRecord = (record: Record<string, unknown>): SyntheticSymbol['status'] => {
-    const explicitStatus = stringFromRecord(record, ['status', 'market_status']).toLowerCase();
-    if (['closed', 'close', 'inactive', 'disabled'].includes(explicitStatus)) return 'closed';
-    if (['open', 'active', 'enabled'].includes(explicitStatus)) return 'open';
-    const statusFlags = ['exchange_is_open', 'is_open', 'is_trading']
-        .map(key => record[key])
-        .filter(value => typeof value === 'boolean');
-    if (statusFlags.some(value => value === false)) return 'closed';
-    if (statusFlags.some(value => value === true)) return 'open';
-    return 'unknown';
-};
-
-const discoverVolatilitySymbols = (records: Array<Record<string, unknown>>): SyntheticSymbol[] => {
-    const metadataBySymbol = new Map(
-        records
-            .map(record => [stringFromRecord(record, ['symbol']), record] as const)
-            .filter(([symbol]) => Boolean(symbol)),
-    );
-
-    return getVerifiedCatalogSymbols().map(catalogSymbol => {
-        const record = metadataBySymbol.get(catalogSymbol.symbol);
-        return {
-            ...catalogSymbol,
-            displayName: stringFromRecord(record || {}, ['display_name', 'underlying_symbol']) || catalogSymbol.displayName,
-            market: stringFromRecord(record || {}, ['market_display_name', 'market']) || catalogSymbol.market,
-            submarket: stringFromRecord(record || {}, ['submarket_display_name', 'submarket']) || catalogSymbol.submarket,
-            pipSize: numberFromRecord(record || {}, ['pip_size']),
-            status: record ? symbolStatusFromRecord(record) : 'unknown',
-        };
-    });
 };
 
 const buildFixtureRows = (
@@ -3082,7 +3022,7 @@ const AlphaScanWorkspace: React.FC = () => {
                 const metadataSymbols = discoverVolatilitySymbols(message.active_symbols);
                 const supportedCodes = new Set(DERIV_VOLATILITIES.map(index => index.code));
                 const matchedMetadataCount = message.active_symbols.filter(record =>
-                    supportedCodes.has(stringFromRecord(record, ['symbol'])),
+                    supportedCodes.has(getMetadataSymbolCode(record)),
                 ).length;
                 const usingVerifiedCatalog = matchedMetadataCount === 0;
                 discoveredSymbols = metadataSymbols;
