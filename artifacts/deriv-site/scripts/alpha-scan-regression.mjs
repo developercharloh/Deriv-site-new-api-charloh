@@ -299,11 +299,22 @@ const getSnapshot = evaluate => evaluate(`(() => {
             Boolean(document.querySelector('[aria-label="Minimum payout"]')),
         executionLeg: root?.dataset.executionLeg || '',
         feedback: document.querySelector('[data-testid="live-trade-feedback"]')?.innerText || '',
+        nexusFeedbackHistory: Array.isArray(window.__nexusFeedbackHistory)
+            ? [...window.__nexusFeedbackHistory]
+            : [],
+        nexusRecoveryEnabled: document.querySelector('[data-testid="toggle-recovery"]')?.getAttribute('aria-pressed') || '',
         runningRows: document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]:not([data-contract-id])').length,
         journalLegs: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-leg]')]
             .map(row => row.getAttribute('data-leg') || ''),
         journalSymbols: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]')]
             .map(row => row.getAttribute('data-symbol') || ''),
+        journalStakes: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-stake]')]
+            .map(row => Number(row.getAttribute('data-stake'))),
+        journalGates: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-contract-id]')]
+            .map(row => row.querySelector('[class*="alpha-cockpit__row-gate"]')?.textContent?.trim() || ''),
+        journalProfits: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-contract-id]')]
+            .map(row => row.lastElementChild?.textContent?.trim() || ''),
+        location: window.location.href,
         journalPrices: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]')]
             .map(row => [...row.querySelectorAll('td')].slice(4, 7).map(cell => cell.textContent?.trim() || '')),
         settledRows: Number(root?.dataset.journalCount || 0),
@@ -658,20 +669,30 @@ const run = async () => {
             throw new Error(`The visible Nexus Scan target is covered at its center: ${JSON.stringify(scanTarget)}`);
         }
         const scanCountBefore = Number(mobileReady.scanCount);
-        await touchTap(client, scanTarget);
-        const afterManualScan = await waitFor(
-            async () => client.evaluate(`(() => {
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-scan-button\\"]")?.click()');
+        let afterManualScan;
+        try {
+            afterManualScan = await waitFor(
+                async () => client.evaluate(`(() => {
+                    const button = document.querySelector('[data-testid="nexus-scan-button"]');
+                    const root = document.querySelector('[data-testid="alpha-tool"]');
+                    const scanCount = Number(root?.dataset.scanCount || 0);
+                    return button && !button.disabled && scanCount > ${scanCountBefore}
+                        ? { scanCount }
+                        : false;
+                })()`),
+                'mobile Nexus scan action',
+                30000,
+                50,
+            );
+        } catch (error) {
+            const snapshot = await getSnapshot(client.evaluate);
+            const buttonState = await client.evaluate(`(() => {
                 const button = document.querySelector('[data-testid="nexus-scan-button"]');
-                const root = document.querySelector('[data-testid="alpha-tool"]');
-                const scanCount = Number(root?.dataset.scanCount || 0);
-                return button && !button.disabled && scanCount > ${scanCountBefore}
-                    ? { scanCount }
-                    : false;
-            })()`),
-            'mobile Nexus scan action',
-            10000,
-            50,
-        );
+                return button ? { disabled: button.disabled, text: button.innerText, scanCountBefore: ${scanCountBefore} } : null;
+            })()`);
+            throw new Error(`Mobile Nexus scan action failed: ${JSON.stringify({ snapshot, buttonState })}`);
+        }
 
         const launchTarget = await client.evaluate(`(() => {
             const launch = document.querySelector('[data-testid="nexus-launch-button"]');
@@ -1181,6 +1202,105 @@ const run = async () => {
             executionLeg: afterRecoveryOffLoss.executionLeg,
         };
         runReport.fixture.recoveryOff = recoveryOff;
+
+        const nexusSessionUrl = new URL(fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'nexus-digits', false, true));
+        nexusSessionUrl.searchParams.set('alpha_scan_fixture_stake', '10');
+        nexusSessionUrl.searchParams.set('alpha_scan_fixture_stop_loss', '50');
+        nexusSessionUrl.searchParams.set('alpha_scan_fixture_target_profit', '50');
+        nexusSessionUrl.searchParams.set('alpha_scan_fixture_martingale', '2');
+        await client.call('Page.navigate', { url: nexusSessionUrl.toString() });
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+            'Nexus multi-market recovery fixture Alpha Tool',
+        );
+        const nexusScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return ['ready', 'partial-data'].includes(next.status) ? next : false;
+            },
+            'Nexus multi-market recovery fixture scan',
+            10000,
+        );
+        assertScan(nexusScan, SAMPLE_WINDOWS[0], 'fixture');
+        const nexusRiskSettings = await client.evaluate(`(() => ({
+            url: location.href,
+            controls: [...document.querySelectorAll('select[aria-label]')]
+                .filter(select => ['Stop loss', 'Target profit', 'Martingale'].includes(select.getAttribute('aria-label')))
+                .map(select => ({ label: select.getAttribute('aria-label'), value: select.value })),
+        }))()`);
+        if (!['Stop loss:50', 'Target profit:50', 'Martingale:2'].every(expected => {
+            const [label, value] = expected.split(':');
+            return nexusRiskSettings.controls.some(control => control.label === label && control.value === value);
+        })) {
+            throw new Error(`Nexus fixture settings were not applied: ${JSON.stringify(nexusRiskSettings)}`);
+        }
+        await client.evaluate(`(() => {
+            window.__nexusFeedbackHistory = [];
+            window.addEventListener('nexus-ai-feedback', event => {
+                const detail = event.detail;
+                window.__nexusFeedbackHistory.push(typeof detail === 'string' ? detail : detail?.message || '');
+            });
+        })()`);
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        await waitFor(
+            () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "true"'),
+            'Nexus session launch',
+        );
+        const nexusSession = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.journalLegs.length >= 3 && next.settledRows >= 3 &&
+                    next.executionLeg === 'idle' && next.runningRows === 0
+                    ? next
+                    : false;
+            },
+            'Nexus primary, alternate-market recovery, and next primary entry',
+            30000,
+            50,
+        );
+        const nexusLegs = nexusSession.journalLegs.slice(0, 3);
+        const nexusSymbols = nexusSession.journalSymbols.slice(0, 3);
+        const nexusStakes = nexusSession.journalStakes.slice(0, 3);
+        if (
+            nexusLegs.join(',') !== 'primary,recovery,primary' ||
+            nexusSymbols[0] === nexusSymbols[1] ||
+            nexusStakes.join(',') !== '10,20,10'
+        ) {
+            throw new Error(
+                `Nexus did not use one different-market recovery before returning to base stake: ${JSON.stringify({
+                    legs: nexusLegs,
+                    symbols: nexusSymbols,
+                    stakes: nexusStakes,
+                    gates: nexusSession.journalGates.slice(0, 3),
+                    profits: nexusSession.journalProfits.slice(0, 3),
+                    location: nexusSession.location,
+                    feedbackHistory: nexusSession.nexusFeedbackHistory,
+                    recoveryEnabled: nexusSession.nexusRecoveryEnabled,
+                    feedback: nexusSession.feedback,
+                })}`,
+            );
+        }
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        await waitFor(
+            () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
+            'Nexus session stop after recovery regression',
+        );
+        await sleep(250);
+        const nexusAfterStop = await getSnapshot(client.evaluate);
+        if (
+            nexusAfterStop.executionLeg !== 'idle' ||
+            nexusAfterStop.journalLegs.length !== 3 ||
+            !nexusAfterStop.feedback.includes('stopped manually')
+        ) {
+            throw new Error(`Nexus placed another contract after Stop: ${JSON.stringify(nexusAfterStop)}`);
+        }
+        runReport.fixture.nexusSession = {
+            status: 'passed',
+            legs: nexusLegs,
+            symbols: nexusSymbols,
+            stakes: nexusStakes,
+            stopMessage: nexusAfterStop.feedback,
+        };
 
         const riskBoundaryCases = [
             { mode: 'target', stopMessage: 'Session target reached', settledRows: 2 },

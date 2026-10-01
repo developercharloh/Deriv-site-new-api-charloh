@@ -79,15 +79,23 @@ const NexusAIComingSoon: React.FC = () => {
     const launchTimerRef = useRef<number | null>(null);
     const seenContractsRef = useRef(new Set<string>());
     const settledContractsRef = useRef(new Set<string>());
+    const fixtureQuery = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search)
+        : null;
+    const fixtureNumber = (key: string, fallback: number): number => {
+        if (fixtureQuery?.get('alpha_scan_execution_fixture') !== '1') return fallback;
+        const value = Number(fixtureQuery.get(key));
+        return Number.isFinite(value) && value > 0 ? value : fallback;
+    };
     const [isLaunched, setIsLaunched] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const [scanComplete, setScanComplete] = useState(false);
     const [hasEligiblePlan, setHasEligiblePlan] = useState(false);
     const [isRecoveryEnabled, setIsRecoveryEnabled] = useState(true);
-    const [stake, setStake] = useState<NumericValue>(1);
-    const [takeProfit, setTakeProfit] = useState<NumericValue>(10);
-    const [stopLoss, setStopLoss] = useState<NumericValue>(50);
-    const [multiplier, setMultiplier] = useState<NumericValue>(2);
+    const [stake, setStake] = useState<NumericValue>(() => fixtureNumber('alpha_scan_fixture_stake', 1));
+    const [takeProfit, setTakeProfit] = useState<NumericValue>(() => fixtureNumber('alpha_scan_fixture_target_profit', 10));
+    const [stopLoss, setStopLoss] = useState<NumericValue>(() => fixtureNumber('alpha_scan_fixture_stop_loss', 50));
+    const [multiplier, setMultiplier] = useState<NumericValue>(() => fixtureNumber('alpha_scan_fixture_martingale', 2));
     const [launchMessage, setLaunchMessage] = useState('Run a market scan before launching. No purchase can be staged until an eligible plan is ready.');
     const [stats, setStats] = useState<NexusStats>({ trades: 0, wins: 0, losses: 0 });
     const [journal, setJournal] = useState<NexusJournalEntry[]>([]);

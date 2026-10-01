@@ -5,10 +5,12 @@ import {
     AUTO_SIGNAL_CONFIDENCE_WINDOW,
     evaluateMomentumMarket,
     isMomentumDirectionConfirmed,
+    isNexusDigitDecisionQualified,
     selectBestAvailableDigitFallback,
     selectAdaptiveDigitMarketPlan,
     selectAutoFallbackMarket,
     selectBestQualifiedMomentumMarket,
+    selectNexusAutomaticCandidates,
     selectQualifiedMomentumMarkets,
     selectStrongestMomentumMarket,
     type StrategySource,
@@ -196,5 +198,58 @@ describe('auto volatility momentum selection', () => {
         expect(fallback?.symbol).toBe('NO_MOMENTUM');
         expect(fallback?.contractType).toBe('DIGITOVER');
         expect(fallback?.reason).toMatch(/No strict momentum market/);
+    });
+});
+
+describe('Nexus automatic candidate selection', () => {
+    it('ranks Rise/Fall, parity, and Over/Under candidates from open markets', () => {
+        const riseAndEven = {
+            ...source('RISE_EVEN', Array.from({ length: 61 }, (_, index) => index + 1)),
+            lastDigits: Array.from({ length: 60 }, (_, index) => (index % 5) * 2),
+            tradable: true,
+        };
+        const overCandidate = {
+            ...source('OVER', Array.from({ length: 60 }, () => 100)),
+            lastDigits: Array.from({ length: 60 }, (_, index) => [5, 6, 7, 8, 9, 5][index % 6]),
+            tradable: true,
+        };
+        const closed = { ...overCandidate, symbol: 'CLOSED', tradable: false };
+
+        const candidates = selectNexusAutomaticCandidates([riseAndEven, overCandidate, closed]);
+
+        expect(candidates.some(candidate => candidate.symbol === 'RISE_EVEN' && candidate.contractType === 'CALL')).toBe(true);
+        expect(candidates.some(candidate => candidate.symbol === 'RISE_EVEN' && candidate.contractType === 'DIGITEVEN')).toBe(true);
+        expect(candidates.some(candidate => candidate.symbol === 'OVER' && candidate.contractType === 'DIGITOVER')).toBe(true);
+        expect(candidates.every(candidate => candidate.symbol !== 'CLOSED')).toBe(true);
+    });
+
+    it('requires enough recent digits and an edge above the route baseline', () => {
+        const qualified = {
+            ...source('QUALIFIED', Array(60).fill(100)),
+            lastDigits: [...Array(33).fill(2), ...Array(27).fill(1)],
+            tradable: true,
+        };
+        const belowEdge = {
+            ...source('BELOW_EDGE', Array(60).fill(100)),
+            lastDigits: [...Array(32).fill(2), ...Array(28).fill(1)],
+            tradable: true,
+        };
+        const shortHistory = {
+            ...source('SHORT', Array(59).fill(100)),
+            lastDigits: Array(59).fill(2),
+            tradable: true,
+        };
+
+        const candidates = selectNexusAutomaticCandidates([qualified, belowEdge, shortHistory]);
+        const evenCandidate = candidates.find(candidate =>
+            candidate.symbol === 'QUALIFIED' && candidate.contractType === 'DIGITEVEN',
+        );
+
+        expect(evenCandidate).toBeDefined();
+        expect(isNexusDigitDecisionQualified(evenCandidate!, qualified)).toBe(true);
+        expect(candidates.some(candidate =>
+            candidate.symbol === 'BELOW_EDGE' && candidate.contractType === 'DIGITEVEN',
+        )).toBe(false);
+        expect(candidates.some(candidate => candidate.symbol === 'SHORT')).toBe(false);
     });
 });

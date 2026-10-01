@@ -15,6 +15,9 @@ const makeHarness = (config: DTConfig) => {
         send: jest.fn((payload: SentPayload) => {
             sent.push(payload);
         }),
+        balance: jest.fn().mockResolvedValue({
+            balance: { balance: 100, currency: 'USD', loginid: 'VRTC12345' },
+        }),
         onMessage: () => ({
             subscribe: (next: MessageHandler) => {
                 handler = next;
@@ -46,7 +49,7 @@ const makeHarness = (config: DTConfig) => {
         return payload;
     };
 
-    return { engine, sent, feedback, positions, emit, latest };
+    return { api, engine, sent, feedback, positions, emit, latest };
 };
 
 const baseConfig: DTConfig = {
@@ -137,6 +140,7 @@ describe('DTraderEngine Alpha Scan execution path', () => {
             payout: 19.5,
             isOpen: true,
         });
+        expect(harness.api.balance).toHaveBeenCalledTimes(1);
 
         const poc = harness.latest(payload => payload.proposal_open_contract === 1);
         harness.emit({
@@ -164,6 +168,7 @@ describe('DTraderEngine Alpha Scan execution path', () => {
             entrySpot: '1379.50',
             exitSpot: '1379.52',
         });
+        expect(harness.api.balance).toHaveBeenCalledTimes(2);
         expect(feedback.some(message => message.startsWith('success:Bought'))).toBe(true);
         harness.engine.stop();
     });

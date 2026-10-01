@@ -48,3 +48,4 @@
 - [Digit contract availability fallback](deriv-digit-contract-availability.md) — cache broker-rejected digit routes per symbol and retry once with a supported same-symbol route.
 - [Alpha Scan queued execution](alpha-scan-queued-execution.md) — sequential qualified-market runs can replace transient idle gaps; regressions should assert durable settlements and journal prices.
 - [Alpha Scan auto fallback](alpha-scan-auto-fallback.md) — strict momentum and adaptive-digit entries need separate fresh-confirmation modes and current callback dependencies.
+- [Nexus digit confirmation fixtures](nexus-digit-confirmation-fixtures.md) — synthetic fresh ticks must match the selected digit route or recovery correctly fails confirmation.

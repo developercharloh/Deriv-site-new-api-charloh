@@ -32,11 +32,14 @@ const useActiveAccount = ({
 
         return {
             ...activeAccount,
-            balance: currentBalanceData?.balance
-                ? addComma(currentBalanceData.balance.toFixed(getDecimalPlaces(currentBalanceData.currency)))
-                : directBalance
-                  ? addComma(parseFloat(directBalance).toFixed(getDecimalPlaces(activeAccount.currency)))
-                  : addComma(parseFloat('0').toFixed(getDecimalPlaces(activeAccount.currency))),
+            balance: directBalance !== undefined &&
+                directBalance.trim() !== '' &&
+                Number.isFinite(Number(directBalance))
+                ? addComma(Number(directBalance).toFixed(getDecimalPlaces(activeAccount.currency)))
+                : typeof currentBalanceData?.balance === 'number' &&
+                    Number.isFinite(currentBalanceData.balance)
+                    ? addComma(currentBalanceData.balance.toFixed(getDecimalPlaces(currentBalanceData.currency)))
+                    : addComma(Number(0).toFixed(getDecimalPlaces(activeAccount.currency))),
             currencyLabel: isVirtual ? 'Demo' : activeAccount?.currency,
             icon: <CurrencyIcon currency={activeAccount?.currency?.toLowerCase()} isVirtual={isVirtual} />,
             isVirtual: isVirtual,

@@ -869,6 +869,7 @@ export class DTraderEngine {
         };
         this.positions.set(contractId, pos);
         this.onPosition(pos);
+        this.refreshAccountBalance();
         this.log(`✅ Bought #${contractId}  stake $${buyPrice.toFixed(2)}  payout $${payout.toFixed(2)}`, 'info');
 
         // Subscribe to settlement
@@ -1027,6 +1028,20 @@ export class DTraderEngine {
             this.positions.delete(contractId);
         }
         this.onPosition({ ...pos });
+        if (settled) this.refreshAccountBalance();
+    }
+
+    private refreshAccountBalance(): void {
+        const api = api_base.api;
+        if (!api || !api_base.is_authorized) return;
+        const balanceApi = api as typeof api & { balance: () => Promise<unknown> };
+        try {
+            void balanceApi.balance().catch(error => {
+                console.warn('[DTraderEngine] Could not refresh the account balance.', error);
+            });
+        } catch (error) {
+            console.warn('[DTraderEngine] Could not refresh the account balance.', error);
+        }
     }
 
     // ── Internal: WS helpers ──────────────────────────────────────────────────

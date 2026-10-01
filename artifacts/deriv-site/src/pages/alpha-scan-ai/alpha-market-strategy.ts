@@ -620,6 +620,9 @@ export const AUTO_MOMENTUM_SHORT_WINDOW = 6;
 export const AUTO_MOMENTUM_LONG_WINDOW = 14;
 export const AUTO_MOMENTUM_CONFIDENCE = 55;
 export const AUTO_SIGNAL_CONFIDENCE_WINDOW = 60;
+export const NEXUS_DIGIT_SIGNAL_WINDOW = 60;
+export const NEXUS_DIGIT_MIN_EDGE = 0.04;
+export const NEXUS_DEFAULT_PAYOUT_FLOOR = 1.8;
 
 export type MomentumSignal = 'CALL' | 'PUT';
 
@@ -638,6 +641,130 @@ export type MomentumMarketEvaluation = {
     confidencePassed: boolean;
     qualified: boolean;
     reasons: string[];
+};
+
+const digitMarketProbability = (market: PurchaseMarket): number | null => {
+    if (market === 'even' || market === 'odd') return 0.5;
+    const match = market.match(/^(over|under)-(\d+)$/);
+    if (!match) return null;
+    const barrier = Number(match[2]);
+    return match[1] === 'over'
+        ? (9 - barrier) / 10
+        : barrier / 10;
+};
+
+const digitMarketMatches = (market: PurchaseMarket, digit: number): boolean => {
+    if (market === 'even') return digit % 2 === 0;
+    if (market === 'odd') return digit % 2 !== 0;
+    const match = market.match(/^(over|under)-(\d+)$/);
+    if (!match) return false;
+    const barrier = Number(match[2]);
+    return match[1] === 'over' ? digit > barrier : digit < barrier;
+};
+
+const nexusDigitDecision = (
+    source: StrategySource,
+    market: PurchaseMarket,
+    digits: number[],
+    hitRate: number,
+    expectedRate: number,
+): RankedMarketDecision => {
+    const condition: MarketCondition = market === 'even'
+        ? 'all-even'
+        : market === 'odd'
+            ? 'all-odd'
+            : market as MarketCondition;
+    const edge = hitRate - expectedRate;
+    return {
+        symbol: source.symbol,
+        displayName: source.displayName,
+        condition,
+        label: purchaseMarketLabel(market),
+        contractType: market === 'even'
+            ? 'DIGITEVEN'
+            : market === 'odd'
+                ? 'DIGITODD'
+                : market.startsWith('over-')
+                    ? 'DIGITOVER'
+                    : 'DIGITUNDER',
+        barrier: market.match(/^(?:over|under)-(\d+)$/)?.[1] || null,
+        purchaseMarket: market,
+        digits,
+        strength: 50 + edge * 100,
+        reason: `${purchaseMarketLabel(market)} appeared on ${(
+            hitRate * 100
+        ).toFixed(0)}% of the latest ${digits.length} digits versus a ${(
+            expectedRate * 100
+        ).toFixed(0)}% baseline. This is historical evidence, not a prediction guarantee.`,
+    };
+};
+
+/**
+ * Require a minimum tick sample and an observed edge over the route's
+ * baseline. Live proposal payout remains the final entry gate.
+ */
+export const isNexusDigitDecisionQualified = (
+    decision: RankedMarketDecision,
+    source: StrategySource,
+    payoutFloor = NEXUS_DEFAULT_PAYOUT_FLOOR,
+    windowSize = NEXUS_DIGIT_SIGNAL_WINDOW,
+): boolean => {
+    const market = purchaseMarketFromDecision(decision);
+    if (!market) return false;
+    const expectedRate = digitMarketProbability(market);
+    if (!expectedRate || expectedRate <= 0 || (1 / expectedRate) < payoutFloor) return false;
+    const digits = source.lastDigits
+        .slice(-windowSize)
+        .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+    if (digits.length < windowSize) return false;
+    const hitRate = digitHitRate(digits, digit => digitMarketMatches(market, digit));
+    return hitRate >= expectedRate + NEXUS_DIGIT_MIN_EDGE;
+};
+
+/**
+ * Rank supported Rise/Fall and digit routes across every currently open
+ * synthetic market. Digit candidates need a 60-tick sample, an observed
+ * baseline edge, and a theoretical payout compatible with the configured
+ * floor; the broker's fresh proposal still decides whether an entry is allowed.
+ */
+export const selectNexusAutomaticCandidates = (
+    sources: StrategySource[],
+    payoutFloor = NEXUS_DEFAULT_PAYOUT_FLOOR,
+    windowSize = NEXUS_DIGIT_SIGNAL_WINDOW,
+): RankedMarketDecision[] => {
+    const openSources = sources.filter(source => source.tradable === true);
+    const momentumCandidates = selectQualifiedMomentumMarkets(
+        openSources,
+        AUTO_MOMENTUM_SHORT_WINDOW,
+        AUTO_MOMENTUM_LONG_WINDOW,
+        AUTO_MOMENTUM_CONFIDENCE,
+        AUTO_SIGNAL_CONFIDENCE_WINDOW,
+    );
+    const digitMarkets: PurchaseMarket[] = [
+        'even',
+        'odd',
+        ...Array.from({ length: 8 }, (_, index) => `over-${index + 1}` as PurchaseMarket),
+        ...Array.from({ length: 9 }, (_, index) => `under-${index + 1}` as PurchaseMarket),
+    ];
+    const digitCandidates = openSources.flatMap(source => {
+        const digits = source.lastDigits
+            .slice(-windowSize)
+            .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+        if (digits.length < windowSize) return [];
+        return digitMarkets.flatMap(market => {
+            const expectedRate = digitMarketProbability(market);
+            if (!expectedRate || expectedRate <= 0 || (1 / expectedRate) < payoutFloor) return [];
+            const hitRate = digitHitRate(digits, digit => digitMarketMatches(market, digit));
+            if (hitRate < expectedRate + NEXUS_DIGIT_MIN_EDGE) return [];
+            return [nexusDigitDecision(source, market, digits, hitRate, expectedRate)];
+        });
+    });
+    return [...momentumCandidates, ...digitCandidates].sort((left, right) =>
+        right.strength - left.strength ||
+        left.symbol.localeCompare(right.symbol) ||
+        left.contractType.localeCompare(right.contractType) ||
+        (left.barrier || '').localeCompare(right.barrier || ''),
+    );
 };
 
 const directionalPercentage = (moves: number[], direction: 1 | -1): number =>
