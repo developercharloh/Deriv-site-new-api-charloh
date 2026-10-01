@@ -89,3 +89,11 @@ When deploying a flat `dist` manifest directly through `/v13/deployments`, Verce
 **Why:** The existing project configuration expects a repository checkout, but a direct API deployment already contains the compiled artifact and has no `artifacts/deriv-site` source directory to build from.
 
 **How to apply:** Upload all referenced SHA-1 files to `/v2/files`, create the production deployment with the flat manifest and explicit no-op build settings, wait for `READY`, then verify the custom domain over HTTPS.
+
+## JavaScript verification
+
+Do not use only the first script referenced by the page to decide whether a deployment changed. It may be an unchanged vendor bundle while the application entry bundle changed. Verify the live HTML against the local build and compare every referenced script, especially the application bundle.
+
+**Why:** The first live script can remain byte-identical across a redesign even when the main application bundle is different.
+
+**How to apply:** After the deployment reaches `READY`, confirm the production domain serves the local build's HTML and check that all script assets load; use the app entry bundle for before/after comparisons.
