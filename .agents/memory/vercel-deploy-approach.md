@@ -31,11 +31,11 @@ npx vercel@latest deploy --prebuilt --prod --yes --token=$VERCEL_TOKEN
 - Git integration: **DISCONNECTED** intentionally (prevents permission errors)
 - Custom domain: `mrcharlohfx.site` → `www.mrcharlohfx.site`
 - The root `package.json` preinstall was removed from GitHub repo to allow npm
-- `scripts/push-to-github.sh` handles full flow: git push → build → vercel deploy --prebuilt
+- `scripts/push-to-github.sh` stages all changes and force-pushes `main`; avoid it for routine publishing
 
 **Why:** Vercel's monorepo detection overrides any `installCommand`/`buildCommand` settings when `pnpm-workspace.yaml` is present. The only reliable approach is to bypass Vercel's build system entirely using prebuilt output.
 
-**How to apply:** Any time code needs to be deployed to Vercel, run `bash scripts/push-to-github.sh` from the project root. Do NOT re-enable Vercel git integration.
+**How to apply:** Prefer the prebuilt Vercel CLI flow. Do not use `scripts/push-to-github.sh` for routine publishing because it stages all files and force-pushes `main`. If the CLI is unavailable, use the REST fallback below. Do not re-enable Vercel git integration.
 
 ## Direct API fallback
 
@@ -43,13 +43,13 @@ If the Vercel CLI cannot be installed because its transitive dependencies are bl
 
 **Why:** The CLI may be unavailable in a restricted package environment, while the Vercel API remains reachable. Submitting `.vercel/output/...` paths can produce a `READY` deployment that still inherits the repository build settings and serves no files.
 
-**How to apply:** Use the existing project and team identifiers from `.vercel/project.json`, never expose the deployment token, bind the prebuilt request with the team scope, wait for `READY`, and verify both the custom-domain HTML hash and at least one changed JavaScript asset.
+**How to apply:** Use the linked project and team identifiers from `.vercel/project.json`, never expose the deployment token, set the request body's `project` field to the linked project ID (not `projectId`), and include verified domains in `alias` when targeting production. After READY, verify the returned project ID and aliases, then compare custom-domain HTML and JavaScript assets against the local build.
 
-The current Vercel API rejects `projectId` as a deployment-body property; bind the prebuilt request with the team scope query parameter and use the linked project name. A `400 missing_files` response from the first prebuilt request is the normal digest handshake, not a failed deployment.
+The current Vercel API rejects `projectId` as a deployment-body property. Omitting `project` can send a deployment to a different same-team project, and `target: "production"` without an `alias` list may leave the custom domain on the previous deployment.
 
-**Why:** The older fallback example expected `projectId` in the JSON body, but the current endpoint schema rejects it before returning the missing digest list.
+**Why:** The API needs the target project set through `project`; the deployment's `name` alone is not a reliable project selector. Production aliases are assigned only when supplied in the creation request.
 
-**How to apply:** POST the manifest to `/v13/deployments?prebuilt=1&teamId=...` without `projectId`, upload the returned missing SHA-1 digests to `/v2/files`, POST the same manifest again, then poll the returned deployment until `READY`.
+**How to apply:** POST the manifest to `/v13/deployments?prebuilt=1&teamId=...` with `project` set to the linked project ID, `target: "production"`, and an `alias` array of verified project domains. Upload returned missing SHA-1 digests to `/v2/files`, POST the same manifest again, poll until `READY`, and confirm the resulting project ID and aliases before claiming the live site changed.
 
 The current API may return the digest list at `error.missing` inside a 400 `missing_files` response rather than at the top level. Treat that response as the expected handshake and read both shapes.
 
