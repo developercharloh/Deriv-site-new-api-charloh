@@ -14,3 +14,9 @@ The Nexus artwork controls synchronize values into the hidden Alpha controller t
 **Why:** Dispatching launch in the same event handler can start execution with the controller's previous stake, martingale, or risk limits even though the artwork visibly shows the new settings.
 
 **How to apply:** When a visual wrapper drives hidden Alpha controls, update the controls first and defer the launch event; keep manual stop as a separate event that clears the session without discarding journal updates.
+
+Manual Stop must also invalidate any launch waiting on an active scan. A completed scan may resume execution only while the original launch is still pending; Stop during the scan must prevent all later purchases.
+
+**Why:** The scan-to-launch handoff is asynchronous, so a late completion can otherwise recreate a session after the user has stopped it.
+
+**How to apply:** Keep the resume event synchronous with the scan-completion effect and validate the pending launch state before consuming it. Do not schedule an unguarded delayed continuation.

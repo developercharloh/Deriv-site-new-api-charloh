@@ -1167,6 +1167,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     });
     const nexusLaunchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const nexusLaunchPendingRef = useRef(false);
+    const nexusAutoLaunchAfterScanRef = useRef(false);
+    const nexusScanStateRef = useRef({
+        isBusy: true,
+        hasCompleteCoverage: false,
+        status: 'discovering',
+    });
     const recoveryUsedRef = useRef(false);
     const executeDecisionRef = useRef<(
         decision: RankedMarketDecision,
@@ -1249,6 +1255,70 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             });
         return candidates[0]?.plan || null;
     }, [digitWindow, strategySources]);
+
+    const hasCompleteNexusScan =
+        !isBusy &&
+        status === 'ready' &&
+        discoveredCount > 0 &&
+        rows.length >= discoveredCount &&
+        failedSymbols.length === 0;
+    nexusScanStateRef.current = {
+        isBusy,
+        hasCompleteCoverage: hasCompleteNexusScan,
+        status,
+    };
+
+    useEffect(() => {
+        const detail = {
+            busy: isBusy,
+            status,
+            complete: hasCompleteNexusScan,
+            hasPlan: Boolean(nexusAdaptivePlan),
+        };
+        const publishStatus = () => {
+            window.dispatchEvent(new CustomEvent('nexus-ai-scan-status', { detail }));
+        };
+        const handleScanStatusRequest = () => publishStatus();
+        const handleNexusScan = () => {
+            const scanState = nexusScanStateRef.current;
+            if (
+                scanState.isBusy ||
+                nexusLaunchPendingRef.current ||
+                nexusSessionRef.current ||
+                activeLegRef.current ||
+                autoRescanPendingRef.current
+            ) return;
+            onScan();
+        };
+        window.addEventListener('nexus-ai-scan', handleNexusScan);
+        window.addEventListener('nexus-ai-scan-status-request', handleScanStatusRequest);
+        publishStatus();
+        return () => {
+            window.removeEventListener('nexus-ai-scan', handleNexusScan);
+            window.removeEventListener('nexus-ai-scan-status-request', handleScanStatusRequest);
+        };
+    }, [hasCompleteNexusScan, isBusy, nexusAdaptivePlan, onScan, status]);
+
+    useEffect(() => {
+        if (!nexusAutoLaunchAfterScanRef.current || isBusy) return;
+        if (hasCompleteNexusScan && nexusAdaptivePlan) {
+            window.dispatchEvent(new CustomEvent('nexus-ai-launch', {
+                detail: { resumeAfterScan: true },
+            }));
+            return;
+        }
+        if (!['ready', 'partial-data', 'empty', 'timeout', 'connection-error'].includes(String(status))) return;
+
+        nexusAutoLaunchAfterScanRef.current = false;
+        nexusLaunchPendingRef.current = false;
+        const message = status === 'ready'
+            ? 'The scan completed, but no eligible market was found. No trade was opened.'
+            : `The live scan ended with ${status}. No trade was opened. Please scan again when the feed is available.`;
+        emitNexusFeedback(message, 'error');
+        window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+            detail: { active: false, message },
+        }));
+    }, [emitNexusFeedback, hasCompleteNexusScan, isBusy, nexusAdaptivePlan, status]);
 
     const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
     const autoMomentumEvaluations = useMemo(
@@ -1588,14 +1658,23 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     startQueuedAutoPrimaryRef.current = startQueuedAutoPrimary;
 
     useEffect(() => {
-        const handleNexusLaunch = () => {
+        const handleNexusLaunch = (event: Event) => {
+            const resumeAfterScan = Boolean(
+                (event as CustomEvent<{ resumeAfterScan?: boolean }>).detail?.resumeAfterScan,
+            );
+            if (resumeAfterScan) {
+                if (!nexusAutoLaunchAfterScanRef.current || !nexusLaunchPendingRef.current) return;
+                nexusAutoLaunchAfterScanRef.current = false;
+                nexusLaunchPendingRef.current = false;
+            }
             if (
                 activeLegRef.current ||
                 nexusSessionRef.current ||
                 nexusLaunchPendingRef.current ||
                 autoRescanPendingRef.current
             ) return;
-            const plan = nexusAdaptivePlan;
+            const scanState = nexusScanStateRef.current;
+            const plan = scanState.hasCompleteCoverage ? nexusAdaptivePlan : null;
             nexusLaunchPendingRef.current = true;
             emitNexusFeedback('Launching Nexus AI…');
             if (typeof window !== 'undefined') {
@@ -1604,21 +1683,28 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 }));
             }
 
+            if (!plan) {
+                nexusAutoLaunchAfterScanRef.current = true;
+                const message = scanState.isBusy
+                    ? 'Waiting for the live market scan to complete…'
+                    : 'Scanning live markets before opening a trade…';
+                emitNexusFeedback(message);
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                        detail: { active: true, message },
+                    }));
+                }
+                if (!scanState.isBusy) {
+                    onScan();
+                }
+                return;
+            }
+
+            nexusAutoLaunchAfterScanRef.current = false;
             nexusLaunchTimerRef.current = setTimeout(() => {
                 emitNexusFeedback('Scanning for the best market…');
                 nexusLaunchTimerRef.current = setTimeout(() => {
                     nexusLaunchPendingRef.current = false;
-                    if (!plan) {
-                        const message = 'No completed market scan is available yet. Run a scan, then launch Nexus AI again.';
-                        emitNexusFeedback(message, 'error');
-                        if (typeof window !== 'undefined') {
-                            window.dispatchEvent(new CustomEvent('nexus-ai-session', {
-                                detail: { active: false, message },
-                            }));
-                        }
-                        return;
-                    }
-
                     nexusAdaptivePlanRef.current = plan;
                     const baseStake = Number(runtimeRef.current.stake);
                     const configuredMultiplier = Number(runtimeRef.current.martingale);
@@ -1653,6 +1739,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 nexusLaunchTimerRef.current = null;
             }
             nexusLaunchPendingRef.current = false;
+            nexusAutoLaunchAfterScanRef.current = false;
             nexusSessionRef.current = null;
             pendingAutoEntryRef.current = null;
             recoveryUsedRef.current = false;
@@ -1675,7 +1762,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             window.removeEventListener('nexus-ai-launch', handleNexusLaunch);
             window.removeEventListener('nexus-ai-stop', handleNexusStop);
         };
-    }, [emitNexusFeedback, liveEngine, nexusAdaptivePlan]);
+    }, [emitNexusFeedback, liveEngine, nexusAdaptivePlan, onScan]);
 
     const toggleAutoRunner = useCallback(() => {
         autoQualifiedQueueRef.current = [];

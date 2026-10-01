@@ -620,6 +620,7 @@
         pointer-events: auto;
         cursor: pointer;
         touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
 
         &--stake-minus,
         &--profit-minus,
@@ -670,10 +671,23 @@
         }
 
         &--launch {
-            top: 76%;
+            top: 75.5%;
+            left: 2%;
+            width: 96%;
+            height: 9.5%;
+            min-height: 52px;
+        }
+
+        &--scan {
+            top: 85%;
             left: 4%;
             width: 92%;
             height: 8%;
+            min-height: 44px;
+        }
+
+        &:disabled {
+            cursor: wait;
         }
 
         &:focus-visible {
@@ -1776,8 +1790,7 @@
 // tabs (LDP Tool, Free Bots, AI Analysis) need their own scroll context so
 // users can reach all content on mobile.
 @include mobile-or-tablet-screen {
-    .main__container:has(#id-free-bots),
-    .main__container:has(#id-alpha-scan-ai) {
+    .main__container:has(#id-free-bots) {
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -1817,7 +1830,6 @@
     }
 
     #id-free-bots,
-    #id-alpha-scan-ai,
     #id-ai-analysis,
     #id-d-circles,
     #id-advanced-dtrader {
@@ -1827,24 +1839,20 @@
         overscroll-behavior-y: contain;
     }
 
-    #id-free-bots,
-    #id-alpha-scan-ai {
+    #id-free-bots {
         display: flex;
         flex-direction: column;
         min-height: 0;
         overflow-y: auto;
 
-        .free-bots,
-        .nexus-ai {
+        .free-bots {
             flex: 1 1 auto;
             width: 100%;
             min-height: 0;
         }
     }
 
-    // The Nexus artwork and Journal are one continuous surface inside the
-    // same bounded scrollport used by Free Bots. Keep the visual surface
-    // natural-height so the Journal remains reachable below it.
+    // Keep the artwork and Journal natural-height inside the main scrollport.
     #id-alpha-scan-ai .nexus-ai {
         flex: 0 0 auto;
         height: auto;
@@ -1852,9 +1860,22 @@
         overflow: visible;
     }
 
-    // Nexus is a document-length page. Remove the fixed-height tab chain so
-    // the browser can scroll the artwork and the full Journal as one surface.
-    .main.main--nexus-ai,
+    // Nexus owns one bounded touch-scroll area; its tab wrappers must remain
+    // natural-height so the entire artwork and Journal can scroll together.
+    .main.main--nexus-ai {
+        display: block;
+        box-sizing: border-box;
+        height: calc(100vh - 6rem) !important;
+        height: calc(100dvh - 6rem) !important;
+        max-height: none !important;
+        min-height: 0;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
+        touch-action: pan-y;
+    }
+
     .main.main--nexus-ai .main__container,
     .main.main--nexus-ai .main__container > div,
     .main.main--nexus-ai .dc-tabs,

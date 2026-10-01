@@ -28,6 +28,13 @@ type NexusSessionState = {
     message?: string;
 };
 
+type NexusScanStatus = {
+    busy?: boolean;
+    status?: string;
+    complete?: boolean;
+    hasPlan?: boolean;
+};
+
 type EditableNumberProps = {
     value: number | '';
     setValue: React.Dispatch<React.SetStateAction<number | ''>>;
@@ -77,6 +84,7 @@ const NexusAIComingSoon: React.FC = () => {
     const seenContractsRef = useRef(new Set<string>());
     const settledContractsRef = useRef(new Set<string>());
     const [isLaunched, setIsLaunched] = useState(false);
+    const [isScanning, setIsScanning] = useState(true);
     const [isRecoveryEnabled, setIsRecoveryEnabled] = useState(true);
     const [stake, setStake] = useState<number | ''>(1);
     const [takeProfit, setTakeProfit] = useState<number | ''>(10);
@@ -112,6 +120,20 @@ const NexusAIComingSoon: React.FC = () => {
             setIsLaunched(Boolean(session.active));
             if (session.message) setLaunchMessage(session.message);
         };
+        const handleScanStatus = (event: Event) => {
+            const scan = (event as CustomEvent).detail as NexusScanStatus | undefined;
+            if (!scan) return;
+            setIsScanning(Boolean(scan.busy));
+            if (scan.busy) {
+                setLaunchMessage('Scanning live volatility markets…');
+            } else if (scan.complete && scan.hasPlan) {
+                setLaunchMessage('Market scan complete · eligible market ready.');
+            } else if (scan.status && scan.status !== 'idle') {
+                setLaunchMessage(scan.status === 'ready'
+                    ? 'Scan complete · no eligible market found. No trade was opened.'
+                    : `Market scan ${scan.status.replace(/-/g, ' ')} · no trade was opened.`);
+            }
+        };
         const handleJournal = (event: Event) => {
             const entry = (event as CustomEvent).detail as NexusJournalEntry | undefined;
             if (!entry?.contractId || !entry.symbol) return;
@@ -131,10 +153,16 @@ const NexusAIComingSoon: React.FC = () => {
         };
         window.addEventListener('nexus-ai-feedback', handleFeedback);
         window.addEventListener('nexus-ai-session', handleSession);
+        window.addEventListener('nexus-ai-scan-status', handleScanStatus);
         window.addEventListener('nexus-ai-journal', handleJournal);
+        const scanStatusRequest = window.setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('nexus-ai-scan-status-request'));
+        }, 0);
         return () => {
+            window.clearTimeout(scanStatusRequest);
             window.removeEventListener('nexus-ai-feedback', handleFeedback);
             window.removeEventListener('nexus-ai-session', handleSession);
+            window.removeEventListener('nexus-ai-scan-status', handleScanStatus);
             window.removeEventListener('nexus-ai-journal', handleJournal);
         };
     }, []);
@@ -191,6 +219,13 @@ const NexusAIComingSoon: React.FC = () => {
         window.setTimeout(() => window.dispatchEvent(new CustomEvent('nexus-ai-launch')), 0);
     };
 
+    const scanMarkets = (): void => {
+        if (!controllerRef.current || isScanning || isLaunched) return;
+        setIsScanning(true);
+        setLaunchMessage('Scanning live volatility markets…');
+        window.dispatchEvent(new CustomEvent('nexus-ai-scan'));
+    };
+
     const toggleRecovery = (): void => {
         const nextValue = !isRecoveryEnabled;
         setIsRecoveryEnabled(nextValue);
@@ -218,7 +253,7 @@ const NexusAIComingSoon: React.FC = () => {
                     alt='Nexus AI adaptive trading engine with trading parameters, recovery mode, Launch AI, and trading statistics'
                 />
 
-                <div className='nexus-ai__control-layer' aria-label='Nexus AI live controls'>
+                <div className='nexus-ai__control-layer' role='group' aria-label='Nexus AI live controls'>
                     <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--stake-minus' aria-label='Decrease stake' onClick={() => adjust(setStake, -1)} />
                     <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--stake-plus' aria-label='Increase stake' onClick={() => adjust(setStake, 1)} />
                     <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--profit-minus' aria-label='Decrease take profit' onClick={() => adjust(setTakeProfit, -1)} />
@@ -230,9 +265,18 @@ const NexusAIComingSoon: React.FC = () => {
                     <button type='button' className='nexus-ai__hitbox nexus-ai__hitbox--recovery' aria-label='Toggle recovery mode' aria-pressed={isRecoveryEnabled} onClick={toggleRecovery} />
                     <button
                         type='button'
+                        className='nexus-ai__hitbox nexus-ai__hitbox--scan'
+                        aria-label={isScanning ? 'Scanning volatility markets' : 'Scan volatility markets'}
+                        data-testid='nexus-scan-button'
+                        disabled={isScanning || isLaunched}
+                        onClick={scanMarkets}
+                    />
+                    <button
+                        type='button'
                         className='nexus-ai__hitbox nexus-ai__hitbox--launch'
                         aria-label={isLaunched ? 'Stop Nexus AI' : 'Launch AI'}
                         aria-pressed={isLaunched}
+                        data-testid='nexus-launch-button'
                         onClick={launchAI}
                     />
                 </div>

@@ -239,6 +239,17 @@ const waitFor = async (condition, description, timeout = 30000, pollInterval = 5
     throw new Error(`Timed out waiting for ${description}.`);
 };
 
+const touchTap = async (client, { x, y }) => {
+    const touchPoint = { x, y, id: 1, radiusX: 1, radiusY: 1, force: 1 };
+    await client.call('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [touchPoint],
+    });
+    await sleep(50);
+    await client.call('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(50);
+};
+
 const getSnapshot = evaluate => evaluate(`(() => {
     const root = document.querySelector('[data-testid="alpha-tool"]');
     const modelPick = document.querySelector('[data-testid="tool-model-pick"]')?.getAttribute('data-symbol') || '';
@@ -423,12 +434,258 @@ const run = async () => {
             return url.toString();
         };
 
-        await client.call('Page.navigate', { url: fixtureUrl(SAMPLE_WINDOWS[0]) });
-        await client.evaluate(`document.querySelector('.slx-popup__dismiss')?.click()`);
+        await client.call('Page.navigate', { url: fixtureUrl(SAMPLE_WINDOWS[0], true) });
         await waitFor(
             () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
             'model-powered Alpha tool',
         );
+        await waitFor(
+            () => client.evaluate('!document.querySelector(".spl")'),
+            'startup splash dismissal',
+            10000,
+            100,
+        );
+        await waitFor(
+            () => client.evaluate(`(() => {
+                const dismiss = document.querySelector('.slx-popup__dismiss');
+                if (!dismiss) return false;
+                dismiss.click();
+                return true;
+            })()`),
+            'late social popup dismissal',
+            5000,
+            100,
+        );
+        await waitFor(
+            () => client.evaluate('!document.querySelector(".slx-popup__dismiss")'),
+            'social popup closing',
+            5000,
+            100,
+        );
+
+        await client.call('Emulation.setDeviceMetricsOverride', {
+            width: 390,
+            height: 700,
+            deviceScaleFactor: 1,
+            mobile: true,
+        });
+        await client.call('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"nexus-launch-button\\"]"))'),
+            'mobile Nexus controls',
+        );
+        const mobileReady = await waitFor(
+            async () => client.evaluate(`(() => {
+                const scan = document.querySelector('[data-testid="nexus-scan-button"]');
+                const main = document.querySelector('.main.main--nexus-ai');
+                return scan && !scan.disabled && main
+                    ? { scanCount: Number(document.querySelector('[data-testid="alpha-tool"]')?.dataset.scanCount || 0) }
+                    : false;
+            })()`),
+            'completed mobile Nexus market scan',
+        );
+        const mobileLayout = await client.evaluate(`(() => {
+            const main = document.querySelector('.main.main--nexus-ai');
+            const journal = document.querySelector('.nexus-ai__journal');
+            const launch = document.querySelector('[data-testid="nexus-launch-button"]');
+            const scan = document.querySelector('[data-testid="nexus-scan-button"]');
+            if (!main || !journal || !launch || !scan) return null;
+            const launchRect = launch.getBoundingClientRect();
+            const scanRect = scan.getBoundingClientRect();
+            const maxScroll = Math.max(0, main.scrollHeight - main.clientHeight);
+            main.scrollTop = maxScroll;
+            const journalRect = journal.getBoundingClientRect();
+            const mainRect = main.getBoundingClientRect();
+            const result = {
+                overflowY: getComputedStyle(main).overflowY,
+                clientHeight: main.clientHeight,
+                scrollHeight: main.scrollHeight,
+                maxScroll,
+                journalBottom: journalRect.bottom,
+                scrollportBottom: mainRect.bottom,
+                launchWidth: launchRect.width,
+                launchHeight: launchRect.height,
+                scanWidth: scanRect.width,
+                scanHeight: scanRect.height,
+            };
+            main.scrollTop = 0;
+            return result;
+        })()`);
+        if (
+            !mobileLayout ||
+            mobileLayout.overflowY !== 'auto' ||
+            mobileLayout.maxScroll <= 0 ||
+            mobileLayout.journalBottom > mobileLayout.scrollportBottom + 4 ||
+            mobileLayout.launchWidth < 44 ||
+            mobileLayout.launchHeight < 44 ||
+            mobileLayout.scanWidth < 44 ||
+            mobileLayout.scanHeight < 44
+        ) {
+            throw new Error(`Nexus mobile layout or touch targets are not usable: ${JSON.stringify(mobileLayout)}`);
+        }
+
+        const swipe = await client.evaluate(`(() => {
+            const main = document.querySelector('.main.main--nexus-ai');
+            if (!main) return null;
+            const rect = main.getBoundingClientRect();
+            const startY = Math.min(rect.bottom - 20, window.innerHeight - 20);
+            return {
+                x: Math.min(120, rect.right - 20),
+                startY,
+                endY: Math.max(rect.top + 20, startY - 420),
+            };
+        })()`);
+        if (!swipe || swipe.startY - swipe.endY < 80) {
+            throw new Error(`Nexus scrollport did not expose a usable mobile swipe area: ${JSON.stringify(swipe)}`);
+        }
+        await client.evaluate(`(() => {
+            const main = document.querySelector('.main.main--nexus-ai');
+            if (!main) return;
+            window.__nexusMobileTrace = [];
+            for (const type of ['touchstart', 'touchmove', 'touchend', 'scroll']) {
+                main.addEventListener(type, event => {
+                    const item = {
+                        type: event.type,
+                        defaultPrevented: event.defaultPrevented,
+                        y: event.touches?.[0]?.clientY ?? null,
+                    };
+                    window.__nexusMobileTrace.push(item);
+                    Promise.resolve().then(() => { item.defaultPrevented = event.defaultPrevented; });
+                }, true);
+            }
+        })()`);
+        const touchPoint = y => ({
+            x: swipe.x,
+            y,
+            id: 1,
+            radiusX: 1,
+            radiusY: 1,
+            force: 1,
+        });
+        await client.call('Input.dispatchTouchEvent', {
+            type: 'touchStart',
+            touchPoints: [touchPoint(swipe.startY)],
+        });
+        for (let step = 1; step <= 6; step += 1) {
+            const y = swipe.startY + ((swipe.endY - swipe.startY) * step) / 6;
+            await client.call('Input.dispatchTouchEvent', {
+                type: 'touchMove',
+                touchPoints: [touchPoint(y)],
+            });
+            await sleep(25);
+        }
+        await client.call('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await sleep(250);
+        const touchScrollState = await client.evaluate(`(() => {
+            const main = document.querySelector('.main.main--nexus-ai');
+            if (!main) return null;
+            const rect = main.getBoundingClientRect();
+            const target = document.elementFromPoint(${swipe.x}, ${swipe.startY});
+            return {
+                scrollTop: main.scrollTop,
+                scrollHeight: main.scrollHeight,
+                clientHeight: main.clientHeight,
+                overflowY: getComputedStyle(main).overflowY,
+                touchAction: getComputedStyle(main).touchAction,
+                rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
+                gestureTarget: target
+                    ? { tag: target.tagName, className: String(target.className || ''), id: target.id || '' }
+                    : null,
+                documentScrollTop: document.scrollingElement?.scrollTop || 0,
+                touchTrace: window.__nexusMobileTrace || [],
+            };
+        })()`);
+        const touchScrollTop = Number(touchScrollState?.scrollTop || 0);
+        if (touchScrollTop <= 0) {
+            throw new Error(`A mobile swipe did not scroll the Nexus page: ${JSON.stringify(touchScrollState)}`);
+        }
+
+        const scanTarget = await client.evaluate(`(() => {
+            const scan = document.querySelector('[data-testid="nexus-scan-button"]');
+            scan?.scrollIntoView({ block: 'center' });
+            if (!scan) return null;
+            const rect = scan.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            const hit = document.elementFromPoint(x, y);
+            return { x, y, receivesTap: hit === scan || scan.contains(hit) };
+        })()`);
+        if (!scanTarget?.receivesTap) {
+            throw new Error(`The visible Nexus Scan target is covered at its center: ${JSON.stringify(scanTarget)}`);
+        }
+        const scanCountBefore = Number(mobileReady.scanCount);
+        await touchTap(client, scanTarget);
+        const afterManualScan = await waitFor(
+            async () => client.evaluate(`(() => {
+                const button = document.querySelector('[data-testid="nexus-scan-button"]');
+                const root = document.querySelector('[data-testid="alpha-tool"]');
+                const scanCount = Number(root?.dataset.scanCount || 0);
+                return button && !button.disabled && scanCount > ${scanCountBefore}
+                    ? { scanCount }
+                    : false;
+            })()`),
+            'mobile Nexus scan action',
+            10000,
+            50,
+        );
+
+        const launchTarget = await client.evaluate(`(() => {
+            const launch = document.querySelector('[data-testid="nexus-launch-button"]');
+            launch?.scrollIntoView({ block: 'center' });
+            if (!launch) return null;
+            const rect = launch.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const hit = document.elementFromPoint(centerX, centerY);
+            return {
+                x: centerX,
+                y: centerY,
+                receivesTap: hit === launch || launch.contains(hit),
+            };
+        })()`);
+        if (!launchTarget?.receivesTap) {
+            throw new Error(`The visible Nexus Launch target is covered at its center: ${JSON.stringify(launchTarget)}`);
+        }
+        await touchTap(client, launchTarget);
+        await waitFor(
+            () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "true"'),
+            'Nexus launch responding to a mobile touch',
+            5000,
+            50,
+        );
+        const stopTarget = await client.evaluate(`(() => {
+            const stop = document.querySelector('[data-testid="nexus-launch-button"]');
+            const rect = stop.getBoundingClientRect();
+            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        })()`);
+        await touchTap(client, stopTarget);
+        await waitFor(
+            () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
+            'Nexus stop cancelling its pending launch',
+            5000,
+            50,
+        );
+        await sleep(1000);
+        const afterNexusStop = await getSnapshot(client.evaluate);
+        if (
+            afterNexusStop.executionLeg !== 'idle' ||
+            afterNexusStop.journalLegs.length > 0 ||
+            afterNexusStop.runningRows > 0
+        ) {
+            throw new Error(`Nexus opened a contract after mobile Stop: ${JSON.stringify(afterNexusStop)}`);
+        }
+        const mobileNexusTest = {
+            status: 'passed',
+            scrollHeight: mobileLayout.scrollHeight,
+            clientHeight: mobileLayout.clientHeight,
+            touchScrollTop,
+            launchTarget: `${Math.round(mobileLayout.launchWidth)}×${Math.round(mobileLayout.launchHeight)}`,
+            scanTarget: `${Math.round(mobileLayout.scanWidth)}×${Math.round(mobileLayout.scanHeight)}`,
+            scanCount: afterManualScan.scanCount,
+            contractsAfterStop: afterNexusStop.journalLegs.length,
+        };
+        await client.call('Emulation.setTouchEmulationEnabled', { enabled: false });
+        await client.call('Emulation.clearDeviceMetricsOverride');
 
         const results = [];
         for (const sampleSize of SAMPLE_WINDOWS) {
@@ -525,6 +782,7 @@ const run = async () => {
         runReport.fixture = {
             status: 'passed',
             scans: fixtureResults,
+            mobileNexus: mobileNexusTest,
         };
 
         await client.call('Page.navigate', { url: fixtureUrl(SAMPLE_WINDOWS[0], true) });
@@ -887,9 +1145,17 @@ const run = async () => {
         ];
         const riskBoundaries = [];
         for (const riskCase of riskBoundaryCases) {
+            const riskUrl = fixtureUrl(SAMPLE_WINDOWS[0], true, riskCase.mode);
             await client.call('Page.navigate', {
-                url: fixtureUrl(SAMPLE_WINDOWS[0], true, riskCase.mode),
+                url: riskUrl,
             });
+            const expectedRiskUrl = JSON.stringify(riskUrl);
+            await waitFor(
+                () => client.evaluate(`location.href === ${expectedRiskUrl} && document.readyState === 'complete'`),
+                `${riskCase.mode} risk fixture navigation`,
+                15000,
+                50,
+            );
             await waitFor(
                 () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
                 `${riskCase.mode} risk fixture Alpha Tool`,
@@ -1071,6 +1337,7 @@ const run = async () => {
             fixture: {
                 status: 'passed',
                 scans: fixtureResults,
+                mobileNexus: mobileNexusTest,
                 autoRunner,
                 unavailableContractFallback: runReport.fixture.unavailableContractFallback,
                 confirmationRecovery,
