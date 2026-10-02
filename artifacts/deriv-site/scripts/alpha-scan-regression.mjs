@@ -1759,11 +1759,13 @@ const run = async () => {
         ];
         const riskBoundaries = [];
         for (const riskCase of riskBoundaryCases) {
-            const riskUrl = fixtureUrl(SAMPLE_WINDOWS[0], true, riskCase.mode);
+            const riskUrl = new URL(fixtureUrl(SAMPLE_WINDOWS[0], true, riskCase.mode));
+            riskUrl.searchParams.set('alpha_scan_fixture_target_profit', '15');
+            riskUrl.searchParams.set('alpha_scan_fixture_stop_loss', '5');
             await client.call('Page.navigate', {
-                url: riskUrl,
+                url: riskUrl.toString(),
             });
-            const expectedRiskUrl = JSON.stringify(riskUrl);
+            const expectedRiskUrl = JSON.stringify(riskUrl.toString());
             await waitFor(
                 () => client.evaluate(`location.href === ${expectedRiskUrl} && document.readyState === 'complete'`),
                 `${riskCase.mode} risk fixture navigation`,

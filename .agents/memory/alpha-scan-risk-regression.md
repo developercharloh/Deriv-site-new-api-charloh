@@ -14,3 +14,9 @@ The browser regression defaults to the public production URL. Set its target to 
 **Why:** A P/L visibility regression initially exercised production and correctly reported that the fix had not yet been published, rather than testing the local changes.
 
 **How to apply:** Use `ALPHA_SCAN_URL` for local fixture runs, and use the default production target only when intentionally checking the live deployment.
+
+Risk-boundary fixture URLs must pin the target-profit and stop-loss values expected by the case rather than relying on the page's initial controls.
+
+**Why:** An unpinned production run reached the consecutive-loss limit before the intended stop-loss boundary; explicitly setting the fixture values made the standard production regression pass.
+
+**How to apply:** Set `alpha_scan_fixture_target_profit` and `alpha_scan_fixture_stop_loss` on risk-boundary URLs before navigating.
