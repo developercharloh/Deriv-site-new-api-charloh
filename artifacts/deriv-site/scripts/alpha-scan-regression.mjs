@@ -322,6 +322,8 @@ const getSnapshot = evaluate => evaluate(`(() => {
             .map(row => row.lastElementChild?.textContent?.trim() || ''),
         journalProfitValues: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-contract-id]')]
             .map(row => Number(row.getAttribute('data-profit'))),
+        openProfitLoss: root?.dataset.openProfitLoss || '',
+        totalPnlAtTop: Boolean(document.querySelector('.alpha-cockpit__topbar + [data-testid="tool-total-pnl"]')),
         totalProfitLoss: Number(root?.dataset.totalProfitLoss || 'NaN'),
         totalPnlDisplay: document.querySelector('[data-testid="tool-total-pnl"]')?.innerText || '',
         location: window.location.href,
@@ -1633,9 +1635,17 @@ const run = async () => {
             () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "true"'),
             'Nexus session launch',
         );
+        let openWithHistorySnapshot = null;
         const nexusSession = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
+                if (
+                    !openWithHistorySnapshot &&
+                    next.runningRows > 0 &&
+                    next.settledRows > 1
+                ) {
+                    openWithHistorySnapshot = next;
+                }
                 return next.journalLegs.length >= 3 && next.settledRows >= 3 &&
                     next.executionLeg === 'idle' && next.runningRows === 0
                     ? next
@@ -1645,6 +1655,23 @@ const run = async () => {
             30000,
             50,
         );
+        if (
+            !openWithHistorySnapshot ||
+            openWithHistorySnapshot.runningRows !== 1 ||
+            openWithHistorySnapshot.journalGates.length < 1 ||
+            !openWithHistorySnapshot.journalGates.includes('LOST') ||
+            openWithHistorySnapshot.openProfitLoss !== '' ||
+            !openWithHistorySnapshot.totalPnlAtTop ||
+            !openWithHistorySnapshot.totalPnlDisplay.includes('Open Pending')
+        ) {
+            throw new Error(`P/L and settled journal history were not visible during an open trade: ${JSON.stringify({
+                runningRows: openWithHistorySnapshot?.runningRows,
+                visibleSettledGates: openWithHistorySnapshot?.journalGates,
+                openProfitLoss: openWithHistorySnapshot?.openProfitLoss,
+                pnlAtTop: openWithHistorySnapshot?.totalPnlAtTop,
+                display: openWithHistorySnapshot?.totalPnlDisplay,
+            })}`);
+        }
         const nexusLegs = nexusSession.journalLegs.slice(0, 3);
         const nexusSymbols = nexusSession.journalSymbols.slice(0, 3);
         const nexusStakes = nexusSession.journalStakes.slice(0, 3);
@@ -1688,6 +1715,7 @@ const run = async () => {
             .reduce((total, profit) => total + profit, 0);
         if (
             !nexusSession.totalPnlDisplay.includes('TOTAL PROFIT / LOSS') ||
+            !nexusSession.totalPnlAtTop ||
             !Number.isFinite(nexusSession.totalProfitLoss) ||
             Math.abs(nexusSession.totalProfitLoss - expectedNexusProfitLoss) > 0.01
         ) {

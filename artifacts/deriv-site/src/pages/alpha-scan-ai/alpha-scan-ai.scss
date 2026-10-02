@@ -2226,7 +2226,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    margin-top: 0.8rem;
+    width: min(100%, 108rem);
+    margin: 0.8rem auto;
     padding: 0.7rem 0.85rem;
     border: 1px solid var(--cockpit-line);
     border-radius: 0.4rem;
@@ -2235,8 +2236,10 @@
 
 .alpha-cockpit__total-pnl > div { display: grid; gap: 0.25rem; }
 .alpha-cockpit__total-pnl span { color: var(--cockpit-muted); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.09em; }
-.alpha-cockpit__total-pnl strong { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 1.2rem; font-weight: 600; }
+.alpha-cockpit__total-pnl strong { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 1.5rem; font-weight: 650; }
 .alpha-cockpit__total-pnl small { color: var(--cockpit-muted); font-size: 0.62rem; line-height: 1.4; text-align: right; }
+.alpha-cockpit__total-pnl--positive { border-color: rgba(66, 215, 160, 0.32); background: rgba(66, 215, 160, 0.045); }
+.alpha-cockpit__total-pnl--negative { border-color: rgba(255, 106, 122, 0.38); background: rgba(255, 106, 122, 0.045); }
 .alpha-cockpit__total-pnl--positive strong { color: var(--cockpit-green); }
 .alpha-cockpit__total-pnl--negative strong { color: var(--cockpit-red); }
 
@@ -2426,6 +2429,10 @@
 .alpha-tool--focused .alpha-cockpit__topbar {
     min-height: 3.2rem;
     padding-bottom: 0.75rem;
+}
+
+.alpha-tool--focused .alpha-cockpit__total-pnl {
+    width: min(100%, 90rem);
 }
 
 .alpha-tool--focused .alpha-cockpit__headline {

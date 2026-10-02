@@ -989,7 +989,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
             });
         }
         const fixtureOpenDelayMs = 45;
-        const fixtureSettlementDelayMs = this.riskFixtureMode || this.recoveryFixtureMode ? 100 : 500;
+        const fixtureSettlementDelayMs = this.riskFixtureMode ? 100 : this.recoveryFixtureMode ? 300 : 500;
         this.schedule(() => {
             if (!this.activePosition || this.activePosition.contractId !== contractId) return;
             this.onBuyFeedback({
@@ -2564,8 +2564,16 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         ? (recoveryDecision ? purchaseMarketFromDecision(recoveryDecision) : null) || recoveryPurchaseMarket
         : recoveryPurchaseMarket;
     const modelProbability = modelPick ? Math.round(modelPick.baselineProbability * 100) : 0;
-    const openProfitLoss = liveTrade?.isOpen ? Number(liveTrade.profit) || 0 : 0;
+    const openProfitLossValue =
+        liveTrade?.isOpen && liveTrade.profit !== null && Number.isFinite(liveTrade.profit)
+            ? liveTrade.profit
+            : null;
+    const openProfitLoss = openProfitLossValue ?? 0;
+    const openProfitLossLabel = liveTrade?.isOpen
+        ? openProfitLossValue === null ? 'Pending' : formatMoney(openProfitLossValue)
+        : formatMoney(0);
     const totalProfitLoss = toolRealizedProfitLoss + openProfitLoss;
+    const visibleJournalRows = journalRows.filter(entry => entry.contractId !== liveTrade?.contractId);
     const modelGate = modelPick?.validationGate || 'insufficient-evidence';
     const modelGateLabel = modelGate === 'validated'
         ? 'VALIDATED'
@@ -2612,6 +2620,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-digit-fallback-count={digitFallbackCount}
             data-last-payout-skip={lastPayoutSkipMessage}
             data-realized-profit-loss={toolRealizedProfitLoss.toFixed(2)}
+            data-open-profit-loss={openProfitLossValue?.toFixed(2) || ''}
             data-total-profit-loss={totalProfitLoss.toFixed(2)}
         >
             <header className='alpha-cockpit__topbar'>
@@ -2633,6 +2642,20 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     </button>
                 </div>
             </header>
+
+            <div
+                className={`alpha-cockpit__total-pnl alpha-cockpit__total-pnl--${totalProfitLoss >= 0 ? 'positive' : 'negative'}`}
+                data-testid='tool-total-pnl'
+                data-total-profit-loss={totalProfitLoss.toFixed(2)}
+                aria-label='Profit and loss since this tool opened'
+                aria-live='polite'
+            >
+                <div>
+                    <span>TOTAL PROFIT / LOSS</span>
+                    <strong>{formatMoney(totalProfitLoss)}</strong>
+                </div>
+                <small>Realized {formatMoney(toolRealizedProfitLoss)} · Open {openProfitLossLabel} · Since this tool opened</small>
+            </div>
 
             <section className='alpha-cockpit__headline'>
                 <div>
@@ -2699,18 +2722,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         <label>STOP LOSS<select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option><option value='50'>$50</option></select></label>
                         <label>MARTINGALE<select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Martingale'><option value='no'>OFF · 1x</option><option value='2'>ON · 2x</option><option value='3'>ON · 3x</option></select></label>
                         <label>MIN PAYOUT<select value={payoutFloor} onChange={event => setPayoutFloor(event.target.value)} aria-label='Minimum payout'><option value='1.5'>1.50x</option><option value='1.8'>1.80x</option><option value='2'>2.00x</option></select></label>
-                    </div>
-                    <div
-                        className={`alpha-cockpit__total-pnl alpha-cockpit__total-pnl--${totalProfitLoss >= 0 ? 'positive' : 'negative'}`}
-                        data-testid='tool-total-pnl'
-                        data-total-profit-loss={totalProfitLoss.toFixed(2)}
-                        aria-live='polite'
-                    >
-                        <div>
-                            <span>TOTAL PROFIT / LOSS</span>
-                            <strong>{formatMoney(totalProfitLoss)}</strong>
-                        </div>
-                        <small>Realized {formatMoney(toolRealizedProfitLoss)} · Open {formatMoney(openProfitLoss)} · Since this tool opened</small>
                     </div>
                     <div className='alpha-cockpit__execution-actions'>
                         <button
@@ -2797,9 +2808,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                     <td>{liveTrade.entrySpot || '—'}</td>
                                     <td>—</td>
                                     <td><span className='alpha-cockpit__row-gate alpha-cockpit__row-gate--validated'>OPEN</span></td>
-                                    <td className='alpha-cockpit__gain'>Live · {formatMoney(liveTrade.profit)}</td>
+                                    <td className={openProfitLossValue === null ? '' : openProfitLossValue >= 0 ? 'alpha-cockpit__gain' : 'alpha-cockpit__loss'}>
+                                        {openProfitLossValue === null ? 'Live · P/L pending' : `Live · ${formatMoney(openProfitLossValue)}`}
+                                    </td>
                                 </tr>
-                            ) : journalRows.length ? journalRows.map(entry => (
+                            ) : null}
+                            {visibleJournalRows.map(entry => (
                                 <tr
                                     key={entry.contractId}
                                     data-contract-id={entry.contractId}
@@ -2820,13 +2834,14 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                         {entry.profit === null ? `Open · ${formatMoney(entry.payout)}` : `${entry.profit >= 0 ? '+' : ''}${formatMoney(entry.profit)}`}
                                     </td>
                                 </tr>
-                            )) : (
+                            ))}
+                            {!liveTrade && !visibleJournalRows.length ? (
                                 <tr>
                                     <td colSpan={9} className='alpha-cockpit__table-empty'>
                                         {liveFeedback?.message || 'No executions recorded. The journal will keep every approved attempt and settlement.'}
                                     </td>
                                 </tr>
-                            )}
+                            ) : null}
                         </tbody>
                     </table>
                 </div>
