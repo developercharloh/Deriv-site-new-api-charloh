@@ -1087,58 +1087,60 @@ const run = async () => {
         };
 
         await client.call('Page.navigate', {
-            url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'reverse'),
+            url: fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'evidence-decay'),
         });
         await waitFor(
             () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
-            'confirmation-reversal fixture Alpha Tool',
+            'evidence-decay fixture Alpha Tool',
         );
         const reversalScan = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
                 return ['ready', 'partial-data'].includes(next.status) ? next : false;
             },
-            'confirmation-reversal fixture scan',
+            'evidence-decay fixture scan',
             90000,
         );
         assertScan(reversalScan, SAMPLE_WINDOWS[0], 'fixture');
-        const initialReversalScanCount = Number(reversalScan.scanCount);
+        const initialEvidenceScanCount = Number(reversalScan.scanCount);
         await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
-        const failedConfirmation = await waitFor(
+        const expiredEvidence = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.feedback.includes('Fresh digit confirmation failed') ? next : false;
+                return next.feedback.includes('The live 60-tick digit evidence no longer qualifies')
+                    ? next
+                    : false;
             },
-            'failed fresh confirmation',
+            'live digit evidence invalidation',
             5000,
             50,
         );
         if (
-            failedConfirmation.runningRows !== 0 ||
-            failedConfirmation.settledRows !== 0 ||
-            failedConfirmation.executionLeg !== 'idle' ||
-            Number(failedConfirmation.autoTrades) !== 0
+            expiredEvidence.runningRows !== 0 ||
+            expiredEvidence.settledRows !== 0 ||
+            expiredEvidence.executionLeg !== 'idle' ||
+            Number(expiredEvidence.autoTrades) !== 0
         ) {
             throw new Error(
-                `A failed fresh confirmation left an active or settled contract: ${JSON.stringify(failedConfirmation)}`,
+                `Expired 60-tick evidence left an active or settled contract: ${JSON.stringify(expiredEvidence)}`,
             );
         }
-        const reversalRescan = await waitFor(
+        const evidenceRescan = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return Number(next.scanCount) > initialReversalScanCount &&
+                return Number(next.scanCount) > initialEvidenceScanCount &&
                     ['ready', 'partial-data'].includes(next.status)
                     ? next
                     : false;
             },
-            'complete rescan after failed fresh confirmation',
+            'complete rescan after live evidence expired',
             10000,
             50,
         );
-        assertScan(reversalRescan, SAMPLE_WINDOWS[0], 'fixture');
-        if (reversalRescan.runningRows !== 0 || Number(reversalRescan.autoTrades) !== 0) {
+        assertScan(evidenceRescan, SAMPLE_WINDOWS[0], 'fixture');
+        if (evidenceRescan.runningRows !== 0 || Number(evidenceRescan.autoTrades) !== 0) {
             throw new Error(
-                `The runner resumed execution before a new confirmation: ${JSON.stringify(reversalRescan)}`,
+                `The runner resumed execution before a new confirmation: ${JSON.stringify(evidenceRescan)}`,
             );
         }
         const resumedConfirmation = await waitFor(
@@ -1178,9 +1180,10 @@ const run = async () => {
             );
         const confirmationRecovery = {
             status: 'passed',
-            initialScanCount: initialReversalScanCount,
-            rescanCount: Number(reversalRescan.scanCount),
-            failedActiveRows: failedConfirmation.runningRows,
+            invalidationReason: 'live 60-tick evidence no longer qualified',
+            initialScanCount: initialEvidenceScanCount,
+            rescanCount: Number(evidenceRescan.scanCount),
+            expiredCandidateRows: expiredEvidence.runningRows,
             resumedActiveRows: recoveredRunning.runningRows,
         };
         runReport.fixture.confirmationRecovery = confirmationRecovery;
@@ -1305,7 +1308,6 @@ const run = async () => {
                     `Nexus ${nexusCase.label} submitted a Rise/Fall or unsupported digit contract: ${JSON.stringify(unsupportedBuys)}`,
                 );
             }
-
             await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
             await waitFor(
                 () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
@@ -1314,7 +1316,6 @@ const run = async () => {
             nexusDirectionalExclusionResults.push({
                 fixture: nexusCase.fixture,
                 executedContracts: directionalFixture.fixtureBuyCalls.map(buyCall => buyCall.contractType),
-                freshDigitFailure: directionalFixture.feedback.includes('Fresh digit confirmation failed'),
             });
         }
         runReport.fixture.nexusDirectionalExclusion = {
@@ -1384,6 +1385,112 @@ const run = async () => {
             status: 'passed',
             repeatedQuoteTicks: 3,
             executedContract: repeatedPriceExecution.fixtureBuyCalls[0].contractType,
+        };
+
+        const intermittentPriceUrl = new URL(
+            fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'mismatch-then-match-ticks'),
+        );
+        intermittentPriceUrl.searchParams.set('alpha_scan_fixture_stake', '10');
+        intermittentPriceUrl.searchParams.set('alpha_scan_fixture_stop_loss', '50');
+        intermittentPriceUrl.searchParams.set('alpha_scan_fixture_target_profit', '50');
+        intermittentPriceUrl.searchParams.set('alpha_scan_fixture_payout_floor', '1.5');
+        fixtureStage = 'Nexus mismatch-then-match navigation';
+        await client.call('Page.navigate', { url: intermittentPriceUrl.toString() });
+        fixtureStage = 'Nexus mismatch-then-match fixture mount';
+        await waitFor(
+            () => client.evaluate(
+                'document.querySelector(\'[data-testid="alpha-tool"]\')?.dataset.confirmationFixture === "mismatch-then-match-ticks"',
+            ),
+            'Nexus mismatch-then-match confirmation fixture mounted',
+        );
+        const intermittentPriceScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.status === 'ready' ? next : false;
+            },
+            'Nexus mismatch-then-match confirmation scan',
+            10000,
+        );
+        assertScan(intermittentPriceScan, SAMPLE_WINDOWS[0], 'fixture');
+        await client.evaluate(`(() => {
+            window.__nexusFeedbackHistory = [];
+            window.addEventListener('nexus-ai-feedback', event => {
+                const detail = event.detail;
+                window.__nexusFeedbackHistory.push(typeof detail === 'string' ? detail : detail?.message || '');
+            });
+            window.__alphaScanFixtureBuyCalls = [];
+        })()`);
+        fixtureStage = 'Nexus mismatch-then-match launch';
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        fixtureStage = 'Nexus mismatch wait state';
+        await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.nexusFeedbackHistory.some(message =>
+                    message.includes('did not match') && message.includes('60-tick evidence still qualifies'),
+                ) ? next : false;
+            },
+            'Nexus to retain an evidence-qualified candidate after one mismatching tick',
+            10000,
+            20,
+        );
+        const intermittentWaitingState = await getSnapshot(client.evaluate);
+        const intermittentSessionActive = await client.evaluate(
+            'document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "true"',
+        );
+        if (
+            intermittentWaitingState.fixtureBuyCalls.length !== 0 ||
+            !intermittentSessionActive ||
+            intermittentWaitingState.nexusFeedbackHistory.some(message =>
+                message.includes('Fresh digit confirmation failed'),
+            )
+        ) {
+            throw new Error(
+                `Nexus did not keep waiting safely after a mismatching live digit: ${JSON.stringify({
+                    buyCalls: intermittentWaitingState.fixtureBuyCalls,
+                    sessionActive: intermittentSessionActive,
+                    feedback: intermittentWaitingState.nexusFeedbackHistory,
+                })}`,
+            );
+        }
+        fixtureStage = 'Nexus mismatch-then-match buy wait';
+        await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.fixtureBuyCalls.length >= 1 ? next : false;
+            },
+            'Nexus purchase after three matching ticks following one mismatch',
+            12000,
+            20,
+        );
+        const intermittentExecution = await getSnapshot(client.evaluate);
+        if (
+            intermittentExecution.fixtureBuyCalls.length !== 1 ||
+            !intermittentExecution.nexusFeedbackHistory.some(message =>
+                message.includes('Fresh 3/3 digit confirmation passed'),
+            ) ||
+            intermittentExecution.nexusFeedbackHistory.some(message =>
+                message.includes('Fresh digit confirmation failed'),
+            )
+        ) {
+            throw new Error(
+                `Nexus did not resume confirmation after the mismatch and wait for three matching ticks: ${JSON.stringify({
+                    buyCalls: intermittentExecution.fixtureBuyCalls,
+                    feedback: intermittentExecution.nexusFeedbackHistory,
+                })}`,
+            );
+        }
+        fixtureStage = 'Nexus mismatch-then-match fixture stop';
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        await waitFor(
+            () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
+            'Nexus mismatch-then-match fixture stop',
+        );
+        runReport.fixture.nexusMismatchThenMatchConfirmation = {
+            status: 'passed',
+            mismatchingFreshTicks: 1,
+            matchingFreshTicksBeforePurchase: 3,
+            executedContract: intermittentExecution.fixtureBuyCalls[0].contractType,
         };
 
         const nexusFallbackUrl = new URL(
@@ -1829,6 +1936,7 @@ const run = async () => {
                 recoveryOff,
                 nexusDirectionalExclusion: runReport.fixture.nexusDirectionalExclusion,
                 nexusRepeatedPriceConfirmation: runReport.fixture.nexusRepeatedPriceConfirmation,
+                nexusMismatchThenMatchConfirmation: runReport.fixture.nexusMismatchThenMatchConfirmation,
                 nexusUnsupportedRouteFallback: runReport.fixture.nexusUnsupportedRouteFallback,
                 nexusSession: runReport.fixture.nexusSession,
                 riskBoundaries: runReport.fixture.riskBoundaries || [],

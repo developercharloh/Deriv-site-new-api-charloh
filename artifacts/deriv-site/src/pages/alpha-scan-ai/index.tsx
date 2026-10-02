@@ -18,6 +18,7 @@ import {
     NEXUS_PURCHASE_MARKET_OPTION_GROUPS,
     evaluateNexusQuoteGate,
     isNexusExecutionDecisionAllowed,
+    isNexusDigitEvidenceQualified,
     isNexusDigitDecisionQualified,
     marketConditionLabel,
     purchaseMarketLabel,
@@ -666,6 +667,8 @@ type AlphaConfirmationFixture =
     | 'route-change'
     | 'nexus-digits'
     | 'repeated-price-ticks'
+    | 'mismatch-then-match-ticks'
+    | 'evidence-decay'
     | 'nexus-call'
     | 'nexus-put'
     | null;
@@ -702,6 +705,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
     private readonly unavailableContractFixture: AlphaUnavailableContractFixture;
     private readonly recoveryFixtureMode: AlphaRecoveryFixture;
     private confirmationReversalUsed = false;
+    private confirmationEvidenceDecayUsed = false;
     private confirmationRouteChangeUsed = false;
     private unavailableContractUsed = false;
     private buyGuard: DTBuyGuard = () => null;
@@ -745,6 +749,9 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         if (routeChange) this.confirmationRouteChangeUsed = true;
         const reverseConfirmation = this.confirmationFixtureMode === 'reverse' && !this.confirmationReversalUsed;
         if (reverseConfirmation) this.confirmationReversalUsed = true;
+        const evidenceDecay = this.confirmationFixtureMode === 'evidence-decay' &&
+            !this.confirmationEvidenceDecayUsed;
+        if (evidenceDecay) this.confirmationEvidenceDecayUsed = true;
         const nexusMomentumFixture = this.confirmationFixtureMode === 'nexus-call' ||
             this.confirmationFixtureMode === 'nexus-put';
         const nexusMomentumDirection = this.confirmationFixtureMode === 'nexus-put' ? -1 : 1;
@@ -780,7 +787,11 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
             if (!this.config) return;
             this.onStatus('ready');
             this.onPriceWindow(prices, 2, false);
-            const confirmationCount = routeChange ? 5 : 3;
+            const confirmationCount = routeChange
+                ? 5
+                : this.confirmationFixtureMode === 'mismatch-then-match-ticks'
+                    ? 4
+                    : evidenceDecay ? 1 : 3;
             for (let confirmation = 1; confirmation <= confirmationCount; confirmation += 1) {
                 this.schedule(() => {
                     if (!this.config) return;
@@ -798,8 +809,49 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                                 Number((latestPrice + 0.03 + index * 0.02).toFixed(2)),
                             ),
                         ];
+                    } else if (evidenceDecay && confirmation === 1) {
+                        const latestPrice = prices[prices.length - 1];
+                        const barrier = Number(this.config.barrier);
+                        const matchingDigit = this.config.contractType === 'DIGITEVEN'
+                            ? 8
+                            : this.config.contractType === 'DIGITODD'
+                                ? 9
+                                : this.config.contractType === 'DIGITOVER'
+                                    ? Math.min(9, barrier + 1)
+                                    : Math.max(0, barrier - 1);
+                        const mismatchingDigit = this.config.contractType === 'DIGITEVEN'
+                            ? 9
+                            : this.config.contractType === 'DIGITODD'
+                                ? 8
+                                : barrier;
+                        const nextBase = Math.floor(latestPrice) + 1;
+                        prices = [
+                            ...prices,
+                            ...Array.from({ length: 60 }, (_, index) => {
+                                const digit = index % 2 === 0 ? matchingDigit : mismatchingDigit;
+                                return Number((nextBase + index + digit / 100).toFixed(2));
+                            }),
+                        ];
                     } else if (this.confirmationFixtureMode === 'repeated-price-ticks') {
                         prices = [...prices, prices[prices.length - 1]];
+                    } else if (this.confirmationFixtureMode === 'mismatch-then-match-ticks') {
+                        const latestPrice = prices[prices.length - 1];
+                        const barrier = Number(this.config.barrier);
+                        const matchingDigit = this.config.contractType === 'DIGITEVEN'
+                            ? 8
+                            : this.config.contractType === 'DIGITODD'
+                                ? 9
+                                : this.config.contractType === 'DIGITOVER'
+                                    ? Math.min(9, barrier + 1)
+                                    : Math.max(0, barrier - 1);
+                        const mismatchDigit = this.config.contractType === 'DIGITEVEN'
+                            ? 9
+                            : this.config.contractType === 'DIGITODD'
+                                ? 8
+                                : barrier;
+                        const nextDigit = confirmation === 1 ? mismatchDigit : matchingDigit;
+                        const nextPrice = Math.floor(latestPrice) + 1 + nextDigit / 100;
+                        prices = [...prices, Number(nextPrice.toFixed(2))];
                     } else {
                         const latestPrice = prices[prices.length - 1];
                         const increment = routeChangeSeed
@@ -1195,6 +1247,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         decision: RankedMarketDecision;
         leg: 'primary' | 'recovery';
         confirmations: number;
+        waitingFor: 'window' | 'match' | null;
     } | null>(null);
     const autoQualifiedQueueRef = useRef<RankedMarketDecision[]>([]);
     const autoRescanPendingRef = useRef(false);
@@ -1659,6 +1712,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 decision,
                 leg,
                 confirmations: 0,
+                waitingFor: null,
             };
         } else {
             pendingAutoEntryRef.current = null;
@@ -2398,8 +2452,27 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 lastDigits: quotesToLastDigits(prices, pipSize),
                 tradable: true,
             };
-            const freshSignalConfirmed = isNexusDigitDecisionQualified(pending.decision, freshSource);
-            if (!freshSignalConfirmed) {
+            const evidenceDigits = freshSource.lastDigits
+                .slice(-60)
+                .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+            if (evidenceDigits.length < 60) {
+                const previousConfirmations = pending.confirmations;
+                pending.confirmations = 0;
+                if (pending.waitingFor !== 'window' || previousConfirmations > 0) {
+                    const resetNotice = previousConfirmations > 0
+                        ? ` The previous ${previousConfirmations}/3 confirmations were reset.`
+                        : '';
+                    emitNexusFeedback(
+                        `Live digit history is still loading (${evidenceDigits.length}/60); waiting for a complete 60-tick window before confirming this candidate.${resetNotice} No order was sent.`,
+                        'info',
+                    );
+                }
+                pending.waitingFor = 'window';
+                return;
+            }
+
+            const freshEvidenceConfirmed = isNexusDigitEvidenceQualified(pending.decision, freshSource);
+            if (!freshEvidenceConfirmed) {
                 if (nexusSessionRef.current) {
                     nexusSkippedCandidatesRef.current.set(
                         `${pending.decision.symbol}|${pending.decision.contractType}|${pending.decision.barrier || ''}`,
@@ -2413,13 +2486,32 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 activeDecisionRef.current = null;
                 liveEngine.stop();
                 emitNexusFeedback(
-                    `Fresh digit confirmation failed for ${pending.decision.displayName} · ${pending.decision.label}. The latest entry digit did not match the route or its 60-tick evidence changed. No order was sent.`,
-                    nexusSessionRef.current || runtimeRef.current.autoVolatilityMode ? 'info' : 'error',
+                    `The live 60-tick digit evidence no longer qualifies for ${pending.decision.displayName} · ${pending.decision.label}. Discarding this candidate and rescanning; no order was sent.`,
+                    'info',
                 );
                 scheduleAutoRescan();
                 return;
             }
 
+            const freshSignalConfirmed = isNexusDigitDecisionQualified(pending.decision, freshSource);
+            if (!freshSignalConfirmed) {
+                const previousConfirmations = pending.confirmations;
+                pending.confirmations = 0;
+                if (pending.waitingFor !== 'match' || previousConfirmations > 0) {
+                    const resetNotice = previousConfirmations > 0
+                        ? ` The previous ${previousConfirmations}/3 confirmations were reset.`
+                        : '';
+                    const latestDigit = freshSource.lastDigits[freshSource.lastDigits.length - 1];
+                    emitNexusFeedback(
+                        `Live digit ${latestDigit} did not match ${pending.decision.label}.${resetNotice} The 60-tick evidence still qualifies, so Nexus is waiting for three consecutive matching fresh ticks.`,
+                        'info',
+                    );
+                }
+                pending.waitingFor = 'match';
+                return;
+            }
+
+            pending.waitingFor = null;
             pending.confirmations += 1;
             if (pending.confirmations < 3) {
                 emitNexusFeedback(
@@ -3052,6 +3144,8 @@ const AlphaScanWorkspace: React.FC = () => {
                 requested === 'route-change' ||
                 requested === 'nexus-digits' ||
                 requested === 'repeated-price-ticks' ||
+                requested === 'mismatch-then-match-ticks' ||
+                requested === 'evidence-decay' ||
                 requested === 'nexus-call' ||
                 requested === 'nexus-put'
                 ? requested

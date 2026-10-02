@@ -7,6 +7,7 @@ import {
     evaluateMomentumMarket,
     isNexusExecutionDecisionAllowed,
     isMomentumDirectionConfirmed,
+    isNexusDigitEvidenceQualified,
     isNexusDigitDecisionQualified,
     NEXUS_ALLOWED_DIGIT_MARKETS,
     NEXUS_MARKET_OPTION_GROUPS,
@@ -308,7 +309,9 @@ describe('Nexus automatic candidate selection', () => {
 
         expect(evenCandidate).toBeDefined();
         expect(isNexusDigitDecisionQualified(evenCandidate!, qualified)).toBe(true);
+        expect(isNexusDigitEvidenceQualified(evenCandidate!, mismatchedEntryDigit)).toBe(true);
         expect(isNexusDigitDecisionQualified(evenCandidate!, mismatchedEntryDigit)).toBe(false);
+        expect(isNexusDigitEvidenceQualified(evenCandidate!, belowEdge)).toBe(false);
         expect(candidates.some(candidate =>
             candidate.symbol === 'BELOW_EDGE' && candidate.contractType === 'DIGITEVEN',
         )).toBe(false);

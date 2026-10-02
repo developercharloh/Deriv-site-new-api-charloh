@@ -796,7 +796,7 @@ const nexusDigitDecision = (
  * lower bound above the route baseline. This is a screening statistic, not a
  * calibrated estimate of the next contract's win probability.
  */
-export const isNexusDigitDecisionQualified = (
+export const isNexusDigitEvidenceQualified = (
     decision: RankedMarketDecision,
     source: StrategySource,
     windowSize = NEXUS_DIGIT_SIGNAL_WINDOW,
@@ -809,9 +809,20 @@ export const isNexusDigitDecisionQualified = (
         .slice(-windowSize)
         .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
     if (digits.length < windowSize) return false;
-    const entryDigit = digits[digits.length - 1];
-    return digitMarketMatches(market, entryDigit) &&
-        hasNexusDigitEvidence(digits, market, expectedRate);
+    return hasNexusDigitEvidence(digits, market, expectedRate);
+};
+
+export const isNexusDigitDecisionQualified = (
+    decision: RankedMarketDecision,
+    source: StrategySource,
+    windowSize = NEXUS_DIGIT_SIGNAL_WINDOW,
+): boolean => {
+    const market = purchaseMarketFromDecision(decision);
+    if (!market || !isNexusDigitEvidenceQualified(decision, source, windowSize)) return false;
+    const digits = source.lastDigits
+        .slice(-windowSize)
+        .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+    return digitMarketMatches(market, digits[digits.length - 1]);
 };
 
 export type NexusQuoteGateInput = {
