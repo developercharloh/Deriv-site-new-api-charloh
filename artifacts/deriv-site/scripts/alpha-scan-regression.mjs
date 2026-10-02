@@ -1873,6 +1873,203 @@ const run = async () => {
             stopMessage: nexusAfterStop.feedback,
         };
 
+        fixtureStage = 'Nexus Martingale without recovery navigation';
+        const nexusMartingaleNoRecoveryUrl = new URL(
+            fixtureUrl(SAMPLE_WINDOWS[0], true, 'consecutive-losses', 'nexus-digits'),
+        );
+        nexusMartingaleNoRecoveryUrl.searchParams.set('alpha_scan_fixture_stake', '10');
+        nexusMartingaleNoRecoveryUrl.searchParams.set('alpha_scan_fixture_stop_loss', '50');
+        nexusMartingaleNoRecoveryUrl.searchParams.set('alpha_scan_fixture_target_profit', '50');
+        nexusMartingaleNoRecoveryUrl.searchParams.set('alpha_scan_fixture_martingale', '2');
+        await client.call('Page.navigate', { url: nexusMartingaleNoRecoveryUrl.toString() });
+        await waitFor(
+            () => client.evaluate(
+                `location.href === ${JSON.stringify(nexusMartingaleNoRecoveryUrl.toString())} && document.readyState === 'complete'`,
+            ),
+            'Nexus Martingale without recovery fixture navigation',
+            15000,
+            50,
+        );
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+            'Nexus Martingale without recovery fixture mounted',
+        );
+        const nexusMartingaleNoRecoveryScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return ['ready', 'partial-data'].includes(next.status) ? next : false;
+            },
+            'Nexus Martingale without recovery fixture scan',
+            10000,
+        );
+        assertScan(nexusMartingaleNoRecoveryScan, SAMPLE_WINDOWS[0], 'fixture');
+        const configuredMartingaleValues = await client.evaluate(
+            '[...document.querySelectorAll(\'select[aria-label="Martingale"]\')].map(select => select.value)',
+        );
+        await client.evaluate('document.querySelector("[data-testid=\\"toggle-recovery\\"]")?.click()');
+        const recoveryDisabledSnapshot = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.nexusRecoveryEnabled === 'false' ? next : false;
+            },
+            'Nexus recovery disabled before Martingale run',
+        );
+        await client.evaluate(`(() => {
+            window.__nexusFeedbackHistory = [];
+            window.addEventListener('nexus-ai-feedback', event => {
+                const detail = event.detail;
+                window.__nexusFeedbackHistory.push(typeof detail === 'string' ? detail : detail?.message || '');
+            });
+            window.__alphaScanFixtureBuyCalls = [];
+        })()`);
+        fixtureStage = 'Nexus Martingale without recovery launch';
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        const nexusMartingaleNoRecovery = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.fixtureBuyCalls.length >= 2 && next.journalLegs.length >= 2
+                    ? next
+                    : false;
+            },
+            'Martingale stake increase while recovery is disabled',
+            20000,
+            50,
+        );
+        const noRecoveryStakes = nexusMartingaleNoRecovery.fixtureBuyCalls
+            .slice(0, 2)
+            .map(purchase => purchase.stake);
+        const noRecoveryJournalStakes = nexusMartingaleNoRecovery.journalStakes.slice(0, 2);
+        if (
+            recoveryDisabledSnapshot.nexusRecoveryEnabled !== 'false' ||
+            noRecoveryStakes[0] !== 10 ||
+            noRecoveryStakes[1] !== 20 ||
+            nexusMartingaleNoRecovery.journalLegs.slice(0, 2).join(',') !== 'primary,primary' ||
+            !noRecoveryJournalStakes.includes(10) ||
+            !noRecoveryJournalStakes.includes(20)
+        ) {
+            throw new Error(
+                `Nexus did not apply 2x Martingale after a loss when recovery was disabled: ${JSON.stringify({
+                    recoveryEnabled: recoveryDisabledSnapshot.nexusRecoveryEnabled,
+                    martingaleValues: configuredMartingaleValues,
+                    purchases: nexusMartingaleNoRecovery.fixtureBuyCalls.slice(0, 2),
+                    legs: nexusMartingaleNoRecovery.journalLegs.slice(0, 2),
+                    stakes: noRecoveryJournalStakes,
+                    feedback: nexusMartingaleNoRecovery.nexusFeedbackHistory.slice(-10),
+                })}`,
+            );
+        }
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        await waitFor(
+            () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
+            'Nexus Martingale without recovery fixture stop',
+        );
+        runReport.fixture.nexusMartingaleWithoutRecovery = {
+            status: 'passed',
+            recoveryEnabled: false,
+            legs: nexusMartingaleNoRecovery.journalLegs.slice(0, 2),
+            stakes: noRecoveryStakes,
+        };
+
+        fixtureStage = 'Nexus Martingale stop-loss budget navigation';
+        const nexusMartingaleBudgetUrl = new URL(
+            fixtureUrl(SAMPLE_WINDOWS[0], true, 'consecutive-losses', 'nexus-digits'),
+        );
+        nexusMartingaleBudgetUrl.searchParams.set('alpha_scan_fixture_stake', '10');
+        nexusMartingaleBudgetUrl.searchParams.set('alpha_scan_fixture_stop_loss', '5');
+        nexusMartingaleBudgetUrl.searchParams.set('alpha_scan_fixture_target_profit', '50');
+        nexusMartingaleBudgetUrl.searchParams.set('alpha_scan_fixture_martingale', '2');
+        await client.call('Page.navigate', { url: nexusMartingaleBudgetUrl.toString() });
+        await waitFor(
+            () => client.evaluate(
+                `location.href === ${JSON.stringify(nexusMartingaleBudgetUrl.toString())} && document.readyState === 'complete'`,
+            ),
+            'Nexus Martingale stop-loss budget fixture navigation',
+            15000,
+            50,
+        );
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+            'Nexus Martingale stop-loss budget fixture mounted',
+        );
+        const nexusMartingaleBudgetScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return ['ready', 'partial-data'].includes(next.status) ? next : false;
+            },
+            'Nexus Martingale stop-loss budget fixture scan',
+            10000,
+        );
+        assertScan(nexusMartingaleBudgetScan, SAMPLE_WINDOWS[0], 'fixture');
+        await client.evaluate('document.querySelector("[data-testid=\\"toggle-recovery\\"]")?.click()');
+        const recoveryDisabledBudget = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.nexusRecoveryEnabled === 'false' ? next : false;
+            },
+            'Nexus recovery disabled before stop-loss budget test',
+        );
+        await client.evaluate(`(() => {
+            window.__nexusFeedbackHistory = [];
+            window.addEventListener('nexus-ai-feedback', event => {
+                const detail = event.detail;
+                window.__nexusFeedbackHistory.push(typeof detail === 'string' ? detail : detail?.message || '');
+            });
+            window.__alphaScanFixtureBuyCalls = [];
+        })()`);
+        fixtureStage = 'Nexus Martingale stop-loss budget launch';
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        const nexusMartingaleBudgetRun = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.fixtureBuyCalls.length >= 2 ? next : false;
+            },
+            'Martingale stake fallback within the remaining stop-loss budget',
+            20000,
+            50,
+        );
+        const budgetStakes = nexusMartingaleBudgetRun.fixtureBuyCalls
+            .slice(0, 2)
+            .map(purchase => purchase.stake);
+        if (
+            recoveryDisabledBudget.nexusRecoveryEnabled !== 'false' ||
+            budgetStakes[0] !== 10 ||
+            budgetStakes[1] !== 10 ||
+            !nexusMartingaleBudgetRun.nexusFeedbackHistory.some(message =>
+                message.includes('remaining session stop-loss budget'),
+            )
+        ) {
+            throw new Error(
+                `Nexus did not keep the Martingale stake within the remaining stop-loss budget: ${JSON.stringify({
+                    recoveryEnabled: recoveryDisabledBudget.nexusRecoveryEnabled,
+                    purchases: nexusMartingaleBudgetRun.fixtureBuyCalls.slice(0, 2),
+                    feedback: nexusMartingaleBudgetRun.nexusFeedbackHistory.slice(-10),
+                })}`,
+            );
+        }
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        await waitFor(
+            () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
+            'Nexus Martingale stop-loss budget fixture stop',
+        );
+        await sleep(200);
+        const nexusMartingaleBudgetStopped = await getSnapshot(client.evaluate);
+        if (nexusMartingaleBudgetStopped.fixtureBuyCalls.length !== 2) {
+            throw new Error(
+                `Nexus opened another contract after stopping the stop-loss budget fixture: ${JSON.stringify(
+                    nexusMartingaleBudgetStopped.fixtureBuyCalls,
+                )}`,
+            );
+        }
+        runReport.fixture.nexusMartingaleStopLossBudget = {
+            status: 'passed',
+            recoveryEnabled: false,
+            stopLoss: 5,
+            stakes: budgetStakes,
+            budgetFeedback: nexusMartingaleBudgetRun.nexusFeedbackHistory.find(message =>
+                message.includes('remaining session stop-loss budget'),
+            ),
+        };
+
         const riskBoundaryCases = [
             { mode: 'target', stopMessage: 'Session target reached', settledRows: 2 },
             { mode: 'stop-loss', stopMessage: 'Session stop loss reached', settledRows: 1 },
@@ -2091,6 +2288,8 @@ const run = async () => {
                 nexusMismatchThenMatchConfirmation: runReport.fixture.nexusMismatchThenMatchConfirmation,
                 nexusUnsupportedRouteFallback: runReport.fixture.nexusUnsupportedRouteFallback,
                 nexusSession: runReport.fixture.nexusSession,
+                nexusMartingaleWithoutRecovery: runReport.fixture.nexusMartingaleWithoutRecovery,
+                nexusMartingaleStopLossBudget: runReport.fixture.nexusMartingaleStopLossBudget,
                 nexusPnl: runReport.fixture.nexusPnl,
                 riskBoundaries: runReport.fixture.riskBoundaries || [],
             },

@@ -4,6 +4,7 @@ import {
     AUTO_MOMENTUM_SHORT_WINDOW,
     AUTO_SIGNAL_CONFIDENCE_WINDOW,
     evaluateNexusQuoteGate,
+    getNexusStakeForLossStreak,
     evaluateMomentumMarket,
     isNexusExecutionDecisionAllowed,
     isMomentumDirectionConfirmed,
@@ -35,6 +36,23 @@ const pricesFromMoves = (moves: number[]): number[] => moves.reduce(
     (prices, move) => [...prices, prices[prices.length - 1] + move],
     [100],
 );
+
+describe('Nexus Martingale stake progression', () => {
+    it('keeps the base stake after losses when Martingale is off', () => {
+        expect(getNexusStakeForLossStreak(10, 'no', 1)).toBe(10);
+        expect(getNexusStakeForLossStreak(10, 'no', 3)).toBe(10);
+    });
+
+    it('multiplies the stake by the selected factor for each consecutive loss', () => {
+        expect(getNexusStakeForLossStreak(10, '2', 1)).toBe(20);
+        expect(getNexusStakeForLossStreak(10, '2', 2)).toBe(40);
+        expect(getNexusStakeForLossStreak(10, '3', 2)).toBe(90);
+    });
+
+    it('returns to the base stake when the loss streak is reset after a win', () => {
+        expect(getNexusStakeForLossStreak(10, '3', 0)).toBe(10);
+    });
+});
 
 describe('auto volatility momentum selection', () => {
     it('selects the strongest aligned CALL candidate', () => {

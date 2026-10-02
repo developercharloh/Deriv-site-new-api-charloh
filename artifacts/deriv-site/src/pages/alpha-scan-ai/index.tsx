@@ -17,6 +17,7 @@ import {
     NEXUS_MARKET_OPTION_GROUPS,
     NEXUS_PURCHASE_MARKET_OPTION_GROUPS,
     evaluateNexusQuoteGate,
+    getNexusStakeForLossStreak,
     isNexusExecutionDecisionAllowed,
     isNexusDigitEvidenceQualified,
     isNexusDigitDecisionQualified,
@@ -677,7 +678,6 @@ type AlphaRecoveryFixture = 'loss' | null;
 type NexusSession = {
     baseStake: number;
     currentStake: number;
-    multiplier: number;
     sessionProfit: number;
     trades: number;
     consecutiveLosses: number;
@@ -1591,11 +1591,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             return;
         }
 
-        const configuredMultiplier = Number(runtime.martingale);
         const effectiveStake = stakeOverride !== undefined
             ? stakeOverride
-            : leg === 'recovery' && Number.isFinite(configuredMultiplier) && configuredMultiplier > 1
-                ? amount * configuredMultiplier
+            : leg === 'recovery'
+                ? getNexusStakeForLossStreak(amount, runtime.martingale, 1)
                 : amount;
         const config: DTConfig = {
             symbol: decision.symbol,
@@ -1772,6 +1771,25 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         const session = nexusSessionRef.current;
         if (!session || activeLegRef.current || nexusLaunchPendingRef.current) return;
 
+        const requestedNextStake = getNexusStakeForLossStreak(
+            session.baseStake,
+            runtimeRef.current.martingale,
+            session.consecutiveLosses,
+        );
+        const stop = Number(runtimeRef.current.stopLoss);
+        const remainingStopBudget = stop > 0
+            ? stop + session.sessionProfit
+            : Number.POSITIVE_INFINITY;
+        const stakeExceedsBudget = requestedNextStake > remainingStopBudget;
+        const nextStake = stakeExceedsBudget ? session.baseStake : requestedNextStake;
+        const recovery = session.nextLeg === 'recovery' &&
+            runtimeRef.current.recoveryEnabled &&
+            !stakeExceedsBudget;
+        if (session.nextLeg === 'recovery' && !recovery) {
+            session.nextLeg = 'primary';
+        }
+        session.currentStake = nextStake;
+
         const now = Date.now();
         for (const [key, expiresAt] of nexusSkippedCandidatesRef.current) {
             if (expiresAt <= now) nexusSkippedCandidatesRef.current.delete(key);
@@ -1781,7 +1799,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 `${decision.symbol}|${decision.contractType}|${decision.barrier || ''}`,
             ),
         );
-        const recovery = session.nextLeg === 'recovery';
         const nextDecision = selectNextNexusDecision(candidates, {
             recovery,
             lastSymbol: session.lastSymbol,
@@ -1791,8 +1808,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         if (!nextDecision) {
             if (recovery) {
                 session.nextLeg = 'primary';
-                session.currentStake = session.baseStake;
-                emitNexusFeedback('No other currently qualified market is available for recovery. Skipping the recovery leg and rescanning at the base stake.');
+                emitNexusFeedback(
+                    `No other currently qualified market is available for recovery. Skipping that leg and rescanning at the next stake of $${nextStake.toFixed(2)}.`,
+                );
+            } else if (stakeExceedsBudget) {
+                emitNexusFeedback(
+                    `The Martingale stake would exceed the remaining session stop-loss budget. Rescanning at the base stake of $${nextStake.toFixed(2)}.`,
+                );
             } else {
                 emitNexusFeedback('No market currently meets the entry gates. Nexus is rescanning; no contract was opened.');
             }
@@ -1800,8 +1822,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             return;
         }
 
-        const leg = session.nextLeg;
-        const nextStake = leg === 'recovery' ? session.currentStake : session.baseStake;
+        const leg = recovery ? 'recovery' : 'primary';
         session.nextLeg = 'primary';
         nexusScanConsumedRef.current = scanCount;
         if (leg === 'recovery') {
@@ -1812,7 +1833,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         } else {
             setPrimaryDecision(nextDecision);
             emitNexusFeedback(
-                `Qualified entry found · ${nextDecision.displayName} · ${nextDecision.label}.`,
+                stakeExceedsBudget
+                    ? `Qualified entry found · ${nextDecision.displayName} · ${nextDecision.label}. Martingale progression exceeds the remaining stop-loss budget, so the base stake $${nextStake.toFixed(2)} will be used.`
+                    : `Qualified entry found · ${nextDecision.displayName} · ${nextDecision.label} at $${nextStake.toFixed(2)}.`,
                 'success',
             );
         }
@@ -1869,16 +1892,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 nexusLaunchTimerRef.current = setTimeout(() => {
                     nexusLaunchPendingRef.current = false;
                     const baseStake = Number(runtimeRef.current.stake);
-                    const configuredMultiplier = Number(runtimeRef.current.martingale);
                     nexusAdaptivePlanRef.current = nexusAdaptivePlan;
                     primaryPayoutMultiplierRef.current = null;
                     recoveryTargetProfitRef.current = 0;
                     nexusSessionRef.current = {
                         baseStake,
                         currentStake: baseStake,
-                        multiplier: Number.isFinite(configuredMultiplier) && configuredMultiplier > 1
-                            ? configuredMultiplier
-                            : 1,
                         sessionProfit: 0,
                         trades: 0,
                         consecutiveLosses: 0,
@@ -2262,34 +2281,46 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 if (leg === 'primary' && loss) {
                     recoveryTargetProfitRef.current = Math.max(0, -nexusSession.sessionProfit);
                 }
-                const nextRecoveryStake = nexusSession.baseStake * Math.max(1, nexusSession.multiplier);
+                const requestedNextStake = loss
+                    ? getNexusStakeForLossStreak(
+                        nexusSession.baseStake,
+                        runtimeRef.current.martingale,
+                        nexusSession.consecutiveLosses,
+                    )
+                    : nexusSession.baseStake;
                 const remainingStopBudget = stop > 0
                     ? stop + nexusSession.sessionProfit
                     : Number.POSITIVE_INFINITY;
+                const stakeExceedsBudget = requestedNextStake > remainingStopBudget;
+                const nextStake = stakeExceedsBudget
+                    ? nexusSession.baseStake
+                    : requestedNextStake;
                 if (
                     leg === 'primary' &&
                     loss &&
                     canRecover &&
-                    nextRecoveryStake <= remainingStopBudget
+                    !stakeExceedsBudget
                 ) {
                     nexusSession.nextLeg = 'recovery';
-                    nexusSession.currentStake = nextRecoveryStake;
+                    nexusSession.currentStake = nextStake;
                     emitNexusFeedback(
-                        `Primary lost. Scanning for a different qualified market for one recovery leg at $${nextRecoveryStake.toFixed(2)}.`,
+                        `Primary lost. Scanning for a different qualified market for one recovery leg at $${nextStake.toFixed(2)}.`,
                     );
                 } else {
-                    if (leg === 'primary' && loss && canRecover && nextRecoveryStake > remainingStopBudget) {
-                        emitNexusFeedback('Recovery skipped because its stake would exceed the remaining session stop-loss budget.');
+                    if (stakeExceedsBudget) {
+                        emitNexusFeedback(
+                            `The Martingale stake would exceed the remaining session stop-loss budget. Continuing at the base stake of $${nextStake.toFixed(2)}.`,
+                        );
                     } else {
                         emitNexusFeedback(
                             leg === 'recovery'
-                                ? `Recovery ${position.isWin ? 'won' : 'settled'}. Returning to base stake and scanning again.`
+                                ? `Recovery ${position.isWin ? 'won' : 'lost'}. Scanning again at $${nextStake.toFixed(2)}.`
                                 : `${position.isWin ? 'Primary won' : 'Primary settled'}. Scanning all open markets for the next entry.`,
                             position.isWin ? 'success' : 'info',
                         );
                     }
                     nexusSession.nextLeg = 'primary';
-                    nexusSession.currentStake = nexusSession.baseStake;
+                    nexusSession.currentStake = nextStake;
                 }
                 scheduleAutoRescan();
                 return;

@@ -11,6 +11,7 @@
 - [Alpha Scan visual surface](alpha-scan-visual-surface.md) — neon model-powered tool uses live ScanRow values, omits footer navigation, and selects one primary/recovery market from X latest digits.
 - [Alpha Scan live execution](alpha-scan-live-execution.md) — use reactive auth state and keep explicit Run separate from pattern qualification so trades cannot silently remain disabled.
 - [Nexus session P/L](deriv-nexus-session-pnl.md) — keep settled results cumulative and separate from open P/L; missing live values stay Pending.
+- [Nexus Martingale](deriv-nexus-martingale.md) — stake progression is independent of recovery-market selection; wins reset to base and the session stop-loss budget remains enforced.
 - [Deriv tick subscription recovery](deriv-tick-subscription-recovery.md) — duplicate symbol streams need one-shot forget-all recovery before retrying ticks.
 - [Deriv builder and settlement validation](deriv-builder-settlement-validation.md) — validate bundled Blockly XML and merge partial settlement updates so mobile nodes and spots cannot disappear.
 - [Binary Matrix XML import guard](deriv-binary-matrix-import-guard.md) — root Blockly blocks can self-dispose during delayed option validation; hold an import guard through post-load callbacks.

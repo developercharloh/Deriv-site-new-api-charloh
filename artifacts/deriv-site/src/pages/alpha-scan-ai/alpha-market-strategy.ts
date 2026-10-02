@@ -835,6 +835,21 @@ export type NexusQuoteGateInput = {
     sessionDeficit: number;
 };
 
+export const getNexusStakeForLossStreak = (
+    baseStake: number,
+    configuredMultiplier: string | number,
+    consecutiveLosses: number,
+): number => {
+    const base = Number(baseStake);
+    if (!Number.isFinite(base) || base <= 0) return baseStake;
+
+    const multiplier = Number(configuredMultiplier);
+    const losses = Math.max(0, Math.floor(Number(consecutiveLosses) || 0));
+    if (!Number.isFinite(multiplier) || multiplier <= 1 || losses === 0) return base;
+
+    return base * multiplier ** losses;
+};
+
 export const evaluateNexusQuoteGate = (input: NexusQuoteGateInput): string[] => {
     const reasons: string[] = [];
     const multiplierLabel = Number.isFinite(input.payoutMultiplier)
