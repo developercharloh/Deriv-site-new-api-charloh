@@ -51,6 +51,12 @@ The current Vercel API rejects `projectId` as a deployment-body property. Omitti
 
 **How to apply:** POST the manifest to `/v13/deployments?prebuilt=1&teamId=...` with `project` set to the linked project ID, `target: "production"`, and an `alias` array of verified project domains. Upload returned missing SHA-1 digests to `/v2/files`, POST the same manifest again, poll until `READY`, and confirm the resulting project ID and aliases before claiming the live site changed.
 
+The current Vercel OpenAPI schema may omit `alias` from the `/v13/deployments` request even though the live endpoint accepts the explicit alias array. If inline aliases are rejected, use the deployment aliases endpoint after `READY`; include any configured redirect target when assigning a redirecting domain.
+
+**Why:** The documented request schema and runtime behavior can differ, while dropping aliases or redirect metadata can leave a custom domain on an old deployment or change its redirect behavior.
+
+**How to apply:** Prefer the verified inline alias array, then inspect the deployment's aliases. If assigning aliases separately, preserve project-domain redirect settings and confirm the redirect over HTTPS.
+
 The current API may return the digest list at `error.missing` inside a 400 `missing_files` response rather than at the top level. Treat that response as the expected handshake and read both shapes.
 
 **Why:** The first prebuilt request intentionally asks Vercel which content-addressed files it does not already have; a parser that only checks top-level `missing` will mistake a normal handshake for a failed publish.
