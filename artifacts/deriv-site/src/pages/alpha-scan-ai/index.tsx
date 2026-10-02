@@ -14,37 +14,27 @@ import {
     getPayoutMultiplier,
 } from '@/utils/dtrader-engine';
 import {
-    MARKET_OPTION_GROUPS,
-    PURCHASE_MARKET_OPTION_GROUPS,
-    AUTO_MOMENTUM_CONFIDENCE,
-    AUTO_MOMENTUM_LONG_WINDOW,
-    AUTO_MOMENTUM_SHORT_WINDOW,
-    AUTO_SIGNAL_CONFIDENCE_WINDOW,
-    evaluateMomentumMarket,
+    NEXUS_MARKET_OPTION_GROUPS,
+    NEXUS_PURCHASE_MARKET_OPTION_GROUPS,
+    evaluateNexusQuoteGate,
+    isNexusExecutionDecisionAllowed,
     isNexusDigitDecisionQualified,
-    isMomentumDirectionConfirmed,
     marketConditionLabel,
     purchaseMarketLabel,
     NEXUS_DEFAULT_PAYOUT_FLOOR,
     selectAdaptiveDigitMarketPlan,
     selectBestAvailableDigitFallback,
-    selectBestQualifiedMomentumMarket,
     selectNextNexusDecision,
     selectNexusAutomaticCandidates,
-    selectQualifiedMomentumMarkets,
     purchaseMarketFromDecision,
-    nexusDecisionFamily,
     strategyContractDisplayLabel,
     type MarketCondition,
-    type MomentumMarketEvaluation,
-    type NexusDecisionFamily,
     type PurchaseMarket,
     type RankedMarketDecision,
     type StrategySource,
     type AdaptiveDigitMarketPlan,
     quotesToLastDigits,
     selectConfiguredMarket,
-    selectStrongestMomentumMarket,
     selectStrongestMarket,
     withPurchaseMarket,
 } from './alpha-market-strategy';
@@ -72,7 +62,6 @@ const FEATURE_WINDOWS = [3, 5, 10, 20, 50];
 const MAX_NOISE_FRACTION = 0.65;
 const UNAVAILABLE_MARKET_TTL_MS = 5 * 60_000;
 const LOW_PAYOUT_MARKET_TTL_MS = 60_000;
-const AUTO_EXECUTION_FALLBACK_CONFIDENCE = 50;
 const UNAVAILABLE_DIGIT_CONTRACT_PATTERN = /contract(?:notallowed|notallowed|validation|forbidden)|market(?:closed|unavailable)|not permitted|contract type.*(?:not|unavailable)|invalid contract/i;
 
 const isUnavailableDigitContractFeedback = (feedback: DTBuyFeedback): boolean =>
@@ -691,7 +680,6 @@ type NexusSession = {
     nextLeg: 'primary' | 'recovery';
     lastSymbol: string | null;
     lastDecisionKey: string | null;
-    lastFamily: NexusDecisionFamily | null;
 };
 /**
  * The browser regression runs without a Deriv account. This deterministic
@@ -754,32 +742,38 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         const routeChangeSeed = this.confirmationFixtureMode === 'route-change';
         const routeChange = routeChangeSeed && !this.confirmationRouteChangeUsed;
         if (routeChange) this.confirmationRouteChangeUsed = true;
+        const reverseConfirmation = this.confirmationFixtureMode === 'reverse' && !this.confirmationReversalUsed;
+        if (reverseConfirmation) this.confirmationReversalUsed = true;
         const nexusMomentumFixture = this.confirmationFixtureMode === 'nexus-call' ||
             this.confirmationFixtureMode === 'nexus-put';
         const nexusMomentumDirection = this.confirmationFixtureMode === 'nexus-put' ? -1 : 1;
-        const seedLength = routeChangeSeed || this.confirmationFixtureMode === 'nexus-digits' ||
-            nexusMomentumFixture ? 80 : 30;
+        const seedLength = 80;
         const seedOffset = routeChangeSeed && !routeChange ? 0.01 : 0;
         let prices = Array.from({ length: seedLength }, (_, index) =>
             Number((100 + nexusMomentumDirection * index * 0.02 + seedOffset).toFixed(2)),
         );
-        if (this.confirmationFixtureMode === 'nexus-digits') {
+        if (
+            config.contractType.startsWith('DIGIT') &&
+            !reverseConfirmation &&
+            !routeChangeSeed
+        ) {
+            const barrier = Number(config.barrier);
             const matchingDigit = config.contractType === 'DIGITEVEN'
                 ? 8
-                : config.contractType === 'DIGITODD' || config.contractType === 'DIGITOVER'
+                : config.contractType === 'DIGITODD'
                     ? 9
-                    : config.contractType === 'DIGITUNDER'
-                        ? 0
-                        : null;
-            if (matchingDigit !== null) {
+                    : config.contractType === 'DIGITOVER'
+                        ? Math.min(9, barrier + 1)
+                        : config.contractType === 'DIGITUNDER'
+                            ? Math.max(0, barrier - 1)
+                            : Number.isInteger(barrier) ? barrier : null;
+            if (matchingDigit !== null && Number.isFinite(matchingDigit)) {
                 prices = Array.from({ length: seedLength }, (_, index) =>
                     Number((100 + index + matchingDigit / 100).toFixed(2)),
                 );
             }
         }
         const confirmationDelay = this.riskFixtureMode ? 10 : nexusMomentumFixture ? 250 : 70;
-        const reverseConfirmation = this.confirmationFixtureMode === 'reverse' && !this.confirmationReversalUsed;
-        if (reverseConfirmation) this.confirmationReversalUsed = true;
 
         this.schedule(() => {
             if (!this.config) return;
@@ -809,7 +803,9 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                             ? 1
                             : this.confirmationFixtureMode === 'nexus-put'
                                 ? -0.01
-                                : 0.01;
+                                : this.confirmationFixtureMode === 'nexus-call'
+                                    ? 0.01
+                                    : 1;
                         prices = [...prices, Number((latestPrice + increment).toFixed(2))];
                     }
                     this.onPriceWindow(prices, 2);
@@ -859,7 +855,11 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
             });
             return;
         }
-        const payoutMultiplier = this.lowPayoutProposalUsed ? 1.8 : 1.6;
+        const payoutMultiplier = this.recoveryFixtureMode === 'loss' && config.stake > 10
+            ? 2.2
+            : this.lowPayoutProposalUsed
+                ? 2
+                : 1.6;
         const proposal = {
             id: `fixture-proposal-${this.contractSequence + 1}`,
             askPrice: config.stake,
@@ -919,6 +919,8 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                     barrier: string | null;
                     symbol: string;
                     stake: number;
+                    payoutMultiplier: number;
+                    projectedProfit: number;
                 }>;
             };
             fixtureWindow.__alphaScanFixtureBuyCalls ??= [];
@@ -927,6 +929,8 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                 barrier: config.barrier ?? null,
                 symbol: config.symbol,
                 stake: config.stake,
+                payoutMultiplier,
+                projectedProfit: proposal.profit,
             });
         }
         const fixtureOpenDelayMs = 45;
@@ -1058,7 +1062,7 @@ const MarketConditionSelect: React.FC<MarketConditionSelectProps> = ({ value, on
         aria-label={label}
         data-testid={testId}
     >
-        {MARKET_OPTION_GROUPS.map(group => (
+        {NEXUS_MARKET_OPTION_GROUPS.map(group => (
             <optgroup key={group.label} label={group.label}>
                 {group.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </optgroup>
@@ -1081,7 +1085,7 @@ const PurchaseMarketSelect: React.FC<PurchaseMarketSelectProps> = ({ value, onCh
         aria-label={label}
         data-testid={testId}
     >
-        {PURCHASE_MARKET_OPTION_GROUPS.map(group => (
+        {NEXUS_PURCHASE_MARKET_OPTION_GROUPS.map(group => (
             <optgroup key={group.label} label={group.label}>
                 {group.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </optgroup>
@@ -1141,7 +1145,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [autoVolatilityMode, setAutoVolatilityMode] = useState(false);
     const [stake, setStake] = useState('10');
     const [payoutFloor, setPayoutFloor] = useState(() =>
-        initialFixtureSelection('alpha_scan_fixture_payout_floor', ['1.5', '1.8', '2'], '1.8'),
+        initialFixtureSelection(
+            'alpha_scan_fixture_payout_floor',
+            ['1.5', '1.8', '2'],
+            String(NEXUS_DEFAULT_PAYOUT_FLOOR),
+        ),
     );
     const [targetProfit, setTargetProfit] = useState(() =>
         initialFixtureSelection('alpha_scan_fixture_target_profit', ['10', '15', '25', '50'], '15'),
@@ -1182,7 +1190,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const fallbackAttemptedRef = useRef(false);
     const pendingAutoEntryRef = useRef<{
         decision: RankedMarketDecision;
-        confirmationMode: 'momentum' | 'digits';
+        leg: 'primary' | 'recovery';
         seeded: boolean;
         confirmations: number;
         lastPrice: number | null;
@@ -1204,6 +1212,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         status: 'discovering',
     });
     const recoveryUsedRef = useRef(false);
+    const primaryPayoutMultiplierRef = useRef<number | null>(null);
+    const recoveryTargetProfitRef = useRef(0);
     const executeDecisionRef = useRef<(
         decision: RankedMarketDecision,
         leg: 'primary' | 'recovery',
@@ -1259,20 +1269,23 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         }
     }, [bestModelRow, rows, selectedSymbol]);
 
+    const useDeterministicDigitFixture = Boolean(riskFixtureMode) || (
+        executionFixtureMode &&
+        !['route-change', 'reverse'].includes(confirmationFixtureMode || '')
+    );
     const strategySources = useMemo<StrategySource[]>(() => rows.map(row => ({
         symbol: row.symbol,
         displayName: row.displayName,
-        prices: row.prices,
-        lastDigits: row.lastDigits,
+        prices: useDeterministicDigitFixture
+            ? Array.from({ length: 80 }, (_, index) => Number((100 + index * 0.02).toFixed(2)))
+            : row.prices,
+        lastDigits: useDeterministicDigitFixture ? Array(80).fill(8) : row.lastDigits,
         tradable: row.status === 'open',
-    })), [rows]);
+    })), [rows, useDeterministicDigitFixture]);
 
     const nexusAutomaticCandidates = useMemo(
-        () => selectNexusAutomaticCandidates(
-            strategySources,
-            Number(payoutFloor) > 0 ? Number(payoutFloor) : NEXUS_DEFAULT_PAYOUT_FLOOR,
-        ),
-        [payoutFloor, strategySources],
+        () => selectNexusAutomaticCandidates(strategySources),
+        [strategySources],
     );
     nexusCandidatesRef.current = nexusAutomaticCandidates;
 
@@ -1369,62 +1382,11 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     }, [emitNexusFeedback, hasCompleteNexusScan, isBusy, nexusAutomaticCandidates.length, onScan, riskFixtureMode, scanCount, status]);
 
     const selectedRow = rows.find(row => row.symbol === selectedSymbol) || rows[0];
-    const autoMomentumEvaluations = useMemo(
-        () => new Map<string, MomentumMarketEvaluation>(
-            strategySources.map(source => [
-                source.symbol,
-                evaluateMomentumMarket(
-                    source,
-                    AUTO_MOMENTUM_SHORT_WINDOW,
-                    AUTO_MOMENTUM_LONG_WINDOW,
-                    AUTO_MOMENTUM_CONFIDENCE,
-                    AUTO_SIGNAL_CONFIDENCE_WINDOW,
-                ),
-            ]),
-        ),
-        [strategySources],
-    );
-    const autoMomentumDecision = useMemo(
-        () => selectBestQualifiedMomentumMarket(
-            strategySources,
-            AUTO_MOMENTUM_SHORT_WINDOW,
-            AUTO_MOMENTUM_LONG_WINDOW,
-            AUTO_MOMENTUM_CONFIDENCE,
-            AUTO_SIGNAL_CONFIDENCE_WINDOW,
-        ),
-        [strategySources],
-    );
-    const autoQualifiedMomentumDecisions = useMemo(
-        () => selectQualifiedMomentumMarkets(
-            strategySources,
-            AUTO_MOMENTUM_SHORT_WINDOW,
-            AUTO_MOMENTUM_LONG_WINDOW,
-            AUTO_MOMENTUM_CONFIDENCE,
-            AUTO_SIGNAL_CONFIDENCE_WINDOW,
-        ),
-        [strategySources],
-    );
-    const autoPriceFallbackDecision = useMemo(
-        () => selectStrongestMomentumMarket(
-            strategySources,
-            AUTO_MOMENTUM_SHORT_WINDOW,
-            AUTO_MOMENTUM_LONG_WINDOW,
-            AUTO_EXECUTION_FALLBACK_CONFIDENCE,
-        ),
-        [strategySources],
-    );
-    const autoQualifiedDecisions = useMemo(
-        () => autoQualifiedMomentumDecisions.length
-            ? autoQualifiedMomentumDecisions
-            : autoPriceFallbackDecision
-                ? [autoPriceFallbackDecision]
-                : [],
-        [autoPriceFallbackDecision, autoQualifiedMomentumDecisions],
-    );
-    const autoMomentumRow = rows.find(row => row.symbol === autoMomentumDecision?.symbol);
+    const autoQualifiedDecisions = nexusAutomaticCandidates;
     const autoPrimaryDecision = autoQualifiedDecisions[0] || null;
+    const autoPrimaryRow = rows.find(row => row.symbol === autoPrimaryDecision?.symbol);
     const modelPick = autoVolatilityMode
-        ? autoMomentumRow || selectedRow
+        ? autoPrimaryRow || selectedRow
         : bestModelRow || selectedRow;
     const autoCandidateSymbol = autoVolatilityMode ? autoPrimaryDecision?.symbol : undefined;
 
@@ -1525,6 +1487,26 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         stakeOverride?: number,
     ) => {
         const runtime = runtimeRef.current;
+        if (!isNexusExecutionDecisionAllowed(decision)) {
+            const message = 'Blocked unsupported contract. Only Over 1–5, Under 4–8, Even, and Odd are allowed; Rise/Fall and other digit contracts are disabled.';
+            setLiveFeedback({ seq: Date.now(), kind: 'error', message });
+            setExecutionLeg('idle');
+            activeLegRef.current = null;
+            activeDecisionRef.current = null;
+            pendingAutoEntryRef.current = null;
+            if (runtime.autoVolatilityMode) setAutoVolatilityMode(false);
+            if (nexusSessionRef.current) {
+                nexusSessionRef.current = null;
+                setNexusSessionActive(false);
+                liveEngine.stop();
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                        detail: { active: false, message },
+                    }));
+                }
+            }
+            return;
+        }
         if (!runtime.liveMode || !runtime.liveAuthorized) {
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
             setExecutionLeg('idle');
@@ -1539,16 +1521,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             }
             return;
         }
-        if (runtime.autoVolatilityMode && leg === 'primary' && !['CALL', 'PUT'].includes(decision.contractType)) {
-            setLiveFeedback({
-                seq: Date.now(),
-                kind: 'error',
-                message: 'Automatic execution only uses price-direction Rise/Fall contracts. Digit execution is disabled.',
-            });
-            setExecutionLeg('idle');
-            return;
-        }
-
         const amount = Number(runtime.stake);
         if (!Number.isFinite(amount) || amount <= 0) {
             setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Enter a valid stake before executing.' });
@@ -1582,102 +1554,109 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         };
         const automaticPrimary = runtime.autoVolatilityMode && leg === 'primary';
         const automaticNexus = Boolean(nexusSessionRef.current);
-        liveEngine.setBuyGuard(automaticPrimary || automaticNexus
-            ? proposal => {
-                const minimumPayout = Number(runtimeRef.current.payoutFloor);
-                const payoutMultiplier = getPayoutMultiplier(proposal);
-                if (!Number.isFinite(minimumPayout) || minimumPayout <= 0 || payoutMultiplier >= minimumPayout) {
-                    return null;
-                }
+        const enforceLivePayoutFloor = runtime.autoVolatilityMode || automaticNexus;
+        liveEngine.setBuyGuard(proposal => {
+            const minimumPayout = Number(runtimeRef.current.payoutFloor);
+            const payoutMultiplier = getPayoutMultiplier(proposal);
+            const reasons = evaluateNexusQuoteGate({
+                leg,
+                payoutMultiplier,
+                minimumPayoutMultiplier: minimumPayout,
+                enforceMinimumPayout: enforceLivePayoutFloor,
+                primaryPayoutMultiplier: primaryPayoutMultiplierRef.current,
+                projectedProfit: Number(proposal.profit),
+                sessionDeficit: recoveryTargetProfitRef.current,
+            });
 
-                if (nexusSessionRef.current) {
-                    const key = `${decision.symbol}|${decision.contractType}|${decision.barrier || ''}`;
-                    nexusSkippedCandidatesRef.current.set(key, Date.now() + LOW_PAYOUT_MARKET_TTL_MS);
-                    const message = `Fresh payout ${payoutMultiplier.toFixed(2)}x is below the ${minimumPayout.toFixed(2)}x floor. Skipping this candidate and rescanning.`;
-                    liveEngine.stop();
-                    pendingAutoEntryRef.current = null;
-                    activeLegRef.current = null;
-                    activeDecisionRef.current = null;
-                    setExecutionLeg('idle');
-                    setPayoutSkipCount(count => count + 1);
-                    setLastPayoutSkipMessage(message);
-                    setLiveFeedback({ seq: Date.now(), kind: 'info', message });
-                    ignoreNextNexusBuyErrorRef.current = true;
-                    setTimeout(() => scheduleAutoRescan(), 0);
-                    return message;
+            if (!reasons.length) {
+                if (leg === 'primary') {
+                    primaryPayoutMultiplierRef.current = payoutMultiplier;
+                    recoveryTargetProfitRef.current = 0;
                 }
-
-                 const rejectedMarket = purchaseMarketFromDecision(decision);
-                 const source = runtimeRef.current.rows.find(row => row.symbol === decision.symbol);
-                 const now = Date.now();
-                 for (const [key, expiresAt] of lowPayoutDigitMarketsRef.current) {
-                     if (expiresAt <= now) lowPayoutDigitMarketsRef.current.delete(key);
-                 }
-                 const unavailableMarkets = new Set<PurchaseMarket>();
-                 for (const [key, expiresAt] of unavailableDigitMarketsRef.current) {
-                     if (expiresAt > now && key.startsWith(`${decision.symbol}|`)) {
-                         unavailableMarkets.add(key.slice(decision.symbol.length + 1) as PurchaseMarket);
-                     }
-                 }
-                 for (const [key, expiresAt] of lowPayoutDigitMarketsRef.current) {
-                     if (expiresAt > now && key.startsWith(`${decision.symbol}|`)) {
-                         unavailableMarkets.add(key.slice(decision.symbol.length + 1) as PurchaseMarket);
-                     }
-                 }
-                 if (rejectedMarket && decision.contractType.startsWith('DIGIT')) {
-                     lowPayoutDigitMarketsRef.current.set(
-                         `${decision.symbol}|${rejectedMarket}`,
-                         now + LOW_PAYOUT_MARKET_TTL_MS,
-                     );
-                     unavailableMarkets.add(rejectedMarket);
-                 }
-                 const payoutFallback = source && rejectedMarket && decision.contractType.startsWith('DIGIT')
-                     ? selectBestAvailableDigitFallback(
-                         source,
-                         rejectedMarket,
-                         runtimeRef.current.digitWindow,
-                         unavailableMarkets,
-                     )
-                     : null;
-                 const baseMessage = `Skipped automatic buy: fresh payout ${payoutMultiplier.toFixed(2)}x is below the ${minimumPayout.toFixed(2)}x floor.`;
-                 const message = payoutFallback
-                     ? `${baseMessage} Trying ${payoutFallback.label} before rescanning.`
-                     : `${baseMessage} Rescanning for a qualifying proposal.`;
-                liveEngine.stop();
-                pendingAutoEntryRef.current = null;
-                activeLegRef.current = null;
-                activeDecisionRef.current = null;
-                setExecutionLeg('idle');
-                setPayoutSkipCount(count => count + 1);
-                setLastPayoutSkipMessage(message);
-                setLiveFeedback({ seq: Date.now(), kind: 'error', message });
-                 setTimeout(
-                     () => {
-                          if (payoutFallback) {
-                              fallbackAttemptedRef.current = true;
-                              setDigitFallbackCount(count => count + 1);
-                              executeDecisionRef.current(payoutFallback, 'primary');
-                          } else {
-                              startQueuedAutoPrimaryRef.current('The last proposal was below the payout floor.');
-                          }
-                         scheduleAutoRescan();
-                     },
-                     0,
-                 );
-                return message;
+                return null;
             }
-            : null);
+
+            const rejectedMarket = purchaseMarketFromDecision(decision);
+            const now = Date.now();
+            for (const [key, expiresAt] of lowPayoutDigitMarketsRef.current) {
+                if (expiresAt <= now) lowPayoutDigitMarketsRef.current.delete(key);
+            }
+            if (rejectedMarket) {
+                lowPayoutDigitMarketsRef.current.set(
+                    `${decision.symbol}|${rejectedMarket}`,
+                    now + LOW_PAYOUT_MARKET_TTL_MS,
+                );
+            }
+            const source = runtimeRef.current.rows.find(row => row.symbol === decision.symbol);
+            const unavailableMarkets = new Set<PurchaseMarket>();
+            for (const [key, expiresAt] of unavailableDigitMarketsRef.current) {
+                if (expiresAt > now && key.startsWith(`${decision.symbol}|`)) {
+                    unavailableMarkets.add(key.slice(decision.symbol.length + 1) as PurchaseMarket);
+                }
+            }
+            for (const [key, expiresAt] of lowPayoutDigitMarketsRef.current) {
+                if (expiresAt > now && key.startsWith(`${decision.symbol}|`)) {
+                    unavailableMarkets.add(key.slice(decision.symbol.length + 1) as PurchaseMarket);
+                }
+            }
+            const payoutFallback = runtimeRef.current.autoVolatilityMode && source && rejectedMarket
+                ? selectBestAvailableDigitFallback(
+                    source,
+                    rejectedMarket,
+                    runtimeRef.current.digitWindow,
+                    unavailableMarkets,
+                )
+                : null;
+            const message = `Skipping ${decision.label}: ${reasons.join('; ')}. ${
+                payoutFallback
+                    ? `Trying ${payoutFallback.label} with a fresh quote.`
+                    : automaticNexus
+                        ? 'Rescanning for another allowed route.'
+                        : runtimeRef.current.autoVolatilityMode
+                            ? 'Skipping recovery and moving to the next qualified digit route.'
+                            : 'No order was sent.'
+            }`;
+
+            ignoreNextNexusBuyErrorRef.current = true;
+            liveEngine.stop();
+            pendingAutoEntryRef.current = null;
+            activeLegRef.current = null;
+            activeDecisionRef.current = null;
+            setExecutionLeg('idle');
+            setPayoutSkipCount(count => count + 1);
+            setLastPayoutSkipMessage(message);
+            setLiveFeedback({ seq: Date.now(), kind: enforceLivePayoutFloor ? 'info' : 'error', message });
+            if (nexusSessionRef.current) {
+                nexusSessionRef.current.nextLeg = leg;
+                nexusSkippedCandidatesRef.current.set(
+                    `${decision.symbol}|${decision.contractType}|${decision.barrier || ''}`,
+                    now + LOW_PAYOUT_MARKET_TTL_MS,
+                );
+                setTimeout(() => scheduleAutoRescan(), 0);
+            } else if (payoutFallback) {
+                setTimeout(() => {
+                    fallbackAttemptedRef.current = true;
+                    setDigitFallbackCount(count => count + 1);
+                    executeDecisionRef.current(payoutFallback, leg);
+                    scheduleAutoRescan();
+                }, 0);
+            } else if (runtimeRef.current.autoVolatilityMode) {
+                setTimeout(() => {
+                    startQueuedAutoPrimaryRef.current(message);
+                    scheduleAutoRescan();
+                }, 0);
+            }
+            return message;
+        });
         activeLegRef.current = leg;
         activeDecisionRef.current = decision;
         setExecutionLeg(leg === 'primary' ? 'primary-pending' : 'recovery-pending');
         if (!fallbackAttemptedRef.current) setLiveFeedback(null);
-        const waitForFreshConfirmation = (runtime.autoVolatilityMode && leg === 'primary') || automaticNexus;
+        const waitForFreshConfirmation = runtime.autoVolatilityMode || automaticNexus;
         if (waitForFreshConfirmation) {
             pendingAutoEntryRef.current = {
                 decision,
-                confirmationMode: decision.contractType === 'CALL' || decision.contractType === 'PUT'
-                    ? 'momentum'
-                    : 'digits',
+                leg,
                 seeded: false,
                 confirmations: 0,
                 lastPrice: null,
@@ -1703,13 +1682,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             }
             return;
         }
-        // The automatic runner waits for three new ticks after the history
-        // seed. Its candidate must still have the same direction before the
-        // engine is allowed to request a buy proposal.
+        // Automated digit entries wait for three fresh matching digits after
+        // the history seed before the engine requests a live payout proposal.
         if (!waitForFreshConfirmation) {
             liveEngine.placeBuyNow(config);
         }
-    }, [autoQualifiedMomentumDecisions, emitNexusFeedback, liveEngine, riskFixtureMode, scheduleAutoRescan]);
+    }, [emitNexusFeedback, liveEngine, riskFixtureMode, scheduleAutoRescan]);
 
     executeDecisionRef.current = executeDecision;
 
@@ -1755,7 +1733,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             recovery,
             lastSymbol: session.lastSymbol,
             lastDecisionKey: session.lastDecisionKey,
-            lastFamily: session.lastFamily,
         });
 
         if (!nextDecision) {
@@ -1841,6 +1818,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     const baseStake = Number(runtimeRef.current.stake);
                     const configuredMultiplier = Number(runtimeRef.current.martingale);
                     nexusAdaptivePlanRef.current = nexusAdaptivePlan;
+                    primaryPayoutMultiplierRef.current = null;
+                    recoveryTargetProfitRef.current = 0;
                     nexusSessionRef.current = {
                         baseStake,
                         currentStake: baseStake,
@@ -1853,7 +1832,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         nextLeg: 'primary',
                         lastSymbol: null,
                         lastDecisionKey: null,
-                        lastFamily: null,
                     };
                     setNexusSessionActive(true);
                     recoveryUsedRef.current = false;
@@ -1936,6 +1914,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     trades: 0,
                     consecutiveLosses: 0,
                 };
+                primaryPayoutMultiplierRef.current = null;
+                recoveryTargetProfitRef.current = 0;
             }
             return !value;
         });
@@ -1980,8 +1960,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 seq: Date.now(),
                 kind: 'error',
                 message: autoVolatilityMode
-                    ? `No volatility passed the ${AUTO_MOMENTUM_CONFIDENCE}% Adaptive Momentum threshold. Waiting for the next scan.`
-                    : 'Wait for the market scan to produce a selectable volatility.',
+                    ? 'No allowed digit route passed the evidence gate. Waiting for the next scan.'
+                    : 'Wait for the market scan to produce a selectable digit route.',
             });
             return;
         }
@@ -2001,6 +1981,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     }, [autoPrimaryDecision, autoVolatilityMode, executionLeg, isBusy, liveAuthorized, liveMode, riskFixtureMode, runTrade, scanCount]);
 
     const upsertJournalEntry = useCallback((position: DTPosition, leg: 'primary' | 'recovery', decision: RankedMarketDecision | null) => {
+        const strategyLabel = decision?.label
+            ? `${decision.label}${decision.entryDigit === undefined ? '' : ` · entry digit ${decision.entryDigit}`}`
+            : position.contractType === 'DIGITEVEN'
+                ? 'Even'
+                : position.contractType === 'DIGITODD'
+                    ? 'Odd'
+                    : strategyContractDisplayLabel(position.contractType);
         const nextEntry: AlphaTradeJournalEntry = {
             contractId: position.contractId,
             leg,
@@ -2010,11 +1997,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             entryPrice: position.entrySpot,
             exitPrice: position.exitSpot,
             market: leg === 'recovery' ? 'Market 2' : 'Market 1',
-            strategy: decision?.label || (position.contractType === 'DIGITEVEN'
-                ? 'Even'
-                : position.contractType === 'DIGITODD'
-                    ? 'Odd'
-                    : strategyContractDisplayLabel(position.contractType)),
+            strategy: strategyLabel,
             gate: position.isOpen ? 'Running' : position.isWin ? 'Won' : 'Lost',
             stake: position.stake,
             payout: position.payout,
@@ -2135,7 +2118,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     detail: {
                         ...position,
                         leg: leg || 'primary',
-                        strategy: decision?.label || strategyContractDisplayLabel(position.contractType),
+                        strategy: decision?.label
+                            ? `${decision.label}${decision.entryDigit === undefined ? '' : ` · entry digit ${decision.entryDigit}`}`
+                            : strategyContractDisplayLabel(position.contractType),
+                        entryDigit: decision?.entryDigit ?? null,
                         market: (() => {
                             const market = decision ? purchaseMarketFromDecision(decision) : null;
                             return market ? purchaseMarketLabel(market) : strategyContractDisplayLabel(position.contractType);
@@ -2150,14 +2136,16 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     nexusSession.lastSymbol = decision.symbol;
                     nexusSession.lastDecisionKey =
                         `${decision.symbol}|${decision.contractType}|${decision.barrier || ''}`;
-                    nexusSession.lastFamily = nexusDecisionFamily(decision);
                 }
                 setLiveTrade(position);
                 setLiveTradeLeg(leg);
                 setLiveTradeDecision(activeDecisionRef.current);
                 setExecutionLeg(leg === 'recovery' ? 'recovery-running' : 'primary-running');
+                const entryContext = decision?.entryDigit === undefined
+                    ? ''
+                    : ` · entry digit ${decision.entryDigit}`;
                 emitNexusFeedback(
-                    `${leg === 'recovery' ? 'Recovery' : 'Primary'} ${strategyContractDisplayLabel(position.contractType)} contract executed · ${decision?.displayName || position.symbol} · tracking live price.`,
+                    `${leg === 'recovery' ? 'Recovery' : 'Primary'} ${strategyContractDisplayLabel(position.contractType)} contract executed · ${decision?.displayName || position.symbol}${entryContext} · tracking live price.`,
                     'success',
                 );
                 if (nexusSessionRef.current) scheduleAutoRescan();
@@ -2213,6 +2201,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
                 const loss = position.isWin === false;
                 const canRecover = runtimeRef.current.recoveryEnabled;
+                if (leg === 'primary' && loss) {
+                    recoveryTargetProfitRef.current = Math.max(0, -nexusSession.sessionProfit);
+                }
                 const nextRecoveryStake = nexusSession.baseStake * Math.max(1, nexusSession.multiplier);
                 const remainingStopBudget = stop > 0
                     ? stop + nexusSession.sessionProfit
@@ -2251,6 +2242,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 const settledSymbol = settledDecision?.symbol || position.symbol;
                 const risk = autoRiskRef.current;
                 risk.sessionProfit += Number(position.profit) || 0;
+                if (position.isWin === false) {
+                    recoveryTargetProfitRef.current = Math.max(0, -risk.sessionProfit);
+                }
                 risk.trades += 1;
                 risk.consecutiveLosses = position.isWin ? 0 : risk.consecutiveLosses + 1;
                 const target = Number(targetProfit);
@@ -2316,6 +2310,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 });
                 startQueuedAutoPrimary(`Recovery ${position.isWin ? 'won' : 'settled'}.`);
                 return;
+            }
+
+            if (leg === 'primary' && position.isWin === false) {
+                recoveryTargetProfitRef.current = Math.max(0, -settledProfit);
             }
 
             if (leg === 'primary' && position.isWin === false && runtimeRef.current.recoveryEnabled && !recoveryUsedRef.current) {
@@ -2403,29 +2401,14 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 lastDigits: quotesToLastDigits(prices, pipSize),
                 tradable: true,
             };
-            const freshDecision = pending.confirmationMode === 'momentum'
-                ? selectStrongestMomentumMarket(
-                    [freshSource],
-                    AUTO_MOMENTUM_SHORT_WINDOW,
-                    AUTO_MOMENTUM_LONG_WINDOW,
-                    AUTO_EXECUTION_FALLBACK_CONFIDENCE,
-                )
-                : null;
-            const freshSignalConfirmed = pending.confirmationMode === 'momentum'
-                ? isMomentumDirectionConfirmed(pending.decision.contractType, freshDecision)
-                : isNexusDigitDecisionQualified(
-                    pending.decision,
-                    freshSource,
-                    Number(runtimeRef.current.payoutFloor) > 0
-                        ? Number(runtimeRef.current.payoutFloor)
-                        : NEXUS_DEFAULT_PAYOUT_FLOOR,
-                );
+            const freshSignalConfirmed = isNexusDigitDecisionQualified(pending.decision, freshSource);
             if (!freshSignalConfirmed) {
                 if (nexusSessionRef.current) {
                     nexusSkippedCandidatesRef.current.set(
                         `${pending.decision.symbol}|${pending.decision.contractType}|${pending.decision.barrier || ''}`,
                         Date.now() + LOW_PAYOUT_MARKET_TTL_MS,
                     );
+                    nexusSessionRef.current.nextLeg = pending.leg;
                 }
                 pendingAutoEntryRef.current = null;
                 setExecutionLeg('idle');
@@ -2435,7 +2418,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: nexusSessionRef.current ? 'info' : 'error',
-                    message: `Fresh confirmation failed for ${pending.decision.displayName} · ${strategyContractDisplayLabel(pending.decision.contractType)}. No order was sent; rescanning before another trade.`,
+                    message: `Fresh digit confirmation failed for ${pending.decision.displayName} · ${pending.decision.label}. The latest entry digit did not match the route or its 60-tick evidence changed. No order was sent.`,
                 });
                 scheduleAutoRescan();
                 return;
@@ -2446,19 +2429,27 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: 'info',
-                    message: pending.confirmationMode === 'momentum'
-                        ? `Fresh price confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} — ${freshDecision ? strategyContractDisplayLabel(freshDecision.contractType) : 'waiting for direction'}.`
-                        : `Fresh digit-frequency confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} · ${pending.decision.label}.`,
+                    message: `Fresh digit confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} · ${pending.decision.label}.`,
                 });
                 return;
             }
 
-            const confirmedDecision = pending.decision;
+            const confirmedDigits = freshSource.lastDigits.slice(-pending.decision.digits.length);
+            const entryDigit = confirmedDigits[confirmedDigits.length - 1];
+            const confirmedDecision: RankedMarketDecision = {
+                ...pending.decision,
+                digits: confirmedDigits,
+                entryDigit,
+                reason: `${pending.decision.reason} Three fresh entry ticks matched; latest entry digit ${entryDigit}.`,
+            };
+            activeDecisionRef.current = confirmedDecision;
+            if (pending.leg === 'recovery') setRecoveryDecision(confirmedDecision);
+            else setPrimaryDecision(confirmedDecision);
             pendingAutoEntryRef.current = null;
             setLiveFeedback({
                 seq: Date.now(),
-                kind: 'success',
-                    message: `Fresh confirmation passed for ${confirmedDecision.displayName}. Buying ${strategyContractDisplayLabel(confirmedDecision.contractType)}.`,
+                kind: 'info',
+                message: `Fresh 3/3 digit confirmation passed for ${confirmedDecision.displayName} · ${confirmedDecision.label}; entry digit ${entryDigit}. Requesting a live payout-checked quote.`,
             });
             setTimeout(() => liveEngine.placeBuyNow({
                 symbol: confirmedDecision.symbol,
@@ -2483,18 +2474,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         : '—';
     const activeDecision = autoVolatilityMode ? autoPrimaryDecision : primaryDecision || explicitPrimaryDecision;
     const effectivePrimaryPurchaseMarket = autoVolatilityMode
-        ? autoPrimaryDecision?.contractType === 'CALL'
-            ? 'rise'
-            : autoPrimaryDecision?.contractType === 'PUT'
-                ? 'fall'
-                : primaryPurchaseMarket
+        ? (autoPrimaryDecision ? purchaseMarketFromDecision(autoPrimaryDecision) : null) || primaryPurchaseMarket
         : primaryPurchaseMarket;
     const effectiveRecoveryPurchaseMarket = autoVolatilityMode
-        ? autoPrimaryDecision?.contractType === 'CALL'
-            ? 'rise'
-            : autoPrimaryDecision?.contractType === 'PUT'
-                ? 'fall'
-                : recoveryPurchaseMarket
+        ? (recoveryDecision ? purchaseMarketFromDecision(recoveryDecision) : null) || recoveryPurchaseMarket
         : recoveryPurchaseMarket;
     const modelProbability = modelPick ? Math.round(modelPick.baselineProbability * 100) : 0;
     const openProfitLoss = liveTrade?.isOpen ? Number(liveTrade.profit) || 0 : 0;
@@ -2508,7 +2491,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const modelGateTone = modelGate === 'validated' ? 'positive' : modelGate === 'failed' ? 'negative' : 'neutral';
     const runLabel = executionLeg !== 'idle'
         ? executionLeg.includes('recovery') ? 'RECOVERY ACTIVE' : 'PRIMARY ACTIVE'
-        : autoVolatilityMode ? 'START AUTO RUN' : 'RUN MODEL PICK';
+        : autoVolatilityMode ? 'START DIGIT RUNNER' : 'RUN MODEL PICK';
     return (
         <main
             className='alpha-tool alpha-tool--model-cockpit'
@@ -2569,9 +2552,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
             <section className='alpha-cockpit__headline'>
                 <div>
-                    <span className='alpha-cockpit__overline'>AUTOMATED VOLATILITY INDEX EXECUTION</span>
+                            <span className='alpha-cockpit__overline'>DIGIT-ONLY AUTOMATED EXECUTION</span>
                     <h1>Scan. Qualify.<br /><em>Execute with rules.</em></h1>
-                    <p>AI Auto Scan evaluates every volatility index, selects qualified markets, and keeps primary and recovery rules visible before execution.</p>
+                            <p>Only Over 1–5, Under 4–8, Even, and Odd are eligible. Rise/Fall is disabled. Every entry needs fresh digit confirmation and a live payout check; losses remain possible.</p>
                 </div>
                 <div className={`alpha-cockpit__gate alpha-cockpit__gate--${modelGateTone}`}>
                     <span className='alpha-cockpit__gate-label'>CURRENT MODEL GATE</span>
@@ -2618,8 +2601,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                             <small>{activeDecision?.label || 'No qualified contract selected'}</small>
                         </div>
                         <div className='alpha-cockpit__direction'>
-                            <span>MODEL DIRECTION</span>
-                            <strong>{activeDecision?.contractType === 'PUT' ? 'FALL (PUT)' : activeDecision?.contractType === 'CALL' ? 'RISE (CALL)' : '—'}</strong>
+                            <span>ENTRY DIGIT</span>
+                            <strong>{activeDecision?.entryDigit ?? activeDecision?.digits[activeDecision.digits.length - 1] ?? '—'}</strong>
                         </div>
                     </div>
                     <div className='alpha-cockpit__execution-reason'>
@@ -2656,7 +2639,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                             <span>{runLabel}</span><span aria-hidden='true'>↗</span>
                         </button>
                          <button type='button' className={`alpha-cockpit__mode ${autoVolatilityMode ? 'alpha-cockpit__mode--active' : ''}`} onClick={toggleAutoRunner} aria-pressed={autoVolatilityMode} data-testid='toggle-auto-volatility'>
-                            <span className='alpha-cockpit__mode-dot' />{autoVolatilityMode ? 'AUTO RUNNER ON' : 'MANUAL MODE'}
+                            <span className='alpha-cockpit__mode-dot' />{autoVolatilityMode ? 'DIGIT RUNNER ON' : 'MANUAL MODE'}
                         </button>
                     </div>
                     {liveFeedback ? <div className={`alpha-cockpit__feedback alpha-cockpit__feedback--${liveFeedback.kind}`} role={liveFeedback.kind === 'error' ? 'alert' : 'status'} data-testid='live-trade-feedback'>{liveFeedback.message}</div> : null}
@@ -2833,10 +2816,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             <section className='alpha-tool__selector-grid' aria-label='Execution controls' data-testid='tool-model-pick' data-symbol={modelPick?.symbol || ''}>
                 <div className='alpha-tool__selector alpha-tool__selector--green'>
                     <span className='alpha-tool__selector-icon'>∿</span>
-                    <span className='alpha-tool__selector-copy'><b>Volatility</b><small>{autoVolatilityMode ? 'Momentum-selected market' : multiMarketScanning ? 'Model-selected market' : 'Single selected market'}</small></span>
+                    <span className='alpha-tool__selector-copy'><b>Digit route</b><small>{autoVolatilityMode ? 'Evidence-selected digit market' : multiMarketScanning ? 'Model-selected market' : 'Single selected market'}</small></span>
                     <strong className='alpha-tool__selector-value'>
                         {autoVolatilityMode
-                            ? autoMomentumRow?.displayName || 'Waiting for momentum'
+                            ? autoPrimaryRow?.displayName || 'Waiting for digit evidence'
                             : (multiMarketScanning ? modelPick : selectedRow)?.displayName || 'Waiting for scan'}
                     </strong>
                 </div>
@@ -2906,7 +2889,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         className='alpha-tool__scan-mode'
                         onClick={toggleAutoRunner}
                         aria-pressed={autoVolatilityMode}
-                        aria-label='Toggle automatic volatility runner'
+                        aria-label='Toggle digit-only automatic runner'
                         data-testid='toggle-auto-volatility'
                     >
                         <span>{autoVolatilityMode ? 'Auto runner' : 'Manual runner'}</span>
@@ -2920,8 +2903,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 <label className='alpha-tool__setting-row'><span className='alpha-tool__setting-icon'>×</span><span>Martingale</span><select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Martingale'><option value='no'>No (1x)</option><option value='2'>2x</option><option value='3'>3x</option></select></label>
                 <div className='alpha-tool__settings-note'>
                     {autoVolatilityMode
-                        ? `Auto runner · all volatility symbols · ${AUTO_SIGNAL_CONFIDENCE_WINDOW}-tick confidence ≥ ${AUTO_MOMENTUM_CONFIDENCE}% + ${AUTO_MOMENTUM_SHORT_WINDOW}/${AUTO_MOMENTUM_LONG_WINDOW} momentum alignment · payout ≥ ${payoutFloor}x · one contract at a time`
-                        : 'One-tick contract · one selected market condition · recovery starts only after a primary loss'}
+                        ? `Digit-only runner · Over 1–5, Under 4–8, Even, Odd · 60-tick evidence + 3 fresh matching entry digits · payout ≥ ${payoutFloor}x · one contract at a time`
+                        : 'One-tick digit contract · only Over 1–5, Under 4–8, Even, or Odd · recovery requires a better quote and enough profit to cover the deficit'}
                 </div>
             </section>
 
@@ -2965,39 +2948,36 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <span className='alpha-tool__view-label'>{rows.length} / {discoveredCount || rows.length} markets</span>
                 </div>
                 <p className='alpha-tool__scan-coverage-note'>
-                    Every supported volatility index is evaluated against symbol status, momentum alignment, and at least {AUTO_MOMENTUM_CONFIDENCE}% directional confidence across the last {AUTO_SIGNAL_CONFIDENCE_WINDOW} ticks. Every qualified market is ranked, confirmed with fresh ticks, and queued for its own entry.
+                    Each open index is checked for evidence on Over 1–5, Under 4–8, Even, and Odd. Rise/Fall and other digit contracts are excluded. Automated entries require three fresh matching digits and a live payout quote; no outcome is guaranteed.
                 </p>
                 <div className='alpha-tool__scan-coverage-list'>
                     {rows.map(row => {
-                        const evaluation = autoMomentumEvaluations.get(row.symbol);
+                        const rowCandidates = autoQualifiedDecisions.filter(decision => decision.symbol === row.symbol);
+                        const nextRoute = rowCandidates[0];
                         const isCandidate = row.symbol === autoCandidateSymbol;
                         const wasExecuted = journalRows.some(entry => entry.symbol === row.symbol);
-                        const isQueued = autoQualifiedDecisions.some(decision => decision.symbol === row.symbol);
                         const status = row.status === 'closed'
                             ? 'Symbol closed'
                             : wasExecuted
                                 ? 'Signal executed'
                                 : isCandidate
-                                    ? 'Next entry'
-                                    : isQueued || evaluation?.qualified
+                                    ? 'Next digit route'
+                                    : rowCandidates.length
                                         ? 'Qualified'
                                         : 'Conditions not met';
-                        const conditionSummary = evaluation
-                            ? `${evaluation.signal || 'WAIT'} · ${evaluation.confidence.toFixed(0)}% / ${evaluation.confidenceWindow} ticks`
-                            : 'Waiting for enough ticks';
+                        const conditionSummary = nextRoute
+                            ? `${nextRoute.label} · 60-tick evidence`
+                            : 'No allowed digit route passed';
                         const reason = row.status === 'closed'
                             ? 'Symbol status is closed; it cannot be selected.'
-                            : evaluation?.qualified
-                                ? 'All scan conditions met'
-                                : evaluation?.reasons[0] || 'No signal direction confirmed';
+                            : nextRoute?.reason || 'No allowed digit route passed the recent-digit evidence screen.';
                         return (
                             <div
-                                className={`alpha-tool__scan-market${isCandidate ? ' alpha-tool__scan-market--selected' : ''}${evaluation?.qualified ? ' alpha-tool__scan-market--qualified' : ''}${wasExecuted ? ' alpha-tool__scan-market--executed' : ''}`}
+                                className={`alpha-tool__scan-market${isCandidate ? ' alpha-tool__scan-market--selected' : ''}${rowCandidates.length ? ' alpha-tool__scan-market--qualified' : ''}${wasExecuted ? ' alpha-tool__scan-market--executed' : ''}`}
                                 key={row.symbol}
                                 data-symbol={row.symbol}
                                 data-selected={isCandidate}
-                                data-qualified={evaluation?.qualified || false}
-                                data-confidence={evaluation?.confidence ?? 0}
+                                data-qualified={rowCandidates.length > 0}
                                 title={`${conditionSummary} — ${reason}`}
                             >
                                 <span className='alpha-tool__scan-market-copy'>

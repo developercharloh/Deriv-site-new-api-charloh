@@ -3,9 +3,14 @@ import {
     AUTO_MOMENTUM_LONG_WINDOW,
     AUTO_MOMENTUM_SHORT_WINDOW,
     AUTO_SIGNAL_CONFIDENCE_WINDOW,
+    evaluateNexusQuoteGate,
     evaluateMomentumMarket,
+    isNexusExecutionDecisionAllowed,
     isMomentumDirectionConfirmed,
     isNexusDigitDecisionQualified,
+    NEXUS_ALLOWED_DIGIT_MARKETS,
+    NEXUS_MARKET_OPTION_GROUPS,
+    NEXUS_PURCHASE_MARKET_OPTION_GROUPS,
     selectBestAvailableDigitFallback,
     selectAdaptiveDigitMarketPlan,
     selectAutoFallbackMarket,
@@ -204,7 +209,56 @@ describe('auto volatility momentum selection', () => {
 });
 
 describe('Nexus automatic candidate selection', () => {
-    it('ranks Rise/Fall, parity, and Over/Under candidates from open markets', () => {
+    it('exposes and accepts only Over 1–5, Under 4–8, Even, and Odd', () => {
+        const allowedMarkets = NEXUS_PURCHASE_MARKET_OPTION_GROUPS.flatMap(group =>
+            group.options.map(option => option.value),
+        );
+        const allowedConditions = NEXUS_MARKET_OPTION_GROUPS.flatMap(group =>
+            group.options.map(option => option.value),
+        );
+
+        expect(allowedMarkets.slice().sort()).toEqual([...NEXUS_ALLOWED_DIGIT_MARKETS].sort());
+        expect(allowedConditions).toEqual([
+            'all-even',
+            'all-odd',
+            'over-1',
+            'over-2',
+            'over-3',
+            'over-4',
+            'over-5',
+            'under-8',
+            'under-7',
+            'under-6',
+            'under-5',
+            'under-4',
+        ]);
+        expect(isNexusExecutionDecisionAllowed({
+            symbol: 'ALLOWED',
+            displayName: 'Allowed',
+            condition: 'over-5',
+            label: 'Over 5',
+            contractType: 'DIGITOVER',
+            barrier: '5',
+            purchaseMarket: 'over-5',
+            digits: Array(60).fill(9),
+            strength: 100,
+            reason: 'fixture',
+        })).toBe(true);
+        expect(isNexusExecutionDecisionAllowed({
+            symbol: 'MISMATCH',
+            displayName: 'Mismatch',
+            condition: 'over-5',
+            label: 'Over 5',
+            contractType: 'DIGITOVER',
+            barrier: '6',
+            purchaseMarket: 'over-5',
+            digits: Array(60).fill(9),
+            strength: 100,
+            reason: 'fixture',
+        })).toBe(false);
+    });
+
+    it('ranks only whitelisted digit routes from open markets', () => {
         const riseAndEven = {
             ...source('RISE_EVEN', Array.from({ length: 61 }, (_, index) => index + 1)),
             lastDigits: Array.from({ length: 60 }, (_, index) => (index % 5) * 2),
@@ -219,16 +273,17 @@ describe('Nexus automatic candidate selection', () => {
 
         const candidates = selectNexusAutomaticCandidates([riseAndEven, overCandidate, closed]);
 
-        expect(candidates.some(candidate => candidate.symbol === 'RISE_EVEN' && candidate.contractType === 'CALL')).toBe(true);
         expect(candidates.some(candidate => candidate.symbol === 'RISE_EVEN' && candidate.contractType === 'DIGITEVEN')).toBe(true);
         expect(candidates.some(candidate => candidate.symbol === 'OVER' && candidate.contractType === 'DIGITOVER')).toBe(true);
         expect(candidates.every(candidate => candidate.symbol !== 'CLOSED')).toBe(true);
+        expect(candidates.every(isNexusExecutionDecisionAllowed)).toBe(true);
+        expect(candidates.some(candidate => candidate.contractType === 'CALL' || candidate.contractType === 'PUT')).toBe(false);
     });
 
     it('requires enough recent digits, an observed edge, and a lower bound above baseline', () => {
         const qualified = {
             ...source('QUALIFIED', Array(60).fill(100)),
-            lastDigits: [...Array(40).fill(2), ...Array(20).fill(1)],
+            lastDigits: [...Array(40).fill(2), ...Array(19).fill(1), 2],
             tradable: true,
         };
         const belowEdge = {
@@ -246,9 +301,14 @@ describe('Nexus automatic candidate selection', () => {
         const evenCandidate = candidates.find(candidate =>
             candidate.symbol === 'QUALIFIED' && candidate.contractType === 'DIGITEVEN',
         );
+        const mismatchedEntryDigit = {
+            ...qualified,
+            lastDigits: [...qualified.lastDigits.slice(0, -1), 1],
+        };
 
         expect(evenCandidate).toBeDefined();
         expect(isNexusDigitDecisionQualified(evenCandidate!, qualified)).toBe(true);
+        expect(isNexusDigitDecisionQualified(evenCandidate!, mismatchedEntryDigit)).toBe(false);
         expect(candidates.some(candidate =>
             candidate.symbol === 'BELOW_EDGE' && candidate.contractType === 'DIGITEVEN',
         )).toBe(false);
@@ -260,6 +320,7 @@ describe('Nexus automatic candidate selection', () => {
             { market: 'under-1', contractType: 'DIGITUNDER', barrier: '1', digit: 0 },
             { market: 'under-2', contractType: 'DIGITUNDER', barrier: '2', digit: 0 },
             { market: 'under-3', contractType: 'DIGITUNDER', barrier: '3', digit: 0 },
+            { market: 'over-6', contractType: 'DIGITOVER', barrier: '6', digit: 9 },
             { market: 'over-7', contractType: 'DIGITOVER', barrier: '7', digit: 9 },
             { market: 'over-8', contractType: 'DIGITOVER', barrier: '8', digit: 9 },
         ] as const;
@@ -308,11 +369,11 @@ describe('Nexus automatic candidate selection', () => {
             candidate.symbol === 'UNDER_4' && candidate.purchaseMarket === 'under-4',
         )).toBe(true);
         expect(candidates.some(candidate =>
-            candidate.symbol === 'OVER_6' && candidate.purchaseMarket === 'over-6',
+            candidate.symbol === 'OVER_6' && candidate.purchaseMarket === 'over-5',
         )).toBe(true);
     });
 
-    it('prioritizes qualified Rise/Fall before a higher-scoring digit candidate', () => {
+    it('does not add Rise/Fall candidates even when every quote trends in one direction', () => {
         const moves = [...Array(26).fill(-1), ...Array(34).fill(1)];
         let price = 100;
         const prices = [price];
@@ -327,39 +388,98 @@ describe('Nexus automatic candidate selection', () => {
         };
 
         const candidates = selectNexusAutomaticCandidates([bothFamilies]);
-        const riseFall = candidates.find(candidate =>
-            candidate.contractType === 'CALL' || candidate.contractType === 'PUT',
-        );
-        const highScoringDigit = candidates.find(candidate => candidate.contractType === 'DIGITOVER');
-
-        expect(riseFall).toBeDefined();
-        expect(highScoringDigit).toBeDefined();
-        expect(highScoringDigit!.strength).toBeGreaterThan(riseFall!.strength);
-        expect(candidates[0].contractType).toBe(riseFall!.contractType);
-        expect(selectNextNexusDecision(candidates)?.contractType).toBe(riseFall!.contractType);
+        expect(candidates.length).toBeGreaterThan(0);
+        expect(candidates.every(candidate => candidate.contractType !== 'CALL' && candidate.contractType !== 'PUT')).toBe(true);
+        expect(candidates.every(isNexusExecutionDecisionAllowed)).toBe(true);
+        expect(isNexusExecutionDecisionAllowed({
+            ...candidates[0],
+            contractType: 'CALL',
+            barrier: null,
+            purchaseMarket: undefined,
+        })).toBe(false);
+        expect(selectNextNexusDecision(candidates)?.contractType).not.toBe('CALL');
+        expect(selectNextNexusDecision(candidates)?.contractType).not.toBe('PUT');
     });
 
-    it('rotates to a qualified Rise/Fall candidate when the previous route was digits', () => {
+    it('chooses only a different-symbol allowed digit route for recovery', () => {
         const sourceWithBothFamilies = {
             ...source('BOTH', Array.from({ length: 61 }, (_, index) => index + 1)),
             lastDigits: Array.from({ length: 60 }, (_, index) => (index % 5) * 2),
             tradable: true,
         };
-        const candidates = selectNexusAutomaticCandidates([sourceWithBothFamilies]);
+        const otherSymbol = { ...sourceWithBothFamilies, symbol: 'OTHER', displayName: 'OTHER' };
+        const candidates = selectNexusAutomaticCandidates([sourceWithBothFamilies, otherSymbol]);
         const previousDigit = candidates.find(candidate => candidate.contractType === 'DIGITEVEN');
         expect(previousDigit).toBeDefined();
 
         const next = selectNextNexusDecision(candidates, {
+            recovery: true,
             lastDecisionKey: `${previousDigit!.symbol}|${previousDigit!.contractType}|${previousDigit!.barrier || ''}`,
-            lastFamily: 'digits',
             lastSymbol: previousDigit!.symbol,
         });
 
-        expect(next?.contractType).toBe('CALL');
+        expect(next?.symbol).toBe('OTHER');
+        expect(next?.contractType).toBe('DIGITEVEN');
+        expect(next && isNexusExecutionDecisionAllowed(next)).toBe(true);
     });
 
     it('shows the direction represented by broker CALL and PUT codes', () => {
         expect(strategyContractDisplayLabel('CALL')).toBe('Rise (CALL)');
         expect(strategyContractDisplayLabel('PUT')).toBe('Fall (PUT)');
+    });
+});
+
+describe('Nexus live quote safety gate', () => {
+    const primaryQuote = {
+        leg: 'primary' as const,
+        minimumPayoutMultiplier: 1.8,
+        enforceMinimumPayout: true,
+        primaryPayoutMultiplier: null,
+        projectedProfit: 8,
+        sessionDeficit: 0,
+    };
+
+    it('enforces the live payout floor for automated primary entries', () => {
+        expect(evaluateNexusQuoteGate({
+            ...primaryQuote,
+            payoutMultiplier: 1.79,
+        })).toEqual(['quoted payout 1.79x is below the 1.80x floor']);
+    });
+
+    it('does not change manual primary buying with an automatic-only payout floor', () => {
+        expect(evaluateNexusQuoteGate({
+            ...primaryQuote,
+            payoutMultiplier: 1.5,
+            enforceMinimumPayout: false,
+        })).toEqual([]);
+    });
+
+    it('rejects recovery quotes that do not improve payout or cover the session deficit', () => {
+        const reasons = evaluateNexusQuoteGate({
+            leg: 'recovery',
+            payoutMultiplier: 2,
+            minimumPayoutMultiplier: 1.8,
+            enforceMinimumPayout: true,
+            primaryPayoutMultiplier: 2,
+            projectedProfit: 8,
+            sessionDeficit: 10,
+        });
+
+        expect(reasons).toEqual([
+            'recovery payout must exceed the primary 2.00x rate',
+            'quoted recovery profit $8.00 does not cover the $10.00 session deficit',
+        ]);
+    });
+
+    it('accepts recovery only when its quoted payout is higher and profit covers the deficit', () => {
+        expect(evaluateNexusQuoteGate({
+            leg: 'recovery',
+            payoutMultiplier: 2.2,
+            minimumPayoutMultiplier: 1.8,
+            enforceMinimumPayout: true,
+            primaryPayoutMultiplier: 2,
+            projectedProfit: 12,
+            sessionDeficit: 10,
+        })).toEqual([]);
     });
 });

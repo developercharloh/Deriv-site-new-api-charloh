@@ -384,14 +384,24 @@ const assertScan = (snapshot, sampleSize, expectedSource = 'fixture') => {
     if (snapshot.legacyExecutionRules) {
         throw new Error('The separate Execution Rules block should be removed.');
     }
-    for (const option of ['All Even', 'All Odd', 'All Same', 'Over 1', 'Over 8', 'Under 9', 'Under 1', 'Rise', 'Fall', 'Matches 1', 'Matches 9']) {
+    for (const option of ['All Even', 'All Odd', 'Over 1', 'Over 2', 'Over 3', 'Over 4', 'Over 5', 'Under 8', 'Under 7', 'Under 6', 'Under 5', 'Under 4']) {
         if (!snapshot.primaryOptions.includes(option)) {
             throw new Error(`Market selector is missing ${option}.`);
         }
     }
-    for (const option of ['Over prediction 0', 'Over prediction 8', 'Under prediction 9', 'Under prediction 1', 'Even', 'Odd', 'Rise', 'Fall', 'Matches prediction 0', 'Matches prediction 9', 'Differs prediction 0', 'Differs prediction 9']) {
+    for (const option of ['Over prediction 1', 'Over prediction 2', 'Over prediction 3', 'Over prediction 4', 'Over prediction 5', 'Under prediction 8', 'Under prediction 7', 'Under prediction 6', 'Under prediction 5', 'Under prediction 4', 'Even', 'Odd']) {
         if (!snapshot.purchaseOptions.includes(option)) {
             throw new Error(`Purchase selector is missing ${option}.`);
+        }
+    }
+    for (const option of ['All Same', 'Rise', 'Fall', 'Over 6', 'Over 8', 'Under 3', 'Under 1', 'Matches 1', 'Matches 9']) {
+        if (snapshot.primaryOptions.includes(option)) {
+            throw new Error(`Unsupported condition ${option} is still selectable: ${JSON.stringify(snapshot.primaryOptions)}`);
+        }
+    }
+    for (const option of ['Over prediction 0', 'Over prediction 6', 'Under prediction 9', 'Under prediction 3', 'Rise', 'Fall', 'Matches prediction 0', 'Differs prediction 9']) {
+        if (snapshot.purchaseOptions.includes(option)) {
+            throw new Error(`Unsupported purchase route ${option} is still selectable.`);
         }
     }
     if (!['1', '2', '3', '4', '5', '6', '7', '8'].includes(snapshot.digitWindow)) {
@@ -893,24 +903,47 @@ const run = async () => {
         const confirmation = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.feedback.includes('Fresh price confirmation') ? next : false;
+                return next.feedback.includes('Fresh digit confirmation') ? next : false;
             },
-            'fresh confirmation messaging before execution',
+            'fresh digit confirmation messaging before execution',
             5000,
             50,
         );
-        if (!/Fresh price confirmation (?:1|2)\/3/.test(confirmation.feedback)) {
+        if (!/Fresh digit confirmation (?:1|2)\/3/.test(confirmation.feedback)) {
             throw new Error(`Expected an in-progress fresh confirmation before execution, received: ${confirmation.feedback}`);
         }
-        const passedConfirmation = await waitFor(
-            async () => {
-                const next = await getSnapshot(client.evaluate);
-                return next.feedback.includes('Fresh confirmation passed') ? next : false;
-            },
-            'fresh confirmation gate passed',
-            5000,
-            10,
-        );
+        let passedConfirmation;
+        try {
+            passedConfirmation = await waitFor(
+                async () => {
+                    const next = await getSnapshot(client.evaluate);
+                    return next.feedback.includes('Fresh 3/3 digit confirmation passed') ||
+                        next.feedback.includes('Fresh digit confirmation failed')
+                        ? next
+                        : false;
+                },
+                'fresh digit confirmation gate passed',
+                5000,
+                10,
+            );
+        } catch (error) {
+            const finalState = await getSnapshot(client.evaluate);
+            throw new Error(`${error.message} Final runner state: ${JSON.stringify({
+                feedback: finalState.feedback,
+                executionLeg: finalState.executionLeg,
+                autoTrades: finalState.autoTrades,
+                runningRows: finalState.runningRows,
+                payoutSkipCount: finalState.payoutSkipCount,
+                fixtureBuyCalls: finalState.fixtureBuyCalls,
+            })}`);
+        }
+        if (passedConfirmation.feedback.includes('Fresh digit confirmation failed')) {
+            throw new Error(`Fresh digit confirmation did not pass: ${JSON.stringify({
+                feedback: passedConfirmation.feedback,
+                executionLeg: passedConfirmation.executionLeg,
+                fixtureBuyCalls: passedConfirmation.fixtureBuyCalls,
+            })}`);
+        }
         if (passedConfirmation.runningRows !== 0) {
             throw new Error('The automatic runner opened a contract before fresh confirmation passed.');
         }
@@ -920,8 +953,7 @@ const run = async () => {
                 const next = await getSnapshot(client.evaluate);
                 return next.runningRows === 0 &&
                     next.payoutSkipCount >= 1 &&
-                    next.lastPayoutSkip.includes('Skipped automatic buy') &&
-                    next.lastPayoutSkip.includes('below the 1.80x floor')
+                    next.lastPayoutSkip.includes('quoted payout 1.60x is below the 1.80x floor')
                     ? next
                     : false;
             },
@@ -929,7 +961,7 @@ const run = async () => {
             5000,
             50,
         );
-        if (payoutSkipped.runningRows !== 0 || !payoutSkipped.lastPayoutSkip.includes('Skipped automatic buy')) {
+        if (payoutSkipped.runningRows !== 0 || !payoutSkipped.lastPayoutSkip.includes('quoted payout 1.60x is below the 1.80x floor')) {
             throw new Error(`The automatic runner did not skip the below-floor proposal cleanly: ${JSON.stringify(payoutSkipped)}`);
         }
 
@@ -1027,27 +1059,30 @@ const run = async () => {
         );
         assertScan(unavailableScan, SAMPLE_WINDOWS[0], 'fixture');
         await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
-        const priceDirectionRunning = await waitFor(
+        const digitFallbackRunning = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
                 return next.runningRows === 1 ? next : false;
             },
-            'automatic price-direction contract',
+            'automatic digit contract after an unavailable route',
             10000,
             25,
         );
-        if (
-            !['Rise', 'Fall'].includes(priceDirectionRunning.primaryPurchase) ||
-            priceDirectionRunning.digitFallbackCount !== 0
-        ) {
+        const fallbackBuy = digitFallbackRunning.fixtureBuyCalls[0];
+        const fallbackBuyAllowed = fallbackBuy &&
+            ((['DIGITEVEN', 'DIGITODD'].includes(fallbackBuy.contractType) && fallbackBuy.barrier === null) ||
+                (fallbackBuy.contractType === 'DIGITOVER' && ['1', '2', '3', '4', '5'].includes(String(fallbackBuy.barrier))) ||
+                (fallbackBuy.contractType === 'DIGITUNDER' && ['4', '5', '6', '7', '8'].includes(String(fallbackBuy.barrier))));
+        if (!fallbackBuyAllowed || digitFallbackRunning.digitFallbackCount < 1) {
             throw new Error(
-                `Automatic execution did not stay on price-direction contracts: ${JSON.stringify(priceDirectionRunning)}`,
+                `Automatic fallback did not execute a whitelisted digit contract: ${JSON.stringify(digitFallbackRunning)}`,
             );
         }
-        runReport.fixture.priceDirectionExecution = {
+        runReport.fixture.digitFallbackExecution = {
             status: 'passed',
-            purchase: priceDirectionRunning.primaryPurchase,
-            runningRows: priceDirectionRunning.runningRows,
+            contractType: fallbackBuy.contractType,
+            barrier: fallbackBuy.barrier,
+            runningRows: digitFallbackRunning.runningRows,
         };
 
         await client.call('Page.navigate', {
@@ -1071,7 +1106,7 @@ const run = async () => {
         const failedConfirmation = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.feedback.includes('Fresh confirmation failed') ? next : false;
+                return next.feedback.includes('Fresh digit confirmation failed') ? next : false;
             },
             'failed fresh confirmation',
             5000,
@@ -1108,7 +1143,7 @@ const run = async () => {
         const resumedConfirmation = await waitFor(
             async () => {
                 const next = await getSnapshot(client.evaluate);
-                return next.feedback.includes('Fresh price confirmation 1/3') ||
+                return next.feedback.includes('Fresh digit confirmation 1/3') ||
                     ['primary-pending', 'primary-running'].includes(next.executionLeg) ||
                     Number(next.autoTrades) >= 1
                     ? next
@@ -1212,10 +1247,10 @@ const run = async () => {
         };
         runReport.fixture.recoveryOff = recoveryOff;
 
-        const nexusMomentumResults = [];
+        const nexusDirectionalExclusionResults = [];
         for (const nexusCase of [
-            { fixture: 'nexus-call', contractType: 'CALL', label: 'Rise (CALL)' },
-            { fixture: 'nexus-put', contractType: 'PUT', label: 'Fall (PUT)' },
+            { fixture: 'nexus-call', label: 'rising-price fixture' },
+            { fixture: 'nexus-put', label: 'falling-price fixture' },
         ]) {
             const nexusMomentumUrl = new URL(
                 fixtureUrl(SAMPLE_WINDOWS[0], true, '', nexusCase.fixture),
@@ -1242,74 +1277,31 @@ const run = async () => {
                 () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
                 `Nexus ${nexusCase.label} fixture Alpha Tool`,
             );
-            const momentumScan = await waitFor(
+            const directionScan = await waitFor(
                 async () => {
                     const next = await getSnapshot(client.evaluate);
                     return ['ready', 'partial-data'].includes(next.status) ? next : false;
                 },
-                `Nexus ${nexusCase.label} fixture scan`,
+                `Nexus ${nexusCase.label} scan`,
                 10000,
             );
-            assertScan(momentumScan, SAMPLE_WINDOWS[0], 'fixture');
+            assertScan(directionScan, SAMPLE_WINDOWS[0], 'fixture');
             await client.evaluate('window.__alphaScanFixtureBuyCalls = []');
             await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
             await waitFor(
                 () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "true"'),
                 `Nexus ${nexusCase.label} session launch`,
             );
-
-            for (const confirmationCount of [1, 2]) {
-                const confirmation = await waitFor(
-                    async () => {
-                        const next = await getSnapshot(client.evaluate);
-                        return next.feedback.includes(`Fresh price confirmation ${confirmationCount}/3`) &&
-                            next.feedback.includes(nexusCase.label)
-                            ? next
-                            : false;
-                    },
-                    `Nexus ${nexusCase.label} confirmation ${confirmationCount}/3`,
-                    10000,
-                    50,
-                );
-                if (confirmation.fixtureBuyCalls.length !== 0) {
-                    throw new Error(
-                        `Nexus ${nexusCase.label} submitted its mock buy before confirmation 3/3: ${JSON.stringify(confirmation.fixtureBuyCalls)}`,
-                    );
-                }
-            }
-
-            let mockBuy;
-            try {
-                mockBuy = await waitFor(
-                    async () => {
-                        const next = await getSnapshot(client.evaluate);
-                        return next.fixtureBuyCalls.length ? next : false;
-                    },
-                    `Nexus ${nexusCase.label} mock buy after fresh confirmation`,
-                    10000,
-                    50,
-                );
-            } catch (error) {
-                const diagnostic = await getSnapshot(client.evaluate);
+            await sleep(1800);
+            const directionalFixture = await getSnapshot(client.evaluate);
+            const isAllowedDigitBuy = buyCall =>
+                (['DIGITEVEN', 'DIGITODD'].includes(buyCall.contractType) && buyCall.barrier === null) ||
+                (buyCall.contractType === 'DIGITOVER' && ['1', '2', '3', '4', '5'].includes(String(buyCall.barrier))) ||
+                (buyCall.contractType === 'DIGITUNDER' && ['4', '5', '6', '7', '8'].includes(String(buyCall.barrier)));
+            const unsupportedBuys = directionalFixture.fixtureBuyCalls.filter(buyCall => !isAllowedDigitBuy(buyCall));
+            if (unsupportedBuys.length) {
                 throw new Error(
-                    `${error.message} Final fixture state: ${JSON.stringify({
-                        feedback: diagnostic.feedback,
-                        executionLeg: diagnostic.executionLeg,
-                        fixtureBuyCalls: diagnostic.fixtureBuyCalls,
-                        journalLegs: diagnostic.journalLegs,
-                        nexusFeedbackHistory: diagnostic.nexusFeedbackHistory,
-                        location: diagnostic.location,
-                    })}`,
-                );
-            }
-            const buyCall = mockBuy.fixtureBuyCalls[0];
-            if (
-                mockBuy.fixtureBuyCalls.length !== 1 ||
-                buyCall.contractType !== nexusCase.contractType ||
-                buyCall.barrier !== null
-            ) {
-                throw new Error(
-                    `Nexus ${nexusCase.label} did not submit exactly one matching mock buy: ${JSON.stringify(mockBuy.fixtureBuyCalls)}`,
+                    `Nexus ${nexusCase.label} submitted a Rise/Fall or unsupported digit contract: ${JSON.stringify(unsupportedBuys)}`,
                 );
             }
 
@@ -1318,17 +1310,15 @@ const run = async () => {
                 () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
                 `Nexus ${nexusCase.label} fixture stop`,
             );
-            nexusMomentumResults.push({
+            nexusDirectionalExclusionResults.push({
                 fixture: nexusCase.fixture,
-                contractType: buyCall.contractType,
-                symbol: buyCall.symbol,
-                stake: buyCall.stake,
-                confirmationsRequired: 3,
+                executedContracts: directionalFixture.fixtureBuyCalls.map(buyCall => buyCall.contractType),
+                freshDigitFailure: directionalFixture.feedback.includes('Fresh digit confirmation failed'),
             });
         }
-        runReport.fixture.nexusMomentum = {
+        runReport.fixture.nexusDirectionalExclusion = {
             status: 'passed',
-            cases: nexusMomentumResults,
+            cases: nexusDirectionalExclusionResults,
         };
 
         const nexusSessionUrl = new URL(fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'nexus-digits', false, true));
@@ -1406,20 +1396,29 @@ const run = async () => {
         const nexusPurchaseCalls = nexusSession.fixtureBuyCalls.slice(0, 3);
         const initialPrimarySymbol = nexusPurchaseCalls[0]?.symbol;
         const recoverySymbol = nexusPurchaseCalls[1]?.symbol;
+        const allowedNexusPurchase = purchase =>
+            (['DIGITEVEN', 'DIGITODD'].includes(purchase.contractType) && purchase.barrier === null) ||
+            (purchase.contractType === 'DIGITOVER' && ['1', '2', '3', '4', '5'].includes(String(purchase.barrier))) ||
+            (purchase.contractType === 'DIGITUNDER' && ['4', '5', '6', '7', '8'].includes(String(purchase.barrier)));
+        const nexusPrimaryLoss = Number(nexusSession.journalProfitValues[0]);
         if (
             nexusLegs.join(',') !== 'primary,recovery,primary' ||
             nexusPurchaseCalls.length < 3 ||
             recoverySymbol === initialPrimarySymbol ||
-            nexusStakes.join(',') !== '10,20,10'
+            nexusStakes.join(',') !== '10,20,10' ||
+            !nexusPurchaseCalls.slice(0, 3).every(allowedNexusPurchase) ||
+            !(nexusPurchaseCalls[1]?.payoutMultiplier > nexusPurchaseCalls[0]?.payoutMultiplier) ||
+            !(nexusPurchaseCalls[1]?.projectedProfit >= Math.abs(nexusPrimaryLoss))
         ) {
             throw new Error(
-                `Nexus did not use one different-market recovery before returning to base stake: ${JSON.stringify({
+                `Nexus did not use a better-paying, deficit-covering different-market recovery before returning to base stake: ${JSON.stringify({
                     legs: nexusLegs,
                     symbols: nexusSymbols,
                     purchases: nexusPurchaseCalls,
                     initialPrimarySymbol,
                     recoverySymbol,
                     stakes: nexusStakes,
+                    primaryLoss: nexusPrimaryLoss,
                     gates: nexusSession.journalGates.slice(0, 3),
                     profits: nexusSession.journalProfits.slice(0, 3),
                     location: nexusSession.location,
@@ -1677,9 +1676,11 @@ const run = async () => {
                 scans: fixtureResults,
                 mobileNexus: mobileNexusTest,
                 autoRunner,
-                unavailableContractFallback: runReport.fixture.unavailableContractFallback,
+                digitFallbackExecution: runReport.fixture.digitFallbackExecution,
                 confirmationRecovery,
                 recoveryOff,
+                nexusDirectionalExclusion: runReport.fixture.nexusDirectionalExclusion,
+                nexusSession: runReport.fixture.nexusSession,
                 riskBoundaries: runReport.fixture.riskBoundaries || [],
             },
             externalFeed: RUN_LIVE ? {

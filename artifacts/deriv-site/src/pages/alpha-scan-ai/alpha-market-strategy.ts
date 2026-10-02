@@ -81,6 +81,26 @@ export type PurchaseMarketOptionGroup = {
     options: Array<{ value: PurchaseMarket; label: string }>;
 };
 
+export const NEXUS_ALLOWED_DIGIT_MARKETS = [
+    'even',
+    'odd',
+    'over-1',
+    'over-2',
+    'over-3',
+    'over-4',
+    'over-5',
+    'under-4',
+    'under-5',
+    'under-6',
+    'under-7',
+    'under-8',
+] as const satisfies readonly PurchaseMarket[];
+
+const NEXUS_ALLOWED_DIGIT_MARKET_SET = new Set<string>(NEXUS_ALLOWED_DIGIT_MARKETS);
+
+export const isNexusDigitMarketAllowed = (market: string): market is typeof NEXUS_ALLOWED_DIGIT_MARKETS[number] =>
+    NEXUS_ALLOWED_DIGIT_MARKET_SET.has(market);
+
 export const PURCHASE_MARKET_OPTION_GROUPS: PurchaseMarketOptionGroup[] = [
     {
         label: 'Over prediction',
@@ -123,6 +143,25 @@ export const PURCHASE_MARKET_OPTION_GROUPS: PurchaseMarketOptionGroup[] = [
 
 export const PURCHASE_MARKET_OPTIONS = PURCHASE_MARKET_OPTION_GROUPS.flatMap(group => group.options);
 
+export const NEXUS_MARKET_OPTION_GROUPS: MarketOptionGroup[] = MARKET_OPTION_GROUPS
+    .map(group => ({
+        ...group,
+        options: group.options.filter(({ value }) =>
+            value === 'all-even' ||
+            value === 'all-odd' ||
+            /^over-[1-5]$/.test(value) ||
+            /^under-[4-8]$/.test(value),
+        ),
+    }))
+    .filter(group => group.options.length > 0);
+
+export const NEXUS_PURCHASE_MARKET_OPTION_GROUPS: PurchaseMarketOptionGroup[] = PURCHASE_MARKET_OPTION_GROUPS
+    .map(group => ({
+        ...group,
+        options: group.options.filter(option => NEXUS_ALLOWED_DIGIT_MARKET_SET.has(option.value)),
+    }))
+    .filter(group => group.options.length > 0);
+
 export const purchaseMarketLabel = (market: PurchaseMarket): string =>
     PURCHASE_MARKET_OPTIONS.find(option => option.value === market)?.label || market;
 
@@ -161,6 +200,7 @@ export type MarketDecision = {
     contractType: StrategyContractType;
     barrier: string | null;
     purchaseMarket?: PurchaseMarket;
+    entryDigit?: number;
     digits: number[];
     strength: number;
     reason: string;
@@ -349,6 +389,20 @@ export const purchaseMarketFromDecision = (
                     ? `under-${Number(decision.barrier ?? 0)}`
                     : null
 );
+
+export const isNexusExecutionDecisionAllowed = (decision: RankedMarketDecision): boolean => {
+    const market = purchaseMarketFromDecision(decision);
+    if (!market || !isNexusDigitMarketAllowed(market)) return false;
+
+    if (market === 'even') return decision.contractType === 'DIGITEVEN' && decision.barrier === null;
+    if (market === 'odd') return decision.contractType === 'DIGITODD' && decision.barrier === null;
+
+    const match = market.match(/^(over|under)-(\d+)$/);
+    if (!match || decision.barrier !== match[2]) return false;
+    return match[1] === 'over'
+        ? decision.contractType === 'DIGITOVER'
+        : decision.contractType === 'DIGITUNDER';
+};
 
 export type AdaptiveDigitMarketPlan = {
     primary: RankedMarketDecision;
@@ -661,15 +715,6 @@ const digitMarketProbability = (market: PurchaseMarket): number | null => {
         : barrier / 10;
 };
 
-const isNexusDigitMarketAllowed = (market: PurchaseMarket): boolean => {
-    const match = market.match(/^(over|under)-(\d+)$/);
-    if (!match) return true;
-    const barrier = Number(match[2]);
-    return match[1] === 'under'
-        ? barrier > 3
-        : barrier < 7;
-};
-
 const digitMarketMatches = (market: PurchaseMarket, digit: number): boolean => {
     if (market === 'even') return digit % 2 === 0;
     if (market === 'odd') return digit % 2 !== 0;
@@ -733,6 +778,7 @@ const nexusDigitDecision = (
                     : 'DIGITUNDER',
         barrier: market.match(/^(?:over|under)-(\d+)$/)?.[1] || null,
         purchaseMarket: market,
+        entryDigit: digits[digits.length - 1],
         digits,
         strength: 50 + edge * 100,
         reason: `${purchaseMarketLabel(market)} appeared ${hits}/${digits.length} times (${(
@@ -753,79 +799,113 @@ const nexusDigitDecision = (
 export const isNexusDigitDecisionQualified = (
     decision: RankedMarketDecision,
     source: StrategySource,
-    payoutFloor = NEXUS_DEFAULT_PAYOUT_FLOOR,
     windowSize = NEXUS_DIGIT_SIGNAL_WINDOW,
 ): boolean => {
     const market = purchaseMarketFromDecision(decision);
-    if (!market || !isNexusDigitMarketAllowed(market)) return false;
+    if (!market || !isNexusExecutionDecisionAllowed(decision)) return false;
     const expectedRate = digitMarketProbability(market);
-    if (!expectedRate || expectedRate <= 0 || (1 / expectedRate) < payoutFloor) return false;
+    if (!expectedRate || expectedRate <= 0) return false;
     const digits = source.lastDigits
         .slice(-windowSize)
         .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
     if (digits.length < windowSize) return false;
-    return hasNexusDigitEvidence(digits, market, expectedRate);
+    const entryDigit = digits[digits.length - 1];
+    return digitMarketMatches(market, entryDigit) &&
+        hasNexusDigitEvidence(digits, market, expectedRate);
+};
+
+export type NexusQuoteGateInput = {
+    leg: 'primary' | 'recovery';
+    payoutMultiplier: number;
+    minimumPayoutMultiplier: number;
+    enforceMinimumPayout: boolean;
+    primaryPayoutMultiplier: number | null;
+    projectedProfit: number;
+    sessionDeficit: number;
+};
+
+export const evaluateNexusQuoteGate = (input: NexusQuoteGateInput): string[] => {
+    const reasons: string[] = [];
+    const multiplierLabel = Number.isFinite(input.payoutMultiplier)
+        ? input.payoutMultiplier.toFixed(2)
+        : 'unknown';
+
+    if (input.enforceMinimumPayout && (
+        !Number.isFinite(input.minimumPayoutMultiplier) ||
+        input.minimumPayoutMultiplier <= 0 ||
+        !Number.isFinite(input.payoutMultiplier) ||
+        input.payoutMultiplier < input.minimumPayoutMultiplier
+    )) {
+        reasons.push(
+            `quoted payout ${multiplierLabel}x is below the ${input.minimumPayoutMultiplier.toFixed(2)}x floor`,
+        );
+    }
+
+    if (input.leg === 'recovery') {
+        const primaryLabel = input.primaryPayoutMultiplier === null ||
+            !Number.isFinite(input.primaryPayoutMultiplier)
+            ? 'unknown'
+            : input.primaryPayoutMultiplier.toFixed(2);
+        if (
+            input.primaryPayoutMultiplier === null ||
+            !Number.isFinite(input.primaryPayoutMultiplier) ||
+            !Number.isFinite(input.payoutMultiplier) ||
+            input.payoutMultiplier <= input.primaryPayoutMultiplier
+        ) {
+            reasons.push(`recovery payout must exceed the primary ${primaryLabel}x rate`);
+        }
+
+        const deficit = Math.max(0, Number(input.sessionDeficit) || 0);
+        if (
+            !Number.isFinite(input.projectedProfit) ||
+            input.projectedProfit < deficit
+        ) {
+            const projectedLabel = Number.isFinite(input.projectedProfit)
+                ? input.projectedProfit.toFixed(2)
+                : '0.00';
+            reasons.push(
+                `quoted recovery profit $${projectedLabel} does not cover the $${deficit.toFixed(2)} session deficit`,
+            );
+        }
+    }
+
+    return reasons;
 };
 
 /**
- * Rank supported Rise/Fall and digit routes across every currently open
- * synthetic market. Digit candidates need a 60-tick sample, an observed
- * baseline edge, a conservative binomial evidence bound, and a theoretical
- * payout compatible with the configured floor; the broker's fresh proposal
- * still decides whether an entry is allowed.
+ * Rank only the configured digit routes across currently open synthetic
+ * markets. A route needs a 60-tick sample, an observed baseline edge, and a
+ * conservative binomial evidence bound. The broker quote, not a theoretical
+ * hit-rate proxy, decides whether its payout is acceptable.
  */
 export const selectNexusAutomaticCandidates = (
     sources: StrategySource[],
-    payoutFloor = NEXUS_DEFAULT_PAYOUT_FLOOR,
     windowSize = NEXUS_DIGIT_SIGNAL_WINDOW,
 ): RankedMarketDecision[] => {
     const openSources = sources.filter(source => source.tradable === true);
-    const momentumCandidates = selectQualifiedMomentumMarkets(
-        openSources,
-        AUTO_MOMENTUM_SHORT_WINDOW,
-        AUTO_MOMENTUM_LONG_WINDOW,
-        AUTO_MOMENTUM_CONFIDENCE,
-        AUTO_SIGNAL_CONFIDENCE_WINDOW,
-    );
-    const digitMarkets: PurchaseMarket[] = [
-        'even',
-        'odd',
-        ...Array.from({ length: 8 }, (_, index) => `over-${index + 1}` as PurchaseMarket),
-        ...Array.from({ length: 9 }, (_, index) => `under-${index + 1}` as PurchaseMarket),
-    ];
     const digitCandidates = openSources.flatMap(source => {
         const digits = source.lastDigits
             .slice(-windowSize)
             .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
         if (digits.length < windowSize) return [];
-        return digitMarkets.flatMap(market => {
-            if (!isNexusDigitMarketAllowed(market)) return [];
+        return NEXUS_ALLOWED_DIGIT_MARKETS.flatMap(market => {
             const expectedRate = digitMarketProbability(market);
-            if (!expectedRate || expectedRate <= 0 || (1 / expectedRate) < payoutFloor) return [];
+            if (!expectedRate || expectedRate <= 0) return [];
             const hitRate = digitHitRate(digits, digit => digitMarketMatches(market, digit));
             if (!hasNexusDigitEvidence(digits, market, expectedRate)) return [];
             return [nexusDigitDecision(source, market, digits, hitRate, expectedRate)];
         });
     });
-    return [...momentumCandidates, ...digitCandidates].sort((left, right) => {
-        const leftFamilyPriority = left.contractType === 'CALL' || left.contractType === 'PUT' ? 0 : 1;
-        const rightFamilyPriority = right.contractType === 'CALL' || right.contractType === 'PUT' ? 0 : 1;
-        return leftFamilyPriority - rightFamilyPriority ||
-            right.strength - left.strength ||
+    return digitCandidates.sort((left, right) =>
+        right.strength - left.strength ||
             left.symbol.localeCompare(right.symbol) ||
             left.contractType.localeCompare(right.contractType) ||
-            (left.barrier || '').localeCompare(right.barrier || '');
-    });
+            (left.barrier || '').localeCompare(right.barrier || ''),
+    );
 };
-
-export type NexusDecisionFamily = 'rise-fall' | 'digits';
-
-export const nexusDecisionFamily = (decision: RankedMarketDecision): NexusDecisionFamily =>
-    decision.contractType === 'CALL' || decision.contractType === 'PUT' ? 'rise-fall' : 'digits';
 
 type NexusDecisionSelectionOptions = {
     lastDecisionKey?: string | null;
-    lastFamily?: NexusDecisionFamily | null;
     lastSymbol?: string | null;
     recovery?: boolean;
 };
@@ -834,17 +914,17 @@ const nexusDecisionKey = (decision: RankedMarketDecision): string =>
     `${decision.symbol}|${decision.contractType}|${decision.barrier || ''}`;
 
 /**
- * Keep the best ranked family available, but rotate between qualified
- * Rise/Fall and digit routes so a long list of digit thresholds cannot starve
- * a price-direction signal. Recovery still requires a different symbol.
+ * Select only whitelisted digit decisions. Recovery still requires a
+ * different symbol from the last contract.
  */
 export const selectNextNexusDecision = (
     candidates: RankedMarketDecision[],
     options: NexusDecisionSelectionOptions = {},
 ): RankedMarketDecision | null => {
-    const eligible = options.recovery
-        ? candidates.filter(decision => decision.symbol !== options.lastSymbol)
-        : candidates;
+    const eligible = candidates.filter(decision =>
+        isNexusExecutionDecisionAllowed(decision) &&
+        (!options.recovery || decision.symbol !== options.lastSymbol),
+    );
     if (options.recovery) {
         return eligible.find(decision => nexusDecisionKey(decision) !== options.lastDecisionKey) || null;
     }
@@ -852,10 +932,7 @@ export const selectNextNexusDecision = (
     const differentDecision = eligible.filter(
         decision => nexusDecisionKey(decision) !== options.lastDecisionKey,
     );
-    const otherFamily = options.lastFamily
-        ? differentDecision.find(decision => nexusDecisionFamily(decision) !== options.lastFamily)
-        : null;
-    return otherFamily || differentDecision[0] || eligible[0] || null;
+    return differentDecision[0] || eligible[0] || null;
 };
 
 const directionalPercentage = (moves: number[], direction: 1 | -1): number =>
