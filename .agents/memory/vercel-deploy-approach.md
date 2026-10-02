@@ -55,7 +55,7 @@ The current API may return the digest list at `error.missing` inside a 400 `miss
 
 **Why:** The first prebuilt request intentionally asks Vercel which content-addressed files it does not already have; a parser that only checks top-level `missing` will mistake a normal handshake for a failed publish.
 
-**How to apply:** Resolve missing digests from `response.missing ?? response.error?.missing`, upload only those files, then repost the same manifest.
+**How to apply:** Resolve missing digests from `response.missing ?? response.error?.missing`; each item may be a digest string or an object with `sha`. Upload only those files, then repost the same manifest.
 
 ## Environment note
 The Vercel CLI may be unavailable because Replit's package firewall blocks its transitive `tar` dependency, including older CLI versions. In that case, the REST fallback is validated: upload SHA-1-addressed files to `/v2/files`, then create a production deployment at `/v13/deployments?prebuilt=1` with flat `dist` paths, explicit no-op build settings, and wait for `READY`.
@@ -92,8 +92,8 @@ When deploying a flat `dist` manifest directly through `/v13/deployments`, Verce
 
 ## JavaScript verification
 
-Do not use only the first script referenced by the page to decide whether a deployment changed. It may be an unchanged vendor bundle while the application entry bundle changed. Verify the live HTML against the local build and compare every referenced script, especially the application bundle.
+Do not use only the first script referenced by the page to decide whether a deployment changed. It may be an unchanged vendor bundle, while feature code may live in a lazy-loaded chunk. Verify the live HTML against the local build and compare the application entry bundle plus relevant async chunks.
 
-**Why:** The first live script can remain byte-identical across a redesign even when the main application bundle is different.
+**Why:** The first live script can remain byte-identical across a redesign, and Alpha Scan's Rise/Fall labels were in an async chunk rather than the entry bundle.
 
-**How to apply:** After the deployment reaches `READY`, confirm the production domain serves the local build's HTML and check that all script assets load; use the app entry bundle for before/after comparisons.
+**How to apply:** After the deployment reaches `READY`, confirm the production domain serves the local build's HTML, check referenced scripts and styles load, and compare both the entry bundle and relevant route chunks.
