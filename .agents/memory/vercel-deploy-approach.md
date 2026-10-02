@@ -70,6 +70,12 @@ The Vercel CLI may be unavailable because Replit's package firewall blocks its t
 
 **How to apply:** Keep the deploy script outside the project if possible, use concurrency for static file uploads, and verify both the deployment URL and the custom domain with HTTP checks.
 
+The `/v2/files` upload must use `POST` with `Content-Type: application/octet-stream`, `Content-Length`, and `x-vercel-digest`; using `PUT` returned HTTP 415 despite the same content type.
+
+**Why:** The Vercel upload endpoint rejects the wrong HTTP method as an unsupported media type, which can misdirect debugging toward the payload headers.
+
+**How to apply:** Upload only SHA-1 hashes requested by the prebuilt manifest using `POST`, then repost the same manifest.
+
 
 ## Cached CLI fallback
 
