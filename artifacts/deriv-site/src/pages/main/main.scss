@@ -2135,7 +2135,8 @@
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(410px, .86fr);
         align-items: end;
-        gap: 40px;
+        column-gap: 40px;
+        row-gap: 14px;
         padding: clamp(28px, 4vw, 54px) 4px 30px;
     }
 
@@ -2189,6 +2190,58 @@
     &__telemetry strong small { margin-left: 2px; font-size: 12px; }
     &__telemetry .is-positive { color: var(--nx-forest); }
     &__telemetry .is-negative { color: var(--nx-alert); }
+
+    &__pnl-summary {
+        display: flex;
+        min-width: 0;
+        grid-column: 1 / -1;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 15px 18px;
+        border: 1px solid #d0dfcf;
+        border-radius: 12px;
+        background: linear-gradient(105deg, #edf5eb, #fbfcf9 76%);
+        box-shadow: inset 0 0 18px rgba(46, 96, 62, .035);
+
+        &--positive .nexus-ai__pnl-primary strong { color: var(--nx-forest); }
+        &--negative .nexus-ai__pnl-primary strong { color: var(--nx-alert); }
+    }
+
+    &__pnl-primary {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 5px;
+
+        > span {
+            color: #6d7d72;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+        }
+
+        strong {
+            color: var(--nx-ink);
+            font-size: clamp(24px, 3.4vw, 34px);
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+    }
+
+    &__pnl-summary p {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px 15px;
+        margin: 0;
+        color: #68796d;
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
 
     &__workspace {
         display: grid;
@@ -2596,6 +2649,9 @@
     .nexus-ai__telemetry > div { gap: 7px; padding: 12px 8px; }
     .nexus-ai__telemetry span { font-size: 9px; }
     .nexus-ai__telemetry strong { font-size: 20px; }
+    .nexus-ai__pnl-summary { align-items: flex-start; flex-direction: column; gap: 10px; padding: 13px 14px; }
+    .nexus-ai__pnl-primary strong { font-size: 28px; }
+    .nexus-ai__pnl-summary p { justify-content: flex-start; gap: 5px 12px; text-align: left; }
     .nexus-ai__controls,
     .nexus-ai__execution,
     .nexus-ai__journal { padding: 16px 13px; }

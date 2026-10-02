@@ -3,6 +3,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 const AlphaScanAI = lazy(() => import('../alpha-scan-ai'));
 
 type NexusStats = { trades: number; wins: number; losses: number };
+type NexusProfitLoss = { realized: number; openPositions: Record<string, number | null> };
 type NexusJournalEntry = {
     contractId: string;
     purchaseTime?: string;
@@ -98,6 +99,7 @@ const NexusAIComingSoon: React.FC = () => {
     const [multiplier, setMultiplier] = useState<NumericValue>(() => fixtureNumber('alpha_scan_fixture_martingale', 2));
     const [launchMessage, setLaunchMessage] = useState('Run a market scan before launching. No purchase can be staged until an eligible plan is ready.');
     const [stats, setStats] = useState<NexusStats>({ trades: 0, wins: 0, losses: 0 });
+    const [profitLoss, setProfitLoss] = useState<NexusProfitLoss>({ realized: 0, openPositions: {} });
     const [journal, setJournal] = useState<NexusJournalEntry[]>([]);
 
     const syncHiddenSettings = (): void => {
@@ -186,12 +188,23 @@ const NexusAIComingSoon: React.FC = () => {
                 contractId?: string;
                 isOpen?: boolean;
                 isWin?: boolean | null;
+                profit?: number | null;
             } | undefined;
             if (!position?.contractId) return;
             if (position.isOpen) {
-                if (seenContractsRef.current.has(position.contractId)) return;
-                seenContractsRef.current.add(position.contractId);
-                setStats(current => ({ ...current, trades: current.trades + 1 }));
+                if (!seenContractsRef.current.has(position.contractId)) {
+                    seenContractsRef.current.add(position.contractId);
+                    setStats(current => ({ ...current, trades: current.trades + 1 }));
+                }
+                setProfitLoss(current => ({
+                    ...current,
+                    openPositions: {
+                        ...current.openPositions,
+                        [position.contractId as string]: typeof position.profit === 'number' && Number.isFinite(position.profit)
+                            ? position.profit
+                            : null,
+                    },
+                }));
                 return;
             }
             if (settledContractsRef.current.has(position.contractId)) return;
@@ -203,6 +216,14 @@ const NexusAIComingSoon: React.FC = () => {
                 wins: current.wins + (position.isWin ? 1 : 0),
                 losses: current.losses + (position.isWin === false ? 1 : 0),
             }));
+            setProfitLoss(current => {
+                const openPositions = { ...current.openPositions };
+                delete openPositions[position.contractId as string];
+                const settledProfit = typeof position.profit === 'number' && Number.isFinite(position.profit)
+                    ? position.profit
+                    : 0;
+                return { realized: current.realized + settledProfit, openPositions };
+            });
         };
         window.addEventListener('nexus-ai-position', handlePosition);
         return () => window.removeEventListener('nexus-ai-position', handlePosition);
@@ -252,6 +273,17 @@ const NexusAIComingSoon: React.FC = () => {
     };
 
     const winRate = stats.trades ? Math.round((stats.wins / stats.trades) * 100) : 0;
+    const openContractIds = Object.keys(profitLoss.openPositions);
+    const hasOpenContracts = openContractIds.length > 0;
+    const hasPendingOpenProfit = hasOpenContracts &&
+        openContractIds.some(contractId => profitLoss.openPositions[contractId] === null);
+    const openProfitLoss = hasOpenContracts && !hasPendingOpenProfit
+        ? openContractIds.reduce((total, contractId) => total + (profitLoss.openPositions[contractId] || 0), 0)
+        : hasOpenContracts ? null : 0;
+    const totalProfitLoss = profitLoss.realized + (openProfitLoss ?? 0);
+    const formatMoney = (value: number): string =>
+        `${value < 0 ? '-$' : '$'}${Math.abs(value).toFixed(2)}`;
+    const pnlTone = totalProfitLoss >= 0 ? 'positive' : 'negative';
     const canLaunch = isLaunched || (scanComplete && hasEligiblePlan && !isScanning);
 
     return (
@@ -282,6 +314,28 @@ const NexusAIComingSoon: React.FC = () => {
                         <div><span>Wins</span><strong className='is-positive'>{stats.wins}</strong></div>
                         <div><span>Losses</span><strong className='is-negative'>{stats.losses}</strong></div>
                         <div><span>Win rate</span><strong>{winRate}<small>%</small></strong></div>
+                    </div>
+                    <div
+                        className={`nexus-ai__pnl-summary nexus-ai__pnl-summary--${pnlTone}`}
+                        data-testid='nexus-total-pnl'
+                        data-realized-profit-loss={profitLoss.realized.toFixed(2)}
+                        data-open-profit-loss={hasPendingOpenProfit ? 'pending' : (openProfitLoss ?? 0).toFixed(2)}
+                        data-total-profit-loss={hasPendingOpenProfit ? '' : totalProfitLoss.toFixed(2)}
+                        data-open-contracts={openContractIds.length}
+                        data-contract-count={stats.trades}
+                        role='group'
+                        aria-label='Total profit or loss since Nexus opened'
+                        aria-live='polite'
+                    >
+                        <div className='nexus-ai__pnl-primary'>
+                            <span>Total Profit / Loss</span>
+                            <strong>{hasPendingOpenProfit ? 'Pending' : formatMoney(totalProfitLoss)}</strong>
+                        </div>
+                        <p>
+                            <span>Realized {formatMoney(profitLoss.realized)}</span>
+                            <span>Open {hasPendingOpenProfit ? 'Pending' : formatMoney(openProfitLoss ?? 0)}</span>
+                            <span>Since Nexus opened</span>
+                        </p>
                     </div>
                 </section>
 

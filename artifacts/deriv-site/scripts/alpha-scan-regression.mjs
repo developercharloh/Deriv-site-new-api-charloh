@@ -326,6 +326,13 @@ const getSnapshot = evaluate => evaluate(`(() => {
         totalPnlAtTop: Boolean(document.querySelector('.alpha-cockpit__topbar + [data-testid="tool-total-pnl"]')),
         totalProfitLoss: Number(root?.dataset.totalProfitLoss || 'NaN'),
         totalPnlDisplay: document.querySelector('[data-testid="tool-total-pnl"]')?.innerText || '',
+        nexusPnlDisplay: document.querySelector('[data-testid="nexus-total-pnl"]')?.innerText || '',
+        nexusPnlRealized: Number(document.querySelector('[data-testid="nexus-total-pnl"]')?.dataset.realizedProfitLoss || 'NaN'),
+        nexusPnlOpen: document.querySelector('[data-testid="nexus-total-pnl"]')?.dataset.openProfitLoss || '',
+        nexusPnlTotal: Number(document.querySelector('[data-testid="nexus-total-pnl"]')?.dataset.totalProfitLoss || 'NaN'),
+        nexusPnlTotalAvailable: Boolean(document.querySelector('[data-testid="nexus-total-pnl"]')?.dataset.totalProfitLoss),
+        nexusPnlOpenContracts: Number(document.querySelector('[data-testid="nexus-total-pnl"]')?.dataset.openContracts || 'NaN'),
+        nexusPnlContracts: Number(document.querySelector('[data-testid="nexus-total-pnl"]')?.dataset.contractCount || 'NaN'),
         location: window.location.href,
         journalPrices: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]')]
             .map(row => [...row.querySelectorAll('td')].slice(4, 7).map(cell => cell.textContent?.trim() || '')),
@@ -469,14 +476,20 @@ const run = async () => {
 
         await client.call('Page.navigate', { url: fixtureUrl(SAMPLE_WINDOWS[0], true) });
         await waitFor(
-            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
-            'model-powered Alpha tool',
+            () => client.evaluate(`document.readyState === 'complete' &&
+                (Boolean(document.querySelector('.spl')) ||
+                    Boolean(document.querySelector('[data-testid="nexus-interface"]')))`),
+            'Nexus application shell',
         );
         await waitFor(
             () => client.evaluate('!document.querySelector(".spl")'),
             'startup splash dismissal',
-            10000,
+            30000,
             100,
+        );
+        await waitFor(
+            () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+            'model-powered Alpha tool',
         );
         await waitFor(
             () => client.evaluate(`(() => {
@@ -518,12 +531,17 @@ const run = async () => {
             })()`),
             'completed mobile Nexus market scan',
         );
+        if (process.env.ALPHA_SCAN_CAPTURE_PATH) {
+            const capture = await client.call('Page.captureScreenshot', { format: 'jpeg', quality: 85 });
+            await writeFile(process.env.ALPHA_SCAN_CAPTURE_PATH, Buffer.from(capture.result.data, 'base64'));
+        }
         const mobileLayout = await client.evaluate(`(() => {
             const main = document.querySelector('.main.main--nexus-ai');
             const journal = document.querySelector('.nexus-ai__journal');
             const launch = document.querySelector('[data-testid="nexus-launch-button"]');
             const scan = document.querySelector('[data-testid="nexus-scan-button"]');
-            if (!main || !journal || !launch || !scan) return null;
+            const pnl = document.querySelector('[data-testid="nexus-total-pnl"]');
+            if (!main || !journal || !launch || !scan || !pnl) return null;
             const page = document.scrollingElement || document.documentElement;
             const documentMaxScroll = Math.max(0, page.scrollHeight - document.documentElement.clientHeight);
             const journalDocumentBottom = journal.getBoundingClientRect().bottom + window.scrollY;
@@ -531,6 +549,7 @@ const run = async () => {
             const journalRect = journal.getBoundingClientRect();
             const launchRect = launch.getBoundingClientRect();
             const scanRect = scan.getBoundingClientRect();
+            const pnlRect = pnl.getBoundingClientRect();
             const ancestors = [];
             for (let element = main; element && ancestors.length < 8; element = element.parentElement) {
                 const style = getComputedStyle(element);
@@ -567,6 +586,9 @@ const run = async () => {
                 launchHeight: launchRect.height,
                 scanWidth: scanRect.width,
                 scanHeight: scanRect.height,
+                pnlVisible: pnlRect.width > 0 && pnlRect.height > 0 &&
+                    pnlRect.left >= 0 && pnlRect.right <= document.documentElement.clientWidth + 1,
+                pnlWidth: pnlRect.width,
             };
             page.scrollTop = 0;
             return result;
@@ -577,6 +599,8 @@ const run = async () => {
             mobileLayout.mainScrollRange > 1 ||
             mobileLayout.documentMaxScroll <= 0 ||
             !mobileLayout.journalReachable ||
+            !mobileLayout.pnlVisible ||
+            mobileLayout.pnlWidth < 1 ||
             mobileLayout.launchWidth < 44 ||
             mobileLayout.launchHeight < 44 ||
             mobileLayout.scanWidth < 44 ||
@@ -771,6 +795,7 @@ const run = async () => {
             scanTarget: `${Math.round(mobileLayout.scanWidth)}×${Math.round(mobileLayout.scanHeight)}`,
             scanCount: afterManualScan.scanCount,
             contractsAfterStop: afterNexusStop.journalLegs.length,
+            pnlFitsMobileWidth: mobileLayout.pnlVisible,
         };
         await client.call('Emulation.setTouchEmulationEnabled', { enabled: false });
         await client.call('Emulation.clearDeviceMetricsOverride');
@@ -1662,7 +1687,16 @@ const run = async () => {
             !openWithHistorySnapshot.journalGates.includes('LOST') ||
             openWithHistorySnapshot.openProfitLoss !== '' ||
             !openWithHistorySnapshot.totalPnlAtTop ||
-            !openWithHistorySnapshot.totalPnlDisplay.includes('Open Pending')
+            !openWithHistorySnapshot.totalPnlDisplay.includes('Open Pending') ||
+            !openWithHistorySnapshot.nexusPnlDisplay.includes('TOTAL PROFIT / LOSS') ||
+            !openWithHistorySnapshot.nexusPnlDisplay.includes('Open Pending') ||
+            !Number.isFinite(openWithHistorySnapshot.nexusPnlRealized) ||
+            openWithHistorySnapshot.nexusPnlOpen !== 'pending' ||
+            openWithHistorySnapshot.nexusPnlOpenContracts < 1 ||
+            Math.abs(
+                openWithHistorySnapshot.nexusPnlRealized -
+                    openWithHistorySnapshot.journalProfitValues.reduce((total, profit) => total + profit, 0),
+            ) > 0.01
         ) {
             throw new Error(`P/L and settled journal history were not visible during an open trade: ${JSON.stringify({
                 runningRows: openWithHistorySnapshot?.runningRows,
@@ -1670,6 +1704,11 @@ const run = async () => {
                 openProfitLoss: openWithHistorySnapshot?.openProfitLoss,
                 pnlAtTop: openWithHistorySnapshot?.totalPnlAtTop,
                 display: openWithHistorySnapshot?.totalPnlDisplay,
+                nexusPnlDisplay: openWithHistorySnapshot?.nexusPnlDisplay,
+                nexusRealized: openWithHistorySnapshot?.nexusPnlRealized,
+                settledJournalTotal: openWithHistorySnapshot?.journalProfitValues.reduce((total, profit) => total + profit, 0),
+                nexusOpen: openWithHistorySnapshot?.nexusPnlOpen,
+                nexusOpenContracts: openWithHistorySnapshot?.nexusPnlOpenContracts,
             })}`);
         }
         const nexusLegs = nexusSession.journalLegs.slice(0, 3);
@@ -1726,6 +1765,87 @@ const run = async () => {
                 label: nexusSession.totalPnlDisplay,
             })}`);
         }
+        if (
+            !Number.isFinite(nexusSession.nexusPnlTotal) ||
+            Math.abs(nexusSession.nexusPnlTotal - expectedNexusProfitLoss) > 0.01 ||
+            Math.abs(nexusSession.nexusPnlRealized - expectedNexusProfitLoss) > 0.01 ||
+            nexusSession.nexusPnlOpenContracts !== 0
+        ) {
+            throw new Error(`Nexus session P/L did not retain and total its settled contract results: ${JSON.stringify({
+                displayed: nexusSession.nexusPnlTotal,
+                realized: nexusSession.nexusPnlRealized,
+                expected: expectedNexusProfitLoss,
+                openContracts: nexusSession.nexusPnlOpenContracts,
+                display: nexusSession.nexusPnlDisplay,
+            })}`);
+        }
+        const syntheticPnlContractId = 'nexus-pnl-regression-contract';
+        await client.evaluate(`(() => {
+            const send = position => window.dispatchEvent(new CustomEvent('nexus-ai-position', { detail: position }));
+            send({ contractId: ${JSON.stringify(syntheticPnlContractId)}, isOpen: true, isWin: null, profit: null });
+        })()`);
+        const pendingNexusPnl = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.nexusPnlOpen === 'pending' &&
+                    next.nexusPnlOpenContracts === 1 &&
+                    next.nexusPnlContracts === nexusSession.nexusPnlContracts + 1
+                    ? next
+                    : false;
+            },
+            'Nexus pending open P/L with retained realized results',
+        );
+        if (
+            !pendingNexusPnl.nexusPnlDisplay.includes('Open Pending') ||
+            Math.abs(pendingNexusPnl.nexusPnlRealized - expectedNexusProfitLoss) > 0.01 ||
+            pendingNexusPnl.nexusPnlTotalAvailable
+        ) {
+            throw new Error(`Nexus did not show Pending while preserving its settled P/L: ${JSON.stringify(pendingNexusPnl)}`);
+        }
+        await client.evaluate(`window.dispatchEvent(new CustomEvent('nexus-ai-position', { detail: {
+            contractId: ${JSON.stringify(syntheticPnlContractId)}, isOpen: true, isWin: null, profit: 0.75
+        } }))`);
+        const liveNexusPnl = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.nexusPnlOpen === '0.75' && next.nexusPnlOpenContracts === 1 ? next : false;
+            },
+            'Nexus live open P/L update',
+        );
+        if (Math.abs(liveNexusPnl.nexusPnlTotal - (expectedNexusProfitLoss + 0.75)) > 0.01) {
+            throw new Error(`Nexus live open P/L was not included in the session total: ${JSON.stringify(liveNexusPnl)}`);
+        }
+        await client.evaluate(`window.dispatchEvent(new CustomEvent('nexus-ai-position', { detail: {
+            contractId: ${JSON.stringify(syntheticPnlContractId)}, isOpen: false, isWin: false, profit: -2.25
+        } }))`);
+        await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.nexusPnlOpenContracts === 0 && Math.abs(next.nexusPnlTotal - (expectedNexusProfitLoss - 2.25)) < 0.01
+                    ? next
+                    : false;
+            },
+            'Nexus settled P/L update',
+        );
+        await client.evaluate(`window.dispatchEvent(new CustomEvent('nexus-ai-position', { detail: {
+            contractId: ${JSON.stringify(syntheticPnlContractId)}, isOpen: false, isWin: true, profit: 100
+        } }))`);
+        await sleep(100);
+        const dedupedNexusPnl = await getSnapshot(client.evaluate);
+        if (
+            dedupedNexusPnl.nexusPnlContracts !== nexusSession.nexusPnlContracts + 1 ||
+            Math.abs(dedupedNexusPnl.nexusPnlRealized - (expectedNexusProfitLoss - 2.25)) > 0.01 ||
+            Math.abs(dedupedNexusPnl.nexusPnlTotal - (expectedNexusProfitLoss - 2.25)) > 0.01
+        ) {
+            throw new Error(`A duplicate Nexus settlement changed its trade count or realized P/L: ${JSON.stringify(dedupedNexusPnl)}`);
+        }
+        runReport.fixture.nexusPnl = {
+            status: 'passed',
+            settledTotal: expectedNexusProfitLoss,
+            openPending: pendingNexusPnl.nexusPnlOpen,
+            liveOpenProfit: liveNexusPnl.nexusPnlOpen,
+            deduplicatedTotal: dedupedNexusPnl.nexusPnlTotal,
+        };
         await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
         await waitFor(
             () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
@@ -1737,7 +1857,8 @@ const run = async () => {
             nexusAfterStop.executionLeg !== 'idle' ||
             nexusAfterStop.journalLegs.length !== 3 ||
             !nexusAfterStop.feedback.includes('stopped manually') ||
-            Math.abs(nexusAfterStop.totalProfitLoss - expectedNexusProfitLoss) > 0.01
+            Math.abs(nexusAfterStop.totalProfitLoss - expectedNexusProfitLoss) > 0.01 ||
+            Math.abs(nexusAfterStop.nexusPnlTotal - (expectedNexusProfitLoss - 2.25)) > 0.01
         ) {
             throw new Error(`Nexus placed another contract after Stop: ${JSON.stringify(nexusAfterStop)}`);
         }
@@ -1748,6 +1869,7 @@ const run = async () => {
             purchases: nexusPurchaseCalls,
             stakes: nexusStakes,
             totalProfitLoss: nexusAfterStop.totalProfitLoss,
+            nexusTotalProfitLoss: nexusSession.nexusPnlTotal,
             stopMessage: nexusAfterStop.feedback,
         };
 
@@ -1969,6 +2091,7 @@ const run = async () => {
                 nexusMismatchThenMatchConfirmation: runReport.fixture.nexusMismatchThenMatchConfirmation,
                 nexusUnsupportedRouteFallback: runReport.fixture.nexusUnsupportedRouteFallback,
                 nexusSession: runReport.fixture.nexusSession,
+                nexusPnl: runReport.fixture.nexusPnl,
                 riskBoundaries: runReport.fixture.riskBoundaries || [],
             },
             externalFeed: RUN_LIVE ? {
