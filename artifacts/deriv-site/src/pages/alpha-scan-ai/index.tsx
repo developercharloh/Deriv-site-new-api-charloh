@@ -164,12 +164,19 @@ const buildFixtureRows = (
         status: 'open' as const,
     }));
     const forceDigitFallback = autoRunnerFixture && confirmationFixtureMode === 'route-change';
+    const nexusMomentumFixture = autoRunnerFixture &&
+        (confirmationFixtureMode === 'nexus-call' || confirmationFixtureMode === 'nexus-put');
+    const nexusMomentumDirection = confirmationFixtureMode === 'nexus-put' ? -1 : 1;
 
     return fixtureSymbols.map((fixture, symbolIndex) => {
         const pipSize = 2;
         const prices = Array.from({ length: sampleSize }, (_, index) => {
             if (forceDigitFallback) {
                 return Number((100 + symbolIndex * 25 + fixture.digitPattern[0] / 100).toFixed(2));
+            }
+            if (nexusMomentumFixture) {
+                if (symbolIndex !== 0) return 100 + symbolIndex * 25;
+                return Number((100 + nexusMomentumDirection * index * 0.02).toFixed(2));
             }
             if (autoRunnerFixture && symbolIndex === 0 && index >= sampleSize - 40) {
                 return 100 + index * 0.01;
@@ -665,7 +672,13 @@ type AlphaExecutionEngine = {
 };
 
 type AlphaRiskFixture = 'target' | 'stop-loss' | 'consecutive-losses' | 'trade-count';
-type AlphaConfirmationFixture = 'reverse' | 'route-change' | 'nexus-digits' | null;
+type AlphaConfirmationFixture =
+    | 'reverse'
+    | 'route-change'
+    | 'nexus-digits'
+    | 'nexus-call'
+    | 'nexus-put'
+    | null;
 type AlphaUnavailableContractFixture = 'once' | null;
 type AlphaRecoveryFixture = 'loss' | null;
 type NexusSession = {
@@ -741,10 +754,14 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         const routeChangeSeed = this.confirmationFixtureMode === 'route-change';
         const routeChange = routeChangeSeed && !this.confirmationRouteChangeUsed;
         if (routeChange) this.confirmationRouteChangeUsed = true;
-        const seedLength = routeChangeSeed || this.confirmationFixtureMode === 'nexus-digits' ? 80 : 30;
+        const nexusMomentumFixture = this.confirmationFixtureMode === 'nexus-call' ||
+            this.confirmationFixtureMode === 'nexus-put';
+        const nexusMomentumDirection = this.confirmationFixtureMode === 'nexus-put' ? -1 : 1;
+        const seedLength = routeChangeSeed || this.confirmationFixtureMode === 'nexus-digits' ||
+            nexusMomentumFixture ? 80 : 30;
         const seedOffset = routeChangeSeed && !routeChange ? 0.01 : 0;
         let prices = Array.from({ length: seedLength }, (_, index) =>
-            Number((100 + index * 0.02 + seedOffset).toFixed(2)),
+            Number((100 + nexusMomentumDirection * index * 0.02 + seedOffset).toFixed(2)),
         );
         if (this.confirmationFixtureMode === 'nexus-digits') {
             const matchingDigit = config.contractType === 'DIGITEVEN'
@@ -760,7 +777,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                 );
             }
         }
-        const confirmationDelay = this.riskFixtureMode ? 10 : 70;
+        const confirmationDelay = this.riskFixtureMode ? 10 : nexusMomentumFixture ? 250 : 70;
         const reverseConfirmation = this.confirmationFixtureMode === 'reverse' && !this.confirmationReversalUsed;
         if (reverseConfirmation) this.confirmationReversalUsed = true;
 
@@ -788,7 +805,11 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                         ];
                     } else {
                         const latestPrice = prices[prices.length - 1];
-                        const increment = routeChangeSeed ? 1 : 0.01;
+                        const increment = routeChangeSeed
+                            ? 1
+                            : this.confirmationFixtureMode === 'nexus-put'
+                                ? -0.01
+                                : 0.01;
                         prices = [...prices, Number((latestPrice + increment).toFixed(2))];
                     }
                     this.onPriceWindow(prices, 2);
@@ -891,6 +912,25 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         };
         this.config = config;
         this.activePosition = position;
+        if (typeof window !== 'undefined') {
+            const fixtureWindow = window as Window & {
+                __alphaScanFixtureBuyCalls?: Array<{
+                    contractType: string;
+                    barrier: string | null;
+                    symbol: string;
+                    stake: number;
+                }>;
+            };
+            fixtureWindow.__alphaScanFixtureBuyCalls ??= [];
+            fixtureWindow.__alphaScanFixtureBuyCalls.push({
+                contractType: config.contractType,
+                barrier: config.barrier ?? null,
+                symbol: config.symbol,
+                stake: config.stake,
+            });
+        }
+        const fixtureOpenDelayMs = 45;
+        const fixtureSettlementDelayMs = this.riskFixtureMode || this.recoveryFixtureMode ? 100 : 500;
         this.schedule(() => {
             if (!this.activePosition || this.activePosition.contractId !== contractId) return;
             this.onBuyFeedback({
@@ -899,7 +939,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                 message: `Bought #${contractId}  $${config.stake.toFixed(2)} → payout $${payout.toFixed(2)}`,
             });
             this.onPosition(position);
-        }, 45);
+        }, fixtureOpenDelayMs);
         this.schedule(() => {
             if (!this.activePosition || this.activePosition.contractId !== contractId) return;
             const settlement = this.recoveryFixtureMode === 'loss' && this.contractSequence === 1
@@ -922,7 +962,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                 isWin: settlement.isWin,
                 exitSpot: settlement.isWin ? '100.45' : '100.35',
             });
-        }, this.riskFixtureMode || this.recoveryFixtureMode ? 20 : 500);
+        }, fixtureSettlementDelayMs);
     }
 }
 
@@ -1100,7 +1140,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [multiMarketScanning, setMultiMarketScanning] = useState(true);
     const [autoVolatilityMode, setAutoVolatilityMode] = useState(false);
     const [stake, setStake] = useState('10');
-    const [payoutFloor, setPayoutFloor] = useState('1.8');
+    const [payoutFloor, setPayoutFloor] = useState(() =>
+        initialFixtureSelection('alpha_scan_fixture_payout_floor', ['1.5', '1.8', '2'], '1.8'),
+    );
     const [targetProfit, setTargetProfit] = useState(() =>
         initialFixtureSelection('alpha_scan_fixture_target_profit', ['10', '15', '25', '50'], '15'),
     );
@@ -1730,11 +1772,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
 
         const leg = session.nextLeg;
         const nextStake = leg === 'recovery' ? session.currentStake : session.baseStake;
-        const decisionKey = `${nextDecision.symbol}|${nextDecision.contractType}|${nextDecision.barrier || ''}`;
         session.nextLeg = 'primary';
-        session.lastSymbol = nextDecision.symbol;
-        session.lastDecisionKey = decisionKey;
-        session.lastFamily = nexusDecisionFamily(nextDecision);
         nexusScanConsumedRef.current = scanCount;
         if (leg === 'recovery') {
             setRecoveryDecision(nextDecision);
@@ -2107,6 +2145,13 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             }
             upsertJournalEntry(position, leg || 'primary', activeDecisionRef.current);
             if (position.isOpen) {
+                const nexusSession = nexusSessionRef.current;
+                if (nexusSession && decision) {
+                    nexusSession.lastSymbol = decision.symbol;
+                    nexusSession.lastDecisionKey =
+                        `${decision.symbol}|${decision.contractType}|${decision.barrier || ''}`;
+                    nexusSession.lastFamily = nexusDecisionFamily(decision);
+                }
                 setLiveTrade(position);
                 setLiveTradeLeg(leg);
                 setLiveTradeDecision(activeDecisionRef.current);
@@ -2390,7 +2435,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveFeedback({
                     seq: Date.now(),
                     kind: nexusSessionRef.current ? 'info' : 'error',
-                    message: `Fresh confirmation failed for ${pending.decision.displayName}. Pending contract cancelled. Rescanning before another trade.`,
+                    message: `Fresh confirmation failed for ${pending.decision.displayName} · ${strategyContractDisplayLabel(pending.decision.contractType)}. No order was sent; rescanning before another trade.`,
                 });
                 scheduleAutoRescan();
                 return;
@@ -2490,6 +2535,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-execution-leg={executionLeg}
             data-auto-volatility-mode={autoVolatilityMode}
             data-execution-fixture={executionFixtureMode}
+            data-confirmation-fixture={confirmationFixtureMode || ''}
             data-journal-count={journalRows.length}
             data-auto-trades={autoRiskRef.current.trades}
             data-auto-qualified-count={autoQualifiedDecisions.length}
@@ -3030,7 +3076,11 @@ const AlphaScanWorkspace: React.FC = () => {
     const confirmationFixtureMode: AlphaConfirmationFixture = typeof window !== 'undefined'
         ? (() => {
             const requested = new URLSearchParams(window.location.search).get('alpha_scan_confirmation_fixture');
-            return requested === 'reverse' || requested === 'route-change' || requested === 'nexus-digits'
+            return requested === 'reverse' ||
+                requested === 'route-change' ||
+                requested === 'nexus-digits' ||
+                requested === 'nexus-call' ||
+                requested === 'nexus-put'
                 ? requested
                 : null;
         })()

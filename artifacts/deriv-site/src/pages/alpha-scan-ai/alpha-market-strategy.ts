@@ -661,6 +661,15 @@ const digitMarketProbability = (market: PurchaseMarket): number | null => {
         : barrier / 10;
 };
 
+const isNexusDigitMarketAllowed = (market: PurchaseMarket): boolean => {
+    const match = market.match(/^(over|under)-(\d+)$/);
+    if (!match) return true;
+    const barrier = Number(match[2]);
+    return match[1] === 'under'
+        ? barrier > 3
+        : barrier < 7;
+};
+
 const digitMarketMatches = (market: PurchaseMarket, digit: number): boolean => {
     if (market === 'even') return digit % 2 === 0;
     if (market === 'odd') return digit % 2 !== 0;
@@ -748,7 +757,7 @@ export const isNexusDigitDecisionQualified = (
     windowSize = NEXUS_DIGIT_SIGNAL_WINDOW,
 ): boolean => {
     const market = purchaseMarketFromDecision(decision);
-    if (!market) return false;
+    if (!market || !isNexusDigitMarketAllowed(market)) return false;
     const expectedRate = digitMarketProbability(market);
     if (!expectedRate || expectedRate <= 0 || (1 / expectedRate) < payoutFloor) return false;
     const digits = source.lastDigits
@@ -790,6 +799,7 @@ export const selectNexusAutomaticCandidates = (
             .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
         if (digits.length < windowSize) return [];
         return digitMarkets.flatMap(market => {
+            if (!isNexusDigitMarketAllowed(market)) return [];
             const expectedRate = digitMarketProbability(market);
             if (!expectedRate || expectedRate <= 0 || (1 / expectedRate) < payoutFloor) return [];
             const hitRate = digitHitRate(digits, digit => digitMarketMatches(market, digit));
@@ -797,12 +807,15 @@ export const selectNexusAutomaticCandidates = (
             return [nexusDigitDecision(source, market, digits, hitRate, expectedRate)];
         });
     });
-    return [...momentumCandidates, ...digitCandidates].sort((left, right) =>
-        right.strength - left.strength ||
-        left.symbol.localeCompare(right.symbol) ||
-        left.contractType.localeCompare(right.contractType) ||
-        (left.barrier || '').localeCompare(right.barrier || ''),
-    );
+    return [...momentumCandidates, ...digitCandidates].sort((left, right) => {
+        const leftFamilyPriority = left.contractType === 'CALL' || left.contractType === 'PUT' ? 0 : 1;
+        const rightFamilyPriority = right.contractType === 'CALL' || right.contractType === 'PUT' ? 0 : 1;
+        return leftFamilyPriority - rightFamilyPriority ||
+            right.strength - left.strength ||
+            left.symbol.localeCompare(right.symbol) ||
+            left.contractType.localeCompare(right.contractType) ||
+            (left.barrier || '').localeCompare(right.barrier || '');
+    });
 };
 
 export type NexusDecisionFamily = 'rise-fall' | 'digits';

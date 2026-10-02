@@ -299,8 +299,13 @@ const getSnapshot = evaluate => evaluate(`(() => {
             Boolean(document.querySelector('[aria-label="Minimum payout"]')),
         executionLeg: root?.dataset.executionLeg || '',
         feedback: document.querySelector('[data-testid="live-trade-feedback"]')?.innerText || '',
+        executionFixture: root?.dataset.executionFixture || '',
+        confirmationFixture: root?.dataset.confirmationFixture || '',
         nexusFeedbackHistory: Array.isArray(window.__nexusFeedbackHistory)
             ? [...window.__nexusFeedbackHistory]
+            : [],
+        fixtureBuyCalls: Array.isArray(window.__alphaScanFixtureBuyCalls)
+            ? [...window.__alphaScanFixtureBuyCalls]
             : [],
         nexusRecoveryEnabled: document.querySelector('[data-testid="toggle-recovery"]')?.getAttribute('aria-pressed') || '',
         runningRows: document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]:not([data-contract-id])').length,
@@ -1207,12 +1212,144 @@ const run = async () => {
         };
         runReport.fixture.recoveryOff = recoveryOff;
 
+        const nexusMomentumResults = [];
+        for (const nexusCase of [
+            { fixture: 'nexus-call', contractType: 'CALL', label: 'Rise (CALL)' },
+            { fixture: 'nexus-put', contractType: 'PUT', label: 'Fall (PUT)' },
+        ]) {
+            const nexusMomentumUrl = new URL(
+                fixtureUrl(SAMPLE_WINDOWS[0], true, '', nexusCase.fixture),
+            );
+            nexusMomentumUrl.searchParams.set('alpha_scan_fixture_stake', '10');
+            nexusMomentumUrl.searchParams.set('alpha_scan_fixture_stop_loss', '50');
+            nexusMomentumUrl.searchParams.set('alpha_scan_fixture_target_profit', '50');
+            nexusMomentumUrl.searchParams.set('alpha_scan_fixture_martingale', '2');
+            nexusMomentumUrl.searchParams.set('alpha_scan_fixture_payout_floor', '1.5');
+            await client.call('Page.navigate', { url: nexusMomentumUrl.toString() });
+            await waitFor(
+                () => client.evaluate(
+                    `location.search.includes("alpha_scan_confirmation_fixture=${nexusCase.fixture}")`,
+                ),
+                `Nexus ${nexusCase.label} fixture navigation`,
+            );
+            await waitFor(
+                () => client.evaluate(
+                    `document.querySelector('[data-testid="alpha-tool"]')?.dataset.confirmationFixture === "${nexusCase.fixture}"`,
+                ),
+                `Nexus ${nexusCase.label} fixture mounted`,
+            );
+            await waitFor(
+                () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
+                `Nexus ${nexusCase.label} fixture Alpha Tool`,
+            );
+            const momentumScan = await waitFor(
+                async () => {
+                    const next = await getSnapshot(client.evaluate);
+                    return ['ready', 'partial-data'].includes(next.status) ? next : false;
+                },
+                `Nexus ${nexusCase.label} fixture scan`,
+                10000,
+            );
+            assertScan(momentumScan, SAMPLE_WINDOWS[0], 'fixture');
+            await client.evaluate('window.__alphaScanFixtureBuyCalls = []');
+            await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+            await waitFor(
+                () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "true"'),
+                `Nexus ${nexusCase.label} session launch`,
+            );
+
+            for (const confirmationCount of [1, 2]) {
+                const confirmation = await waitFor(
+                    async () => {
+                        const next = await getSnapshot(client.evaluate);
+                        return next.feedback.includes(`Fresh price confirmation ${confirmationCount}/3`) &&
+                            next.feedback.includes(nexusCase.label)
+                            ? next
+                            : false;
+                    },
+                    `Nexus ${nexusCase.label} confirmation ${confirmationCount}/3`,
+                    10000,
+                    50,
+                );
+                if (confirmation.fixtureBuyCalls.length !== 0) {
+                    throw new Error(
+                        `Nexus ${nexusCase.label} submitted its mock buy before confirmation 3/3: ${JSON.stringify(confirmation.fixtureBuyCalls)}`,
+                    );
+                }
+            }
+
+            let mockBuy;
+            try {
+                mockBuy = await waitFor(
+                    async () => {
+                        const next = await getSnapshot(client.evaluate);
+                        return next.fixtureBuyCalls.length ? next : false;
+                    },
+                    `Nexus ${nexusCase.label} mock buy after fresh confirmation`,
+                    10000,
+                    50,
+                );
+            } catch (error) {
+                const diagnostic = await getSnapshot(client.evaluate);
+                throw new Error(
+                    `${error.message} Final fixture state: ${JSON.stringify({
+                        feedback: diagnostic.feedback,
+                        executionLeg: diagnostic.executionLeg,
+                        fixtureBuyCalls: diagnostic.fixtureBuyCalls,
+                        journalLegs: diagnostic.journalLegs,
+                        nexusFeedbackHistory: diagnostic.nexusFeedbackHistory,
+                        location: diagnostic.location,
+                    })}`,
+                );
+            }
+            const buyCall = mockBuy.fixtureBuyCalls[0];
+            if (
+                mockBuy.fixtureBuyCalls.length !== 1 ||
+                buyCall.contractType !== nexusCase.contractType ||
+                buyCall.barrier !== null
+            ) {
+                throw new Error(
+                    `Nexus ${nexusCase.label} did not submit exactly one matching mock buy: ${JSON.stringify(mockBuy.fixtureBuyCalls)}`,
+                );
+            }
+
+            await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+            await waitFor(
+                () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
+                `Nexus ${nexusCase.label} fixture stop`,
+            );
+            nexusMomentumResults.push({
+                fixture: nexusCase.fixture,
+                contractType: buyCall.contractType,
+                symbol: buyCall.symbol,
+                stake: buyCall.stake,
+                confirmationsRequired: 3,
+            });
+        }
+        runReport.fixture.nexusMomentum = {
+            status: 'passed',
+            cases: nexusMomentumResults,
+        };
+
         const nexusSessionUrl = new URL(fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'nexus-digits', false, true));
         nexusSessionUrl.searchParams.set('alpha_scan_fixture_stake', '10');
         nexusSessionUrl.searchParams.set('alpha_scan_fixture_stop_loss', '50');
         nexusSessionUrl.searchParams.set('alpha_scan_fixture_target_profit', '50');
         nexusSessionUrl.searchParams.set('alpha_scan_fixture_martingale', '2');
         await client.call('Page.navigate', { url: nexusSessionUrl.toString() });
+        await waitFor(
+            () => client.evaluate(
+                'location.search.includes("alpha_scan_confirmation_fixture=nexus-digits") && ' +
+                'location.search.includes("alpha_scan_recovery_fixture=loss")',
+            ),
+            'Nexus multi-market recovery fixture navigation',
+        );
+        await waitFor(
+            () => client.evaluate(
+                'document.querySelector("[data-testid=\\"alpha-tool\\"]")?.dataset.confirmationFixture === "nexus-digits"',
+            ),
+            'Nexus multi-market recovery fixture mounted',
+        );
         await waitFor(
             () => client.evaluate('Boolean(document.querySelector("[data-testid=\\"alpha-tool\\"]"))'),
             'Nexus multi-market recovery fixture Alpha Tool',
@@ -1244,6 +1381,7 @@ const run = async () => {
                 const detail = event.detail;
                 window.__nexusFeedbackHistory.push(typeof detail === 'string' ? detail : detail?.message || '');
             });
+            window.__alphaScanFixtureBuyCalls = [];
         })()`);
         await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
         await waitFor(
@@ -1265,15 +1403,22 @@ const run = async () => {
         const nexusLegs = nexusSession.journalLegs.slice(0, 3);
         const nexusSymbols = nexusSession.journalSymbols.slice(0, 3);
         const nexusStakes = nexusSession.journalStakes.slice(0, 3);
+        const nexusPurchaseCalls = nexusSession.fixtureBuyCalls.slice(0, 3);
+        const initialPrimarySymbol = nexusPurchaseCalls[0]?.symbol;
+        const recoverySymbol = nexusPurchaseCalls[1]?.symbol;
         if (
             nexusLegs.join(',') !== 'primary,recovery,primary' ||
-            nexusSymbols[0] === nexusSymbols[1] ||
+            nexusPurchaseCalls.length < 3 ||
+            recoverySymbol === initialPrimarySymbol ||
             nexusStakes.join(',') !== '10,20,10'
         ) {
             throw new Error(
                 `Nexus did not use one different-market recovery before returning to base stake: ${JSON.stringify({
                     legs: nexusLegs,
                     symbols: nexusSymbols,
+                    purchases: nexusPurchaseCalls,
+                    initialPrimarySymbol,
+                    recoverySymbol,
                     stakes: nexusStakes,
                     gates: nexusSession.journalGates.slice(0, 3),
                     profits: nexusSession.journalProfits.slice(0, 3),
@@ -1318,6 +1463,7 @@ const run = async () => {
             status: 'passed',
             legs: nexusLegs,
             symbols: nexusSymbols,
+            purchases: nexusPurchaseCalls,
             stakes: nexusStakes,
             totalProfitLoss: nexusAfterStop.totalProfitLoss,
             stopMessage: nexusAfterStop.feedback,

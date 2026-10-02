@@ -255,6 +255,90 @@ describe('Nexus automatic candidate selection', () => {
         expect(candidates.some(candidate => candidate.symbol === 'SHORT')).toBe(false);
     });
 
+    it('blocks high-risk Over/Under edge barriers even with perfect recent evidence', () => {
+        const blockedRoutes = [
+            { market: 'under-1', contractType: 'DIGITUNDER', barrier: '1', digit: 0 },
+            { market: 'under-2', contractType: 'DIGITUNDER', barrier: '2', digit: 0 },
+            { market: 'under-3', contractType: 'DIGITUNDER', barrier: '3', digit: 0 },
+            { market: 'over-7', contractType: 'DIGITOVER', barrier: '7', digit: 9 },
+            { market: 'over-8', contractType: 'DIGITOVER', barrier: '8', digit: 9 },
+        ] as const;
+
+        for (const route of blockedRoutes) {
+            const marketSource = {
+                ...source(route.market.toUpperCase(), Array(60).fill(100)),
+                lastDigits: Array(60).fill(route.digit),
+                tradable: true,
+            };
+            const decision = {
+                symbol: marketSource.symbol,
+                displayName: marketSource.displayName,
+                condition: route.market,
+                label: route.market,
+                contractType: route.contractType,
+                barrier: route.barrier,
+                purchaseMarket: route.market,
+                digits: [...marketSource.lastDigits],
+                strength: 100,
+                reason: 'Perfect historical match.',
+            };
+
+            expect(isNexusDigitDecisionQualified(decision, marketSource)).toBe(false);
+            expect(selectNexusAutomaticCandidates([marketSource]).some(candidate =>
+                candidate.purchaseMarket === route.market,
+            )).toBe(false);
+        }
+    });
+
+    it('keeps nearby safer Over/Under barriers eligible when their evidence passes', () => {
+        const underSource = {
+            ...source('UNDER_4', Array(60).fill(100)),
+            lastDigits: Array(60).fill(0),
+            tradable: true,
+        };
+        const overSource = {
+            ...source('OVER_6', Array(60).fill(100)),
+            lastDigits: Array(60).fill(9),
+            tradable: true,
+        };
+
+        const candidates = selectNexusAutomaticCandidates([underSource, overSource]);
+
+        expect(candidates.some(candidate =>
+            candidate.symbol === 'UNDER_4' && candidate.purchaseMarket === 'under-4',
+        )).toBe(true);
+        expect(candidates.some(candidate =>
+            candidate.symbol === 'OVER_6' && candidate.purchaseMarket === 'over-6',
+        )).toBe(true);
+    });
+
+    it('prioritizes qualified Rise/Fall before a higher-scoring digit candidate', () => {
+        const moves = [...Array(26).fill(-1), ...Array(34).fill(1)];
+        let price = 100;
+        const prices = [price];
+        for (const move of moves) {
+            price += move;
+            prices.push(price);
+        }
+        const bothFamilies = {
+            ...source('BOTH_FAMILIES', prices),
+            lastDigits: Array(60).fill(9),
+            tradable: true,
+        };
+
+        const candidates = selectNexusAutomaticCandidates([bothFamilies]);
+        const riseFall = candidates.find(candidate =>
+            candidate.contractType === 'CALL' || candidate.contractType === 'PUT',
+        );
+        const highScoringDigit = candidates.find(candidate => candidate.contractType === 'DIGITOVER');
+
+        expect(riseFall).toBeDefined();
+        expect(highScoringDigit).toBeDefined();
+        expect(highScoringDigit!.strength).toBeGreaterThan(riseFall!.strength);
+        expect(candidates[0].contractType).toBe(riseFall!.contractType);
+        expect(selectNextNexusDecision(candidates)?.contractType).toBe(riseFall!.contractType);
+    });
+
     it('rotates to a qualified Rise/Fall candidate when the previous route was digits', () => {
         const sourceWithBothFamilies = {
             ...source('BOTH', Array.from({ length: 61 }, (_, index) => index + 1)),
