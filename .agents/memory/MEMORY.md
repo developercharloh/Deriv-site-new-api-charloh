@@ -49,4 +49,5 @@
 - [Alpha Scan queued execution](alpha-scan-queued-execution.md) — sequential qualified-market runs can replace transient idle gaps; regressions should assert durable settlements and journal prices.
 - [Alpha Scan auto fallback](alpha-scan-auto-fallback.md) — strict momentum and adaptive-digit entries need separate fresh-confirmation modes and current callback dependencies.
 - [Nexus digit confirmation fixtures](nexus-digit-confirmation-fixtures.md) — synthetic fresh ticks must match the selected digit route or recovery correctly fails confirmation.
+- [Nexus fresh-tick identity](deriv-fresh-tick-identity.md) — count new broker tick events, not distinct quote values, without weakening the three-tick confirmation.
 - [Alpha Scan fixture event order](alpha-scan-fixture-event-order.md) — simulated contracts must report open before settlement so recovery excludes the market actually traded.

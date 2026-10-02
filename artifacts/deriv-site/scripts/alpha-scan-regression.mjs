@@ -17,6 +17,7 @@ const RESULT_PATH = resolve(
 const RUN_STARTED_AT = new Date().toISOString();
 const RUN_ID = `${RUN_STARTED_AT.replace(/[^0-9]/g, '')}-${process.pid}`;
 let phase = 'fixture';
+let fixtureStage = 'initial fixture checks';
 
 const runReport = {
     schemaVersion: 1,
@@ -1321,6 +1322,153 @@ const run = async () => {
             cases: nexusDirectionalExclusionResults,
         };
 
+        const repeatedPriceUrl = new URL(
+            fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'repeated-price-ticks'),
+        );
+        repeatedPriceUrl.searchParams.set('alpha_scan_fixture_stake', '10');
+        repeatedPriceUrl.searchParams.set('alpha_scan_fixture_stop_loss', '50');
+        repeatedPriceUrl.searchParams.set('alpha_scan_fixture_target_profit', '50');
+        repeatedPriceUrl.searchParams.set('alpha_scan_fixture_payout_floor', '1.5');
+        await client.call('Page.navigate', { url: repeatedPriceUrl.toString() });
+        await waitFor(
+            () => client.evaluate(
+                'document.querySelector(\'[data-testid="alpha-tool"]\')?.dataset.confirmationFixture === "repeated-price-ticks"',
+            ),
+            'Nexus repeated-price confirmation fixture mounted',
+        );
+        const repeatedPriceScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.status === 'ready' ? next : false;
+            },
+            'Nexus repeated-price confirmation scan',
+            10000,
+        );
+        assertScan(repeatedPriceScan, SAMPLE_WINDOWS[0], 'fixture');
+        await client.evaluate(`(() => {
+            window.__nexusFeedbackHistory = [];
+            window.addEventListener('nexus-ai-feedback', event => {
+                const detail = event.detail;
+                window.__nexusFeedbackHistory.push(typeof detail === 'string' ? detail : detail?.message || '');
+            });
+            window.__alphaScanFixtureBuyCalls = [];
+        })()`);
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.fixtureBuyCalls.length >= 1 ? next : false;
+            },
+            'Nexus purchase after three repeated-price fresh ticks',
+            12000,
+            50,
+        );
+        const repeatedPriceExecution = await getSnapshot(client.evaluate);
+        if (
+            repeatedPriceExecution.fixtureBuyCalls.length !== 1 ||
+            !repeatedPriceExecution.nexusFeedbackHistory.some(message => message.includes('Fresh 3/3 digit confirmation passed'))
+        ) {
+            throw new Error(
+                `Nexus did not count three matching fresh ticks when quote prices repeated: ${JSON.stringify({
+                    buyCalls: repeatedPriceExecution.fixtureBuyCalls,
+                    feedback: repeatedPriceExecution.nexusFeedbackHistory,
+                })}`,
+            );
+        }
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        await waitFor(
+            () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
+            'Nexus repeated-price fixture stop',
+        );
+        runReport.fixture.nexusRepeatedPriceConfirmation = {
+            status: 'passed',
+            repeatedQuoteTicks: 3,
+            executedContract: repeatedPriceExecution.fixtureBuyCalls[0].contractType,
+        };
+
+        const nexusFallbackUrl = new URL(
+            fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'nexus-digits', true),
+        );
+        nexusFallbackUrl.searchParams.set('alpha_scan_fixture_stake', '10');
+        nexusFallbackUrl.searchParams.set('alpha_scan_fixture_stop_loss', '50');
+        nexusFallbackUrl.searchParams.set('alpha_scan_fixture_target_profit', '50');
+        nexusFallbackUrl.searchParams.set('alpha_scan_fixture_payout_floor', '1.5');
+        fixtureStage = 'Nexus fallback navigation';
+        await client.call('Page.navigate', { url: nexusFallbackUrl.toString() });
+        fixtureStage = 'Nexus fallback mount';
+        await waitFor(
+            () => client.evaluate('document.querySelector(\'[data-testid="alpha-tool"]\')?.dataset.confirmationFixture === "nexus-digits"'),
+            'Nexus unavailable-route fallback fixture mounted',
+        );
+        fixtureStage = 'Nexus fallback scan';
+        const nexusFallbackScan = await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.status === 'ready' ? next : false;
+            },
+            'Nexus unavailable-route fallback scan',
+            10000,
+        );
+        assertScan(nexusFallbackScan, SAMPLE_WINDOWS[0], 'fixture');
+        fixtureStage = 'Nexus fallback listener setup';
+        await client.evaluate(`(() => {
+            window.__nexusFeedbackHistory = [];
+            window.addEventListener('nexus-ai-feedback', event => {
+                const detail = event.detail;
+                window.__nexusFeedbackHistory.push(typeof detail === 'string' ? detail : detail?.message || '');
+            });
+            window.__alphaScanFixtureBuyCalls = [];
+        })()`);
+        fixtureStage = 'Nexus fallback launch';
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        fixtureStage = 'Nexus fallback buy wait';
+        await waitFor(
+            async () => {
+                const next = await getSnapshot(client.evaluate);
+                return next.fixtureBuyCalls.length >= 1 ? next : false;
+            },
+            'Nexus same-market fallback after an unavailable contract',
+            15000,
+            50,
+        );
+        fixtureStage = 'Nexus fallback verification';
+        const nexusFallbackExecution = await getSnapshot(client.evaluate);
+        const fallbackMessage = nexusFallbackExecution.nexusFeedbackHistory.find(
+            message => message.includes('is unavailable') && message.includes('Retrying once with'),
+        );
+        const nexusFallbackBuy = nexusFallbackExecution.fixtureBuyCalls[0];
+        const nexusFallbackBuyAllowed = nexusFallbackBuy &&
+            ((['DIGITEVEN', 'DIGITODD'].includes(nexusFallbackBuy.contractType) && nexusFallbackBuy.barrier === null) ||
+                (nexusFallbackBuy.contractType === 'DIGITOVER' && ['1', '2', '3', '4', '5'].includes(String(nexusFallbackBuy.barrier))) ||
+                (nexusFallbackBuy.contractType === 'DIGITUNDER' && ['4', '5', '6', '7', '8'].includes(String(nexusFallbackBuy.barrier))));
+        if (
+            !fallbackMessage ||
+            !nexusFallbackBuyAllowed ||
+            nexusFallbackExecution.nexusFeedbackHistory.some(message => message.includes('Fresh digit confirmation failed')) ||
+            await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") !== "true"')
+        ) {
+            throw new Error(
+                `Nexus did not retain its active state and retry one supported route after an unavailable contract: ${JSON.stringify({
+                    retryMessage: fallbackMessage,
+                    buyCalls: nexusFallbackExecution.fixtureBuyCalls,
+                    feedback: nexusFallbackExecution.nexusFeedbackHistory,
+                })}`,
+            );
+        }
+        fixtureStage = 'Nexus fallback stop';
+        await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
+        await waitFor(
+            () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
+            'Nexus unavailable-route fixture stop',
+        );
+        fixtureStage = 'fixture regression continuing';
+        runReport.fixture.nexusUnsupportedRouteFallback = {
+            status: 'passed',
+            retriedOnSameSymbol: true,
+            contractType: nexusFallbackBuy.contractType,
+            barrier: nexusFallbackBuy.barrier,
+        };
+
         const nexusSessionUrl = new URL(fixtureUrl(SAMPLE_WINDOWS[0], true, '', 'nexus-digits', false, true));
         nexusSessionUrl.searchParams.set('alpha_scan_fixture_stake', '10');
         nexusSessionUrl.searchParams.set('alpha_scan_fixture_stop_loss', '50');
@@ -1680,6 +1828,8 @@ const run = async () => {
                 confirmationRecovery,
                 recoveryOff,
                 nexusDirectionalExclusion: runReport.fixture.nexusDirectionalExclusion,
+                nexusRepeatedPriceConfirmation: runReport.fixture.nexusRepeatedPriceConfirmation,
+                nexusUnsupportedRouteFallback: runReport.fixture.nexusUnsupportedRouteFallback,
                 nexusSession: runReport.fixture.nexusSession,
                 riskBoundaries: runReport.fixture.riskBoundaries || [],
             },
@@ -1713,6 +1863,9 @@ const run = async () => {
 run().catch(async error => {
     const failureLabel = phase === 'external-feed' ? 'Public-feed integration failure' : 'Fixture layout check failure';
     const failureClassification = phase === 'external-feed' ? 'public-feed' : 'fixture-layout';
+    const failureMessage = phase === 'external-feed' || !fixtureStage
+        ? error.message
+        : `${fixtureStage}: ${error.message}`;
     if (phase === 'external-feed') {
         runReport.externalFeed = {
             ...runReport.externalFeed,
@@ -1734,7 +1887,7 @@ run().catch(async error => {
         failure: {
             classification: failureClassification,
             label: failureLabel,
-            message: error.message,
+            message: failureMessage,
         },
     };
     try {
@@ -1742,6 +1895,6 @@ run().catch(async error => {
     } catch (persistError) {
         console.error(`[alpha-scan-regression] Could not persist result to ${RESULT_PATH}: ${persistError.message}`);
     }
-    console.error(`[alpha-scan-regression][${phase}] ${failureLabel}: ${error.message}`);
+    console.error(`[alpha-scan-regression][${phase}] ${failureLabel}: ${failureMessage}`);
     process.exitCode = 1;
 });

@@ -652,7 +652,7 @@ type AlphaExecutionEngine = {
     onStatus: (status: DTStatus) => void;
     onBuyFeedback: (feedback: DTBuyFeedback) => void;
     onPosition: (position: DTPosition) => void;
-    onPriceWindow: (prices: number[], pipSize?: number) => void;
+    onPriceWindow: (prices: number[], pipSize: number | undefined, isFreshTick: boolean) => void;
     start: (config: DTConfig) => boolean;
     stop: () => void;
     updateConfig: (patch: Partial<DTConfig>) => void;
@@ -665,6 +665,7 @@ type AlphaConfirmationFixture =
     | 'reverse'
     | 'route-change'
     | 'nexus-digits'
+    | 'repeated-price-ticks'
     | 'nexus-call'
     | 'nexus-put'
     | null;
@@ -690,7 +691,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
     public onStatus: (status: DTStatus) => void = () => {};
     public onBuyFeedback: (feedback: DTBuyFeedback) => void = () => {};
     public onPosition: (position: DTPosition) => void = () => {};
-    public onPriceWindow: (prices: number[], _pipSize?: number) => void = () => {};
+    public onPriceWindow: (prices: number[], _pipSize: number | undefined, _isFreshTick: boolean) => void = () => {};
 
     private config: DTConfig | null = null;
     private activePosition: DTPosition | null = null;
@@ -778,7 +779,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
         this.schedule(() => {
             if (!this.config) return;
             this.onStatus('ready');
-            this.onPriceWindow(prices, 2);
+            this.onPriceWindow(prices, 2, false);
             const confirmationCount = routeChange ? 5 : 3;
             for (let confirmation = 1; confirmation <= confirmationCount; confirmation += 1) {
                 this.schedule(() => {
@@ -797,6 +798,8 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                                 Number((latestPrice + 0.03 + index * 0.02).toFixed(2)),
                             ),
                         ];
+                    } else if (this.confirmationFixtureMode === 'repeated-price-ticks') {
+                        prices = [...prices, prices[prices.length - 1]];
                     } else {
                         const latestPrice = prices[prices.length - 1];
                         const increment = routeChangeSeed
@@ -808,7 +811,7 @@ class FixtureAlphaExecutionEngine implements AlphaExecutionEngine {
                                     : 1;
                         prices = [...prices, Number((latestPrice + increment).toFixed(2))];
                     }
-                    this.onPriceWindow(prices, 2);
+                    this.onPriceWindow(prices, 2, true);
                 }, confirmation * confirmationDelay);
             }
         }, 20);
@@ -1191,9 +1194,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const pendingAutoEntryRef = useRef<{
         decision: RankedMarketDecision;
         leg: 'primary' | 'recovery';
-        seeded: boolean;
         confirmations: number;
-        lastPrice: number | null;
     } | null>(null);
     const autoQualifiedQueueRef = useRef<RankedMarketDecision[]>([]);
     const autoRescanPendingRef = useRef(false);
@@ -1489,7 +1490,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         const runtime = runtimeRef.current;
         if (!isNexusExecutionDecisionAllowed(decision)) {
             const message = 'Blocked unsupported contract. Only Over 1–5, Under 4–8, Even, and Odd are allowed; Rise/Fall and other digit contracts are disabled.';
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message });
+            emitNexusFeedback(message, 'error');
             setExecutionLeg('idle');
             activeLegRef.current = null;
             activeDecisionRef.current = null;
@@ -1508,7 +1509,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             return;
         }
         if (!runtime.liveMode || !runtime.liveAuthorized) {
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Log in to a Deriv account before live execution.' });
+            emitNexusFeedback('Log in to a Deriv account before live execution.', 'error');
             setExecutionLeg('idle');
             if (nexusSessionRef.current) {
                 nexusSessionRef.current = null;
@@ -1523,7 +1524,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         }
         const amount = Number(runtime.stake);
         if (!Number.isFinite(amount) || amount <= 0) {
-            setLiveFeedback({ seq: Date.now(), kind: 'error', message: 'Enter a valid stake before executing.' });
+            emitNexusFeedback('Enter a valid stake before executing.', 'error');
             setExecutionLeg('idle');
             if (nexusSessionRef.current) {
                 nexusSessionRef.current = null;
@@ -1625,7 +1626,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setExecutionLeg('idle');
             setPayoutSkipCount(count => count + 1);
             setLastPayoutSkipMessage(message);
-            setLiveFeedback({ seq: Date.now(), kind: enforceLivePayoutFloor ? 'info' : 'error', message });
+            emitNexusFeedback(message, enforceLivePayoutFloor ? 'info' : 'error');
             if (nexusSessionRef.current) {
                 nexusSessionRef.current.nextLeg = leg;
                 nexusSkippedCandidatesRef.current.set(
@@ -1657,9 +1658,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             pendingAutoEntryRef.current = {
                 decision,
                 leg,
-                seeded: false,
                 confirmations: 0,
-                lastPrice: null,
             };
         } else {
             pendingAutoEntryRef.current = null;
@@ -2027,7 +2026,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 : null;
             if (
                 feedback.kind === 'error' &&
-                runtime.autoVolatilityMode &&
+                (runtime.autoVolatilityMode || Boolean(nexusSessionRef.current)) &&
                 !fallbackAttemptedRef.current &&
                 activeDecision &&
                 activeLeg &&
@@ -2042,6 +2041,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     if (expiresAt <= now) unavailableDigitMarketsRef.current.delete(key);
                 }
                 unavailableDigitMarketsRef.current.set(cacheKey, now + UNAVAILABLE_MARKET_TTL_MS);
+                fallbackAttemptedRef.current = true;
                 const unavailableMarkets = new Set<PurchaseMarket>();
                 for (const [key, expiresAt] of unavailableDigitMarketsRef.current) {
                     if (key.startsWith(`${activeDecision.symbol}|`) && expiresAt > now) {
@@ -2057,21 +2057,50 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     )
                     : null;
                 if (fallback) {
-                    fallbackAttemptedRef.current = true;
                     setDigitFallbackCount(count => count + 1);
                     pendingAutoEntryRef.current = null;
                     setExecutionLeg('idle');
                     activeLegRef.current = null;
                     activeDecisionRef.current = null;
-                    setLiveFeedback({
-                        seq: Date.now(),
-                        kind: 'info',
-                        message: `${purchaseMarketLabel(rejectedMarket)} is unavailable on ${activeDecision.displayName}. Retrying once with ${fallback.label} on the same market.`,
-                    });
+                    emitNexusFeedback(
+                        `${purchaseMarketLabel(rejectedMarket)} is unavailable on ${activeDecision.displayName}. Retrying once with ${fallback.label} on the same market.`,
+                    );
                     setTimeout(() => executeDecisionRef.current(fallback, activeLeg), 0);
                     return;
                 }
             }
+
+            if (feedback.kind === 'error' && nexusSessionRef.current) {
+                pendingAutoEntryRef.current = null;
+                setExecutionLeg('idle');
+                activeLegRef.current = null;
+                activeDecisionRef.current = null;
+                liveEngine.stop();
+                const isAuthorizationFailure = /log in|not logged|authorization|invalid token/i.test(feedback.message);
+                if (isAuthorizationFailure) {
+                    nexusSessionRef.current = null;
+                    setNexusSessionActive(false);
+                    emitNexusFeedback(feedback.message, 'error');
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('nexus-ai-session', {
+                            detail: { active: false, message: feedback.message },
+                        }));
+                    }
+                } else {
+                    if (activeDecision) {
+                        nexusSkippedCandidatesRef.current.set(
+                            `${activeDecision.symbol}|${activeDecision.contractType}|${activeDecision.barrier || ''}`,
+                            Date.now() + UNAVAILABLE_MARKET_TTL_MS,
+                        );
+                    }
+                    emitNexusFeedback(
+                        `${feedback.message} Skipping this candidate and rescanning; the Nexus session remains active.`,
+                    );
+                    scheduleAutoRescan();
+                }
+                return;
+            }
+
             setLiveFeedback(feedback);
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('nexus-ai-feedback', { detail: feedback }));
@@ -2081,32 +2110,6 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setExecutionLeg('idle');
                 activeLegRef.current = null;
                 activeDecisionRef.current = null;
-                if (nexusSessionRef.current) {
-                    liveEngine.stop();
-                    const isAuthorizationFailure = /log in|not logged|authorization|invalid token/i.test(feedback.message);
-                    if (isAuthorizationFailure) {
-                        nexusSessionRef.current = null;
-                        setNexusSessionActive(false);
-                        if (typeof window !== 'undefined') {
-                            window.dispatchEvent(new CustomEvent('nexus-ai-session', {
-                                detail: { active: false, message: feedback.message },
-                            }));
-                        }
-                    } else {
-                        if (activeDecision) {
-                            nexusSkippedCandidatesRef.current.set(
-                                `${activeDecision.symbol}|${activeDecision.contractType}|${activeDecision.barrier || ''}`,
-                                Date.now() + UNAVAILABLE_MARKET_TTL_MS,
-                            );
-                        }
-                        setLiveFeedback({
-                            ...feedback,
-                            kind: 'info',
-                            message: `${feedback.message} Skipping this candidate and rescanning; the Nexus session remains active.`,
-                        });
-                        scheduleAutoRescan();
-                    }
-                }
             }
         };
         liveEngine.onPosition = position => {
@@ -2199,6 +2202,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     return;
                 }
 
+                fallbackAttemptedRef.current = false;
                 const loss = position.isWin === false;
                 const canRecover = runtimeRef.current.recoveryEnabled;
                 if (leg === 'primary' && loss) {
@@ -2380,19 +2384,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             activeDecisionRef.current = null;
             if (leg === 'recovery' || position.isWin) nexusAdaptivePlanRef.current = null;
         };
-        liveEngine.onPriceWindow = (prices, pipSize) => {
+        liveEngine.onPriceWindow = (prices, pipSize, isFreshTick) => {
             const pending = pendingAutoEntryRef.current;
-            if (!pending || !prices.length) return;
+            if (!pending || !isFreshTick || !prices.length) return;
 
             const latestPrice = prices[prices.length - 1];
             if (!Number.isFinite(latestPrice)) return;
-            if (!pending.seeded) {
-                pending.seeded = true;
-                pending.lastPrice = latestPrice;
-                return;
-            }
-            if (pending.lastPrice === latestPrice) return;
-            pending.lastPrice = latestPrice;
 
             const freshSource = {
                 symbol: pending.decision.symbol,
@@ -2415,22 +2412,19 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 activeLegRef.current = null;
                 activeDecisionRef.current = null;
                 liveEngine.stop();
-                setLiveFeedback({
-                    seq: Date.now(),
-                    kind: nexusSessionRef.current ? 'info' : 'error',
-                    message: `Fresh digit confirmation failed for ${pending.decision.displayName} · ${pending.decision.label}. The latest entry digit did not match the route or its 60-tick evidence changed. No order was sent.`,
-                });
+                emitNexusFeedback(
+                    `Fresh digit confirmation failed for ${pending.decision.displayName} · ${pending.decision.label}. The latest entry digit did not match the route or its 60-tick evidence changed. No order was sent.`,
+                    nexusSessionRef.current || runtimeRef.current.autoVolatilityMode ? 'info' : 'error',
+                );
                 scheduleAutoRescan();
                 return;
             }
 
             pending.confirmations += 1;
             if (pending.confirmations < 3) {
-                setLiveFeedback({
-                    seq: Date.now(),
-                    kind: 'info',
-                    message: `Fresh digit confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} · ${pending.decision.label}.`,
-                });
+                emitNexusFeedback(
+                    `Fresh digit confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} · ${pending.decision.label}.`,
+                );
                 return;
             }
 
@@ -2446,11 +2440,9 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             if (pending.leg === 'recovery') setRecoveryDecision(confirmedDecision);
             else setPrimaryDecision(confirmedDecision);
             pendingAutoEntryRef.current = null;
-            setLiveFeedback({
-                seq: Date.now(),
-                kind: 'info',
-                message: `Fresh 3/3 digit confirmation passed for ${confirmedDecision.displayName} · ${confirmedDecision.label}; entry digit ${entryDigit}. Requesting a live payout-checked quote.`,
-            });
+            emitNexusFeedback(
+                `Fresh 3/3 digit confirmation passed for ${confirmedDecision.displayName} · ${confirmedDecision.label}; entry digit ${entryDigit}. Requesting a live payout-checked quote.`,
+            );
             setTimeout(() => liveEngine.placeBuyNow({
                 symbol: confirmedDecision.symbol,
                 contractType: confirmedDecision.contractType,
@@ -2465,7 +2457,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             liveEngine.onPosition = () => {};
             liveEngine.onPriceWindow = () => {};
         };
-    }, [autoVolatilityMode, liveEngine, riskFixtureMode, scheduleAutoRescan, startQueuedAutoPrimary, stopLoss, targetProfit, upsertJournalEntry]);
+    }, [autoVolatilityMode, emitNexusFeedback, liveEngine, riskFixtureMode, scheduleAutoRescan, startQueuedAutoPrimary, stopLoss, targetProfit, upsertJournalEntry]);
 
     const oosAccuracy = rows.length ? Math.round(averageWalkForwardAccuracy * 100) : 0;
     const modelLabel = isBusy ? 'SYNCING' : modelStatus;
@@ -3059,6 +3051,7 @@ const AlphaScanWorkspace: React.FC = () => {
             return requested === 'reverse' ||
                 requested === 'route-change' ||
                 requested === 'nexus-digits' ||
+                requested === 'repeated-price-ticks' ||
                 requested === 'nexus-call' ||
                 requested === 'nexus-put'
                 ? requested

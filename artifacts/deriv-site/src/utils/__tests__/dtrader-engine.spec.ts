@@ -100,6 +100,33 @@ describe('DTraderEngine Alpha Scan execution path', () => {
         harness.engine.stop();
     });
 
+    it('marks history prices as seeded and repeated-quote ticks as fresh', () => {
+        const harness = makeHarness(baseConfig);
+        const priceWindows: Array<{ prices: number[]; pipSize: number | undefined; isFreshTick: boolean }> = [];
+        harness.engine.onPriceWindow = (prices, pipSize, isFreshTick) => {
+            priceWindows.push({ prices, pipSize, isFreshTick });
+        };
+
+        const historyRequest = harness.latest(payload => payload.ticks_history === 'R_100');
+        const repeatedQuote = 1379.51;
+        harness.emit({
+            msg_type: 'history',
+            req_id: historyRequest.req_id,
+            history: { prices: ['1379.50', String(repeatedQuote)] },
+            pip_size: 2,
+            subscription: { id: 'tick-subscription' },
+        });
+        harness.emit({
+            msg_type: 'tick',
+            subscription: { id: 'tick-subscription' },
+            tick: { quote: repeatedQuote, pip_size: 2, epoch: 1 },
+        });
+
+        expect(priceWindows.map(update => update.isFreshTick)).toEqual([false, true]);
+        expect(priceWindows[1].prices[priceWindows[1].prices.length - 1]).toBe(repeatedQuote);
+        harness.engine.stop();
+    });
+
     it('settles a one-tick buy and emits the final stake, payout, and profit', () => {
         const harness = makeHarness(baseConfig);
         const feedback: string[] = [];
