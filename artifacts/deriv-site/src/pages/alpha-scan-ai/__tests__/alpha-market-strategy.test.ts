@@ -10,9 +10,11 @@ import {
     selectAdaptiveDigitMarketPlan,
     selectAutoFallbackMarket,
     selectBestQualifiedMomentumMarket,
+    selectNextNexusDecision,
     selectNexusAutomaticCandidates,
     selectQualifiedMomentumMarkets,
     selectStrongestMomentumMarket,
+    strategyContractDisplayLabel,
     type StrategySource,
 } from '../alpha-market-strategy';
 
@@ -223,15 +225,15 @@ describe('Nexus automatic candidate selection', () => {
         expect(candidates.every(candidate => candidate.symbol !== 'CLOSED')).toBe(true);
     });
 
-    it('requires enough recent digits and an edge above the route baseline', () => {
+    it('requires enough recent digits, an observed edge, and a lower bound above baseline', () => {
         const qualified = {
             ...source('QUALIFIED', Array(60).fill(100)),
-            lastDigits: [...Array(33).fill(2), ...Array(27).fill(1)],
+            lastDigits: [...Array(40).fill(2), ...Array(20).fill(1)],
             tradable: true,
         };
         const belowEdge = {
             ...source('BELOW_EDGE', Array(60).fill(100)),
-            lastDigits: [...Array(32).fill(2), ...Array(28).fill(1)],
+            lastDigits: [...Array(35).fill(2), ...Array(25).fill(1)],
             tradable: true,
         };
         const shortHistory = {
@@ -251,5 +253,29 @@ describe('Nexus automatic candidate selection', () => {
             candidate.symbol === 'BELOW_EDGE' && candidate.contractType === 'DIGITEVEN',
         )).toBe(false);
         expect(candidates.some(candidate => candidate.symbol === 'SHORT')).toBe(false);
+    });
+
+    it('rotates to a qualified Rise/Fall candidate when the previous route was digits', () => {
+        const sourceWithBothFamilies = {
+            ...source('BOTH', Array.from({ length: 61 }, (_, index) => index + 1)),
+            lastDigits: Array.from({ length: 60 }, (_, index) => (index % 5) * 2),
+            tradable: true,
+        };
+        const candidates = selectNexusAutomaticCandidates([sourceWithBothFamilies]);
+        const previousDigit = candidates.find(candidate => candidate.contractType === 'DIGITEVEN');
+        expect(previousDigit).toBeDefined();
+
+        const next = selectNextNexusDecision(candidates, {
+            lastDecisionKey: `${previousDigit!.symbol}|${previousDigit!.contractType}|${previousDigit!.barrier || ''}`,
+            lastFamily: 'digits',
+            lastSymbol: previousDigit!.symbol,
+        });
+
+        expect(next?.contractType).toBe('CALL');
+    });
+
+    it('shows the direction represented by broker CALL and PUT codes', () => {
+        expect(strategyContractDisplayLabel('CALL')).toBe('Rise (CALL)');
+        expect(strategyContractDisplayLabel('PUT')).toBe('Fall (PUT)');
     });
 });

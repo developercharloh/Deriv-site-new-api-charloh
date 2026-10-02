@@ -126,6 +126,13 @@ export const PURCHASE_MARKET_OPTIONS = PURCHASE_MARKET_OPTION_GROUPS.flatMap(gro
 export const purchaseMarketLabel = (market: PurchaseMarket): string =>
     PURCHASE_MARKET_OPTIONS.find(option => option.value === market)?.label || market;
 
+export const strategyContractDisplayLabel = (contractType: string): string =>
+    contractType === 'CALL'
+        ? 'Rise (CALL)'
+        : contractType === 'PUT'
+            ? 'Fall (PUT)'
+            : contractType;
+
 export const marketConditionLabel = (condition: MarketCondition): string =>
     MARKET_OPTIONS.find(option => option.value === condition)?.label ||
     ({
@@ -622,6 +629,7 @@ export const AUTO_MOMENTUM_CONFIDENCE = 55;
 export const AUTO_SIGNAL_CONFIDENCE_WINDOW = 60;
 export const NEXUS_DIGIT_SIGNAL_WINDOW = 60;
 export const NEXUS_DIGIT_MIN_EDGE = 0.04;
+export const NEXUS_DIGIT_WILSON_Z = 1.645;
 export const NEXUS_DEFAULT_PAYOUT_FLOOR = 1.8;
 
 export type MomentumSignal = 'CALL' | 'PUT';
@@ -662,6 +670,31 @@ const digitMarketMatches = (market: PurchaseMarket, digit: number): boolean => {
     return match[1] === 'over' ? digit > barrier : digit < barrier;
 };
 
+const oneSidedWilsonLowerBound = (successes: number, observations: number): number => {
+    if (!Number.isFinite(successes) || !Number.isFinite(observations) || observations <= 0) return 0;
+    const sampleSize = observations;
+    const observedRate = Math.max(0, Math.min(1, successes / sampleSize));
+    const zSquared = NEXUS_DIGIT_WILSON_Z ** 2;
+    const denominator = 1 + zSquared / sampleSize;
+    const center = observedRate + zSquared / (2 * sampleSize);
+    const margin = NEXUS_DIGIT_WILSON_Z * Math.sqrt(
+        (observedRate * (1 - observedRate) + zSquared / (4 * sampleSize)) / sampleSize,
+    );
+    return Math.max(0, (center - margin) / denominator);
+};
+
+const hasNexusDigitEvidence = (
+    digits: number[],
+    market: PurchaseMarket,
+    expectedRate: number,
+): boolean => {
+    if (!digits.length) return false;
+    const hits = digits.filter(digit => digitMarketMatches(market, digit)).length;
+    const observedRate = hits / digits.length;
+    return observedRate >= expectedRate + NEXUS_DIGIT_MIN_EDGE &&
+        oneSidedWilsonLowerBound(hits, digits.length) > expectedRate;
+};
+
 const nexusDigitDecision = (
     source: StrategySource,
     market: PurchaseMarket,
@@ -675,6 +708,8 @@ const nexusDigitDecision = (
             ? 'all-odd'
             : market as MarketCondition;
     const edge = hitRate - expectedRate;
+    const hits = digits.filter(digit => digitMarketMatches(market, digit)).length;
+    const lowerBound = oneSidedWilsonLowerBound(hits, digits.length);
     return {
         symbol: source.symbol,
         displayName: source.displayName,
@@ -691,17 +726,20 @@ const nexusDigitDecision = (
         purchaseMarket: market,
         digits,
         strength: 50 + edge * 100,
-        reason: `${purchaseMarketLabel(market)} appeared on ${(
+        reason: `${purchaseMarketLabel(market)} appeared ${hits}/${digits.length} times (${(
             hitRate * 100
-        ).toFixed(0)}% of the latest ${digits.length} digits versus a ${(
-            expectedRate * 100
-        ).toFixed(0)}% baseline. This is historical evidence, not a prediction guarantee.`,
+        ).toFixed(0)}%) in the latest digits; its one-sided 95% Wilson lower bound is ${(
+            lowerBound * 100
+        ).toFixed(0)}% versus a ${(expectedRate * 100).toFixed(0)}% theoretical baseline. Latest scanned digit: ${
+            digits[digits.length - 1]
+        }. This is an evidence screen, not a win-probability guarantee.`,
     };
 };
 
 /**
- * Require a minimum tick sample and an observed edge over the route's
- * baseline. Live proposal payout remains the final entry gate.
+ * Require a minimum tick sample, an observed edge, and a one-sided 95% Wilson
+ * lower bound above the route baseline. This is a screening statistic, not a
+ * calibrated estimate of the next contract's win probability.
  */
 export const isNexusDigitDecisionQualified = (
     decision: RankedMarketDecision,
@@ -717,15 +755,15 @@ export const isNexusDigitDecisionQualified = (
         .slice(-windowSize)
         .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
     if (digits.length < windowSize) return false;
-    const hitRate = digitHitRate(digits, digit => digitMarketMatches(market, digit));
-    return hitRate >= expectedRate + NEXUS_DIGIT_MIN_EDGE;
+    return hasNexusDigitEvidence(digits, market, expectedRate);
 };
 
 /**
  * Rank supported Rise/Fall and digit routes across every currently open
  * synthetic market. Digit candidates need a 60-tick sample, an observed
- * baseline edge, and a theoretical payout compatible with the configured
- * floor; the broker's fresh proposal still decides whether an entry is allowed.
+ * baseline edge, a conservative binomial evidence bound, and a theoretical
+ * payout compatible with the configured floor; the broker's fresh proposal
+ * still decides whether an entry is allowed.
  */
 export const selectNexusAutomaticCandidates = (
     sources: StrategySource[],
@@ -755,7 +793,7 @@ export const selectNexusAutomaticCandidates = (
             const expectedRate = digitMarketProbability(market);
             if (!expectedRate || expectedRate <= 0 || (1 / expectedRate) < payoutFloor) return [];
             const hitRate = digitHitRate(digits, digit => digitMarketMatches(market, digit));
-            if (hitRate < expectedRate + NEXUS_DIGIT_MIN_EDGE) return [];
+            if (!hasNexusDigitEvidence(digits, market, expectedRate)) return [];
             return [nexusDigitDecision(source, market, digits, hitRate, expectedRate)];
         });
     });
@@ -765,6 +803,46 @@ export const selectNexusAutomaticCandidates = (
         left.contractType.localeCompare(right.contractType) ||
         (left.barrier || '').localeCompare(right.barrier || ''),
     );
+};
+
+export type NexusDecisionFamily = 'rise-fall' | 'digits';
+
+export const nexusDecisionFamily = (decision: RankedMarketDecision): NexusDecisionFamily =>
+    decision.contractType === 'CALL' || decision.contractType === 'PUT' ? 'rise-fall' : 'digits';
+
+type NexusDecisionSelectionOptions = {
+    lastDecisionKey?: string | null;
+    lastFamily?: NexusDecisionFamily | null;
+    lastSymbol?: string | null;
+    recovery?: boolean;
+};
+
+const nexusDecisionKey = (decision: RankedMarketDecision): string =>
+    `${decision.symbol}|${decision.contractType}|${decision.barrier || ''}`;
+
+/**
+ * Keep the best ranked family available, but rotate between qualified
+ * Rise/Fall and digit routes so a long list of digit thresholds cannot starve
+ * a price-direction signal. Recovery still requires a different symbol.
+ */
+export const selectNextNexusDecision = (
+    candidates: RankedMarketDecision[],
+    options: NexusDecisionSelectionOptions = {},
+): RankedMarketDecision | null => {
+    const eligible = options.recovery
+        ? candidates.filter(decision => decision.symbol !== options.lastSymbol)
+        : candidates;
+    if (options.recovery) {
+        return eligible.find(decision => nexusDecisionKey(decision) !== options.lastDecisionKey) || null;
+    }
+
+    const differentDecision = eligible.filter(
+        decision => nexusDecisionKey(decision) !== options.lastDecisionKey,
+    );
+    const otherFamily = options.lastFamily
+        ? differentDecision.find(decision => nexusDecisionFamily(decision) !== options.lastFamily)
+        : null;
+    return otherFamily || differentDecision[0] || eligible[0] || null;
 };
 
 const directionalPercentage = (moves: number[], direction: 1 | -1): number =>
@@ -878,12 +956,12 @@ export const selectQualifiedMomentumMarkets = (
         symbol: evaluation.symbol,
         displayName: evaluation.displayName,
         condition: evaluation.signal === 'CALL' ? 'all-rise' : 'all-fall',
-        label: `Momentum ${evaluation.signal} · ${evaluation.confidence.toFixed(0)}% / ${evaluation.confidenceWindow} ticks`,
+        label: `Momentum ${strategyContractDisplayLabel(evaluation.signal)} · ${evaluation.confidence.toFixed(0)}% / ${evaluation.confidenceWindow} ticks`,
         contractType: evaluation.signal as StrategyContractType,
         barrier: null,
         digits: [],
         strength: evaluation.confidence,
-        reason: `${evaluation.signal} qualified: ${evaluation.confidence.toFixed(0)}% confidence across the last ${evaluation.confidenceWindow} ticks; short/long momentum aligned.`,
+        reason: `${strategyContractDisplayLabel(evaluation.signal)} qualified: ${evaluation.confidence.toFixed(0)}% of recent price transitions moved in that direction across ${evaluation.confidenceWindow} ticks; short/long momentum aligned. Historical agreement is not a win guarantee.`,
     } satisfies RankedMarketDecision));
 
 /**
@@ -935,7 +1013,7 @@ export const selectStrongestMomentumMarket = (
                 symbol: source.symbol,
                 displayName: source.displayName,
                 condition: isCall ? 'all-rise' : 'all-fall',
-                label: `Adaptive Momentum ${signal}`,
+                label: `Adaptive Momentum ${strategyContractDisplayLabel(signal)}`,
                 contractType: isCall ? 'CALL' : 'PUT',
                 barrier: null,
                 digits: [],

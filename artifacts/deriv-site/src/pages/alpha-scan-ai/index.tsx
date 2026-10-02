@@ -29,11 +29,15 @@ import {
     selectAdaptiveDigitMarketPlan,
     selectBestAvailableDigitFallback,
     selectBestQualifiedMomentumMarket,
+    selectNextNexusDecision,
     selectNexusAutomaticCandidates,
     selectQualifiedMomentumMarkets,
     purchaseMarketFromDecision,
+    nexusDecisionFamily,
+    strategyContractDisplayLabel,
     type MarketCondition,
     type MomentumMarketEvaluation,
+    type NexusDecisionFamily,
     type PurchaseMarket,
     type RankedMarketDecision,
     type StrategySource,
@@ -674,6 +678,7 @@ type NexusSession = {
     nextLeg: 'primary' | 'recovery';
     lastSymbol: string | null;
     lastDecisionKey: string | null;
+    lastFamily: NexusDecisionFamily | null;
 };
 /**
  * The browser regression runs without a Deriv account. This deterministic
@@ -1111,6 +1116,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [payoutSkipCount, setPayoutSkipCount] = useState(0);
     const [lastPayoutSkipMessage, setLastPayoutSkipMessage] = useState('');
     const [liveTrade, setLiveTrade] = useState<DTPosition | null>(null);
+    const [toolRealizedProfitLoss, setToolRealizedProfitLoss] = useState(0);
     const [liveTradeLeg, setLiveTradeLeg] = useState<'primary' | 'recovery' | null>(null);
     const [liveTradeDecision, setLiveTradeDecision] = useState<RankedMarketDecision | null>(null);
     const [digitFallbackCount, setDigitFallbackCount] = useState(0);
@@ -1121,6 +1127,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
     const [recoveryDecision, setRecoveryDecision] = useState<RankedMarketDecision | null>(null);
     const activeLegRef = useRef<'primary' | 'recovery' | null>(null);
     const activeDecisionRef = useRef<RankedMarketDecision | null>(null);
+    const settledContractIdsRef = useRef(new Set<string>());
     const nexusSessionRef = useRef<NexusSession | null>(null);
     const nexusCandidatesRef = useRef<RankedMarketDecision[]>([]);
     const nexusSkippedCandidatesRef = useRef(new Map<string, number>());
@@ -1702,12 +1709,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             ),
         );
         const recovery = session.nextLeg === 'recovery';
-        const eligible = recovery
-            ? candidates.filter(decision => decision.symbol !== session.lastSymbol)
-            : candidates;
-        const nextDecision = eligible.find(decision =>
-            `${decision.symbol}|${decision.contractType}|${decision.barrier || ''}` !== session.lastDecisionKey,
-        ) || (!recovery ? eligible[0] : null);
+        const nextDecision = selectNextNexusDecision(candidates, {
+            recovery,
+            lastSymbol: session.lastSymbol,
+            lastDecisionKey: session.lastDecisionKey,
+            lastFamily: session.lastFamily,
+        });
 
         if (!nextDecision) {
             if (recovery) {
@@ -1727,6 +1734,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
         session.nextLeg = 'primary';
         session.lastSymbol = nextDecision.symbol;
         session.lastDecisionKey = decisionKey;
+        session.lastFamily = nexusDecisionFamily(nextDecision);
         nexusScanConsumedRef.current = scanCount;
         if (leg === 'recovery') {
             setRecoveryDecision(nextDecision);
@@ -1807,6 +1815,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         nextLeg: 'primary',
                         lastSymbol: null,
                         lastDecisionKey: null,
+                        lastFamily: null,
                     };
                     setNexusSessionActive(true);
                     recoveryUsedRef.current = false;
@@ -1967,7 +1976,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 ? 'Even'
                 : position.contractType === 'DIGITODD'
                     ? 'Odd'
-                    : position.contractType),
+                    : strategyContractDisplayLabel(position.contractType)),
             gate: position.isOpen ? 'Running' : position.isWin ? 'Won' : 'Lost',
             stake: position.stake,
             payout: position.payout,
@@ -2088,10 +2097,10 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     detail: {
                         ...position,
                         leg: leg || 'primary',
-                        strategy: decision?.label || position.contractType,
+                        strategy: decision?.label || strategyContractDisplayLabel(position.contractType),
                         market: (() => {
                             const market = decision ? purchaseMarketFromDecision(decision) : null;
-                            return market ? purchaseMarketLabel(market) : position.contractType;
+                            return market ? purchaseMarketLabel(market) : strategyContractDisplayLabel(position.contractType);
                         })(),
                     },
                 }));
@@ -2103,7 +2112,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 setLiveTradeDecision(activeDecisionRef.current);
                 setExecutionLeg(leg === 'recovery' ? 'recovery-running' : 'primary-running');
                 emitNexusFeedback(
-                    `${leg === 'recovery' ? 'Recovery' : 'Primary'} contract executed · ${decision?.displayName || position.symbol} · tracking live price.`,
+                    `${leg === 'recovery' ? 'Recovery' : 'Primary'} ${strategyContractDisplayLabel(position.contractType)} contract executed · ${decision?.displayName || position.symbol} · tracking live price.`,
                     'success',
                 );
                 if (nexusSessionRef.current) scheduleAutoRescan();
@@ -2114,9 +2123,14 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setLiveTradeLeg(null);
             setLiveTradeDecision(null);
 
+            const settledContractId = String(position.contractId || '');
+            if (settledContractId && settledContractIdsRef.current.has(settledContractId)) return;
+            if (settledContractId) settledContractIdsRef.current.add(settledContractId);
+            const settledProfit = Number(position.profit) || 0;
+            setToolRealizedProfitLoss(current => current + settledProfit);
+
             const nexusSession = nexusSessionRef.current;
             if (nexusSession && leg) {
-                const settledProfit = Number(position.profit) || 0;
                 nexusSession.sessionProfit += settledProfit;
                 nexusSession.trades += 1;
                 if (position.isWin === false) {
@@ -2388,7 +2402,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     seq: Date.now(),
                     kind: 'info',
                     message: pending.confirmationMode === 'momentum'
-                        ? `Fresh price confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} — ${freshDecision?.contractType || 'waiting for direction'}.`
+                        ? `Fresh price confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} — ${freshDecision ? strategyContractDisplayLabel(freshDecision.contractType) : 'waiting for direction'}.`
                         : `Fresh digit-frequency confirmation ${pending.confirmations}/3 for ${pending.decision.displayName} · ${pending.decision.label}.`,
                 });
                 return;
@@ -2399,7 +2413,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             setLiveFeedback({
                 seq: Date.now(),
                 kind: 'success',
-                message: `Fresh confirmation passed for ${confirmedDecision.displayName}. Buying ${confirmedDecision.contractType}.`,
+                    message: `Fresh confirmation passed for ${confirmedDecision.displayName}. Buying ${strategyContractDisplayLabel(confirmedDecision.contractType)}.`,
             });
             setTimeout(() => liveEngine.placeBuyNow({
                 symbol: confirmedDecision.symbol,
@@ -2438,6 +2452,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                 : recoveryPurchaseMarket
         : recoveryPurchaseMarket;
     const modelProbability = modelPick ? Math.round(modelPick.baselineProbability * 100) : 0;
+    const openProfitLoss = liveTrade?.isOpen ? Number(liveTrade.profit) || 0 : 0;
+    const totalProfitLoss = toolRealizedProfitLoss + openProfitLoss;
     const modelGate = modelPick?.validationGate || 'insufficient-evidence';
     const modelGateLabel = modelGate === 'validated'
         ? 'VALIDATED'
@@ -2482,6 +2498,8 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
             data-payout-skip-count={payoutSkipCount}
             data-digit-fallback-count={digitFallbackCount}
             data-last-payout-skip={lastPayoutSkipMessage}
+            data-realized-profit-loss={toolRealizedProfitLoss.toFixed(2)}
+            data-total-profit-loss={totalProfitLoss.toFixed(2)}
         >
             <header className='alpha-cockpit__topbar'>
                 <div className='alpha-cockpit__brand'>
@@ -2550,12 +2568,12 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                     <div className='alpha-cockpit__execution-row'>
                         <div>
                             <span className='alpha-cockpit__label'>AI proposed contract</span>
-                            <strong className='alpha-cockpit__contract'>{activeDecision?.contractType || 'WAIT'}</strong>
+                            <strong className='alpha-cockpit__contract'>{activeDecision ? strategyContractDisplayLabel(activeDecision.contractType) : 'WAIT'}</strong>
                             <small>{activeDecision?.label || 'No qualified contract selected'}</small>
                         </div>
                         <div className='alpha-cockpit__direction'>
                             <span>MODEL DIRECTION</span>
-                            <strong>{activeDecision?.contractType === 'PUT' ? 'DOWN' : activeDecision?.contractType === 'CALL' ? 'UP' : '—'}</strong>
+                            <strong>{activeDecision?.contractType === 'PUT' ? 'FALL (PUT)' : activeDecision?.contractType === 'CALL' ? 'RISE (CALL)' : '—'}</strong>
                         </div>
                     </div>
                     <div className='alpha-cockpit__execution-reason'>
@@ -2568,6 +2586,18 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                         <label>STOP LOSS<select value={stopLoss} onChange={event => setStopLoss(event.target.value)} aria-label='Stop loss'><option value='5'>$5</option><option value='10'>$10</option><option value='20'>$20</option><option value='50'>$50</option></select></label>
                         <label>MARTINGALE<select value={martingale} onChange={event => setMartingale(event.target.value)} aria-label='Martingale'><option value='no'>OFF · 1x</option><option value='2'>ON · 2x</option><option value='3'>ON · 3x</option></select></label>
                         <label>MIN PAYOUT<select value={payoutFloor} onChange={event => setPayoutFloor(event.target.value)} aria-label='Minimum payout'><option value='1.5'>1.50x</option><option value='1.8'>1.80x</option><option value='2'>2.00x</option></select></label>
+                    </div>
+                    <div
+                        className={`alpha-cockpit__total-pnl alpha-cockpit__total-pnl--${totalProfitLoss >= 0 ? 'positive' : 'negative'}`}
+                        data-testid='tool-total-pnl'
+                        data-total-profit-loss={totalProfitLoss.toFixed(2)}
+                        aria-live='polite'
+                    >
+                        <div>
+                            <span>TOTAL PROFIT / LOSS</span>
+                            <strong>{formatMoney(totalProfitLoss)}</strong>
+                        </div>
+                        <small>Realized {formatMoney(toolRealizedProfitLoss)} · Open {formatMoney(openProfitLoss)} · Since this tool opened</small>
                     </div>
                     <div className='alpha-cockpit__execution-actions'>
                         <button
@@ -2649,7 +2679,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                     <td>{liveTrade.purchaseTime}</td>
                                     <td><strong>{liveTrade.symbol}</strong></td>
                                     <td>{liveTradeLeg === 'recovery' ? 'Recovery' : 'Primary'}</td>
-                                    <td>{liveTradeDecision?.label || liveTrade.contractType}</td>
+                                    <td>{liveTradeDecision?.label || strategyContractDisplayLabel(liveTrade.contractType)}</td>
                                     <td>{liveTrade.currentSpot || '—'}</td>
                                     <td>{liveTrade.entrySpot || '—'}</td>
                                     <td>—</td>
@@ -2663,6 +2693,7 @@ const AlphaToolSurface: React.FC<AlphaToolSurfaceProps> = ({
                                     data-symbol={entry.symbol}
                                     data-leg={entry.leg}
                                     data-stake={entry.stake}
+                                    data-profit={entry.profit === null ? undefined : entry.profit}
                                 >
                                     <td>{entry.time}</td>
                                     <td><strong>{entry.symbol}</strong></td>

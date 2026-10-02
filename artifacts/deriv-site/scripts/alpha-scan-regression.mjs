@@ -314,6 +314,10 @@ const getSnapshot = evaluate => evaluate(`(() => {
             .map(row => row.querySelector('[class*="alpha-cockpit__row-gate"]')?.textContent?.trim() || ''),
         journalProfits: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-contract-id]')]
             .map(row => row.lastElementChild?.textContent?.trim() || ''),
+        journalProfitValues: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-contract-id]')]
+            .map(row => Number(row.getAttribute('data-profit'))),
+        totalProfitLoss: Number(root?.dataset.totalProfitLoss || 'NaN'),
+        totalPnlDisplay: document.querySelector('[data-testid="tool-total-pnl"]')?.innerText || '',
         location: window.location.href,
         journalPrices: [...document.querySelectorAll('[data-testid="tool-journal"] tbody tr[data-symbol]')]
             .map(row => [...row.querySelectorAll('td')].slice(4, 7).map(cell => cell.textContent?.trim() || '')),
@@ -1280,6 +1284,21 @@ const run = async () => {
                 })}`,
             );
         }
+        const expectedNexusProfitLoss = nexusSession.journalProfitValues
+            .slice(0, 3)
+            .reduce((total, profit) => total + profit, 0);
+        if (
+            !nexusSession.totalPnlDisplay.includes('TOTAL PROFIT / LOSS') ||
+            !Number.isFinite(nexusSession.totalProfitLoss) ||
+            Math.abs(nexusSession.totalProfitLoss - expectedNexusProfitLoss) > 0.01
+        ) {
+            throw new Error(`Nexus total P/L does not match its settled journal: ${JSON.stringify({
+                displayed: nexusSession.totalProfitLoss,
+                expected: expectedNexusProfitLoss,
+                journal: nexusSession.journalProfitValues.slice(0, 3),
+                label: nexusSession.totalPnlDisplay,
+            })}`);
+        }
         await client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.click()');
         await waitFor(
             () => client.evaluate('document.querySelector("[data-testid=\\"nexus-launch-button\\"]")?.getAttribute("aria-pressed") === "false"'),
@@ -1290,7 +1309,8 @@ const run = async () => {
         if (
             nexusAfterStop.executionLeg !== 'idle' ||
             nexusAfterStop.journalLegs.length !== 3 ||
-            !nexusAfterStop.feedback.includes('stopped manually')
+            !nexusAfterStop.feedback.includes('stopped manually') ||
+            Math.abs(nexusAfterStop.totalProfitLoss - expectedNexusProfitLoss) > 0.01
         ) {
             throw new Error(`Nexus placed another contract after Stop: ${JSON.stringify(nexusAfterStop)}`);
         }
@@ -1299,6 +1319,7 @@ const run = async () => {
             legs: nexusLegs,
             symbols: nexusSymbols,
             stakes: nexusStakes,
+            totalProfitLoss: nexusAfterStop.totalProfitLoss,
             stopMessage: nexusAfterStop.feedback,
         };
 
@@ -1335,17 +1356,23 @@ const run = async () => {
             );
             assertScan(riskScan, SAMPLE_WINDOWS[0], 'fixture');
             await client.evaluate('document.querySelector("[data-testid=\\"toggle-auto-volatility\\"]")?.click()');
-            const stopped = await waitFor(
-                async () => {
-                    const next = await getSnapshot(client.evaluate);
-                    return next.autoVolatilityMode === 'false' && next.feedback.includes(riskCase.stopMessage)
-                        ? next
-                        : false;
-                },
-                `${riskCase.mode} risk boundary`,
-                riskCase.mode === 'trade-count' ? 30000 : 10000,
-                50,
-            );
+            let stopped;
+            try {
+                stopped = await waitFor(
+                    async () => {
+                        const next = await getSnapshot(client.evaluate);
+                        return next.autoVolatilityMode === 'false' && next.feedback.includes(riskCase.stopMessage)
+                            ? next
+                            : false;
+                    },
+                    `${riskCase.mode} risk boundary`,
+                    riskCase.mode === 'trade-count' ? 30000 : 10000,
+                    50,
+                );
+            } catch (error) {
+                const latest = await getSnapshot(client.evaluate);
+                throw new Error(`${error instanceof Error ? error.message : String(error)} Latest state: ${JSON.stringify(latest)}`);
+            }
             if (
                 stopped.runningRows !== 0 ||
                 stopped.executionLeg !== 'idle' ||
