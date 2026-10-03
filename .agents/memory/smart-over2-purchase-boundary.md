@@ -9,10 +9,10 @@ Only report a purchase in the Journal after the broker returns an accepted `buy`
 
 The active strategy has two modes: condition-gated Over using the configured prediction, then ungated Under using the configured recovery prediction after a loss. Every recovery loss repeats that prediction; any win resets the next stake to the original base and returns to condition-gated entries. The editable Martingale factor defaults to 1.2; when Martingale is off, losses must not raise the next stake.
 
-Virtual trades must settle against a broker tick newer than their entry tick. After a virtual settlement, do not start another virtual or live entry until a later broker tick. The configured maximum virtual losses controls when the strategy moves from virtual to real purchases.
+The first condition-gated Over entry is always a real broker purchase; Virtual Hook is recovery-only and begins after that real trade loses. Virtual trades must settle against a broker tick newer than their entry tick, and no new entry may start until a later broker tick. After the configured maximum consecutive virtual losses, latch real-recovery mode: repeat the same real recovery contract after later losses until a win. Settled virtual outcomes may appear in Transactions as zero-stake Hook Won/Hook Lost rows, but must not count as broker trades or financial P/L.
 
 Target Profit and Stop Loss apply to cumulative realized Smart Over 2 session profit. Reaching either threshold must stop the bot through the existing stop-button event. These explicit settings supersede the earlier no-automatic-stop behavior.
 
-**Why:** The approved Smart Over 2 configuration now includes editable recovery predictions, Martingale and Virtual Hook toggles, and realized-profit session limits; virtual outcomes must preserve the real strategy's one-tick cadence.
+**Why:** The approved Smart Over 2 configuration includes editable recovery predictions, Martingale and Virtual Hook toggles, and realized-profit session limits. Keeping virtual outcomes distinct prevents them from being mistaken for broker purchases or restarting the hook after real recovery has begun.
 
-**How to apply:** Keep the normal entry's existing last-X rules unchanged and do not gate recovery on recent digits. Keep queued orders authoritative, apply stake progression only after broker settlement, and test that virtual settlement cannot trigger another entry on the same tick.
+**How to apply:** Keep the normal entry's existing last-X rules unchanged and do not gate recovery on recent digits. Keep queued orders authoritative, apply stake progression only after broker settlement, and test the initial real entry, hook-only-after-loss transition, sticky real recovery, and one-tick settlement cadence.

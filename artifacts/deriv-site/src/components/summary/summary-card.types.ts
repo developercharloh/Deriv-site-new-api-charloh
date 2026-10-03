@@ -15,6 +15,9 @@ export type TContractInfo = Omit<
     exit_tick?: TDateType;
     exit_tick_time?: TDateType;
     underlying_symbol?: string;
+    is_virtual_hook?: boolean;
+    virtual_hook_id?: string;
+    virtual_hook_outcome?: 'win' | 'loss';
 };
 
 export interface TSummaryCardProps {

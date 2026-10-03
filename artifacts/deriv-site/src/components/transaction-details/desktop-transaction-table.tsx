@@ -5,6 +5,7 @@ import { transaction_elements } from '@/constants/transactions';
 import { getContractTypeName } from '@/external/bot-skeleton';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { getSymbolDisplayNameSync } from '@/utils/symbol-display-name';
+import { localize } from '@deriv-com/translations';
 import { MarketIcon } from '../market/market-icon';
 import { convertDateFormat } from '../shared';
 import Popover from '../shared_ui/popover';
@@ -77,7 +78,10 @@ export default function DesktopTransactionTable({
                     const { data, type } = transaction;
                     if (type === transaction_elements.CONTRACT) {
                         return (
-                            <div className={`${PARENT_CLASS}__table-row`} key={data?.transaction_ids?.buy}>
+                            <div
+                                className={`${PARENT_CLASS}__table-row`}
+                                key={data?.virtual_hook_id || data?.transaction_ids?.buy}
+                            >
                                 <TableCell
                                     label={
                                         data?.date_start &&
@@ -90,7 +94,7 @@ export default function DesktopTransactionTable({
                                     extra_classes={[`${PARENT_CLASS}__table-cell--grow-big`]}
                                 />
                                 <TableCell
-                                    label={data?.transaction_ids?.buy}
+                                    label={data?.is_virtual_hook ? localize('Virtual Hook') : data?.transaction_ids?.buy}
                                     extra_classes={[`${PARENT_CLASS}__table-cell--grow-mid`]}
                                 />
                                 <TableCell
@@ -112,18 +116,30 @@ export default function DesktopTransactionTable({
                                         />
                                     }
                                 />
-                                <TableCell label={data?.entry_spot} loader={!data?.entry_spot} />
-                                <TableCell label={data?.exit_spot} loader={!data.exit_spot} />
+                                <TableCell
+                                    label={data?.entry_spot}
+                                    loader={!data?.entry_spot && !data?.is_virtual_hook}
+                                />
+                                <TableCell
+                                    label={data?.exit_spot}
+                                    loader={!data?.exit_spot && !data?.is_virtual_hook}
+                                />
                                 <TableCell label={Math.abs(data?.buy_price ?? 0).toFixed(2)} />
                                 <TableCell
                                     label={
                                         <div
                                             className={classNames({
-                                                [`${PARENT_CLASS}__profit--win`]: data?.profit > 0,
-                                                [`${PARENT_CLASS}__profit--loss`]: data?.profit < 0,
+                                                [`${PARENT_CLASS}__profit--win`]: data?.is_virtual_hook
+                                                    ? data?.virtual_hook_outcome === 'win'
+                                                    : data?.profit > 0,
+                                                [`${PARENT_CLASS}__profit--loss`]: data?.is_virtual_hook
+                                                    ? data?.virtual_hook_outcome === 'loss'
+                                                    : data?.profit < 0,
                                             })}
                                         >
-                                            {Math.abs(data?.profit ?? 0).toFixed(2)}
+                                            {data?.is_virtual_hook
+                                                ? localize(data.virtual_hook_outcome === 'win' ? 'Hook Won' : 'Hook Lost')
+                                                : Math.abs(data?.profit ?? 0).toFixed(2)}
                                         </div>
                                     }
                                     loader={!data.is_completed}

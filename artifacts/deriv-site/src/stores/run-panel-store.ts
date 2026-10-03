@@ -50,6 +50,15 @@ type TSmartOver2RecoveryEvent = {
     journalScope?: string | null;
     event?: string;
     message?: string;
+    virtualTradeId?: string;
+    outcome?: 'win' | 'loss';
+    contractType?: string;
+    prediction?: number;
+    market?: string;
+    entryEpoch?: number | null;
+    settlementEpoch?: number | null;
+    entrySpot?: number | string | null;
+    exitSpot?: number | string | null;
 };
 
 export type TParityAnalysis = {
@@ -1064,6 +1073,10 @@ export default class RunPanelStore {
         if (event.event === 'status') {
             this.root_store.journal.updateSmartOver2AnalysisMessage(event.message);
             return;
+        }
+
+        if (event.event === 'virtual_settlement') {
+            this.root_store.transactions?.pushVirtualHookTransaction?.(event);
         }
 
         this.root_store.journal.pushMessage(event.message, MessageTypes.NOTIFY, 'journal__text');

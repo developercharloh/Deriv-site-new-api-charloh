@@ -229,11 +229,23 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                     {contract?.is_completed ? (
                         <div
                             className={classNames({
-                                'transactions__profit--win': contract?.profit && contract?.profit >= 0,
-                                'transactions__profit--loss': contract?.profit && contract?.profit < 0,
+                                'transactions__profit--win': contract?.is_virtual_hook
+                                    ? contract.virtual_hook_outcome === 'win'
+                                    : contract?.profit && contract?.profit >= 0,
+                                'transactions__profit--loss': contract?.is_virtual_hook
+                                    ? contract.virtual_hook_outcome === 'loss'
+                                    : contract?.profit && contract?.profit < 0,
                             })}
                         >
-                            <Money amount={Math.abs(contract.profit || 0)} currency={contract.currency} show_currency />
+                            {contract?.is_virtual_hook ? (
+                                localize(contract.virtual_hook_outcome === 'win' ? 'Hook Won' : 'Hook Lost')
+                            ) : (
+                                <Money
+                                    amount={Math.abs(contract.profit || 0)}
+                                    currency={contract.currency}
+                                    show_currency
+                                />
+                            )}
                         </div>
                     ) : (
                         <TransactionFieldLoader />

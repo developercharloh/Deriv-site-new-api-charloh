@@ -241,63 +241,116 @@ describe('Ticks last-digit analysis events', () => {
         emit.mockRestore();
     });
 
-    it('uses the configured virtual hook for fresh Over and recovery outcomes before allowing a live order', async () => {
+    it('keeps the first Over trade real, virtualizes recovery, and stays real after the hook-loss limit', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
         const emit = jest.spyOn(observer, 'emit');
-        engine.latestTick = { epoch: 100 };
+        engine.latestTick = { epoch: 100, quote: '2591.511' };
+        engine.tradeOptions = { amount: 0.5, symbol: 'R_25' };
         engine.getLastDigitList = jest.fn().mockResolvedValue([3, 4, 5, 6]);
-        engine.getLastDigit = jest.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(7);
+        engine.getLastDigit = jest.fn().mockResolvedValue(7);
         engine.setVirtualHookSettings = jest.fn();
         engine.enableVirtualHook = jest.fn();
         const check = () =>
             engine.checkSmartOver2Recovery(4, 100, 'smart-over-2', 1.2, true, 2, 5, true, 2, 5, 30);
 
-        await expect(check()).resolves.toBe(false);
-        expect(state.pendingVirtualTrade).toEqual(
-            expect.objectContaining({
-                stage: 0,
-                contractType: 'DIGITOVER',
-                prediction: 2,
-                entryEpoch: 100,
-            })
+        await expect(check()).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 0, contractType: 'DIGITOVER', prediction: 2 })
         );
-        expect(state.pendingPurchase).toBeNull();
+        expect(state.pendingVirtualTrade).toBeNull();
         expect(engine.setVirtualHookSettings).toHaveBeenCalledWith(2, 1);
         expect(engine.enableVirtualHook).toHaveBeenCalledWith(true);
 
-        engine.latestTick = { epoch: 101 };
-        await expect(check()).resolves.toBe(false);
+        const initialOrder = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
+        expect(initialOrder).toEqual(expect.objectContaining({ stage: 0, contractType: 'DIGITOVER' }));
+        engine.completeSmartOver2RecoveryPurchase(initialOrder, { buy_price: 0.5, contract_id: 'initial-over' });
+        engine.lastSettledContract = {
+            contract_id: 'initial-over',
+            status: 'lost',
+            buy_price: 0.5,
+            sell_price: 0,
+            profit: -0.5,
+        };
+        expect(engine.completeSmartOver2Recovery('smart-over-2')).toBe(false);
         expect(state.stage).toBe(1);
-        expect(state.virtualLosses).toBe(1);
-        expect(state.pendingVirtualTrade).toBeNull();
-        expect(state.lastVirtualSettlementEpoch).toBe(101);
-        await expect(check()).resolves.toBe(false);
-        expect(state.pendingVirtualTrade).toBeNull();
-        expect(state.pendingPurchase).toBeNull();
+        expect(state.virtualLosses).toBe(0);
 
-        engine.latestTick = { epoch: 102 };
+        engine.latestTick = { epoch: 101, quote: '2591.458' };
         await expect(check()).resolves.toBe(false);
         expect(state.pendingVirtualTrade).toEqual(
             expect.objectContaining({
                 stage: 1,
                 contractType: 'DIGITUNDER',
                 prediction: 5,
-                entryEpoch: 102,
+                entryEpoch: 101,
+                entrySpot: '2591.458',
+            })
+        );
+        expect(state.pendingPurchase).toBeNull();
+
+        engine.latestTick = { epoch: 102, quote: '2591.421' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.virtualLosses).toBe(1);
+        expect(state.pendingVirtualTrade).toBeNull();
+        expect(state.lastVirtualSettlementEpoch).toBe(102);
+        await expect(check()).resolves.toBe(false);
+        expect(state.pendingVirtualTrade).toBeNull();
+        expect(state.pendingPurchase).toBeNull();
+        expect(emit).toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({
+                event: 'virtual_settlement',
+                outcome: 'loss',
+                entrySpot: '2591.458',
+                exitSpot: '2591.421',
+                entryEpoch: 101,
+                settlementEpoch: 102,
             })
         );
 
-        engine.latestTick = { epoch: 103 };
+        engine.latestTick = { epoch: 103, quote: '2591.399' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.pendingVirtualTrade).toEqual(
+            expect.objectContaining({
+                stage: 1,
+                contractType: 'DIGITUNDER',
+                prediction: 5,
+                entryEpoch: 103,
+            })
+        );
+
+        engine.latestTick = { epoch: 104, quote: '2591.382' };
         await expect(check()).resolves.toBe(false);
         expect(state.stage).toBe(1);
         expect(state.virtualLosses).toBe(2);
 
-        engine.latestTick = { epoch: 104 };
+        engine.latestTick = { epoch: 105, quote: '2591.367' };
         await expect(check()).resolves.toBe(true);
         expect(state.pendingPurchase).toEqual(
             expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
+        expect(state.recoveryRealMode).toBe(true);
+        const recoveryOrder = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
+        engine.completeSmartOver2RecoveryPurchase(recoveryOrder, { buy_price: 0.6, contract_id: 'first-recovery' });
+        engine.lastSettledContract = {
+            contract_id: 'first-recovery',
+            status: 'lost',
+            buy_price: 0.6,
+            sell_price: 0,
+            profit: -0.6,
+        };
+        expect(engine.completeSmartOver2Recovery('smart-over-2')).toBe(false);
+        expect(state.stage).toBe(1);
+        expect(state.recoveryRealMode).toBe(true);
+
+        engine.latestTick = { epoch: 106, quote: '2591.354' };
+        await expect(check()).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
+        );
+        expect(state.pendingVirtualTrade).toBeNull();
         expect(emit).toHaveBeenCalledWith(
             'bot.smart_over2.recovery',
             expect.objectContaining({ event: 'virtual_settlement', outcome: 'loss', digit: 7 })

@@ -39,6 +39,7 @@ export default class TransactionsStore {
             transactions: computed,
             onBotContractEvent: action.bound,
             pushTransaction: action.bound,
+            pushVirtualHookTransaction: action.bound,
             clear: action.bound,
             registerReactions: action.bound,
             recoverPendingContracts: action.bound,
@@ -71,7 +72,11 @@ export default class TransactionsStore {
         let total_runs = 0;
         // Filter out only contract transactions and remove dividers
         const trxs = this.transactions.filter(
-            trx => trx.type === transaction_elements.CONTRACT && typeof trx.data === 'object'
+            trx =>
+                trx.type === transaction_elements.CONTRACT &&
+                typeof trx.data === 'object' &&
+                Boolean(trx.data) &&
+                !trx.data.is_virtual_hook
         );
         const statistics = trxs.reduce(
             (stats, { data }) => {
@@ -114,6 +119,89 @@ export default class TransactionsStore {
 
     onBotContractEvent(data: TContractInfo) {
         this.pushTransaction(data);
+    }
+
+    pushVirtualHookTransaction(event: {
+        journalScope?: string | null;
+        virtualTradeId?: string;
+        outcome?: 'win' | 'loss';
+        contractType?: string;
+        prediction?: number;
+        market?: string;
+        entryEpoch?: number | null;
+        settlementEpoch?: number | null;
+        entrySpot?: number | string | null;
+        exitSpot?: number | string | null;
+    }) {
+        const current_account = this.core?.client?.loginid as string;
+        if (!current_account || (event.outcome !== 'win' && event.outcome !== 'loss')) return;
+
+        const market = event.market || '';
+        const contract_type = event.contractType || 'DIGITUNDER';
+        const prediction = event.prediction;
+        const virtual_hook_id =
+            event.virtualTradeId ||
+            [event.journalScope || 'smart-over-2', market, event.entryEpoch ?? '', contract_type, prediction ?? ''].join(
+                ':'
+            );
+        const existing: TTransaction[] = [...(this.elements[current_account] ?? [])];
+        const already_recorded = existing.some(
+            transaction =>
+                transaction.type === transaction_elements.CONTRACT &&
+                typeof transaction.data === 'object' &&
+                transaction.data?.virtual_hook_id === virtual_hook_id
+        );
+        if (already_recorded) return;
+
+        const toMilliseconds = (epoch?: number | null) => {
+            const value = Number(epoch);
+            return Number.isFinite(value) && value > 0 ? value * 1000 : undefined;
+        };
+        const entry_time = toMilliseconds(event.entryEpoch);
+        const exit_time = toMilliseconds(event.settlementEpoch);
+        const entry_spot = event.entrySpot === null || event.entrySpot === undefined ? '' : String(event.entrySpot);
+        const exit_spot = event.exitSpot === null || event.exitSpot === undefined ? '' : String(event.exitSpot);
+        const run_id = this.root_store.run_panel.run_id;
+        const contract: TContractInfo = {
+            contract_type,
+            barrier: prediction === undefined ? '' : String(prediction),
+            underlying_symbol: market,
+            currency: this.core?.client?.currency || '',
+            buy_price: 0,
+            payout: 0,
+            profit: 0,
+            status: event.outcome === 'win' ? 'won' : 'lost',
+            is_completed: true,
+            run_id,
+            date_start: entry_time ? formatDate(entry_time, 'YYYY-M-D HH:mm:ss [GMT]') : '',
+            purchase_time: event.entryEpoch ?? undefined,
+            entry_spot,
+            entry_tick: entry_spot,
+            entry_tick_time: entry_time ? formatDate(entry_time, 'YYYY-M-D HH:mm:ss [GMT]') : undefined,
+            exit_spot,
+            exit_tick: exit_spot,
+            exit_tick_time: exit_time ? formatDate(exit_time, 'YYYY-M-D HH:mm:ss [GMT]') : undefined,
+            is_virtual_hook: true,
+            virtual_hook_id,
+            virtual_hook_outcome: event.outcome,
+        };
+
+        let base = existing;
+        if (existing.length > 0) {
+            const first = existing[0];
+            const is_new_run =
+                first.type === transaction_elements.CONTRACT &&
+                typeof first.data === 'object' &&
+                contract.run_id !== first.data?.run_id;
+            if (is_new_run) {
+                base = [{ type: transaction_elements.DIVIDER, data: contract.run_id }, ...existing];
+            }
+        }
+
+        this.elements = {
+            ...this.elements,
+            [current_account]: [{ type: transaction_elements.CONTRACT, data: contract }, ...base],
+        };
     }
 
     pushTransaction(data: TContractInfo) {

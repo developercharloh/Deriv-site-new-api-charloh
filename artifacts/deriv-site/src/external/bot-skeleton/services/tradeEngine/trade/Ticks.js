@@ -418,6 +418,7 @@ export default Engine =>
                     useVirtualHook: false,
                     maxVirtualLosses: 2,
                     virtualLosses: 0,
+                    recoveryRealMode: false,
                     pendingVirtualTrade: null,
                     lastVirtualSettlementEpoch: null,
                     targetProfit: 0,
@@ -441,6 +442,10 @@ export default Engine =>
         getSmartOver2CurrentEpoch() {
             const epoch = Number(this.latestTick?.epoch ?? this.store?.getState?.().newTick);
             return Number.isFinite(epoch) ? epoch : null;
+        }
+        getSmartOver2CurrentQuote() {
+            const quote = this.latestTick?.quote;
+            return quote === null || quote === undefined ? null : String(quote);
         }
         checkSmartOver2Recovery(
             count = 4,
@@ -499,6 +504,7 @@ export default Engine =>
                 const currentEpoch = this.getSmartOver2CurrentEpoch();
                 const entryEpoch = Number(state.pendingVirtualTrade.entryEpoch);
                 if (currentEpoch === null || currentEpoch <= entryEpoch) return Promise.resolve(false);
+                const settlementSpot = this.getSmartOver2CurrentQuote();
 
                 return this.getLastDigit().then(digitValue => {
                     const digit = Number(digitValue);
@@ -512,6 +518,7 @@ export default Engine =>
                     state.pendingVirtualTrade = null;
                     state.virtualLosses = isWin ? 0 : state.virtualLosses + 1;
                     state.stage = isWin ? 0 : 1;
+                    if (isWin) state.recoveryRealMode = false;
                     state.lastVirtualSettlementEpoch = currentEpoch;
                     this.emitSmartOver2RecoveryEvent(
                         virtualTrade.journalScope || journalScope,
@@ -527,6 +534,11 @@ export default Engine =>
                             digit,
                             virtualLosses: state.virtualLosses,
                             maxVirtualLosses: state.maxVirtualLosses,
+                            virtualTradeId: virtualTrade.virtualTradeId,
+                            entryEpoch,
+                            settlementEpoch: currentEpoch,
+                            entrySpot: virtualTrade.entrySpot,
+                            exitSpot: settlementSpot,
                         }
                     );
                     // Wait for the next broker tick before evaluating another
@@ -550,8 +562,12 @@ export default Engine =>
                     journalScope,
                 };
                 if (journalScope) state.pendingPurchase.journalScope = journalScope;
+                if (state.useVirtualHook && state.virtualLosses >= state.maxVirtualLosses) {
+                    state.recoveryRealMode = true;
+                }
                 if (
                     state.useVirtualHook &&
+                    !state.recoveryRealMode &&
                     state.virtualLosses < state.maxVirtualLosses &&
                     !state.purchaseInFlight
                 ) {
@@ -563,6 +579,13 @@ export default Engine =>
                         contractType: 'DIGITUNDER',
                         prediction: state.recoveryPrediction,
                         entryEpoch,
+                        entrySpot: this.getSmartOver2CurrentQuote(),
+                        virtualTradeId: [
+                            journalScope || 'smart-over-2',
+                            entryEpoch,
+                            'DIGITUNDER',
+                            state.recoveryPrediction,
+                        ].join(':'),
                         journalScope,
                     };
                     this.emitSmartOver2RecoveryEvent(
@@ -575,6 +598,9 @@ export default Engine =>
                             prediction: state.recoveryPrediction,
                             virtualLosses: state.virtualLosses,
                             maxVirtualLosses: state.maxVirtualLosses,
+                            entryEpoch,
+                            entrySpot: state.pendingVirtualTrade.entrySpot,
+                            virtualTradeId: state.pendingVirtualTrade.virtualTradeId,
                         }
                     );
                     return Promise.resolve(false);
@@ -625,24 +651,6 @@ export default Engine =>
                 }
 
                 if (shouldPurchase && order && !state.pendingPurchase) {
-                    if (state.useVirtualHook && state.virtualLosses < state.maxVirtualLosses) {
-                        const entryEpoch = this.getSmartOver2CurrentEpoch();
-                        if (entryEpoch === null) return false;
-                        state.pendingVirtualTrade = { ...order, entryEpoch, journalScope };
-                        this.emitSmartOver2RecoveryEvent(
-                            journalScope,
-                            'virtual_purchase',
-                            `[Smart Over 2] Virtual Over ${state.overPrediction} started; waiting for the next tick.`,
-                            {
-                                stage,
-                                contractType: 'DIGITOVER',
-                                prediction: state.overPrediction,
-                                virtualLosses: state.virtualLosses,
-                                maxVirtualLosses: state.maxVirtualLosses,
-                            }
-                        );
-                        return false;
-                    }
                     state.pendingPurchase = { ...order, journalScope };
                 }
 
@@ -731,6 +739,7 @@ export default Engine =>
             state.pendingPurchase = null;
             state.purchaseInFlight = false;
             state.lastPurchasedStage = order.stage;
+            if (order.stage === 1) state.recoveryRealMode = true;
             const acceptedStake = Number(buy.buy_price);
             if (Number.isFinite(acceptedStake) && acceptedStake > 0) {
                 state.currentStake = acceptedStake;
@@ -826,7 +835,10 @@ export default Engine =>
             if (this.tradeOptions && nextStake !== null) this.tradeOptions.amount = nextStake;
             state.consecutiveLosses = isWin ? 0 : Number(state.consecutiveLosses || 0) + 1;
             state.stage = isWin ? 0 : 1;
-            if (isWin) state.virtualLosses = 0;
+            if (isWin) {
+                state.virtualLosses = 0;
+                state.recoveryRealMode = false;
+            }
             state.pendingPurchase = null;
             state.purchaseInFlight = false;
             const stopReason =

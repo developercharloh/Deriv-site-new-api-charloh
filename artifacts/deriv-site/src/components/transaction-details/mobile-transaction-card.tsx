@@ -94,7 +94,10 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                 />
             </div>
             <div className={`${PARENT_CLASS}__card__row`}>
-                <CardColumn title='Ref. ID' label={transaction?.transaction_ids?.buy} />
+                <CardColumn
+                    title='Ref. ID'
+                    label={transaction?.is_virtual_hook ? localize('Virtual Hook') : transaction?.transaction_ids?.buy}
+                />
             </div>
             <div className={`${PARENT_CLASS}__card__row`}>
                 <CardColumn
@@ -109,7 +112,7 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                     title='Entry Spot'
                     label={transaction?.entry_spot}
                     right_aligned
-                    loader={!transaction.entry_spot}
+                    loader={!transaction.entry_spot && !transaction.is_virtual_hook}
                 />
             </div>
             <div className={`${PARENT_CLASS}__card__row`}>
@@ -118,7 +121,7 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                     title='Exit Spot'
                     label={transaction?.exit_spot}
                     right_aligned
-                    loader={!transaction.exit_spot}
+                    loader={!transaction.exit_spot && !transaction.is_virtual_hook}
                 />
             </div>
 
@@ -128,11 +131,17 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                     label={
                         <div
                             className={classNames({
-                                [`${PARENT_CLASS}__card__profit--win`]: transaction?.profit > 0,
-                                [`${PARENT_CLASS}__card__profit--loss`]: transaction?.profit < 0,
+                                [`${PARENT_CLASS}__card__profit--win`]: transaction?.is_virtual_hook
+                                    ? transaction.virtual_hook_outcome === 'win'
+                                    : transaction?.profit > 0,
+                                [`${PARENT_CLASS}__card__profit--loss`]: transaction?.is_virtual_hook
+                                    ? transaction.virtual_hook_outcome === 'loss'
+                                    : transaction?.profit < 0,
                             })}
                         >
-                            {Math.abs(transaction?.profit ?? 0).toFixed(2)}
+                            {transaction?.is_virtual_hook
+                                ? localize(transaction.virtual_hook_outcome === 'win' ? 'Hook Won' : 'Hook Lost')
+                                : Math.abs(transaction?.profit ?? 0).toFixed(2)}
                         </div>
                     }
                     right_aligned

@@ -70,10 +70,14 @@ const Download = observer(({ tab }: TDownloadProps) => {
                 : String(data.exit_tick_time || '');
 
             // Buy Price
-            const buy_price = String(data.buy_price || '');
+            const buy_price = data.is_virtual_hook
+                ? Number(data.buy_price ?? 0).toFixed(2)
+                : String(data.buy_price || '');
 
             // Profit/Loss
-            const profit_loss = String(data.profit || '');
+            const profit_loss = data.is_virtual_hook
+                ? localize(data.virtual_hook_outcome === 'win' ? 'Hook Won' : 'Hook Lost')
+                : String(data.profit || '');
 
             items.push([
                 market_name,

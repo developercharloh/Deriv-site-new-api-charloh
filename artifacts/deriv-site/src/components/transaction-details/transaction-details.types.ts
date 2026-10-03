@@ -9,7 +9,7 @@ export type TColumn = {
 export type TTransaction = {
     barrier: string;
     buy_price: number;
-    contract_id: number;
+    contract_id?: number;
     contract_type: string;
     currency: string;
     date_start: string;
@@ -24,11 +24,14 @@ export type TTransaction = {
     run_id: string;
     shortcode: string;
     tick_count: number;
-    transaction_ids: {
-        buy: number;
-        sell: number;
+    transaction_ids?: {
+        buy?: number;
+        sell?: number;
     };
     underlying_symbol: string;
+    is_virtual_hook?: boolean;
+    virtual_hook_id?: string;
+    virtual_hook_outcome?: 'win' | 'loss';
 };
 
 export type TTransactions = {
