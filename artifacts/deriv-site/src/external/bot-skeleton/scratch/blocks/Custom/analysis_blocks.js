@@ -362,7 +362,7 @@ registerOutputBlock({
     args3: [countInput('MARTINGALE', '1.2')],
     message4: localize('Use Martingale %1'),
     args4: [{ type: 'input_value', name: 'USE_MARTINGALE', check: 'Boolean' }],
-    message5: localize('Over prediction %1 · Recovery prediction %2'),
+    message5: localize('Over prediction %1 · Virtual Hook prediction %2'),
     args5: [countInput('OVER_PREDICTION', '2'), countInput('RECOVERY_PREDICTION', '5')],
     message6: localize('Use Virtual Hook %1'),
     args6: [{ type: 'input_value', name: 'USE_VIRTUAL_HOOK', check: 'Boolean' }],
@@ -376,7 +376,7 @@ registerOutputBlock({
     inputsInline: false,
     output: 'Boolean',
     tooltip:
-        'Uses the configured Over prediction and entry rules. After a loss, repeats the recovery prediction. The virtual hook, Martingale, Target Profit, and Stop Loss use the linked Run once at start settings.',
+        'Uses the configured Over prediction and entry rules. The Virtual Hook uses its linked prediction for the configured number of losses, then real recovery repeats the configured Over prediction until a win. Martingale, Target Profit, and Stop Loss use the linked Run once at start settings.',
     meta: 'Smart Over 2 Recovery Gate',
     generatorCode: block => [
         `Bot.checkSmartOver2Recovery(${numberInput(block, 'COUNT', '4')}, ` +
@@ -396,10 +396,10 @@ registerOutputBlock({
 window.Blockly.Blocks.smart_over2_recovery_purchase = {
     init() {
         this.jsonInit({
-            message0: localize('Smart Over 2: buy the configured entry or recovery prediction'),
+            message0: localize('Smart Over 2: buy the configured Over prediction'),
             previousStatement: null,
             ...analysisColours(),
-            tooltip: localize('Buys the configured entry prediction or recovery prediction, using the current stake.'),
+            tooltip: localize('Buys the configured Over prediction for a normal entry or real recovery, using the current stake.'),
             category: window.Blockly.Categories.Tick_Analysis,
         });
         this.setNextStatement(false);

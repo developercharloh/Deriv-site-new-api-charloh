@@ -206,7 +206,7 @@ describe('Smart Over 2 Blockly entry gate', () => {
             ['Stop Loss', 'stop_loss'],
             ['Use Martingale', 'use_martingale'],
             ['Over prediction (2)', 'over_prediction'],
-            ['Recovery prediction (5)', 'recovery_prediction'],
+            ['Virtual Hook prediction (5)', 'recovery_prediction'],
         ];
         variables.forEach(([name, id]) => {
             expect(xml).toContain(`>${name}</variable>`);
