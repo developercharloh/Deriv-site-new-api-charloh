@@ -404,11 +404,14 @@ export default Engine =>
             if (!this.smartOver2RecoveryState) {
                 this.smartOver2RecoveryState = {
                     stage: 0,
-                    stopped: false,
                     pendingPurchase: null,
                     purchaseInFlight: false,
                     lastPurchasedStage: null,
                     lastProcessedSettlementId: null,
+                    baseStake: null,
+                    currentStake: null,
+                    martingaleMultiplier: 1.2,
+                    consecutiveLosses: 0,
                 };
             }
             return this.smartOver2RecoveryState;
@@ -423,21 +426,13 @@ export default Engine =>
                 ...details,
             });
         }
-        checkSmartOver2Recovery(count = 4, analysisCount = 100, journalScope = null) {
+        checkSmartOver2Recovery(count = 4, analysisCount = 100, journalScope = null, martingaleMultiplier = 1.2) {
             const size = Math.max(1, Math.floor(Number(count) || 1));
-            const sampleSize = Math.max(20, Math.min(500, Math.floor(Number(analysisCount) || 100)));
+            void analysisCount;
             const state = this.getSmartOver2RecoveryState();
-
-            if (state.stopped) {
-                this.emitSmartOver2RecoveryEvent(
-                    journalScope,
-                    'status',
-                    `[Smart Over 2] Status · Stopped after a Recovery 3 loss on ` +
-                        `${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'}; no further purchases.`,
-                    { stage: 3, conditionStatus: 'STOPPED', digits: [] }
-                );
-                return Promise.resolve(false);
-            }
+            const requestedMultiplier = Number(martingaleMultiplier);
+            state.martingaleMultiplier =
+                Number.isFinite(requestedMultiplier) && requestedMultiplier >= 1 ? requestedMultiplier : 1.2;
 
             if (state.stage === 1) {
                 state.pendingPurchase ??= {
@@ -450,10 +445,17 @@ export default Engine =>
                 this.emitSmartOver2RecoveryEvent(
                     journalScope,
                     'status',
-                    `[Smart Over 2] Status · Recovery 1 · Market: ` +
+                    `[Smart Over 2] Status · Under 5 recovery · Market: ` +
                         `${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'} · ` +
-                        'Under 5 is ready on the next available purchase tick; no last-X gate.',
-                    { stage: 1, conditionStatus: 'READY', digits: [] }
+                        `Under 5 is ready on the next available purchase tick; stake ${Number(state.currentStake ?? this.tradeOptions?.amount).toFixed(2)} ` +
+                        `at ${state.martingaleMultiplier}×; no last-X gate.`,
+                    {
+                        stage: 1,
+                        conditionStatus: 'READY',
+                        digits: [],
+                        stake: Number(state.currentStake ?? this.tradeOptions?.amount),
+                        martingaleMultiplier: state.martingaleMultiplier,
+                    }
                 );
                 return Promise.resolve(true);
             }
@@ -482,47 +484,6 @@ export default Engine =>
                     if (shouldPurchase) {
                         order = { stage, contractType: 'DIGITOVER', prediction: 2 };
                     }
-                } else if (stage === 2) {
-                    const windowReady = recent.length >= size;
-                    const allBelowFour = windowReady && recent.every(digit => digit < 4);
-                    shouldPurchase = allBelowFour;
-                    conditionStatus = !windowReady ? `WAITING (need ${size})` : allBelowFour ? 'READY' : 'WAITING';
-                    statusDetails =
-                        `Recovery 2 waits until every digit is below 4 · Last ${size}: [${recent.join(', ')}] · ` +
-                        `condition: ${conditionStatus}`;
-                    if (shouldPurchase) {
-                        order = { stage, contractType: 'DIGITOVER', prediction: 4 };
-                    }
-                } else if (stage === 3) {
-                    const analysis = analyzeSmartOver2RecoveryDigits(numericDigits, sampleSize);
-                    shouldPurchase = analysis.ready;
-                    conditionStatus = analysis.ready ? 'READY' : 'WAITING FOR ANALYSIS';
-                    const windowSummary = analysis.windows.length
-                        ? analysis.windows
-                              .map(window => `${window.size}t Over ${window.over}/Under ${window.under}/4 ${window.ties}`)
-                              .join(' · ')
-                        : `Need at least ${analysis.minimumHistory} ticks and ${analysis.minimumDecisiveDigits} non-4 digits`;
-                    statusDetails =
-                        `Recovery 3 compares Over 4 vs Under 4 · ${windowSummary}` +
-                        (analysis.ready
-                            ? ` · selected ${analysis.contractType === 'DIGITOVER' ? 'Over 4' : 'Under 4'} ` +
-                              `(score ${analysis.score.toFixed(3)}${analysis.tieBreak ? `; ${analysis.tieBreak}` : ''})`
-                            : '');
-                    if (analysis.ready) {
-                        statusDetails +=
-                            '<br /><strong>Historical holdout:</strong> 47.1% wins vs 50.0% for fixed Over 4 ' +
-                            '(19,500 next-tick checks across 13 synthetic indices; captured 3 Oct 2026 UTC). ' +
-                            'The chooser underperformed in this sample; results are not payout-adjusted. ' +
-                            '<a href="/smart-over-2-recovery-validation.html" target="_blank" rel="noopener noreferrer">' +
-                            'View replay results</a>';
-                    }
-                    if (shouldPurchase) {
-                        order = {
-                            stage,
-                            contractType: analysis.contractType,
-                            prediction: 4,
-                        };
-                    }
                 }
 
                 if (shouldPurchase && order && !state.pendingPurchase) {
@@ -532,7 +493,7 @@ export default Engine =>
                 this.emitSmartOver2RecoveryEvent(
                     journalScope,
                     'status',
-                    `[Smart Over 2] Status · ${stage === 0 ? 'Normal Over 2' : `Recovery ${stage}`} · ` +
+                    `[Smart Over 2] Status · ${stage === 0 ? 'Normal Over 2' : 'Under 5 recovery'} · ` +
                         `Market: ${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'} · ` +
                         `${statusDetails} · Decision: ${conditionStatus}`,
                     {
@@ -553,7 +514,6 @@ export default Engine =>
 
             const order = state.pendingPurchase;
             if (
-                state.stopped ||
                 state.purchaseInFlight
             ) {
                 return { blocked: true, contractType, prediction, order: null };
@@ -584,7 +544,6 @@ export default Engine =>
             const state = this.getSmartOver2RecoveryState();
             const pending = state.pendingPurchase;
             if (
-                state.stopped ||
                 state.purchaseInFlight ||
                 !pending ||
                 pending.stage !== state.stage ||
@@ -616,11 +575,15 @@ export default Engine =>
             state.pendingPurchase = null;
             state.purchaseInFlight = false;
             state.lastPurchasedStage = order.stage;
+            const acceptedStake = Number(buy.buy_price);
+            if (Number.isFinite(acceptedStake) && acceptedStake > 0) {
+                state.currentStake = acceptedStake;
+            }
             const contractName = `${order.contractType === 'DIGITUNDER' ? 'Under' : 'Over'} ${order.prediction}`;
             this.emitSmartOver2RecoveryEvent(
                 order.journalScope,
                 'purchase',
-                `[Smart Over 2] ${order.stage === 0 ? 'Normal entry' : `Recovery ${order.stage}`} · ` +
+                `[Smart Over 2] ${order.stage === 0 ? 'Normal entry' : 'Under 5 recovery'} · ` +
                     `purchased ${contractName}.`,
                 {
                     stage: order.stage,
@@ -640,7 +603,7 @@ export default Engine =>
         purchaseSmartOver2Recovery(journalScope = null) {
             const state = this.getSmartOver2RecoveryState();
             const order = state.pendingPurchase;
-            if (!order || state.stopped || state.purchaseInFlight) return Promise.resolve(false);
+            if (!order || state.purchaseInFlight) return Promise.resolve(false);
             if (journalScope) order.journalScope = journalScope;
 
             return this.purchase(order.contractType, order.prediction);
@@ -669,63 +632,55 @@ export default Engine =>
                 ['won', 'win'].includes(status) ||
                 (!['lost', 'loss'].includes(status) && Number.isFinite(profit) && profit > 0);
             const result = isWin ? 'WIN' : 'LOSS';
-            const stageLabel = purchasedStage === 0 ? 'Normal Over 2' : `Recovery ${purchasedStage}`;
+            const stageLabel = purchasedStage === 0 ? 'Normal Over 2' : 'Under 5 recovery';
+            const configuredBaseStake = Number(state.baseStake);
+            const tradeOptionStake = Number(this.tradeOptions?.amount);
+            const baseStake =
+                Number.isFinite(configuredBaseStake) && configuredBaseStake > 0
+                    ? configuredBaseStake
+                    : Number.isFinite(tradeOptionStake) && tradeOptionStake > 0
+                      ? tradeOptionStake
+                      : null;
+            const configuredCurrentStake = Number(state.currentStake);
+            const currentStake =
+                Number.isFinite(configuredCurrentStake) && configuredCurrentStake > 0
+                    ? configuredCurrentStake
+                    : baseStake;
+            const multiplier = Number(state.martingaleMultiplier);
+            const safeMultiplier = Number.isFinite(multiplier) && multiplier >= 1 ? multiplier : 1.2;
+            const nextStake =
+                baseStake === null || currentStake === null
+                    ? null
+                    : isWin
+                      ? baseStake
+                      : Number((currentStake * safeMultiplier).toFixed(2));
 
-            if (purchasedStage === 3 && !isWin) {
-                state.stopped = true;
-                state.pendingPurchase = null;
-                state.purchaseInFlight = false;
-                this.emitSmartOver2RecoveryEvent(
-                    journalScope,
-                    'stopped',
-                    `[Smart Over 2] Recovery 3 settled ${result}. Bot stopped; no further purchases will be made.`,
-                    { stage: 3, outcome: 'loss', contractId: String(settlementId) }
-                );
-                globalObserver.emit('bot.stop');
-                return true;
-            }
-
-            if (purchasedStage === 0 && !isWin) {
-                state.stage = 1;
-                this.emitSmartOver2RecoveryEvent(
-                    journalScope,
-                    'settlement',
-                    `[Smart Over 2] ${stageLabel} settled ${result}. Starting Recovery 1: Under 5, with no last-X gate.`,
-                    { stage: 1, outcome: 'loss', contractId: String(settlementId) }
-                );
-                return false;
-            }
-
-            if (purchasedStage === 1 && !isWin) {
-                state.stage = 2;
-                this.emitSmartOver2RecoveryEvent(
-                    journalScope,
-                    'settlement',
-                    `[Smart Over 2] Recovery 1 settled ${result}. Recovery 2 is waiting for all last-X digits to be below 4, then it buys Over 4.`,
-                    { stage: 2, outcome: 'loss', contractId: String(settlementId) }
-                );
-                return false;
-            }
-
-            if (purchasedStage === 2 && !isWin) {
-                state.stage = 3;
-                this.emitSmartOver2RecoveryEvent(
-                    journalScope,
-                    'settlement',
-                    `[Smart Over 2] Recovery 2 settled ${result}. Recovery 3 will compare recent Over 4 and Under 4 results before choosing a direction; this is a heuristic, not a guarantee.`,
-                    { stage: 3, outcome: 'loss', contractId: String(settlementId) }
-                );
-                return false;
-            }
-
-            state.stage = 0;
+            if (baseStake !== null) state.baseStake = baseStake;
+            if (nextStake !== null) state.currentStake = nextStake;
+            if (this.tradeOptions && nextStake !== null) this.tradeOptions.amount = nextStake;
+            state.consecutiveLosses = isWin ? 0 : Number(state.consecutiveLosses || 0) + 1;
+            state.stage = isWin ? 0 : 1;
             state.pendingPurchase = null;
             state.purchaseInFlight = false;
+            const stakeLabel = value => (Number.isFinite(value) ? value.toFixed(2) : 'the configured stake');
             this.emitSmartOver2RecoveryEvent(
                 journalScope,
                 'settlement',
-                `[Smart Over 2] ${stageLabel} settled ${result}. Returning to normal Over 2 entries.`,
-                { stage: purchasedStage, outcome: 'win', contractId: String(settlementId) }
+                isWin
+                    ? `[Smart Over 2] ${stageLabel} settled WIN. Stake reset to ${stakeLabel(baseStake)}; ` +
+                      'returning to condition-gated Over 2 entries.'
+                    : `[Smart Over 2] ${stageLabel} settled LOSS. ` +
+                      `${purchasedStage === 0 ? 'Starting' : 'Repeating'} Under 5 at stake ${stakeLabel(nextStake)} ` +
+                      `with a ${safeMultiplier}× multiplier; recovery continues until a win.`,
+                {
+                    stage: isWin ? 0 : 1,
+                    outcome: isWin ? 'win' : 'loss',
+                    baseStake,
+                    nextStake,
+                    martingaleMultiplier: safeMultiplier,
+                    consecutiveLosses: state.consecutiveLosses,
+                    contractId: String(settlementId),
+                }
             );
             return false;
         }

@@ -317,4 +317,26 @@ describe('shared trade-cycle restart', () => {
             ...engine.tradeOptions,
         });
     });
+
+    it('uses the Smart Over 2 recovery stake for the next trade without changing the template amount', () => {
+        const engine: any = Object.create(TradeEngine.prototype);
+        const state = {
+            baseStake: 0.5,
+            currentStake: 0.72,
+        };
+        const templateOptions = {
+            amount: 0.5,
+            basis: 'stake',
+            currency: 'USD',
+        };
+        engine.isSmartOver2Workspace = jest.fn(() => true);
+        engine.getSmartOver2RecoveryState = jest.fn(() => state);
+
+        expect(engine.getSmartOver2TradeOptions(templateOptions)).toEqual({
+            ...templateOptions,
+            amount: 0.72,
+        });
+        expect(templateOptions.amount).toBe(0.5);
+        expect(state.baseStake).toBe(0.5);
+    });
 });

@@ -144,6 +144,11 @@ describe('Free Bots template catalog', () => {
         expect(document.querySelector('block[type="smart_over2_recovery_gate"] field[name="NUM"]')?.textContent).toBe(
             '4'
         );
+        expect(
+            document.querySelector(
+                'block[type="smart_over2_recovery_gate"] value[name="MARTINGALE"] shadow[type="math_number"] field[name="NUM"]'
+            )?.textContent
+        ).toBe('1.2');
         expect(document.querySelector('block[type="smart_over2_recovery_purchase"]')).not.toBeNull();
         expect(document.querySelector('block[type="apollo_purchase2"]')).toBeNull();
         expect(

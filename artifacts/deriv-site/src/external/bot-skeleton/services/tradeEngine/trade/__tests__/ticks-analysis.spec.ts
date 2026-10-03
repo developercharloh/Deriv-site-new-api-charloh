@@ -206,62 +206,60 @@ describe('Ticks last-digit analysis events', () => {
         await expect(engine.checkSmartOver2Entry(3)).resolves.toBe(false);
     });
 
-    it('uses Under 5 for ungated Recovery 1 and preserves the strict Recovery 2 window', async () => {
+    it('repeats ungated Under 5 throughout recovery', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
         state.stage = 1;
+        state.currentStake = 0.6;
+        state.martingaleMultiplier = 1.2;
         engine.getLastDigitList = jest.fn().mockResolvedValue([9, 8, 9]);
         const emit = jest.spyOn(observer, 'emit');
 
         await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
-        expect(engine.getLastDigitList).not.toHaveBeenCalled();
         expect(state.pendingPurchase).toEqual(
             expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
+        expect(engine.getLastDigitList).not.toHaveBeenCalled();
         expect(emit).toHaveBeenCalledWith(
             'bot.smart_over2.recovery',
             expect.objectContaining({
                 event: 'status',
                 stage: 1,
                 message: expect.stringContaining('Under 5 is ready'),
+                stake: 0.6,
+                martingaleMultiplier: 1.2,
             })
         );
-        emit.mockRestore();
 
-        state.stage = 2;
         state.pendingPurchase = null;
-        engine.getLastDigitList.mockResolvedValue([0, 1, 2, 3]);
         await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 2, contractType: 'DIGITOVER', prediction: 4 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
-
-        state.pendingPurchase = null;
-        engine.getLastDigitList.mockResolvedValue([0, 1, 2, 4]);
-        await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(false);
-        expect(state.pendingPurchase).toBeNull();
+        expect(engine.getLastDigitList).not.toHaveBeenCalled();
+        emit.mockRestore();
     });
 
-    it('keeps the queued dynamic order until the broker accepts it', async () => {
+    it('keeps a queued Under 5 order until the broker accepts it', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
-        state.stage = 3;
+        state.stage = 1;
         state.pendingPurchase = {
-            stage: 3,
+            stage: 1,
             contractType: 'DIGITUNDER',
-            prediction: 4,
+            prediction: 5,
             journalScope: 'smart-over-2',
         };
         engine.purchase = jest.fn().mockResolvedValue('submitted');
 
         await expect(engine.purchaseSmartOver2Recovery('smart-over-2')).resolves.toBe('submitted');
 
-        expect(engine.purchase).toHaveBeenCalledWith('DIGITUNDER', 4);
+        expect(engine.purchase).toHaveBeenCalledWith('DIGITUNDER', 5);
         expect(state.lastPurchasedStage).toBeNull();
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 3, contractType: 'DIGITUNDER', prediction: 4 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
     });
 
@@ -358,10 +356,11 @@ describe('Ticks last-digit analysis events', () => {
         expect(state.purchaseInFlight).toBe(true);
         expect(state.lastPurchasedStage).toBeNull();
 
-        expect(engine.completeSmartOver2RecoveryPurchase(order, { contract_id: 123 })).toBe(true);
+        expect(engine.completeSmartOver2RecoveryPurchase(order, { contract_id: 123, buy_price: 0.6 })).toBe(true);
         expect(state.purchaseInFlight).toBe(false);
         expect(state.pendingPurchase).toBeNull();
         expect(state.lastPurchasedStage).toBe(1);
+        expect(state.currentStake).toBe(0.6);
         expect(emit).toHaveBeenCalledWith(
             'bot.smart_over2.recovery',
             expect.objectContaining({
@@ -393,34 +392,15 @@ describe('Ticks last-digit analysis events', () => {
         expect(insufficient.ready).toBe(false);
     });
 
-    it('shows the dated holdout result and report link in the Recovery 3 Journal status', async () => {
-        const Engine = Ticks(BaseEngine as any);
-        const engine: any = new Engine();
-        engine.getSmartOver2RecoveryState().stage = 3;
-        engine.symbol = '1HZ50V';
-        engine.getLastDigitList = jest.fn().mockResolvedValue(Array(100).fill(1));
-        const emit = jest.spyOn(observer, 'emit');
-
-        await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
-
-        const recoveryEvent = emit.mock.calls.find(([eventName]) => eventName === 'bot.smart_over2.recovery')?.[1] as any;
-        expect(recoveryEvent).toEqual(
-            expect.objectContaining({
-                event: 'status',
-                message: expect.stringContaining('47.1% wins vs 50.0% for fixed Over 4'),
-            })
-        );
-        expect(recoveryEvent.message).toContain('The chooser underperformed in this sample');
-        expect(recoveryEvent.message).toContain('/smart-over-2-recovery-validation.html');
-
-        emit.mockRestore();
-    });
-
-    it('advances recovery on final results, returns to Over 2 after a win, and stops after a Recovery 3 loss', () => {
+    it('compounds after every loss, repeats Under 5, and resets to the base stake after any win', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
         const emit = jest.spyOn(observer, 'emit');
+        state.baseStake = 0.5;
+        state.currentStake = 0.5;
+        state.martingaleMultiplier = 1.2;
+        engine.tradeOptions = { amount: 0.5, symbol: '1HZ50V' };
 
         const settle = (id: string, stage: number, outcome: 'won' | 'lost') => {
             state.stage = stage;
@@ -435,24 +415,58 @@ describe('Ticks last-digit analysis events', () => {
 
         expect(settle('normal-loss', 0, 'lost')).toBe(false);
         expect(state.stage).toBe(1);
-        expect(settle('recovery-one-loss', 1, 'lost')).toBe(false);
-        expect(state.stage).toBe(2);
-        expect(settle('recovery-two-loss', 2, 'lost')).toBe(false);
-        expect(state.stage).toBe(3);
-        expect(settle('recovery-three-win', 3, 'won')).toBe(false);
+        expect(state.currentStake).toBe(0.6);
+        expect(engine.tradeOptions.amount).toBe(0.6);
+
+        expect(settle('under-five-loss-1', 1, 'lost')).toBe(false);
+        expect(state.stage).toBe(1);
+        expect(state.currentStake).toBe(0.72);
+        expect(engine.tradeOptions.amount).toBe(0.72);
+
+        state.pendingPurchase = null;
+        await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
+        );
+
+        expect(settle('under-five-win', 1, 'won')).toBe(false);
         expect(state.stage).toBe(0);
-        expect(settle('normal-loss-again', 0, 'lost')).toBe(false);
-        expect(settle('recovery-one-loss-again', 1, 'lost')).toBe(false);
-        expect(settle('recovery-two-loss-again', 2, 'lost')).toBe(false);
-        expect(settle('recovery-three-loss', 3, 'lost')).toBe(true);
-        expect(state.stopped).toBe(true);
-        expect(emit).toHaveBeenCalledWith('bot.stop');
+        expect(state.currentStake).toBe(0.5);
+        expect(state.consecutiveLosses).toBe(0);
+
+        engine.getLastDigitList = jest.fn().mockResolvedValue([9, 9, 9, 9]);
+        await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(false);
+        expect(engine.getLastDigitList).toHaveBeenCalledTimes(1);
+        expect(state.pendingPurchase).toBeNull();
+
+        engine.getLastDigitList.mockResolvedValue([3, 4, 5, 6]);
+        await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 0, contractType: 'DIGITOVER', prediction: 2 })
+        );
+
+        state.pendingPurchase = null;
+        state.currentStake = 1.44;
+        expect(settle('normal-win', 0, 'won')).toBe(false);
+        expect(state.stage).toBe(0);
+        expect(state.currentStake).toBe(0.5);
+        expect(state.stopped).toBeUndefined();
+        expect(emit).not.toHaveBeenCalledWith('bot.stop');
         expect(emit).toHaveBeenCalledWith(
             'bot.smart_over2.recovery',
             expect.objectContaining({
-                event: 'stopped',
-                stage: 3,
-                message: expect.stringContaining('Bot stopped'),
+                event: 'settlement',
+                outcome: 'loss',
+                nextStake: 0.6,
+            })
+        );
+        expect(emit).toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({
+                event: 'settlement',
+                outcome: 'win',
+                nextStake: 0.5,
+                message: expect.stringContaining('condition-gated Over 2'),
             })
         );
 

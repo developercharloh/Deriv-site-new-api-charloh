@@ -19,11 +19,14 @@ const registerOutputBlock = ({
     args1 = [],
     message2,
     args2 = [],
+    message3,
+    args3 = [],
     inputsInline = true,
     output = 'Number',
     tooltip,
     generatorCode,
     meta,
+    hiddenInputs = [],
 }) => {
     window.Blockly.Blocks[type] = {
         init() {
@@ -32,6 +35,7 @@ const registerOutputBlock = ({
                 args0,
                 ...(message1 ? { message1, args1 } : {}),
                 ...(message2 ? { message2, args2 } : {}),
+                ...(message3 ? { message3, args3 } : {}),
                 output,
                 outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
                 ...analysisColours(),
@@ -39,6 +43,9 @@ const registerOutputBlock = ({
                 category: window.Blockly.Categories.Tick_Analysis,
             });
             this.setInputsInline(inputsInline);
+            if (this.workspace.rendered) {
+                hiddenInputs.forEach(inputName => this.getInput(inputName)?.setVisible(false));
+            }
         },
         meta() {
             return {
@@ -339,14 +346,18 @@ registerOutputBlock({
     args1: [countInput('COUNT', '4')],
     message2: localize('Analyze %1 ticks'),
     args2: [countInput('ANALYSIS_COUNT', '100')],
+    message3: localize('Martingale multiplier × %1'),
+    args3: [countInput('MARTINGALE', '1.2')],
+    hiddenInputs: ['ANALYSIS_COUNT'],
     inputsInline: false,
     output: 'Boolean',
     tooltip:
-        'Runs normal Over 2 entry rules, then the staged Over 4 recovery gates and a recent-digit comparison for Recovery 3.',
+        'Uses the configured last-X rules for normal Over 2 entries. After a loss, repeats Under 5 with the selected stake multiplier until a win resets the stake.',
     meta: 'Smart Over 2 Recovery Gate',
     generatorCode: block => [
         `Bot.checkSmartOver2Recovery(${numberInput(block, 'COUNT', '4')}, ` +
-            `${numberInput(block, 'ANALYSIS_COUNT', '100')}, ${smartOver2JournalScope(block)})`,
+            `${numberInput(block, 'ANALYSIS_COUNT', '100')}, ${smartOver2JournalScope(block)}, ` +
+            `${numberInput(block, 'MARTINGALE', '1.2')})`,
         generator().ORDER_FUNCTION_CALL,
     ],
 });
@@ -354,10 +365,10 @@ registerOutputBlock({
 window.Blockly.Blocks.smart_over2_recovery_purchase = {
     init() {
         this.jsonInit({
-            message0: localize('Smart Over 2: buy the selected entry or recovery contract'),
+            message0: localize('Smart Over 2: buy Over 2 or Under 5 recovery'),
             previousStatement: null,
             ...analysisColours(),
-            tooltip: localize('Buys Over 2 normally, or the Over/Under 4 contract selected by the recovery gate.'),
+            tooltip: localize('Buys Over 2 normally or Under 5 during recovery, using the current Martingale stake.'),
             category: window.Blockly.Categories.Tick_Analysis,
         });
         this.setNextStatement(false);
@@ -383,7 +394,7 @@ window.Blockly.Blocks.smart_over2_recovery_settlement = {
             previousStatement: 'TradeAgain',
             nextStatement: 'TradeAgain',
             ...analysisColours(),
-            tooltip: localize('Records the settled result, resets to Over 2 after a recovery win, or stops after a Recovery 3 loss.'),
+            tooltip: localize('A loss repeats Under 5 with a larger stake. Any win resets the stake and resumes condition-gated Over 2 entries.'),
             category: window.Blockly.Categories.Tick_Analysis,
         });
     },

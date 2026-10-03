@@ -105,12 +105,14 @@ describe('Smart Over 2 Blockly entry gate', () => {
         const gate = workspace.newBlock('smart_over2_recovery_gate');
         const lookbackInputIndex = gate.inputList.findIndex(input => input.name === 'COUNT');
         const analysisInputIndex = gate.inputList.findIndex(input => input.name === 'ANALYSIS_COUNT');
+        const martingaleInputIndex = gate.inputList.findIndex(input => input.name === 'MARTINGALE');
         expect(gate.getInputsInline()).toBe(false);
         expect(lookbackInputIndex).toBeGreaterThanOrEqual(0);
         expect(analysisInputIndex).toBeGreaterThan(lookbackInputIndex);
+        expect(martingaleInputIndex).toBeGreaterThan(analysisInputIndex);
         const generatedGate = javascriptGenerator.blockToCode(gate);
         expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
-            'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2")'
+            'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2", 1.2)'
         );
 
         const purchase = workspace.newBlock('smart_over2_recovery_purchase');

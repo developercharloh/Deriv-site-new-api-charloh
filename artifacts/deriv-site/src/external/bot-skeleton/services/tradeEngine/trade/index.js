@@ -206,8 +206,9 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         if (executionSpeed !== 'fast') {
             this.stopFastClock();
         }
+        const binaryMatrixTradeOptions = this.getBinaryMatrixTradeOptions(validated_trade_options);
         this.tradeOptions = {
-            ...this.getBinaryMatrixTradeOptions(validated_trade_options),
+            ...this.getSmartOver2TradeOptions(binaryMatrixTradeOptions),
             ...(executionSpeed === 'fast'
                 ? {
                       duration: FAST_CONTRACT_DURATION_VALUE,
@@ -285,6 +286,37 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
     isBinaryMatrixWorkspace() {
         const blocks = window.Blockly?.derivWorkspace?.getAllBlocks?.(true) ?? [];
         return blocks.some(block => ['last_digits_condition', 'apollo_purchase2'].includes(block.type));
+    }
+
+    isSmartOver2Workspace() {
+        const blocks = window.Blockly?.derivWorkspace?.getAllBlocks?.(true) ?? [];
+        return blocks.some(block =>
+            ['smart_over2_recovery_gate', 'smart_over2_recovery_purchase'].includes(block.type)
+        );
+    }
+
+    getSmartOver2TradeOptions(tradeOptions) {
+        if (!this.isSmartOver2Workspace()) return tradeOptions;
+
+        const state = this.getSmartOver2RecoveryState?.();
+        const suppliedStake = Number(tradeOptions?.amount);
+        if (!state || !Number.isFinite(suppliedStake) || suppliedStake <= 0) return tradeOptions;
+
+        const existingBaseStake = Number(state.baseStake);
+        if (!Number.isFinite(existingBaseStake) || existingBaseStake <= 0) {
+            state.baseStake = suppliedStake;
+            state.currentStake = suppliedStake;
+        }
+
+        const currentStake = Number(state.currentStake);
+        if (!Number.isFinite(currentStake) || currentStake <= 0) {
+            state.currentStake = state.baseStake;
+        }
+
+        return {
+            ...tradeOptions,
+            amount: state.currentStake,
+        };
     }
 
     readBinaryMatrixNumberVariable(name, fallback) {
@@ -386,12 +418,13 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
     prewarmFastNextProposal() {
         if (getBotExecutionSpeed() !== 'fast' || !this.is_proposal_subscription_required) return;
 
-        // Binary Matrix can change the stake only after authoritative settlement.
+        // Stake progressions change only after an authoritative settlement.
         // Start fetching the next proposal before the generated interpreter cycle
         // resumes so proposal latency does not sit on the critical path to buy.
-        const nextTradeOptions = this.getBinaryMatrixTradeOptions?.({
+        const binaryMatrixTradeOptions = this.getBinaryMatrixTradeOptions({
             ...this.tradeOptions,
         });
+        const nextTradeOptions = this.getSmartOver2TradeOptions(binaryMatrixTradeOptions);
         if (!nextTradeOptions) return;
 
         this.tradeOptions = nextTradeOptions;
