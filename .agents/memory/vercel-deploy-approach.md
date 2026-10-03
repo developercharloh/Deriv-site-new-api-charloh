@@ -109,3 +109,11 @@ Do not use only the first script referenced by the page to decide whether a depl
 **Why:** The first live script can remain byte-identical across a redesign, and Alpha Scan's Rise/Fall labels were in an async chunk rather than the entry bundle.
 
 **How to apply:** After the deployment reaches `READY`, confirm the production domain serves the local build's HTML, check referenced scripts and styles load, and compare both the entry bundle and relevant route chunks.
+
+## Inline Node scripts in this workspace
+
+Inline Node scripts run from the artifact directory may be treated as ES modules. Use `node --input-type=module` with `import` statements rather than assuming `require` works.
+
+**Why:** A deployment script using `require` failed before making any network request because Node treated stdin as an ES module.
+
+**How to apply:** For temporary deployment scripts passed through stdin, set the input mode explicitly and use Node's built-in ESM imports.
