@@ -260,6 +260,29 @@ describe('Ticks last-digit analysis events', () => {
         expect(insufficient.ready).toBe(false);
     });
 
+    it('shows the dated holdout result and report link in the Recovery 3 Journal status', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.getSmartOver2RecoveryState().stage = 3;
+        engine.symbol = '1HZ50V';
+        engine.getLastDigitList = jest.fn().mockResolvedValue(Array(100).fill(1));
+        const emit = jest.spyOn(observer, 'emit');
+
+        await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
+
+        const recoveryEvent = emit.mock.calls.find(([eventName]) => eventName === 'bot.smart_over2.recovery')?.[1] as any;
+        expect(recoveryEvent).toEqual(
+            expect.objectContaining({
+                event: 'status',
+                message: expect.stringContaining('47.1% wins vs 50.0% for fixed Over 4'),
+            })
+        );
+        expect(recoveryEvent.message).toContain('The chooser underperformed in this sample');
+        expect(recoveryEvent.message).toContain('/smart-over-2-recovery-validation.html');
+
+        emit.mockRestore();
+    });
+
     it('advances recovery on final results, returns to Over 2 after a win, and stops after a Recovery 3 loss', () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

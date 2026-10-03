@@ -501,6 +501,14 @@ export default Engine =>
                             ? ` · selected ${analysis.contractType === 'DIGITOVER' ? 'Over 4' : 'Under 4'} ` +
                               `(score ${analysis.score.toFixed(3)}${analysis.tieBreak ? `; ${analysis.tieBreak}` : ''})`
                             : '');
+                    if (analysis.ready) {
+                        statusDetails +=
+                            '<br /><strong>Historical holdout:</strong> 47.1% wins vs 50.0% for fixed Over 4 ' +
+                            '(19,500 next-tick checks across 13 synthetic indices; captured 3 Oct 2026 UTC). ' +
+                            'The chooser underperformed in this sample; results are not payout-adjusted. ' +
+                            '<a href="/smart-over-2-recovery-validation.html" target="_blank" rel="noopener noreferrer">' +
+                            'View replay results</a>';
+                    }
                     if (shouldPurchase) {
                         order = {
                             stage,

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex" />
+        <title>Smart Over 2 Recovery 3 — Holdout validation</title>
+        <style>
+            :root {
+                color-scheme: light;
+                font-family:
+                    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                color: #16283d;
+                background: #f4f7fb;
+                font-synthesis: none;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 32px 20px 56px;
+                line-height: 1.55;
+            }
+
+            main {
+                width: min(100%, 980px);
+                margin: 0 auto;
+                padding: clamp(22px, 5vw, 48px);
+                border: 1px solid #dce5ef;
+                border-radius: 20px;
+                background: #fff;
+                box-shadow: 0 16px 48px rgb(20 42 68 / 7%);
+            }
+
+            a {
+                color: #0878c9;
+                font-weight: 650;
+            }
+
+            .back {
+                display: inline-block;
+                margin-bottom: 34px;
+                font-size: 14px;
+            }
+
+            .eyebrow {
+                margin: 0 0 8px;
+                color: #0878c9;
+                font-size: 12px;
+                font-weight: 800;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+            }
+
+            h1 {
+                max-width: 760px;
+                margin: 0;
+                font-size: clamp(30px, 5vw, 46px);
+                line-height: 1.08;
+                letter-spacing: -0.035em;
+            }
+
+            .lede {
+                max-width: 760px;
+                margin: 18px 0 28px;
+                color: #52657a;
+                font-size: 17px;
+            }
+
+            .metrics {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 12px;
+                margin: 28px 0;
+            }
+
+            .metric {
+                min-height: 132px;
+                padding: 18px;
+                border: 1px solid #e2eaf2;
+                border-radius: 14px;
+                background: #f8fafc;
+            }
+
+            .metric span,
+            .metric small {
+                display: block;
+                color: #66788b;
+                font-size: 13px;
+            }
+
+            .metric strong {
+                display: block;
+                margin: 6px 0 3px;
+                color: #12283e;
+                font-size: clamp(25px, 4vw, 34px);
+                line-height: 1.15;
+            }
+
+            .callout {
+                margin: 24px 0 34px;
+                padding: 18px 20px;
+                border: 1px solid #f1d19a;
+                border-left: 5px solid #d88712;
+                border-radius: 12px;
+                background: #fff8e9;
+            }
+
+            .callout strong {
+                display: block;
+                margin-bottom: 4px;
+            }
+
+            h2 {
+                margin: 34px 0 10px;
+                font-size: 21px;
+                letter-spacing: -0.02em;
+            }
+
+            p,
+            li {
+                color: #43576d;
+            }
+
+            ul {
+                padding-left: 22px;
+            }
+
+            li + li {
+                margin-top: 7px;
+            }
+
+            .table-wrap {
+                overflow-x: auto;
+                margin: 14px 0 10px;
+                border: 1px solid #e2eaf2;
+                border-radius: 12px;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 14px;
+                text-align: left;
+            }
+
+            th,
+            td {
+                padding: 11px 14px;
+                border-bottom: 1px solid #e8eef4;
+                white-space: nowrap;
+            }
+
+            th {
+                color: #52657a;
+                background: #f7f9fc;
+                font-size: 12px;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+
+            tbody tr:last-child td {
+                border-bottom: 0;
+            }
+
+            .negative {
+                color: #a3372d;
+                font-weight: 750;
+            }
+
+            .footnote {
+                margin-top: 26px;
+                padding-top: 18px;
+                border-top: 1px solid #e2eaf2;
+                color: #66788b;
+                font-size: 13px;
+            }
+
+            @media (max-width: 650px) {
+                body {
+                    padding: 12px;
+                }
+
+                main {
+                    padding: 22px 16px;
+                    border-radius: 14px;
+                }
+
+                .back {
+                    margin-bottom: 24px;
+                }
+
+                .metrics {
+                    grid-template-columns: 1fr;
+                }
+
+                .metric {
+                    min-height: 0;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <a class="back" href="/">← Back to Trader Charloh FX</a>
+            <p class="eyebrow">Smart Over 2 · Recovery 3</p>
+            <h1>Out-of-sample direction check</h1>
+            <p class="lede">
+                A chronological replay tested whether the weighted recent-digit chooser picked a better next-tick
+                direction than a fixed Over 4 baseline. The result below describes this sample only.
+            </p>
+
+            <section class="metrics" aria-label="Pooled holdout results">
+                <article class="metric">
+                    <span>Weighted chooser</span>
+                    <strong>47.05%</strong>
+                    <small>9,175 wins from 19,500 next-tick checks</small>
+                </article>
+                <article class="metric">
+                    <span>Fixed Over 4 baseline</span>
+                    <strong>49.97%</strong>
+                    <small>9,745 wins from the same checks</small>
+                </article>
+                <article class="metric">
+                    <span>Difference vs baseline</span>
+                    <strong class="negative">−2.93 pp</strong>
+                    <small>95% paired block-bootstrap interval: −3.48 to −2.33 pp</small>
+                </article>
+            </section>
+
+            <aside class="callout">
+                <strong>The chooser underperformed the baseline in this holdout.</strong>
+                It also had a lower hit rate than fixed Over 4 on each of the 13 tested markets. This does not establish
+                how the bot will perform in future ticks.
+            </aside>
+
+            <h2>Results by market</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Market</th>
+                            <th scope="col">Weighted chooser</th>
+                            <th scope="col">Fixed Over 4</th>
+                            <th scope="col">Longest losing run</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1HZ10V</td><td>44.13%</td><td>48.13%</td><td>14</td></tr>
+                        <tr><td>1HZ15V</td><td>47.53%</td><td>49.80%</td><td>9</td></tr>
+                        <tr><td>1HZ25V</td><td>47.80%</td><td>49.67%</td><td>11</td></tr>
+                        <tr><td>1HZ30V</td><td>44.27%</td><td>46.67%</td><td>10</td></tr>
+                        <tr><td>1HZ50V</td><td>46.27%</td><td>49.33%</td><td>13</td></tr>
+                        <tr><td>1HZ75V</td><td>49.87%</td><td>52.13%</td><td>8</td></tr>
+                        <tr><td>1HZ90V</td><td>48.20%</td><td>50.80%</td><td>13</td></tr>
+                        <tr><td>1HZ100V</td><td>47.87%</td><td>50.67%</td><td>9</td></tr>
+                        <tr><td>R_10</td><td>47.53%</td><td>50.07%</td><td>11</td></tr>
+                        <tr><td>R_25</td><td>46.47%</td><td>50.40%</td><td>12</td></tr>
+                        <tr><td>R_50</td><td>47.20%</td><td>49.40%</td><td>12</td></tr>
+                        <tr><td>R_75</td><td>46.93%</td><td>51.27%</td><td>10</td></tr>
+                        <tr><td>R_100</td><td>47.60%</td><td>51.33%</td><td>11</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p>
+                For the Smart Over 2 template’s default market, 1HZ50V, the chooser won on 46.27% of holdout checks
+                versus 49.33% for fixed Over 4. The longest losing run across the market samples ranged from 8 to 14;
+                digit 4 occurred 1,973 times and was counted as a loss for both contracts.
+            </p>
+
+            <h2>How the replay was run</h2>
+            <ul>
+                <li>
+                    Retrieved 5,000 public historical ticks for each of 13 Deriv volatility indices. For each market,
+                    the earliest 70% was kept as the training period and the most recent 30% as the holdout.
+                </li>
+                <li>
+                    At each holdout tick, the existing rule analyzed only the preceding 100 digits, using its 10-, 30-,
+                    and 100-tick windows weighted 2, 1.5, and 1, then selected Over 4 or Under 4 for the next digit.
+                </li>
+                <li>
+                    A digit above 4 counted as an Over 4 win; a digit below 4 counted as an Under 4 win; digit 4 was a
+                    loss for either choice. The training-only majority direction selected Over 4 on all 13 markets.
+                </li>
+                <li>
+                    The paired difference interval used 2,000 moving-block bootstrap resamples with 100-tick blocks to
+                    retain some short-range dependence between neighboring predictions.
+                </li>
+            </ul>
+
+            <h2>Important limits</h2>
+            <p>
+                This is a rolling one-tick classification replay, not a simulation of the complete Recovery 1–3
+                sequence. It does not include broker payouts, stake progression, contract costs, or session risk limits.
+                A higher hit rate would not by itself demonstrate profitability; this sample does not show that the
+                weighted chooser has a predictive advantage.
+            </p>
+            <p class="footnote">
+                Source: Deriv public Options API tick history. Captured 3 October 2026 at 09:15 UTC; each market’s
+                holdout covered its own final 1,500 ticks, approximately 08:25–09:15 UTC. The live Recovery 3
+                direction rule is unchanged; this page reports the observed holdout result and its limitations.
+            </p>
+        </main>
+    </body>
+</html>
