@@ -46,6 +46,12 @@ export type TSmartOver2Analysis = {
     result: boolean;
 };
 
+type TSmartOver2RecoveryEvent = {
+    journalScope?: string | null;
+    event?: string;
+    message?: string;
+};
+
 export type TParityAnalysis = {
     market: string;
     count: number;
@@ -132,6 +138,7 @@ export default class RunPanelStore {
             onError: action,
             onLastDigitsAnalysis: action.bound,
             onSmartOver2Analysis: action.bound,
+            onSmartOver2RecoveryEvent: action.bound,
             onParityAnalysis: action.bound,
              onPurchaseMapping: action.bound,
              onAdaptiveMomentumJournalLog: action.bound,
@@ -1040,14 +1047,26 @@ export default class RunPanelStore {
               ? 'MATCH — SKIP'
               : 'NO';
         const message =
-            `Smart Over 2 · Market: ${analysis.market || 'N/A'} · ` +
+            `[Smart Over 2] Status · Market: ${analysis.market || 'N/A'} · ` +
             `Last ${analysis.count}: [${analysis.digits.join(', ')}] · ` +
             `3–7 window: ${entryWindowStatus} · ` +
             `Latest 3 [${analysis.lastThree.join(', ')}] · ` +
             `all 7–9: ${highSkipStatus} · all 0–2: ${lowSkipStatus} · ` +
             `Entry: ${analysis.result ? 'ALLOWED' : 'BLOCKED'}`;
 
-        this.root_store.journal.pushMessage(message, MessageTypes.NOTIFY, 'journal__text');
+        this.root_store.journal.updateSmartOver2AnalysisMessage(message);
+    };
+
+    onSmartOver2RecoveryEvent = (event: TSmartOver2RecoveryEvent) => {
+        const activeJournalScope = getSmartOver2JournalScope(this.root_store.journal.active_bot_template_id);
+        if (!event.journalScope || event.journalScope !== activeJournalScope || !event.message) return;
+
+        if (event.event === 'status') {
+            this.root_store.journal.updateSmartOver2AnalysisMessage(event.message);
+            return;
+        }
+
+        this.root_store.journal.pushMessage(event.message, MessageTypes.NOTIFY, 'journal__text');
     };
 
     onParityAnalysis = (analysis: TParityAnalysis) => {
@@ -1599,6 +1618,7 @@ export default class RunPanelStore {
         observer.register('ui.log.success', journal.onLogSuccess);
         observer.register('bot.analysis.condition', this.onLastDigitsAnalysis);
         observer.register('bot.analysis.smart_over2', this.onSmartOver2Analysis);
+        observer.register('bot.smart_over2.recovery', this.onSmartOver2RecoveryEvent);
         observer.register('bot.analysis.parity', this.onParityAnalysis);
         observer.register('bot.purchase.mapping', this.onPurchaseMapping);
         observer.register('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);
@@ -1624,6 +1644,7 @@ export default class RunPanelStore {
         observer.unregisterAll('ui.log.success');
         observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysis);
         observer.unregister('bot.analysis.smart_over2', this.onSmartOver2Analysis);
+        observer.unregister('bot.smart_over2.recovery', this.onSmartOver2RecoveryEvent);
         observer.unregister('bot.analysis.parity', this.onParityAnalysis);
         observer.unregister('bot.purchase.mapping', this.onPurchaseMapping);
         observer.unregister('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);

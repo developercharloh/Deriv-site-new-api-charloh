@@ -1,5 +1,7 @@
 import * as BlocklyNamespace from 'blockly';
 import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 
 jest.mock('../../utils', () => ({
@@ -92,6 +94,51 @@ describe('Smart Over 2 Blockly entry gate', () => {
         expect(riseFallCode).toBe('Bot.checkSmartOver2Entry(6, "rise-fall-master")');
 
         workspace.dispose();
+    });
+
+    it('registers reusable recovery gate, purchase, and settlement blocks', () => {
+        const workspace = new Blockly.Workspace();
+        javascriptGenerator.init(workspace);
+        setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2');
+
+        const gate = workspace.newBlock('smart_over2_recovery_gate');
+        const generatedGate = javascriptGenerator.blockToCode(gate);
+        expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
+            'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2")'
+        );
+
+        const purchase = workspace.newBlock('smart_over2_recovery_purchase');
+        expect(javascriptGenerator.blockToCode(purchase)).toBe(
+            'Bot.purchaseSmartOver2Recovery("smart-over-2");\n'
+        );
+
+        const settlement = workspace.newBlock('smart_over2_recovery_settlement');
+        expect(javascriptGenerator.blockToCode(settlement)).toBe(
+            'Bot.completeSmartOver2Recovery("smart-over-2");\n'
+        );
+
+        workspace.dispose();
+    });
+
+    it('uses the recovery blocks without changing the bot duration or stake', () => {
+        const xml = readFileSync(
+            resolve(__dirname, '../../../../../../public/bots/Smart_Over_2_Bot.xml'),
+            'utf8'
+        );
+
+        ['smart_over2_recovery_gate', 'smart_over2_recovery_purchase', 'smart_over2_recovery_settlement'].forEach(
+            type => {
+                expect(xml).toContain(`<block type="${type}"`);
+                expect(Blockly.Blocks[type]).toBeDefined();
+            }
+        );
+        expect(xml).toMatch(/<field name="DURATIONTYPE_LIST">t<\/field>/);
+        expect(xml).toMatch(/<field name="NUM">1<\/field>/);
+        expect(xml).toMatch(/<field name="NUM">0\.5<\/field>/);
+        expect(xml).toMatch(/<field name="NUM">2<\/field>/);
+
+        expect(xml).not.toContain('apollo_purchase2');
+        expect(xml).toContain('smart_over2_recovery_purchase');
     });
 
     it('keeps shared trade settings on short rows without renaming saved fields', () => {

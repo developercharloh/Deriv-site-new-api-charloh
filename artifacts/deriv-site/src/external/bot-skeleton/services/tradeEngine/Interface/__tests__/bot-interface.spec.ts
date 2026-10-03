@@ -37,3 +37,22 @@ describe('Bot volatility scan interface', () => {
         expect(scanVolatilityUntilIndicatorsPass).toHaveBeenCalledWith(20);
     });
 });
+
+describe('Bot Smart Over 2 recovery interface', () => {
+    it('forwards the recovery gate, dynamic purchase, and settlement calls to the current engine', async () => {
+        const tradeEngine = {
+            checkSmartOver2Recovery: jest.fn().mockResolvedValue(true),
+            purchaseSmartOver2Recovery: jest.fn().mockResolvedValue(true),
+            completeSmartOver2Recovery: jest.fn().mockReturnValue(false),
+        };
+        const bot = getBotInterface(tradeEngine as any);
+
+        await expect(bot.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
+        await expect(bot.purchaseSmartOver2Recovery('smart-over-2')).resolves.toBe(true);
+        expect(bot.completeSmartOver2Recovery('smart-over-2')).toBe(false);
+
+        expect(tradeEngine.checkSmartOver2Recovery).toHaveBeenCalledWith(4, 100, 'smart-over-2');
+        expect(tradeEngine.purchaseSmartOver2Recovery).toHaveBeenCalledWith('smart-over-2');
+        expect(tradeEngine.completeSmartOver2Recovery).toHaveBeenCalledWith('smart-over-2');
+    });
+});

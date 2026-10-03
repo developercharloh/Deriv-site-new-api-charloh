@@ -102,6 +102,108 @@ export const getAdaptiveMomentumAnalysisFromPrices = (
 export const getAdaptiveMomentumSignalFromPrices = (...args) =>
     getAdaptiveMomentumAnalysisFromPrices(...args).signal;
 
+export const getSmartOver2EntryAssessment = (digits, count = 4) => {
+    const size = Math.max(1, Math.floor(Number(count) || 1));
+    const numericDigits = digits.map(Number).filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+    const recent = numericDigits.slice(-size);
+    const lastThree = numericDigits.slice(-3);
+    const entryWindowReady = recent.length >= size;
+    const skipWindowReady = lastThree.length >= 3;
+    const entryWindowMatches =
+        entryWindowReady && recent.every(digit => digit >= 3 && digit <= 7);
+    const skipHighTriple =
+        skipWindowReady && lastThree.every(digit => digit >= 7 && digit <= 9);
+    const skipLowTriple =
+        skipWindowReady && lastThree.every(digit => digit >= 0 && digit <= 2);
+
+    return {
+        count: size,
+        digits: recent,
+        lastThree,
+        entryWindowReady,
+        entryWindowMatches,
+        skipWindowReady,
+        skipHighTriple,
+        skipLowTriple,
+        result:
+            entryWindowReady &&
+            skipWindowReady &&
+            entryWindowMatches &&
+            !skipHighTriple &&
+            !skipLowTriple,
+    };
+};
+
+export const analyzeSmartOver2RecoveryDigits = (digits, analysisCount = 100) => {
+    const requestedCount = Math.max(20, Math.min(500, Math.floor(Number(analysisCount) || 100)));
+    const numericDigits = digits.map(Number).filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+    const sample = numericDigits.slice(-requestedCount);
+    const minimumHistory = Math.min(30, requestedCount);
+    const minimumDecisiveDigits = Math.min(10, minimumHistory);
+    const decisiveDigits = sample.filter(digit => digit !== 4);
+
+    if (sample.length < minimumHistory || decisiveDigits.length < minimumDecisiveDigits) {
+        return {
+            ready: false,
+            requestedCount,
+            sampleCount: sample.length,
+            decisiveCount: decisiveDigits.length,
+            minimumHistory,
+            minimumDecisiveDigits,
+            windows: [],
+            score: null,
+            contractType: null,
+            tieBreak: null,
+        };
+    }
+
+    const windowSizes = [...new Set([10, 30, sample.length])].filter(size => size <= sample.length);
+    const windows = windowSizes.map(size => {
+        const window = sample.slice(-size);
+        const over = window.filter(digit => digit > 4).length;
+        const under = window.filter(digit => digit < 4).length;
+        const decisive = over + under;
+        return {
+            size,
+            over,
+            under,
+            ties: window.length - decisive,
+            bias: decisive ? (over - under) / decisive : 0,
+        };
+    });
+    const weightedScore = windows.reduce((total, window) => {
+        const weight = window.size <= 10 ? 2 : window.size <= 30 ? 1.5 : 1;
+        return total + window.bias * weight;
+    }, 0);
+    const totalWeight = windows.reduce(
+        (total, window) => total + (window.size <= 10 ? 2 : window.size <= 30 ? 1.5 : 1),
+        0
+    );
+    const score = totalWeight ? weightedScore / totalWeight : 0;
+    const mostRecentDecisiveDigit = [...sample].reverse().find(digit => digit !== 4);
+    const tieBreak = score === 0 ? (mostRecentDecisiveDigit > 4 ? 'recent_digit_over_4' : 'recent_digit_under_4') : null;
+
+    return {
+        ready: true,
+        requestedCount,
+        sampleCount: sample.length,
+        decisiveCount: decisiveDigits.length,
+        minimumHistory,
+        minimumDecisiveDigits,
+        windows,
+        score,
+        contractType:
+            score === 0
+                ? mostRecentDecisiveDigit > 4
+                    ? 'DIGITOVER'
+                    : 'DIGITUNDER'
+                : score > 0
+                  ? 'DIGITOVER'
+                  : 'DIGITUNDER',
+        tieBreak,
+    };
+};
+
 export default Engine =>
     class Ticks extends Engine {
         constructor(...args) {
@@ -116,6 +218,7 @@ export default Engine =>
             this.volatilityDiagnosticsToken = 0;
             this.volatilityDiagnosticsPromise = null;
             this.purchaseConditionEvaluationTick = null;
+            this.smartOver2RecoveryState = null;
         }
 
         async watchTicks(symbol) {
@@ -284,42 +387,251 @@ export default Engine =>
         }
         checkSmartOver2Entry(count = 4, journalScope = null) {
             return this.getLastDigitList().then(digits => {
-                const size = Math.max(1, Math.floor(Number(count) || 1));
-                const recent = digits.slice(-size).map(Number);
-                const lastThree = digits.slice(-3).map(Number);
-                const entryWindowReady = recent.length >= size;
-                const skipWindowReady = lastThree.length >= 3;
-                const entryWindowMatches =
-                    entryWindowReady && recent.every(digit => digit >= 3 && digit <= 7);
-                const skipHighTriple =
-                    skipWindowReady && lastThree.every(digit => digit >= 7 && digit <= 9);
-                const skipLowTriple =
-                    skipWindowReady && lastThree.every(digit => digit >= 0 && digit <= 2);
-                const result =
-                    entryWindowReady &&
-                    skipWindowReady &&
-                    entryWindowMatches &&
-                    !skipHighTriple &&
-                    !skipLowTriple;
+                const assessment = getSmartOver2EntryAssessment(digits, count);
 
                 if (journalScope === 'rise-fall-master' || journalScope === 'smart-over-2') {
                     globalObserver.emit('bot.analysis.smart_over2', {
                         market: this.symbol || 'N/A',
-                        count: size,
-                        digits: recent,
-                        lastThree,
-                        entryWindowReady,
-                        entryWindowMatches,
-                        skipWindowReady,
-                        skipHighTriple,
-                        skipLowTriple,
-                        result,
+                        ...assessment,
                         journalScope,
                     });
                 }
 
-                return result;
+                return assessment.result;
             });
+        }
+        getSmartOver2RecoveryState() {
+            if (!this.smartOver2RecoveryState) {
+                this.smartOver2RecoveryState = {
+                    stage: 0,
+                    stopped: false,
+                    pendingPurchase: null,
+                    lastPurchasedStage: null,
+                    lastProcessedSettlementId: null,
+                };
+            }
+            return this.smartOver2RecoveryState;
+        }
+        emitSmartOver2RecoveryEvent(journalScope, event, message, details = {}) {
+            if (!journalScope) return;
+            globalObserver.emit('bot.smart_over2.recovery', {
+                journalScope,
+                event,
+                market: this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A',
+                message,
+                ...details,
+            });
+        }
+        checkSmartOver2Recovery(count = 4, analysisCount = 100, journalScope = null) {
+            const size = Math.max(1, Math.floor(Number(count) || 1));
+            const sampleSize = Math.max(20, Math.min(500, Math.floor(Number(analysisCount) || 100)));
+            const state = this.getSmartOver2RecoveryState();
+
+            if (state.stopped) {
+                this.emitSmartOver2RecoveryEvent(
+                    journalScope,
+                    'status',
+                    `[Smart Over 2] Status · Stopped after a Recovery 3 loss on ` +
+                        `${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'}; no further purchases.`,
+                    { stage: 3, conditionStatus: 'STOPPED', digits: [] }
+                );
+                return Promise.resolve(false);
+            }
+
+            if (state.stage === 1) {
+                state.pendingPurchase ??= { stage: 1, contractType: 'DIGITOVER', prediction: 4 };
+                this.emitSmartOver2RecoveryEvent(
+                    journalScope,
+                    'status',
+                    `[Smart Over 2] Status · Recovery 1 · Market: ` +
+                        `${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'} · ` +
+                        'Over 4 is ready on the next available purchase tick; no last-X gate.',
+                    { stage: 1, conditionStatus: 'READY', digits: [] }
+                );
+                return Promise.resolve(true);
+            }
+
+            return this.getLastDigitList().then(digits => {
+                const numericDigits = digits
+                    .map(Number)
+                    .filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+                const recent = numericDigits.slice(-size);
+                const stage = state.stage;
+                let shouldPurchase = false;
+                let order = null;
+                let conditionStatus = 'BLOCKED';
+                let statusDetails = '';
+
+                if (stage === 0) {
+                    const assessment = getSmartOver2EntryAssessment(numericDigits, size);
+                    shouldPurchase = assessment.result;
+                    conditionStatus = shouldPurchase ? 'ALLOWED' : 'WAITING';
+                    statusDetails =
+                        `Last ${size}: [${assessment.digits.join(', ')}] · ` +
+                        `3–7 window: ${assessment.entryWindowReady ? (assessment.entryWindowMatches ? 'MET' : 'NOT MET') : 'WAITING'} · ` +
+                        `latest 3 [${assessment.lastThree.join(', ')}] · ` +
+                        `all 7–9: ${assessment.skipHighTriple ? 'SKIP' : 'NO'} · ` +
+                        `all 0–2: ${assessment.skipLowTriple ? 'SKIP' : 'NO'}`;
+                    if (shouldPurchase) {
+                        order = { stage, contractType: 'DIGITOVER', prediction: 2 };
+                    }
+                } else if (stage === 2) {
+                    const windowReady = recent.length >= size;
+                    const allBelowFour = windowReady && recent.every(digit => digit < 4);
+                    shouldPurchase = allBelowFour;
+                    conditionStatus = !windowReady ? `WAITING (need ${size})` : allBelowFour ? 'READY' : 'WAITING';
+                    statusDetails =
+                        `Recovery 2 waits until every digit is below 4 · Last ${size}: [${recent.join(', ')}] · ` +
+                        `condition: ${conditionStatus}`;
+                    if (shouldPurchase) {
+                        order = { stage, contractType: 'DIGITOVER', prediction: 4 };
+                    }
+                } else if (stage === 3) {
+                    const analysis = analyzeSmartOver2RecoveryDigits(numericDigits, sampleSize);
+                    shouldPurchase = analysis.ready;
+                    conditionStatus = analysis.ready ? 'READY' : 'WAITING FOR ANALYSIS';
+                    const windowSummary = analysis.windows.length
+                        ? analysis.windows
+                              .map(window => `${window.size}t Over ${window.over}/Under ${window.under}/4 ${window.ties}`)
+                              .join(' · ')
+                        : `Need at least ${analysis.minimumHistory} ticks and ${analysis.minimumDecisiveDigits} non-4 digits`;
+                    statusDetails =
+                        `Recovery 3 compares Over 4 vs Under 4 · ${windowSummary}` +
+                        (analysis.ready
+                            ? ` · selected ${analysis.contractType === 'DIGITOVER' ? 'Over 4' : 'Under 4'} ` +
+                              `(score ${analysis.score.toFixed(3)}${analysis.tieBreak ? `; ${analysis.tieBreak}` : ''})`
+                            : '');
+                    if (shouldPurchase) {
+                        order = {
+                            stage,
+                            contractType: analysis.contractType,
+                            prediction: 4,
+                        };
+                    }
+                }
+
+                if (shouldPurchase && order && !state.pendingPurchase) {
+                    state.pendingPurchase = order;
+                }
+
+                this.emitSmartOver2RecoveryEvent(
+                    journalScope,
+                    'status',
+                    `[Smart Over 2] Status · ${stage === 0 ? 'Normal Over 2' : `Recovery ${stage}`} · ` +
+                        `Market: ${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'} · ` +
+                        `${statusDetails} · Decision: ${conditionStatus}`,
+                    {
+                        stage,
+                        conditionStatus,
+                        digits: recent,
+                    }
+                );
+
+                return shouldPurchase;
+            });
+        }
+        purchaseSmartOver2Recovery(journalScope = null) {
+            const state = this.getSmartOver2RecoveryState();
+            const order = state.pendingPurchase;
+            if (!order || state.stopped) return Promise.resolve(false);
+
+            state.pendingPurchase = null;
+            state.lastPurchasedStage = order.stage;
+            const contractName = `${order.contractType === 'DIGITUNDER' ? 'Under' : 'Over'} ${order.prediction}`;
+            this.emitSmartOver2RecoveryEvent(
+                journalScope,
+                'purchase',
+                `[Smart Over 2] ${order.stage === 0 ? 'Normal entry' : `Recovery ${order.stage}`} · ` +
+                    `buying ${contractName}.`,
+                {
+                    stage: order.stage,
+                    contractType: order.contractType,
+                    prediction: order.prediction,
+                }
+            );
+
+            return this.purchase(order.contractType, order.prediction);
+        }
+        completeSmartOver2Recovery(journalScope = null) {
+            const state = this.getSmartOver2RecoveryState();
+            const contract = this.lastSettledContract;
+            const purchasedStage = state.lastPurchasedStage;
+            const settlementId = contract?.contract_id ?? contract?.purchase_reference;
+            if (
+                purchasedStage === null ||
+                purchasedStage === undefined ||
+                settlementId === null ||
+                settlementId === undefined ||
+                String(settlementId) === String(state.lastProcessedSettlementId)
+            ) {
+                return false;
+            }
+
+            state.lastProcessedSettlementId = String(settlementId);
+            state.lastPurchasedStage = null;
+            const status = String(contract.status || '').toLowerCase();
+            const profit = Number(contract.profit);
+            const isWin =
+                ['won', 'win'].includes(status) ||
+                (!['lost', 'loss'].includes(status) && Number.isFinite(profit) && profit > 0);
+            const result = isWin ? 'WIN' : 'LOSS';
+            const stageLabel = purchasedStage === 0 ? 'Normal Over 2' : `Recovery ${purchasedStage}`;
+
+            if (purchasedStage === 3 && !isWin) {
+                state.stopped = true;
+                state.pendingPurchase = null;
+                this.emitSmartOver2RecoveryEvent(
+                    journalScope,
+                    'stopped',
+                    `[Smart Over 2] Recovery 3 settled ${result}. Bot stopped; no further purchases will be made.`,
+                    { stage: 3, outcome: 'loss', contractId: String(settlementId) }
+                );
+                globalObserver.emit('bot.stop');
+                return true;
+            }
+
+            if (purchasedStage === 0 && !isWin) {
+                state.stage = 1;
+                this.emitSmartOver2RecoveryEvent(
+                    journalScope,
+                    'settlement',
+                    `[Smart Over 2] ${stageLabel} settled ${result}. Starting Recovery 1: Over 4, with no last-X gate.`,
+                    { stage: 1, outcome: 'loss', contractId: String(settlementId) }
+                );
+                return false;
+            }
+
+            if (purchasedStage === 1 && !isWin) {
+                state.stage = 2;
+                this.emitSmartOver2RecoveryEvent(
+                    journalScope,
+                    'settlement',
+                    `[Smart Over 2] Recovery 1 settled ${result}. Recovery 2 is waiting for all last-X digits to be below 4, then it buys Over 4.`,
+                    { stage: 2, outcome: 'loss', contractId: String(settlementId) }
+                );
+                return false;
+            }
+
+            if (purchasedStage === 2 && !isWin) {
+                state.stage = 3;
+                this.emitSmartOver2RecoveryEvent(
+                    journalScope,
+                    'settlement',
+                    `[Smart Over 2] Recovery 2 settled ${result}. Recovery 3 will compare recent Over 4 and Under 4 results before choosing a direction; this is a heuristic, not a guarantee.`,
+                    { stage: 3, outcome: 'loss', contractId: String(settlementId) }
+                );
+                return false;
+            }
+
+            state.stage = 0;
+            state.pendingPurchase = null;
+            this.emitSmartOver2RecoveryEvent(
+                journalScope,
+                'settlement',
+                `[Smart Over 2] ${stageLabel} settled ${result}. Returning to normal Over 2 entries.`,
+                { stage: purchasedStage, outcome: 'win', contractId: String(settlementId) }
+            );
+            return false;
         }
         getAnalysisDigits(count = 1000) {
             const size = Math.max(1, Math.floor(Number(count) || 1000));

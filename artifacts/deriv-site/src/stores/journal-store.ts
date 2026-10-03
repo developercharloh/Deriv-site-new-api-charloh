@@ -60,6 +60,7 @@ export interface IJournalStore {
     pushMessage: (message: string, message_type: string, className: string, extra?: TExtra) => void;
     updateAdaptiveAnalysisMessage: (message: string) => void;
     updateVolatilityScanMessage: (message: string) => void;
+    updateSmartOver2AnalysisMessage: (message: string) => void;
     updateStatMessage: (
         message: string,
         setContractBuyInprogress: () => void,
@@ -96,6 +97,7 @@ export default class JournalStore {
             pushMessage: action.bound,
             updateAdaptiveAnalysisMessage: action.bound,
             updateVolatilityScanMessage: action.bound,
+            updateSmartOver2AnalysisMessage: action.bound,
             filtered_messages: computed,
             visible_messages: computed,
             getServerTime: action.bound,
@@ -342,6 +344,35 @@ export default class JournalStore {
         const scanPrefix = '[Volatility Scan] Status';
         const existingIndex = this.unfiltered_messages.findIndex(
             item => item.message_type === MessageTypes.NOTIFY && typeof item.message === 'string' && item.message.startsWith(scanPrefix)
+        );
+
+        if (existingIndex < 0) {
+            this.pushMessage(message, MessageTypes.NOTIFY, 'journal__text');
+            return;
+        }
+
+        const existing = this.unfiltered_messages[existingIndex];
+        const updated = {
+            ...existing,
+            message,
+            time: formatDate(this.getServerTime(), 'HH:mm:ss [GMT]'),
+        };
+        this.unfiltered_messages = [
+            updated,
+            ...this.unfiltered_messages.slice(0, existingIndex),
+            ...this.unfiltered_messages.slice(existingIndex + 1),
+        ];
+    }
+
+    updateSmartOver2AnalysisMessage(message: string) {
+        const analysisPrefix = '[Smart Over 2] Status';
+        const activeTemplateId = this.active_bot_template_id;
+        const existingIndex = this.unfiltered_messages.findIndex(
+            item =>
+                item.message_type === MessageTypes.NOTIFY &&
+                typeof item.message === 'string' &&
+                item.message.startsWith(analysisPrefix) &&
+                (!activeTemplateId || item.extra?.botTemplateId === activeTemplateId)
         );
 
         if (existingIndex < 0) {

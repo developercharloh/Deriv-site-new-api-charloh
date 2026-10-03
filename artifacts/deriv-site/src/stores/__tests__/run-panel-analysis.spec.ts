@@ -9,6 +9,7 @@ jest.mock('@/utils/store-helpers', () => ({
 import { MessageTypes } from '@/external/bot-skeleton';
 import { observer } from '@/external/bot-skeleton/utils/observer';
 import Ticks from '@/external/bot-skeleton/services/tradeEngine/trade/Ticks';
+import JournalStore from '@/stores/journal-store';
 import RunPanelStore from '@/stores/run-panel-store';
 import { BinaryMatrixEngine } from '@/utils/binary-matrix-engine';
 import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
@@ -29,6 +30,7 @@ describe('Binary Matrix analysis observer integration', () => {
     afterEach(() => {
         observer.unregisterAll('bot.analysis.condition');
         observer.unregisterAll('bot.analysis.smart_over2');
+        observer.unregisterAll('bot.smart_over2.recovery');
         observer.unregisterAll('bot.volatility.scan');
         api_base.api = null;
     });
@@ -128,6 +130,7 @@ describe('Binary Matrix analysis observer integration', () => {
     it('journals Smart Over 2 analysis only in the bot whose gate emitted it', () => {
         const journal = {
             pushMessage: jest.fn(),
+            updateSmartOver2AnalysisMessage: jest.fn(),
             active_bot_template_id: 'rise-fall-master',
         };
         const rootStore = {
@@ -209,7 +212,7 @@ describe('Binary Matrix analysis observer integration', () => {
             result: true,
         });
 
-        const messages = journal.pushMessage.mock.calls.map(([message]) => message);
+        const messages = journal.updateSmartOver2AnalysisMessage.mock.calls.map(([message]) => message);
         expect(messages).toHaveLength(3);
         expect(messages[0]).toContain('Last 4: [3, 4, 5, 6]');
         expect(messages[0]).toContain('3–7 window: MET');
@@ -223,11 +226,77 @@ describe('Binary Matrix analysis observer integration', () => {
         expect(messages[1]).toContain('Entry: BLOCKED');
         expect(messages[2]).toContain('Last 4: [3, 4, 5, 6]');
         expect(messages[2]).toContain('Entry: ALLOWED');
-        expect(journal.pushMessage.mock.calls.map(([, type]) => type)).toEqual([
+        expect(journal.pushMessage).not.toHaveBeenCalled();
+    });
+
+    it('keeps one live recovery status row and journals scoped decisions and settlements', () => {
+        const journal = {
+            pushMessage: jest.fn(),
+            updateSmartOver2AnalysisMessage: jest.fn(),
+            active_bot_template_id: 'smart-over-2',
+        };
+        const rootStore = { dbot: {}, journal };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+        runPanel.onMount();
+
+        observer.emit('bot.smart_over2.recovery', {
+            event: 'status',
+            journalScope: 'smart-over-2',
+            message: '[Smart Over 2] Status · Recovery 2 · waiting for all digits below 4',
+        });
+        observer.emit('bot.smart_over2.recovery', {
+            event: 'settlement',
+            journalScope: 'smart-over-2',
+            message: '[Smart Over 2] Recovery 1 settled LOSS. Starting Recovery 2.',
+        });
+        observer.emit('bot.smart_over2.recovery', {
+            event: 'settlement',
+            journalScope: 'rise-fall-master',
+            message: '[Smart Over 2] Recovery event from another bot.',
+        });
+
+        expect(journal.updateSmartOver2AnalysisMessage).toHaveBeenCalledTimes(1);
+        expect(journal.updateSmartOver2AnalysisMessage).toHaveBeenCalledWith(
+            '[Smart Over 2] Status · Recovery 2 · waiting for all digits below 4'
+        );
+        expect(journal.pushMessage).toHaveBeenCalledTimes(1);
+        expect(journal.pushMessage).toHaveBeenCalledWith(
+            '[Smart Over 2] Recovery 1 settled LOSS. Starting Recovery 2.',
             MessageTypes.NOTIFY,
-            MessageTypes.NOTIFY,
-            MessageTypes.NOTIFY,
-        ]);
+            'journal__text'
+        );
+    });
+
+    it('updates the Smart Over 2 status row instead of appending a row per tick', () => {
+        const journal = Object.create(JournalStore.prototype) as any;
+        journal.active_bot_template_id = 'smart-over-2';
+        journal.unfiltered_messages = [
+            {
+                message: '[Smart Over 2] Status · Normal Over 2 · Entry: WAITING',
+                message_type: MessageTypes.NOTIFY,
+                time: '10:00:00 GMT',
+                unique_id: 'status-row',
+                extra: { botTemplateId: 'smart-over-2' },
+            },
+        ];
+        journal.getServerTime = jest.fn(() => new Date('2026-10-03T10:01:00Z'));
+        journal.pushMessage = jest.fn();
+
+        journal.updateSmartOver2AnalysisMessage('[Smart Over 2] Status · Recovery 2 · Entry: WAITING');
+
+        expect(journal.unfiltered_messages).toHaveLength(1);
+        expect(journal.unfiltered_messages[0]).toEqual(
+            expect.objectContaining({
+                message: '[Smart Over 2] Status · Recovery 2 · Entry: WAITING',
+                unique_id: 'status-row',
+            })
+        );
+        expect(journal.pushMessage).not.toHaveBeenCalled();
     });
 
     it('keeps generated condition banners and Journal rows ordered within each configured tick cadence', async () => {

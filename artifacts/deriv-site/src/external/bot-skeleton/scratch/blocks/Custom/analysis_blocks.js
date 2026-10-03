@@ -4,6 +4,7 @@ import { modifyContextMenu } from '../../utils';
 const generator = () => window.Blockly.JavaScript.javascriptGenerator;
 const numberInput = (block, name, fallback) =>
     generator().valueToCode(block, name, generator().ORDER_ATOMIC) || fallback;
+const smartOver2JournalScope = block => JSON.stringify(block.workspace?.__smartOver2JournalScope ?? null);
 const analysisColours = () => ({
     colour: window.Blockly.Colours.Base.colour,
     colourSecondary: window.Blockly.Colours.Base.colourSecondary,
@@ -327,3 +328,69 @@ registerOutputBlock({
         ];
     },
 });
+
+registerOutputBlock({
+    type: 'smart_over2_recovery_gate',
+    message0: localize('Smart Over 2 recovery gate: last %1 digits; analyze %2 ticks'),
+    args0: [countInput('COUNT', '4'), countInput('ANALYSIS_COUNT', '100')],
+    inputsInline: false,
+    output: 'Boolean',
+    tooltip:
+        'Runs normal Over 2 entry rules, then the staged Over 4 recovery gates and a recent-digit comparison for Recovery 3.',
+    meta: 'Smart Over 2 Recovery Gate',
+    generatorCode: block => [
+        `Bot.checkSmartOver2Recovery(${numberInput(block, 'COUNT', '4')}, ` +
+            `${numberInput(block, 'ANALYSIS_COUNT', '100')}, ${smartOver2JournalScope(block)})`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
+});
+
+window.Blockly.Blocks.smart_over2_recovery_purchase = {
+    init() {
+        this.jsonInit({
+            message0: localize('Smart Over 2: buy the selected entry or recovery contract'),
+            previousStatement: null,
+            ...analysisColours(),
+            tooltip: localize('Buys Over 2 normally, or the Over/Under 4 contract selected by the recovery gate.'),
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+        this.setNextStatement(false);
+    },
+    meta() {
+        return {
+            display_name: localize('Smart Over 2 recovery purchase'),
+            description: localize('Places the contract selected by the Smart Over 2 recovery gate.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_recovery_purchase = block =>
+    `Bot.purchaseSmartOver2Recovery(${smartOver2JournalScope(block)});\n`;
+
+window.Blockly.Blocks.smart_over2_recovery_settlement = {
+    init() {
+        this.jsonInit({
+            message0: localize('Smart Over 2: record the result and advance recovery'),
+            previousStatement: 'TradeAgain',
+            nextStatement: 'TradeAgain',
+            ...analysisColours(),
+            tooltip: localize('Records the settled result, resets to Over 2 after a recovery win, or stops after a Recovery 3 loss.'),
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Smart Over 2 recovery settlement'),
+            description: localize('Updates the recovery stage using the final result of the last contract.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_recovery_settlement = block =>
+    `Bot.completeSmartOver2Recovery(${smartOver2JournalScope(block)});\n`;

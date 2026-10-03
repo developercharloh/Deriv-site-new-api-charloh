@@ -197,6 +197,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             ['CALL', 'PUT'].includes(this.volatilitySelectionLock?.signal);
         const isNewBotSession = !this.hasStarted;
         this.hasStarted = true;
+        if (isNewBotSession) this.smartOver2RecoveryState = null;
         if (isNewBotSession) this.resetVolatilitySelection?.();
         if (isNewBotSession) this.store.dispatch(resetFastReady());
         if (isNewBotSession && this.isBinaryMatrixWorkspace()) {
