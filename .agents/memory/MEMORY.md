@@ -1,4 +1,4 @@
-- [Vercel deployment via CLI prebuilt](vercel-deploy-approach.md) — avoid the force-push helper; REST deploys need the linked project and explicit production aliases
+- [Vercel deployment via CLI prebuilt](vercel-deploy-approach.md) — check the pnpm dlx cache before REST fallback; REST deploys need explicit production aliases
 - [Deriv-site Tabs id stripping](deriv-site-tabs-scroll.md) — custom Tabs component drops the wrapper div's `id`, so id-based mobile scroll/height CSS silently no-ops.
 - [Deriv-site AI orb testing quirks](deriv-site-ai-orb-testing.md) — floating orb has a perpetual bounce animation that breaks Playwright's normal click; live bot runs always hit a login gate unrelated to the feature under test.
 - [Deriv-site verification](deriv-site-verification.md) — Rsbuild workflow/build is the reliable app check; package-level typecheck currently includes unrelated dependency gaps.

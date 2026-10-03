@@ -91,11 +91,11 @@ The `/v2/files` upload must use `POST` with `Content-Type: application/octet-str
 
 ## Cached CLI fallback
 
-When downloading the Vercel CLI is blocked by the package firewall, an already-populated pnpm dlx cache may still contain a runnable CLI bundle. Running its local `dist/index.js` preserves the normal prebuilt differential upload behavior and can avoid a manual REST implementation.
+When downloading the latest Vercel CLI is blocked by the package firewall, an already-populated pnpm dlx cache may still contain a runnable CLI bundle. Invoke its local `dist/index.js` directly with Node; this preserves normal prebuilt differential upload behavior and can avoid manual REST deployment. The workspace pnpm version does not support `pnpm dlx --offline`.
 
-**Why:** The deployment retry succeeded from the cached CLI after a fresh `npx` download was rejected by the package firewall.
+**Why:** A fresh CLI install can partially download and then fail on a firewall-blocked transitive dependency, while a cached CLI remains runnable and can publish successfully.
 
-**How to apply:** Search the pnpm dlx cache for the cached `node_modules/vercel` package and invoke its `dist/index.js` with Node from the artifact directory, supplying `VERCEL_ORG_ID` from `.vercel/project.json` and keeping `--prebuilt` enabled. After every build, explicitly sync `dist` into `.vercel/output/static` before uploading and verify a changed asset on the public domain, or the deployment can serve stale or missing files even when the source build is current.
+**How to apply:** Search the pnpm dlx cache for `node_modules/vercel/dist/index.js` and invoke it with Node from the artifact directory, supplying `VERCEL_ORG_ID` from `.vercel/project.json` and keeping `--prebuilt` enabled. After every build, sync `dist` into `.vercel/output/static`; then verify the live HTML and both entry and feature-specific JS assets against the local build.
 ## Upload quota constraint
 
 The Vercel REST upload endpoint can exhaust an account-wide 5,000-file quota even when a later deployment needs only a few changed files. Once exhausted, both full and differential prebuilt publishes are rejected until the quota reset.
