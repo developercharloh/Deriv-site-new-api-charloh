@@ -442,8 +442,8 @@ export default Engine =>
             if (state.stage === 1) {
                 state.pendingPurchase ??= {
                     stage: 1,
-                    contractType: 'DIGITOVER',
-                    prediction: 4,
+                    contractType: 'DIGITUNDER',
+                    prediction: 5,
                     journalScope,
                 };
                 if (journalScope) state.pendingPurchase.journalScope = journalScope;
@@ -452,7 +452,7 @@ export default Engine =>
                     'status',
                     `[Smart Over 2] Status · Recovery 1 · Market: ` +
                         `${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'} · ` +
-                        'Over 4 is ready on the next available purchase tick; no last-X gate.',
+                        'Under 5 is ready on the next available purchase tick; no last-X gate.',
                     { stage: 1, conditionStatus: 'READY', digits: [] }
                 );
                 return Promise.resolve(true);
@@ -690,7 +690,7 @@ export default Engine =>
                 this.emitSmartOver2RecoveryEvent(
                     journalScope,
                     'settlement',
-                    `[Smart Over 2] ${stageLabel} settled ${result}. Starting Recovery 1: Over 4, with no last-X gate.`,
+                    `[Smart Over 2] ${stageLabel} settled ${result}. Starting Recovery 1: Under 5, with no last-X gate.`,
                     { stage: 1, outcome: 'loss', contractId: String(settlementId) }
                 );
                 return false;

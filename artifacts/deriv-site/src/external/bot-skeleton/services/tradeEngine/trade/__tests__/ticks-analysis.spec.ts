@@ -206,18 +206,28 @@ describe('Ticks last-digit analysis events', () => {
         await expect(engine.checkSmartOver2Entry(3)).resolves.toBe(false);
     });
 
-    it('bypasses the digit gate for Recovery 1 and enforces the strict Recovery 2 window', async () => {
+    it('uses Under 5 for ungated Recovery 1 and preserves the strict Recovery 2 window', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
         state.stage = 1;
         engine.getLastDigitList = jest.fn().mockResolvedValue([9, 8, 9]);
+        const emit = jest.spyOn(observer, 'emit');
 
         await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
         expect(engine.getLastDigitList).not.toHaveBeenCalled();
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 4 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
+        expect(emit).toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({
+                event: 'status',
+                stage: 1,
+                message: expect.stringContaining('Under 5 is ready'),
+            })
+        );
+        emit.mockRestore();
 
         state.stage = 2;
         state.pendingPurchase = null;
@@ -255,22 +265,22 @@ describe('Ticks last-digit analysis events', () => {
         );
     });
 
-    it('forces stale Over 2 purchase calls to use the queued Over 4 recovery order', () => {
+    it('forces stale Over 2 purchase calls to use the queued Under 5 recovery order', () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
         state.stage = 1;
         state.pendingPurchase = {
             stage: 1,
-            contractType: 'DIGITOVER',
-            prediction: 4,
+            contractType: 'DIGITUNDER',
+            prediction: 5,
             journalScope: 'smart-over-2',
         };
 
         expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITOVER', 2)).toEqual({
             blocked: false,
-            contractType: 'DIGITOVER',
-            prediction: 4,
+            contractType: 'DIGITUNDER',
+            prediction: 5,
             order: state.pendingPurchase,
         });
 
@@ -311,15 +321,15 @@ describe('Ticks last-digit analysis events', () => {
         state.stage = 1;
         state.pendingPurchase = {
             stage: 1,
-            contractType: 'DIGITOVER',
-            prediction: 4,
+            contractType: 'DIGITUNDER',
+            prediction: 5,
             journalScope: 'smart-over-2',
         };
 
         const order = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
         expect(engine.abortSmartOver2RecoveryPurchase(order)).toBe(true);
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 4 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
         expect(state.purchaseInFlight).toBe(false);
         expect(state.lastPurchasedStage).toBeNull();
@@ -338,13 +348,13 @@ describe('Ticks last-digit analysis events', () => {
         state.stage = 1;
         state.pendingPurchase = {
             stage: 1,
-            contractType: 'DIGITOVER',
-            prediction: 4,
+            contractType: 'DIGITUNDER',
+            prediction: 5,
             journalScope: 'smart-over-2',
         };
 
         const order = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
-        expect(order).toEqual(expect.objectContaining({ stage: 1, prediction: 4 }));
+        expect(order).toEqual(expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 }));
         expect(state.purchaseInFlight).toBe(true);
         expect(state.lastPurchasedStage).toBeNull();
 
@@ -357,9 +367,10 @@ describe('Ticks last-digit analysis events', () => {
             expect.objectContaining({
                 event: 'purchase',
                 stage: 1,
-                prediction: 4,
+                contractType: 'DIGITUNDER',
+                prediction: 5,
                 contractId: '123',
-                message: expect.stringContaining('purchased Over 4'),
+                message: expect.stringContaining('purchased Under 5'),
             })
         );
         emit.mockRestore();

@@ -7,6 +7,6 @@ The queued Smart Over 2 order must be authoritative at the shared purchase bound
 
 Only report a purchase in the Journal after the broker returns an accepted `buy` response. Until then, keep the pending order and do not mark its stage as purchased. When a dynamic prediction changes, refresh proposals and select only a proposal matching that prediction.
 
-**Why:** The user provided evidence that the Journal described Recovery 1 Over 4 while purchase mapping and transaction records showed Over 2. A strategy's intended order is not proof of the contract actually sent.
+**Why:** The user reported that the Journal described Recovery 1 Over 4 while purchase mapping and transaction records showed Over 2. They then specified Under 5 for Recovery 1 after a normal Over 2 loss, while asking to preserve Recovery 2, Recovery 3, and the transparency report.
 
-**How to apply:** For Smart Over 2 changes, test stale standard Purchase calls against queued recovery orders, proposal refresh and prediction matching, failed or delayed buys retaining the order, and successful buys logging the accepted barrier. Preserve Recovery 3 behavior and the transparency report unless explicitly asked to change them.
+**How to apply:** Recovery 1 after a normal Over 2 loss is Under 5 with no last-X gate. Keep Recovery 2's last-X-below-4 gate followed by Over 4 and Recovery 3's Over 4/Under 4 analysis unchanged unless the user requests otherwise. For purchase changes, test stale standard Purchase calls against queued orders, proposal refresh and prediction matching, failed or delayed buys retaining the order, and successful buys logging the accepted barrier.
