@@ -297,3 +297,17 @@ registerOutputBlock({
     meta: 'Nth Last Digit',
     generatorCode: block => [`Bot.getNthLastDigit(${numberInput(block, 'N', '3')})`, generator().ORDER_FUNCTION_CALL],
 });
+
+registerOutputBlock({
+    type: 'smart_over2_entry_gate',
+    message0: localize('Smart Over 2 entry: last %1 digits in 3–7'),
+    args0: [countInput('COUNT', '4')],
+    output: 'Boolean',
+    tooltip:
+        'Allows a Digit Over 2 entry only when every digit in the selected window is 3–7. Skips when the latest three digits are all 7–9 or all 0–2.',
+    meta: 'Smart Over 2 Entry Gate',
+    generatorCode: block => [
+        `Bot.checkSmartOver2Entry(${numberInput(block, 'COUNT', '4')})`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
+});

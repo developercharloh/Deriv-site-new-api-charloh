@@ -69,6 +69,36 @@ describe('Ticks last-digit analysis events', () => {
         emit.mockRestore();
     });
 
+    it('allows Smart Over 2 only when the full selected window is 3–7', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.getLastDigitList = jest.fn().mockResolvedValue([1, 2, 3, 5, 6]);
+
+        await expect(engine.checkSmartOver2Entry(3)).resolves.toBe(true);
+        await expect(engine.checkSmartOver2Entry(5)).resolves.toBe(false);
+    });
+
+    it.each([
+        [[3, 7, 7, 7], 4, 'all 7s even though they satisfy the entry range'],
+        [[4, 8, 8, 9], 1, 'an all-high latest-three skip even when the entry window is shorter'],
+        [[7, 0, 1, 2], 1, 'an all-low latest-three skip even when the entry window is shorter'],
+    ])('overrides entry eligibility for %s (%s)', async (digits, count) => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.getLastDigitList = jest.fn().mockResolvedValue(digits);
+
+        await expect(engine.checkSmartOver2Entry(count)).resolves.toBe(false);
+    });
+
+    it('does not allow Smart Over 2 until both windows have enough digits', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.getLastDigitList = jest.fn().mockResolvedValue([3, 4]);
+
+        await expect(engine.checkSmartOver2Entry(1)).resolves.toBe(false);
+        await expect(engine.checkSmartOver2Entry(3)).resolves.toBe(false);
+    });
+
     it('waits for a new broker tick before evaluating a requested re-analysis', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

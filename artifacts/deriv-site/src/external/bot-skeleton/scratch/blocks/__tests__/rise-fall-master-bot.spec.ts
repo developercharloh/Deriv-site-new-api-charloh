@@ -183,6 +183,53 @@ describe('Rise/Fall Master Bot XML', () => {
             });
     };
 
+    it('imports Smart Over 2 and generates the gated Digit Over 2 purchase', () => {
+        const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Smart_Over_2_Bot.xml');
+        const xmlText = fs.readFileSync(xmlPath, 'utf8');
+        const sourceDom = Blockly.utils.xml.textToDom(xmlText);
+        const importDom = removeDependentFields(sourceDom);
+
+        const workspace = new Blockly.Workspace();
+        window.Blockly.derivWorkspace = workspace;
+        expect(() => Blockly.Xml.domToWorkspace(importDom, workspace)).not.toThrow();
+
+        const marketBlock = workspace.getBlockById('smart_over2_market');
+        const tradeTypeBlock = workspace.getBlockById('smart_over2_trade_type');
+        const contractTypeBlock = workspace.getBlockById('smart_over2_contract_type');
+        const durationBlock = workspace.getBlockById('smart_over2_trade_options');
+        const purchaseBlock = workspace.getBlockById('smart_over2_purchase');
+        expect(marketBlock).toBeDefined();
+        expect(tradeTypeBlock).toBeDefined();
+        expect(contractTypeBlock).toBeDefined();
+        expect(durationBlock).toBeDefined();
+        expect(purchaseBlock).toBeDefined();
+
+        setDropdownOptions(marketBlock, 'MARKET_LIST', [['Synthetic Indices', 'synthetic_index']], 'synthetic_index');
+        setDropdownOptions(marketBlock, 'SUBMARKET_LIST', [['Random Indices', 'random_index']], 'random_index');
+        setDropdownOptions(marketBlock, 'SYMBOL_LIST', [['Volatility 50 (1s)', '1HZ50V']], '1HZ50V');
+        setDropdownOptions(tradeTypeBlock, 'TRADETYPECAT_LIST', [['Digits', 'digits']], 'digits');
+        setDropdownOptions(tradeTypeBlock, 'TRADETYPE_LIST', [['Over/Under', 'overunder']], 'overunder');
+        setDropdownOptions(contractTypeBlock, 'TYPE_LIST', [['Both', 'both']], 'both');
+        setDropdownOptions(durationBlock, 'DURATIONTYPE_LIST', [['Ticks', 't']], 't');
+        setDropdownOptions(purchaseBlock, 'PURCHASE_LIST', [['Digit Over', 'DIGITOVER']], 'DIGITOVER');
+
+        const gate = workspace.getBlockById('smart_over2_entry_gate');
+        expect(gate).toBeDefined();
+        expect(gate?.getInputTargetBlock('COUNT')?.getFieldValue('NUM')).toBe(4);
+
+        javascriptGenerator.init(workspace);
+        (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
+        const generated = javascriptGenerator.blockToCode(
+            workspace.getBlockById('smart_over2_before_purchase') as any
+        );
+
+        expect(String(generated)).toContain('Bot.checkSmartOver2Entry(4)');
+        expect(String(generated)).toContain("Bot.purchase('DIGITOVER', 2)");
+        expect(String(generated)).not.toContain('DIGITUNDER');
+
+        workspace.dispose();
+    });
+
     it('imports the master bot without the removed purchase-block gate', () => {
         const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Rise_Fall_Master_Bot.xml');
         const xmlText = fs.readFileSync(xmlPath, 'utf8');

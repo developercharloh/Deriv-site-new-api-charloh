@@ -41,6 +41,7 @@ describe('bot builder toolbox structure', () => {
         expect(analysisLogicsSection).toBeDefined();
         [
             'last_digits_condition',
+            'smart_over2_entry_gate',
             'digit_frequency_analysis',
             'even_odd_percentage',
             'over_under_analysis',

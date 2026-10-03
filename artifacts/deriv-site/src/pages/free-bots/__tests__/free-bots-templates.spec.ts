@@ -36,4 +36,18 @@ describe('Free Bots template catalog', () => {
 
         expect(apexXml).not.toMatch(/journal|v_msg|previous direction|indicator candles|model signal/i);
     });
+
+    it('keeps Smart Over 2 configured for the gated Over 2 contract', () => {
+        const xml = fs.readFileSync(path.join(publicBotsPath, 'Smart_Over_2_Bot.xml'), 'utf8');
+        const document = new DOMParser().parseFromString(xml, 'application/xml');
+
+        expect(document.querySelector('block[type="smart_over2_entry_gate"]')).not.toBeNull();
+        expect(document.querySelector('block[type="smart_over2_entry_gate"] field[name="NUM"]')?.textContent).toBe(
+            '4'
+        );
+        expect(document.querySelector('block[type="apollo_purchase2"] field[name="PURCHASE_LIST"]')?.textContent).toBe(
+            'DIGITOVER'
+        );
+        expect(document.querySelector('block[type="apollo_purchase2"] field[name="NUM"]')?.textContent).toBe('2');
+    });
 });

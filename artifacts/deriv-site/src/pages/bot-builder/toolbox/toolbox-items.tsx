@@ -75,6 +75,13 @@ export const ToolboxItems = () =>
                         </Shadow>
                     </Value>
                 </Block>
+                <Block type='smart_over2_entry_gate'>
+                    <Value name='COUNT'>
+                        <Shadow type='math_number'>
+                            <Field name='NUM'>4</Field>
+                        </Shadow>
+                    </Value>
+                </Block>
                 <Block type='digit_frequency_analysis'>
                     <Field name='FREQUENCY_MODE'>most</Field>
                     <Value name='COUNT'>

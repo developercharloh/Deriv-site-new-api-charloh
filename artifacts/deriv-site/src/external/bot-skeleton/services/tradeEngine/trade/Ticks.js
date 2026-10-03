@@ -282,6 +282,23 @@ export default Engine =>
                 return result;
             });
         }
+        checkSmartOver2Entry(count = 4) {
+            return this.getLastDigitList().then(digits => {
+                const size = Math.max(1, Math.floor(Number(count) || 1));
+                const recent = digits.slice(-size).map(Number);
+                const lastThree = digits.slice(-3).map(Number);
+
+                if (recent.length < size || lastThree.length < 3) {
+                    return false;
+                }
+
+                const skipHighTriple = lastThree.every(digit => digit >= 7 && digit <= 9);
+                const skipLowTriple = lastThree.every(digit => digit >= 0 && digit <= 2);
+                const entryWindowMatches = recent.every(digit => digit >= 3 && digit <= 7);
+
+                return entryWindowMatches && !skipHighTriple && !skipLowTriple;
+            });
+        }
         getAnalysisDigits(count = 1000) {
             const size = Math.max(1, Math.floor(Number(count) || 1000));
             return this.getLastDigitList().then(digits => digits.slice(-size));

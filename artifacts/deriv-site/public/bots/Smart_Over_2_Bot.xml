@@ -1,0 +1,84 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables></variables>
+  <block type="trade_definition" id="smart_over2_trade_definition" deletable="false" x="0" y="0">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="smart_over2_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ50V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="smart_over2_trade_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="smart_over2_contract_type" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="smart_over2_interval" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="smart_over2_restart" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="smart_over2_trade_options">
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="smart_over2_duration">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="smart_over2_stake">
+            <field name="NUM">0.5</field>
+          </shadow>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="smart_over2_prediction">
+            <field name="NUM">2</field>
+          </shadow>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="smart_over2_after_purchase" x="720" y="0">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="trade_again" id="smart_over2_trade_again"></block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="smart_over2_before_purchase" deletable="false" x="0" y="576">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="smart_over2_entry_if">
+        <value name="IF0">
+          <block type="smart_over2_entry_gate" id="smart_over2_entry_gate">
+            <value name="COUNT">
+              <shadow type="math_number" id="smart_over2_lookback">
+                <field name="NUM">4</field>
+              </shadow>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="apollo_purchase2" id="smart_over2_purchase">
+            <field name="PURCHASE_LIST">DIGITOVER</field>
+            <value name="PREDICTION">
+              <shadow type="math_number_positive" id="smart_over2_purchase_prediction">
+                <field name="NUM">2</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>
