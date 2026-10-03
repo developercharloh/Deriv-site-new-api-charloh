@@ -101,6 +101,7 @@ describe('Binary Matrix analysis observer integration', () => {
 
         observer.emit('bot.analysis.smart_over2', {
             market: 'R_25',
+            journalScope: 'rise-fall-master',
             count: 4,
             digits: [3, 4, 5, 6],
             lastThree: [4, 5, 6],
@@ -113,6 +114,20 @@ describe('Binary Matrix analysis observer integration', () => {
         });
         observer.emit('bot.analysis.smart_over2', {
             market: 'R_25',
+            journalScope: 'rise-fall-master',
+            count: 1,
+            digits: [2],
+            lastThree: [0, 1, 2],
+            entryWindowReady: true,
+            entryWindowMatches: false,
+            skipWindowReady: true,
+            skipHighTriple: false,
+            skipLowTriple: true,
+            result: false,
+        });
+        observer.emit('bot.analysis.smart_over2', {
+            market: 'R_25',
+            journalScope: 'smart-over-2',
             count: 1,
             digits: [2],
             lastThree: [0, 1, 2],

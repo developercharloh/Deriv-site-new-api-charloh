@@ -7,6 +7,7 @@ import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
 import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
 import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
+import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig } from './types';
 import './free-bots.scss';
 
@@ -870,6 +871,8 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                 const v2CfgStr = JSON.stringify(v2Cfg);
                 localStorage.setItem(V2_CONFIG_KEY, v2CfgStr);
                 window.dispatchEvent(new StorageEvent('storage', { key: V2_CONFIG_KEY, newValue: v2CfgStr }));
+                setWorkspaceBotTemplateIdentity((window as any).Blockly?.derivWorkspace, bot.id);
+                store.save_modal.updateBotName(bot.name);
                 setStatus('loaded');
                 openBotBuilderTab(dashboard);
                 setTimeout(() => window.dispatchEvent(new CustomEvent('deriv-v2-autostart')), 400);
@@ -906,6 +909,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             Blockly.Events.setGroup(loadEventGroup);
             try {
                 await Blockly.derivWorkspace.asyncClear();
+                setWorkspaceBotTemplateIdentity(Blockly.derivWorkspace, bot.id);
                 const dom = Blockly.utils.xml.textToDom(xmlText);
                 const importedField = (name: string): string | undefined => {
                     const value = dom.querySelector?.(`field[name="${name}"]`)?.textContent?.trim();
@@ -993,6 +997,8 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
              }, 6000);
 
             setStatus('loaded');
+            store.save_modal.updateBotName(bot.name);
+            setWorkspaceBotTemplateIdentity(Blockly.derivWorkspace, bot.id);
 
             // ROOT CAUSE FIX — blank duration/purchase dropdowns:
             // Restore can wait longer than the Builder's initial mobile reveal

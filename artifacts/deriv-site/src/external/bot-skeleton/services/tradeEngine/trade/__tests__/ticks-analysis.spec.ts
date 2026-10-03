@@ -142,13 +142,30 @@ describe('Ticks last-digit analysis events', () => {
         engine.getLastDigitList = jest.fn().mockResolvedValue(digits);
         const emit = jest.spyOn(observer, 'emit');
 
-        await expect(engine.checkSmartOver2Entry(count)).resolves.toBe(expected.result);
+        await expect(engine.checkSmartOver2Entry(count, true)).resolves.toBe(expected.result);
 
         expect(emit).toHaveBeenCalledWith('bot.analysis.smart_over2', {
             market: 'R_25',
             count,
             ...expected,
+            journalScope: 'rise-fall-master',
         });
+        emit.mockRestore();
+    });
+
+    it('does not publish Smart Over 2 Journal diagnostics unless the bot opts in', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.symbol = 'R_25';
+        engine.getLastDigitList = jest.fn().mockResolvedValue([3, 4, 5, 6]);
+        const emit = jest.spyOn(observer, 'emit');
+
+        await expect(engine.checkSmartOver2Entry(4)).resolves.toBe(true);
+
+        expect(emit).not.toHaveBeenCalledWith(
+            'bot.analysis.smart_over2',
+            expect.objectContaining({ journalScope: 'rise-fall-master' })
+        );
         emit.mockRestore();
     });
 

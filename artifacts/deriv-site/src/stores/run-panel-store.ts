@@ -33,6 +33,7 @@ export type TLastDigitsAnalysis = {
 
 export type TSmartOver2Analysis = {
     market: string;
+    journalScope?: string | null;
     count: number;
     digits: number[];
     lastThree: number[];
@@ -1019,6 +1020,8 @@ export default class RunPanelStore {
     };
 
     onSmartOver2Analysis = (analysis: TSmartOver2Analysis) => {
+        if (analysis.journalScope !== 'rise-fall-master') return;
+
         const entryWindowStatus = !analysis.entryWindowReady
             ? `WAITING (need ${analysis.count})`
             : analysis.entryWindowMatches

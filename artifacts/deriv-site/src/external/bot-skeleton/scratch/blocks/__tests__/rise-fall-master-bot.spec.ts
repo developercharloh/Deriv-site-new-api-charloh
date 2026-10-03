@@ -4,6 +4,7 @@ import path from 'path';
 import * as BlocklyNamespace from 'blockly';
 import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
 import DBotStore from '../../dbot-store';
+import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 
 jest.mock('../../utils', () => ({
     modifyContextMenu: jest.fn(),
@@ -221,13 +222,14 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(gate?.getInputTargetBlock('COUNT')?.getFieldValue('NUM')).toBe(4);
         expect(gate?.toString()).toContain('0–2');
 
+        setWorkspaceBotTemplateIdentity(workspace, 'rise-fall-master');
         javascriptGenerator.init(workspace);
         (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
         const generated = javascriptGenerator.blockToCode(
             workspace.getBlockById('smart_over2_before_purchase') as any
         );
 
-        expect(String(generated)).toContain('Bot.checkSmartOver2Entry(4)');
+        expect(String(generated)).toContain('Bot.checkSmartOver2Entry(4, true)');
         expect(String(generated)).toContain("Bot.purchase('DIGITOVER', 2)");
         expect(String(generated)).not.toContain('DIGITUNDER');
 

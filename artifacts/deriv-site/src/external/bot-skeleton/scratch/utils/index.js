@@ -12,6 +12,7 @@ import BlockConversion from '../backward-compatibility';
 import DBotStore from '../dbot-store';
 import ApiHelpers from '../../services/api/api-helpers';
 import { getContractTypeOptions, saveAs } from '../shared';
+import { setWorkspaceBotTemplateIdentity } from '../../../../utils/bot-template-scope';
 
 export const inject_workspace_options = {
     // Getter (not a literal) so the public-path prefix is read when the options are spread
@@ -439,6 +440,7 @@ export const load = async ({
         }
 
         await restoreDropdownSelections(workspace, saved_dropdown_selections);
+        setWorkspaceBotTemplateIdentity(workspace, file_name);
 
         // Set user disabled state on all disabled blocks. This ensures we don't change the disabled
         // state through code, which was implemented for user experience.

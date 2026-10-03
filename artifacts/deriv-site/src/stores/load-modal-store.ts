@@ -20,6 +20,7 @@ import {
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { TStores } from '@deriv/stores/types';
 import { localize } from '@deriv-com/translations';
+import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import { TStrategy } from 'Types';
 /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
 /* [/AI] */
@@ -291,6 +292,7 @@ export default class LoadModalStore {
         if (workspace) {
             window.Blockly.derivWorkspace.asyncClear();
             window.Blockly.Xml.domToWorkspace(window.Blockly.utils.xml.textToDom(workspace.cached_xml.main), workspace);
+            setWorkspaceBotTemplateIdentity(workspace, this.root_store.save_modal.bot_name);
             window.Blockly.derivWorkspace.strategy_to_load = workspace.cached_xml.main;
             scheduleWorkspaceReveal(workspace);
         }
@@ -335,6 +337,10 @@ export default class LoadModalStore {
             window.Blockly.Xml.domToWorkspace(
                 window.Blockly.utils.xml.textToDom(window.Blockly.derivWorkspace.strategy_to_load),
                 window.Blockly.derivWorkspace
+            );
+            setWorkspaceBotTemplateIdentity(
+                window.Blockly.derivWorkspace,
+                this.root_store.save_modal.bot_name
             );
             scheduleWorkspaceReveal(window.Blockly.derivWorkspace);
             this.is_open_button_loading = false;

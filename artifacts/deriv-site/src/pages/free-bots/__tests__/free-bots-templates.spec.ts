@@ -42,6 +42,11 @@ describe('Free Bots template catalog', () => {
         const document = new DOMParser().parseFromString(xml, 'application/xml');
 
         expect(document.querySelector('block[type="smart_over2_entry_gate"]')).not.toBeNull();
+        expect(
+            document.querySelector(
+                'block[type="smart_over2_entry_gate"] value[name="COUNT"] shadow[type="math_number"]'
+            )
+        ).not.toBeNull();
         expect(document.querySelector('block[type="smart_over2_entry_gate"] field[name="NUM"]')?.textContent).toBe(
             '4'
         );
@@ -49,5 +54,14 @@ describe('Free Bots template catalog', () => {
             'DIGITOVER'
         );
         expect(document.querySelector('block[type="apollo_purchase2"] field[name="NUM"]')?.textContent).toBe('2');
+    });
+
+    it('does not place the Smart Over 2 gate in other free-bot templates', () => {
+        const templatesWithGate = readCatalogXmlPaths().filter(xmlPath => {
+            const templatePath = path.join(publicBotsPath, xmlPath.slice('/bots/'.length));
+            return fs.readFileSync(templatePath, 'utf8').includes('type="smart_over2_entry_gate"');
+        });
+
+        expect(templatesWithGate).toEqual(['/bots/Smart_Over_2_Bot.xml']);
     });
 });

@@ -282,7 +282,7 @@ export default Engine =>
                 return result;
             });
         }
-        checkSmartOver2Entry(count = 4) {
+        checkSmartOver2Entry(count = 4, reportToJournal = false) {
             return this.getLastDigitList().then(digits => {
                 const size = Math.max(1, Math.floor(Number(count) || 1));
                 const recent = digits.slice(-size).map(Number);
@@ -302,18 +302,21 @@ export default Engine =>
                     !skipHighTriple &&
                     !skipLowTriple;
 
-                globalObserver.emit('bot.analysis.smart_over2', {
-                    market: this.symbol || 'N/A',
-                    count: size,
-                    digits: recent,
-                    lastThree,
-                    entryWindowReady,
-                    entryWindowMatches,
-                    skipWindowReady,
-                    skipHighTriple,
-                    skipLowTriple,
-                    result,
-                });
+                if (reportToJournal) {
+                    globalObserver.emit('bot.analysis.smart_over2', {
+                        market: this.symbol || 'N/A',
+                        count: size,
+                        digits: recent,
+                        lastThree,
+                        entryWindowReady,
+                        entryWindowMatches,
+                        skipWindowReady,
+                        skipHighTriple,
+                        skipLowTriple,
+                        result,
+                        journalScope: 'rise-fall-master',
+                    });
+                }
 
                 return result;
             });

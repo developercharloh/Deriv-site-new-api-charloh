@@ -1,5 +1,6 @@
 import * as BlocklyNamespace from 'blockly';
 import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
+import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 
 jest.mock('../../utils', () => ({
     modifyContextMenu: jest.fn(),
@@ -47,7 +48,17 @@ describe('Smart Over 2 Blockly entry gate', () => {
         const code = Array.isArray(generated) ? generated[0] : generated;
 
         expect(gate.isEnabled()).toBe(true);
-        expect(code).toBe('Bot.checkSmartOver2Entry(6)');
+        expect(code).toBe('Bot.checkSmartOver2Entry(6, false)');
+
+        setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2');
+        const otherBotGenerated = javascriptGenerator.blockToCode(gate);
+        const otherBotCode = Array.isArray(otherBotGenerated) ? otherBotGenerated[0] : otherBotGenerated;
+        expect(otherBotCode).toBe('Bot.checkSmartOver2Entry(6, false)');
+
+        setWorkspaceBotTemplateIdentity(workspace, 'Rise_Fall_Master_Bot');
+        const riseFallGenerated = javascriptGenerator.blockToCode(gate);
+        const riseFallCode = Array.isArray(riseFallGenerated) ? riseFallGenerated[0] : riseFallGenerated;
+        expect(riseFallCode).toBe('Bot.checkSmartOver2Entry(6, true)');
 
         workspace.dispose();
     });

@@ -12,6 +12,7 @@ import {
     saveWorkspaceToRecent,
 } from '@/external/bot-skeleton';
 import { localize } from '@deriv-com/translations';
+import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import { TStrategy } from 'Types';
 import RootStore from './root-store';
 
@@ -163,6 +164,7 @@ export default class SaveModalStore implements ISaveModalStore {
         }
 
         this.updateBotName(bot_name);
+        setWorkspaceBotTemplateIdentity(window.Blockly?.derivWorkspace, bot_name);
 
         if (active_tab === 0) {
             const workspace_id = selected_strategy.id ?? Blockly?.utils?.genUid();
