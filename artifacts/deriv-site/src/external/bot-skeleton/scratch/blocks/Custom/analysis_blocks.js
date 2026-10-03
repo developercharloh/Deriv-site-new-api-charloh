@@ -10,12 +10,23 @@ const analysisColours = () => ({
     colourTertiary: window.Blockly.Colours.Base.colourTertiary,
 });
 
-const registerOutputBlock = ({ type, message0, args0 = [], output = 'Number', tooltip, generatorCode, meta }) => {
+const registerOutputBlock = ({
+    type,
+    message0,
+    args0 = [],
+    message1,
+    args1 = [],
+    output = 'Number',
+    tooltip,
+    generatorCode,
+    meta,
+}) => {
     window.Blockly.Blocks[type] = {
         init() {
             this.jsonInit({
                 message0,
                 args0,
+                ...(message1 ? { message1, args1 } : {}),
                 output,
                 outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
                 ...analysisColours(),
@@ -300,11 +311,11 @@ registerOutputBlock({
 
 registerOutputBlock({
     type: 'smart_over2_entry_gate',
-    message0: localize('Smart Over 2 entry: last %1 digits in 3–7'),
+    message0: localize('Smart Over 2: last %1 digits must be 3–7'),
     args0: [countInput('COUNT', '4')],
+    message1: localize('Skip if last 3 are all 7–9 or all 0–2'),
     output: 'Boolean',
-    tooltip:
-        'Allows a Digit Over 2 entry only when every digit in the selected window is 3–7. Skips when the latest three digits are all 7–9 or all 0–2.',
+    tooltip: 'Allows Digit Over 2 only when the last X digits are 3–7 inclusive; skips if the latest three are all 7–9 or all 0–2.',
     meta: 'Smart Over 2 Entry Gate',
     generatorCode: block => [
         `Bot.checkSmartOver2Entry(${numberInput(block, 'COUNT', '4')})`,

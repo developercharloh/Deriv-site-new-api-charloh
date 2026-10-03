@@ -3,6 +3,7 @@ import path from 'path';
 
 import * as BlocklyNamespace from 'blockly';
 import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
+import DBotStore from '../../dbot-store';
 
 jest.mock('../../utils', () => ({
     modifyContextMenu: jest.fn(),
@@ -198,11 +199,13 @@ describe('Rise/Fall Master Bot XML', () => {
         const contractTypeBlock = workspace.getBlockById('smart_over2_contract_type');
         const durationBlock = workspace.getBlockById('smart_over2_trade_options');
         const purchaseBlock = workspace.getBlockById('smart_over2_purchase');
+        const restartOnErrorBlock = workspace.getBlockById('smart_over2_restart_on_error');
         expect(marketBlock).toBeDefined();
         expect(tradeTypeBlock).toBeDefined();
         expect(contractTypeBlock).toBeDefined();
         expect(durationBlock).toBeDefined();
         expect(purchaseBlock).toBeDefined();
+        expect(restartOnErrorBlock?.getFieldValue('RESTARTONERROR')).toBe('TRUE');
 
         setDropdownOptions(marketBlock, 'MARKET_LIST', [['Synthetic Indices', 'synthetic_index']], 'synthetic_index');
         setDropdownOptions(marketBlock, 'SUBMARKET_LIST', [['Random Indices', 'random_index']], 'random_index');
@@ -216,6 +219,7 @@ describe('Rise/Fall Master Bot XML', () => {
         const gate = workspace.getBlockById('smart_over2_entry_gate');
         expect(gate).toBeDefined();
         expect(gate?.getInputTargetBlock('COUNT')?.getFieldValue('NUM')).toBe(4);
+        expect(gate?.toString()).toContain('0–2');
 
         javascriptGenerator.init(workspace);
         (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
@@ -226,6 +230,37 @@ describe('Rise/Fall Master Bot XML', () => {
         expect(String(generated)).toContain('Bot.checkSmartOver2Entry(4)');
         expect(String(generated)).toContain("Bot.purchase('DIGITOVER', 2)");
         expect(String(generated)).not.toContain('DIGITUNDER');
+
+        const previousStore = (DBotStore as any).singleton;
+        (DBotStore as any).singleton = {
+            client: { is_logged_in: true, loginid: 'CR_TEST', currency: 'USD' },
+        };
+        const statementToCode = jest
+            .spyOn(javascriptGenerator as any, 'statementToCode')
+            .mockReturnValue('');
+        try {
+            const tradeDefinitionGenerator = (javascriptGenerator as any).forBlock.trade_definition;
+            const tradeDefinitionBlock = {
+                id: 'legacy-smart-over2-trade-definition',
+                getChildByType: (type: string) => {
+                    const fields: Record<string, Record<string, string>> = {
+                        trade_definition_market: { SYMBOL_LIST: '1HZ50V' },
+                        trade_definition_tradetype: { TRADETYPE_LIST: 'overunder' },
+                        trade_definition_contracttype: { TYPE_LIST: 'DIGITOVER' },
+                        trade_definition_candleinterval: { CANDLEINTERVAL_LIST: '60' },
+                        trade_definition_restartbuysell: { TIME_MACHINE_ENABLED: 'FALSE' },
+                    };
+                    return fields[type]
+                        ? { getFieldValue: (fieldName: string) => fields[type][fieldName] }
+                        : undefined;
+                },
+            };
+            const generatedTradeDefinition = tradeDefinitionGenerator(tradeDefinitionBlock);
+            expect(String(generatedTradeDefinition)).toContain('shouldRestartOnError: true');
+        } finally {
+            statementToCode.mockRestore();
+            (DBotStore as any).singleton = previousStore;
+        }
 
         workspace.dispose();
     });

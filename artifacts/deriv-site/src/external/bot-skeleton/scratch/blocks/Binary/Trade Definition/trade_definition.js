@@ -179,8 +179,9 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition = block 
     const trade_type = trade_type_block.getFieldValue('TRADETYPE_LIST');
     const contract_type = contract_type_block.getFieldValue('TYPE_LIST');
     const candle_interval = candle_interval_block.getFieldValue('CANDLEINTERVAL_LIST');
-    const should_restart_on_error = restart_on_error_block.getFieldValue('RESTARTONERROR') !== 'FALSE';
-    const should_restart_on_buy_sell = restart_on_buy_sell_block.getFieldValue('TIME_MACHINE_ENABLED') !== 'FALSE';
+    const should_restart_on_error = restart_on_error_block?.getFieldValue('RESTARTONERROR') !== 'FALSE';
+    const should_restart_on_buy_sell =
+        restart_on_buy_sell_block?.getFieldValue('TIME_MACHINE_ENABLED') !== 'FALSE';
 
     const { opposites } = config();
     const contract_type_list =

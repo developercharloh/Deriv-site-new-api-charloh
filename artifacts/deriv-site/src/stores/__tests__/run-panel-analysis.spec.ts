@@ -28,6 +28,7 @@ describe('Binary Matrix analysis observer integration', () => {
 
     afterEach(() => {
         observer.unregisterAll('bot.analysis.condition');
+        observer.unregisterAll('bot.analysis.smart_over2');
         api_base.api = null;
     });
 
@@ -79,6 +80,65 @@ describe('Binary Matrix analysis observer integration', () => {
             [expect.stringContaining('Result: ❌ CONDITIONS NOT MET'), MessageTypes.NOTIFY],
             [expect.stringContaining('Result: ❌ CONDITIONS NOT MET'), MessageTypes.NOTIFY],
             [expect.stringContaining('Result: ✅ CONDITIONS MET'), MessageTypes.NOTIFY],
+        ]);
+    });
+
+    it('journals the last digits, entry window, both skip rules, and final Smart Over 2 decision', () => {
+        const journal = {
+            pushMessage: jest.fn(),
+        };
+        const rootStore = {
+            dbot: {},
+            journal,
+        };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+        runPanel.onMount();
+
+        observer.emit('bot.analysis.smart_over2', {
+            market: 'R_25',
+            count: 4,
+            digits: [3, 4, 5, 6],
+            lastThree: [4, 5, 6],
+            entryWindowReady: true,
+            entryWindowMatches: true,
+            skipWindowReady: true,
+            skipHighTriple: false,
+            skipLowTriple: false,
+            result: true,
+        });
+        observer.emit('bot.analysis.smart_over2', {
+            market: 'R_25',
+            count: 1,
+            digits: [2],
+            lastThree: [0, 1, 2],
+            entryWindowReady: true,
+            entryWindowMatches: false,
+            skipWindowReady: true,
+            skipHighTriple: false,
+            skipLowTriple: true,
+            result: false,
+        });
+
+        const messages = journal.pushMessage.mock.calls.map(([message]) => message);
+        expect(messages).toHaveLength(2);
+        expect(messages[0]).toContain('Last 4: [3, 4, 5, 6]');
+        expect(messages[0]).toContain('3–7 window: MET');
+        expect(messages[0]).toContain('all 7–9: NO');
+        expect(messages[0]).toContain('all 0–2: NO');
+        expect(messages[0]).toContain('Entry: ALLOWED');
+        expect(messages[1]).toContain('Last 1: [2]');
+        expect(messages[1]).toContain('3–7 window: NOT MET');
+        expect(messages[1]).toContain('all 7–9: NO');
+        expect(messages[1]).toContain('all 0–2: MATCH — SKIP');
+        expect(messages[1]).toContain('Entry: BLOCKED');
+        expect(journal.pushMessage.mock.calls.map(([, type]) => type)).toEqual([
+            MessageTypes.NOTIFY,
+            MessageTypes.NOTIFY,
         ]);
     });
 

@@ -287,16 +287,35 @@ export default Engine =>
                 const size = Math.max(1, Math.floor(Number(count) || 1));
                 const recent = digits.slice(-size).map(Number);
                 const lastThree = digits.slice(-3).map(Number);
+                const entryWindowReady = recent.length >= size;
+                const skipWindowReady = lastThree.length >= 3;
+                const entryWindowMatches =
+                    entryWindowReady && recent.every(digit => digit >= 3 && digit <= 7);
+                const skipHighTriple =
+                    skipWindowReady && lastThree.every(digit => digit >= 7 && digit <= 9);
+                const skipLowTriple =
+                    skipWindowReady && lastThree.every(digit => digit >= 0 && digit <= 2);
+                const result =
+                    entryWindowReady &&
+                    skipWindowReady &&
+                    entryWindowMatches &&
+                    !skipHighTriple &&
+                    !skipLowTriple;
 
-                if (recent.length < size || lastThree.length < 3) {
-                    return false;
-                }
+                globalObserver.emit('bot.analysis.smart_over2', {
+                    market: this.symbol || 'N/A',
+                    count: size,
+                    digits: recent,
+                    lastThree,
+                    entryWindowReady,
+                    entryWindowMatches,
+                    skipWindowReady,
+                    skipHighTriple,
+                    skipLowTriple,
+                    result,
+                });
 
-                const skipHighTriple = lastThree.every(digit => digit >= 7 && digit <= 9);
-                const skipLowTriple = lastThree.every(digit => digit >= 0 && digit <= 2);
-                const entryWindowMatches = recent.every(digit => digit >= 3 && digit <= 7);
-
-                return entryWindowMatches && !skipHighTriple && !skipLowTriple;
+                return result;
             });
         }
         getAnalysisDigits(count = 1000) {

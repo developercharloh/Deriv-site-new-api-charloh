@@ -31,6 +31,19 @@ export type TLastDigitsAnalysis = {
     purchaseMapping?: string | null;
 };
 
+export type TSmartOver2Analysis = {
+    market: string;
+    count: number;
+    digits: number[];
+    lastThree: number[];
+    entryWindowReady: boolean;
+    entryWindowMatches: boolean;
+    skipWindowReady: boolean;
+    skipHighTriple: boolean;
+    skipLowTriple: boolean;
+    result: boolean;
+};
+
 export type TParityAnalysis = {
     market: string;
     count: number;
@@ -116,6 +129,7 @@ export default class RunPanelStore {
             onBotContractEvent: action,
             onError: action,
             onLastDigitsAnalysis: action.bound,
+            onSmartOver2Analysis: action.bound,
             onParityAnalysis: action.bound,
              onPurchaseMapping: action.bound,
              onAdaptiveMomentumJournalLog: action.bound,
@@ -1004,6 +1018,33 @@ export default class RunPanelStore {
         );
     };
 
+    onSmartOver2Analysis = (analysis: TSmartOver2Analysis) => {
+        const entryWindowStatus = !analysis.entryWindowReady
+            ? `WAITING (need ${analysis.count})`
+            : analysis.entryWindowMatches
+              ? 'MET'
+              : 'NOT MET';
+        const highSkipStatus = !analysis.skipWindowReady
+            ? 'WAITING (need 3)'
+            : analysis.skipHighTriple
+              ? 'MATCH — SKIP'
+              : 'NO';
+        const lowSkipStatus = !analysis.skipWindowReady
+            ? 'WAITING (need 3)'
+            : analysis.skipLowTriple
+              ? 'MATCH — SKIP'
+              : 'NO';
+        const message =
+            `Smart Over 2 · Market: ${analysis.market || 'N/A'} · ` +
+            `Last ${analysis.count}: [${analysis.digits.join(', ')}] · ` +
+            `3–7 window: ${entryWindowStatus} · ` +
+            `Latest 3 [${analysis.lastThree.join(', ')}] · ` +
+            `all 7–9: ${highSkipStatus} · all 0–2: ${lowSkipStatus} · ` +
+            `Entry: ${analysis.result ? 'ALLOWED' : 'BLOCKED'}`;
+
+        this.root_store.journal.pushMessage(message, MessageTypes.NOTIFY, 'journal__text');
+    };
+
     onParityAnalysis = (analysis: TParityAnalysis) => {
         const previous = this.parity_analysis;
         this.parity_analysis = analysis;
@@ -1550,6 +1591,7 @@ export default class RunPanelStore {
         observer.register('ui.log.notify', journal.onNotify);
         observer.register('ui.log.success', journal.onLogSuccess);
         observer.register('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.register('bot.analysis.smart_over2', this.onSmartOver2Analysis);
         observer.register('bot.analysis.parity', this.onParityAnalysis);
         observer.register('bot.purchase.mapping', this.onPurchaseMapping);
         observer.register('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);
@@ -1574,6 +1616,7 @@ export default class RunPanelStore {
         observer.unregisterAll('ui.log.notify');
         observer.unregisterAll('ui.log.success');
         observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.unregister('bot.analysis.smart_over2', this.onSmartOver2Analysis);
         observer.unregister('bot.analysis.parity', this.onParityAnalysis);
         observer.unregister('bot.purchase.mapping', this.onPurchaseMapping);
         observer.unregister('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);

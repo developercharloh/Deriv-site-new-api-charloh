@@ -19,6 +19,11 @@
                     <next>
                       <block type="trade_definition_restartbuysell" id="smart_over2_restart" deletable="false" movable="false">
                         <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="smart_over2_restart_on_error" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
                       </block>
                     </next>
                   </block>

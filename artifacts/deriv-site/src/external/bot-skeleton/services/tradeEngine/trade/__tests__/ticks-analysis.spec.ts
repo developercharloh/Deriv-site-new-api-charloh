@@ -79,6 +79,80 @@ describe('Ticks last-digit analysis events', () => {
     });
 
     it.each([
+        [
+            [1, 3, 4, 5, 6],
+            4,
+            {
+                digits: [3, 4, 5, 6],
+                lastThree: [4, 5, 6],
+                entryWindowReady: true,
+                entryWindowMatches: true,
+                skipWindowReady: true,
+                skipHighTriple: false,
+                skipLowTriple: false,
+                result: true,
+            },
+        ],
+        [
+            [8, 9, 7],
+            1,
+            {
+                digits: [7],
+                lastThree: [8, 9, 7],
+                entryWindowReady: true,
+                entryWindowMatches: true,
+                skipWindowReady: true,
+                skipHighTriple: true,
+                skipLowTriple: false,
+                result: false,
+            },
+        ],
+        [
+            [8, 0, 1, 2],
+            1,
+            {
+                digits: [2],
+                lastThree: [0, 1, 2],
+                entryWindowReady: true,
+                entryWindowMatches: false,
+                skipWindowReady: true,
+                skipHighTriple: false,
+                skipLowTriple: true,
+                result: false,
+            },
+        ],
+        [
+            [3, 4],
+            4,
+            {
+                digits: [3, 4],
+                lastThree: [3, 4],
+                entryWindowReady: false,
+                entryWindowMatches: false,
+                skipWindowReady: false,
+                skipHighTriple: false,
+                skipLowTriple: false,
+                result: false,
+            },
+        ],
+    ])('publishes the window and each Smart Over 2 rule for %s', async (digits, count, expected) => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.symbol = 'R_25';
+        engine.getLastDigitList = jest.fn().mockResolvedValue(digits);
+        const emit = jest.spyOn(observer, 'emit');
+
+        await expect(engine.checkSmartOver2Entry(count)).resolves.toBe(expected.result);
+
+        expect(emit).toHaveBeenCalledWith('bot.analysis.smart_over2', {
+            market: 'R_25',
+            count,
+            ...expected,
+        });
+        emit.mockRestore();
+    });
+
+    it.each([
         [[3, 7, 7, 7], 4, 'all 7s even though they satisfy the entry range'],
         [[4, 8, 8, 9], 1, 'an all-high latest-three skip even when the entry window is shorter'],
         [[7, 0, 1, 2], 1, 'an all-low latest-three skip even when the entry window is shorter'],
