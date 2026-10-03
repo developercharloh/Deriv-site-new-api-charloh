@@ -1,18 +1,25 @@
 import { config } from '../constants/config';
 
+const PURCHASE_BLOCK_TYPES = ['purchase', 'apollo_purchase2', 'smart_over2_recovery_purchase'];
+
+export const isPurchaseBlockType = blockType => PURCHASE_BLOCK_TYPES.includes(blockType);
+
+export const hasPurchaseBlock = blocks =>
+    Array.isArray(blocks) && blocks.some(block => isPurchaseBlockType(block?.type));
+
+export const getMissingRequiredBlocks = (blocks, requiredBlockTypes) =>
+    requiredBlockTypes.filter(blockType => {
+        if (blockType === 'purchase') {
+            return !hasPurchaseBlock(blocks);
+        }
+        return !blocks.some(block => block.type === blockType);
+    });
+
 export const hasAllRequiredBlocks = () => {
     const blocks_in_workspace = window.Blockly.derivWorkspace.getAllBlocks();
     const { mandatoryMainBlocks } = config();
     const required_block_types = ['trade_definition_tradeoptions', ...mandatoryMainBlocks];
-    const all_block_types = blocks_in_workspace.map(block => block.type);
-    const has_all_required_blocks = required_block_types.every(required_block_type => {
-        if (required_block_type === 'purchase') {
-            return all_block_types.includes('purchase') || all_block_types.includes('apollo_purchase2');
-        }
-        return all_block_types.includes(required_block_type);
-    });
-
-    return has_all_required_blocks;
+    return getMissingRequiredBlocks(blocks_in_workspace, required_block_types).length === 0;
 };
 
 export const onWorkspaceResize = () => {

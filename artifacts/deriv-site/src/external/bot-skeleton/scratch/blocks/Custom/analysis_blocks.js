@@ -17,6 +17,8 @@ const registerOutputBlock = ({
     args0 = [],
     message1,
     args1 = [],
+    message2,
+    args2 = [],
     inputsInline = true,
     output = 'Number',
     tooltip,
@@ -29,6 +31,7 @@ const registerOutputBlock = ({
                 message0,
                 args0,
                 ...(message1 ? { message1, args1 } : {}),
+                ...(message2 ? { message2, args2 } : {}),
                 output,
                 outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
                 ...analysisColours(),
@@ -331,8 +334,11 @@ registerOutputBlock({
 
 registerOutputBlock({
     type: 'smart_over2_recovery_gate',
-    message0: localize('Smart Over 2 recovery gate: last %1 digits; analyze %2 ticks'),
-    args0: [countInput('COUNT', '4'), countInput('ANALYSIS_COUNT', '100')],
+    message0: localize('Smart Over 2 recovery gate'),
+    message1: localize('Last %1 digits'),
+    args1: [countInput('COUNT', '4')],
+    message2: localize('Analyze %1 ticks'),
+    args2: [countInput('ANALYSIS_COUNT', '100')],
     inputsInline: false,
     output: 'Boolean',
     tooltip:

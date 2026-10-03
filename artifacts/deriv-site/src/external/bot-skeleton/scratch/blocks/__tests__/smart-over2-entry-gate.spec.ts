@@ -3,6 +3,7 @@ import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
+import { getMissingRequiredBlocks, hasAllRequiredBlocks } from '@/external/bot-skeleton/utils/workspace';
 
 jest.mock('../../utils', () => ({
     excludeOptionFromContextMenu: jest.fn(),
@@ -102,6 +103,11 @@ describe('Smart Over 2 Blockly entry gate', () => {
         setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2');
 
         const gate = workspace.newBlock('smart_over2_recovery_gate');
+        const lookbackInputIndex = gate.inputList.findIndex(input => input.name === 'COUNT');
+        const analysisInputIndex = gate.inputList.findIndex(input => input.name === 'ANALYSIS_COUNT');
+        expect(gate.getInputsInline()).toBe(false);
+        expect(lookbackInputIndex).toBeGreaterThanOrEqual(0);
+        expect(analysisInputIndex).toBeGreaterThan(lookbackInputIndex);
         const generatedGate = javascriptGenerator.blockToCode(gate);
         expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
             'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2")'
@@ -118,6 +124,31 @@ describe('Smart Over 2 Blockly entry gate', () => {
         );
 
         workspace.dispose();
+    });
+
+    it('accepts the Smart Over 2 recovery purchase as the mandatory Purchase block', () => {
+        const blocks = [
+            { type: 'trade_definition_tradeoptions' },
+            { type: 'trade_definition' },
+            { type: 'before_purchase' },
+            { type: 'smart_over2_recovery_purchase' },
+        ];
+        const requiredBlockTypes = [
+            'trade_definition_tradeoptions',
+            'trade_definition',
+            'purchase',
+            'before_purchase',
+        ];
+
+        expect(getMissingRequiredBlocks(blocks, requiredBlockTypes)).toEqual([]);
+
+        const previousWorkspace = (Blockly as any).derivWorkspace;
+        (Blockly as any).derivWorkspace = { getAllBlocks: () => blocks };
+        try {
+            expect(hasAllRequiredBlocks()).toBe(true);
+        } finally {
+            (Blockly as any).derivWorkspace = previousWorkspace;
+        }
     });
 
     it('uses the recovery blocks without changing the bot duration or stake', () => {

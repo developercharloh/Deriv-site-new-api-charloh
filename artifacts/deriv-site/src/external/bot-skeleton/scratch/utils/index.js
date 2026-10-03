@@ -7,7 +7,11 @@ import { LogTypes } from '../../constants/messages';
 import { error_message_map } from '../../utils/error-config';
 import { saveWorkspaceToRecent } from '../../utils/local-storage';
 import { observer as globalObserver } from '../../utils/observer';
-import { removeLimitedBlocks } from '../../utils/workspace';
+import {
+    getMissingRequiredBlocks,
+    isPurchaseBlockType,
+    removeLimitedBlocks,
+} from '../../utils/workspace';
 import BlockConversion from '../backward-compatibility';
 import DBotStore from '../dbot-store';
 import ApiHelpers from '../../services/api/api-helpers';
@@ -289,7 +293,13 @@ export const validateErrorOnBlockDelete = () => {
     const blockX = blockRect?.left || 0;
     const blockY = blockRect?.top || 0;
     const mandatory_trade_option_block = getSelectedTradeType();
-    const required_block_types = [mandatory_trade_option_block, 'trade_definition', 'purchase', 'before_purchase'];
+    const required_block_types = [
+        mandatory_trade_option_block,
+        'trade_definition',
+        'purchase',
+        'smart_over2_recovery_purchase',
+        'before_purchase',
+    ];
     if (required_block_types?.includes(window.Blockly?.getSelected()?.type)) {
         if (
             blockY >= translate_Y - translate_offset &&
@@ -638,7 +648,10 @@ export const addDomAsBlock = (el_block, parent_block = null) => {
 
 const getAllRequiredBlocks = (workspace, required_block_types) => {
     return workspace.getAllBlocks().filter(block => {
-        if (required_block_types.includes(block.type)) {
+        const is_required_type =
+            required_block_types.includes(block.type) ||
+            (required_block_types.includes('purchase') && isPurchaseBlockType(block.type));
+        if (is_required_type) {
             return (
                 (block.childBlocks_.length === 0 && required_block_types.includes(block.category_)) ||
                 block.parentBlock_ === null
@@ -648,34 +661,41 @@ const getAllRequiredBlocks = (workspace, required_block_types) => {
 };
 
 const getMissingBlocks = (workspace, required_block_types) => {
-    return required_block_types.filter(blockType => {
-        if (blockType === 'purchase') {
-            return !workspace.getAllBlocks().some(block => ['purchase', 'apollo_purchase2'].includes(block.type));
-        }
-        return !workspace.getAllBlocks().some(block => block.type === blockType);
-    });
+    return getMissingRequiredBlocks(workspace.getAllBlocks(), required_block_types);
 };
 
 const getDisabledBlocks = required_blocks_check => {
     const workspace = window.Blockly.derivWorkspace;
     const required_block_types = [getSelectedTradeType(workspace), ...config().mandatoryMainBlocks];
+    const all_blocks = workspace.getAllBlocks();
     const disabled_blocks = Object.fromEntries(
-        workspace
-            .getAllBlocks()
-            .filter(block => required_block_types.includes(block.type))
+        all_blocks
+            .filter(
+                block =>
+                    required_block_types.includes(block.type) ||
+                    (required_block_types.includes('purchase') && isPurchaseBlockType(block.type))
+            )
             .map(block => [block.type, block.disabled])
     );
     const mandatory_blocks = ['before_purchase', 'purchase', 'trade_definition', 'trade_definition_tradeoptions'];
     const has_disabled_blocks = mandatory_blocks.some(type => {
         if (type === 'purchase') {
-            return disabled_blocks.purchase || disabled_blocks.apollo_purchase2;
+            return all_blocks.some(block => isPurchaseBlockType(block.type) && block.disabled);
         }
         return disabled_blocks[type];
     });
 
-    return has_disabled_blocks
-        ? required_blocks_check.filter(block => block.disabled || block.childBlocks_?.some(child => child.disabled))
-        : [];
+    if (!has_disabled_blocks) return [];
+
+    const disabled_required_blocks = required_blocks_check.filter(
+        block => block.disabled || block.childBlocks_?.some(child => child.disabled)
+    );
+    const disabled_purchase_blocks = all_blocks.filter(
+        block =>
+            isPurchaseBlockType(block.type) &&
+            (block.disabled || block.childBlocks_?.some(child => child.disabled))
+    );
+    return [...new Set([...disabled_required_blocks, ...disabled_purchase_blocks])];
 };
 
 const throwNewErrorMessage = (error_blocks, key) => {
