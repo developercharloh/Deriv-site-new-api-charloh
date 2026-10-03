@@ -69,6 +69,12 @@ The current API may return the digest list at `error.missing` inside a 400 `miss
 
 **How to apply:** Resolve missing digests from `response.missing ?? response.error?.missing`; each item may be a digest string or an object with `sha`. Upload only those files, then repost the same manifest.
 
+The current Vercel deployment API accepts uploaded-file references with only `file`, `sha`, and `size`. Adding `contentType` makes the strict schema reject the manifest.
+
+**Why:** A prebuilt REST deployment was rejected with an additional-property validation error even though the digest and size fields were valid; the official OpenAPI schema confirmed the allowed shape.
+
+**How to apply:** Keep the manifest file entries to `file`, `sha`, and `size`; let Vercel infer content types from extensions.
+
 ## Environment note
 The Vercel CLI may be unavailable because Replit's package firewall blocks its transitive `tar` dependency, including older CLI versions. In that case, the REST fallback is validated: upload SHA-1-addressed files to `/v2/files`, then create a production deployment at `/v13/deployments?prebuilt=1` with flat `dist` paths, explicit no-op build settings, and wait for `READY`.
 
