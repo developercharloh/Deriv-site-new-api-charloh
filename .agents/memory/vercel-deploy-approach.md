@@ -57,6 +57,12 @@ The current Vercel OpenAPI schema may omit `alias` from the `/v13/deployments` r
 
 **How to apply:** Prefer the verified inline alias array, then inspect the deployment's aliases. If assigning aliases separately, preserve project-domain redirect settings and confirm the redirect over HTTPS.
 
+The deployment response's `aliasAssigned` flag can be false even when the production domains already serve the new deployment.
+
+**Why:** A READY prebuilt deployment reported `aliasAssigned: false`, but apex, `www`, and the Vercel alias all served HTML and JavaScript matching the new local build.
+
+**How to apply:** Verify each public alias over HTTPS and compare its HTML and relevant bundles to the local build; do not treat `aliasAssigned` alone as proof that aliases are stale.
+
 The current API may return the digest list at `error.missing` inside a 400 `missing_files` response rather than at the top level. Treat that response as the expected handshake and read both shapes.
 
 **Why:** The first prebuilt request intentionally asks Vercel which content-addressed files it does not already have; a parser that only checks top-level `missing` will mistake a normal handshake for a failed publish.
