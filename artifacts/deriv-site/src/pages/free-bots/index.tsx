@@ -9,6 +9,7 @@ import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type Bot
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig, FreeBotSection } from './types';
+import FreeBotCategoryTabs from './FreeBotCategoryTabs';
 import './free-bots.scss';
 
 const V2_CONFIG_KEY = 'free_bots_v2_config';
@@ -423,15 +424,18 @@ const BOTS: BotConfig[] = [
 ];
 
 const FREE_BOT_SECTIONS: { id: FreeBotSection; title: string; emptyMessage?: string }[] = [
-    { id: 'premium', title: 'Premium Bots' },
     { id: 'smart-contract', title: 'Smart Contract Bots' },
+    { id: 'premium', title: 'Premium Bots' },
     { id: 'edging', title: 'Edging Bots', emptyMessage: 'No bots added here yet.' },
 ];
 
-const BOTS_IN_DISPLAY_ORDER = FREE_BOT_SECTIONS.flatMap(section =>
-    BOTS.filter(bot => bot.section === section.id)
-);
-const BOT_ORDINALS = new Map(BOTS_IN_DISPLAY_ORDER.map((bot, index) => [bot.id, index + 1]));
+// Keep the existing catalog numbering stable even though Smart Contract is now the first tab.
+const BOTS_IN_ORDINAL_ORDER = [
+    ...BOTS.filter(bot => bot.section === 'premium'),
+    ...BOTS.filter(bot => bot.section === 'smart-contract'),
+    ...BOTS.filter(bot => bot.section === 'edging'),
+];
+const BOT_ORDINALS = new Map(BOTS_IN_ORDINAL_ORDER.map((bot, index) => [bot.id, index + 1]));
 
 const CARD_ART: Record<string, string> = {
     'binary-matrix-ai': '/assets/free-bots/mega-mind.jpg',
@@ -1136,43 +1140,48 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
 
 const FreeBots = observer(() => {
     const engineMode: EngineMode = 'v1';
+    const [activeSectionId, setActiveSectionId] = useState<FreeBotSection>('smart-contract');
     const sections = FREE_BOT_SECTIONS.map(section => ({
         ...section,
         bots: BOTS.filter(bot => bot.section === section.id),
     }));
+    const activeSection = sections.find(section => section.id === activeSectionId) ?? sections[0];
 
     return (
         <div className='free-bots'>
-            {sections.map(section => (
-                <section
-                    className='free-bots__section'
-                    key={section.id}
-                    aria-labelledby={`free-bots-${section.id}-title`}
-                >
-                    <div className='free-bots__section-heading'>
-                        <h2 className='free-bots__section-title' id={`free-bots-${section.id}-title`}>
-                            {section.title}
-                        </h2>
-                        <span className='free-bots__section-count'>
-                            {section.bots.length} {section.bots.length === 1 ? 'bot' : 'bots'}
-                        </span>
+            <FreeBotCategoryTabs
+                tabs={sections.map(section => ({
+                    id: section.id,
+                    label: section.title,
+                    count: section.bots.length,
+                }))}
+                selectedId={activeSection.id}
+                onSelect={setActiveSectionId}
+            />
+            <section
+                className='free-bots__section'
+                id={`free-bots-panel-${activeSection.id}`}
+                role='tabpanel'
+                aria-labelledby={`free-bots-tab-${activeSection.id}`}
+                tabIndex={0}
+            >
+                {activeSection.bots.length > 0 ? (
+                    <div className='free-bots__grid'>
+                        {activeSection.bots.map(bot => (
+                            <BotCard
+                                key={bot.id}
+                                bot={bot}
+                                engineMode={engineMode}
+                                ordinal={BOT_ORDINALS.get(bot.id) ?? 0}
+                            />
+                        ))}
                     </div>
-                    {section.bots.length > 0 ? (
-                        <div className='free-bots__grid'>
-                            {section.bots.map(bot => (
-                                <BotCard
-                                    key={bot.id}
-                                    bot={bot}
-                                    engineMode={engineMode}
-                                    ordinal={BOT_ORDINALS.get(bot.id) ?? 0}
-                                />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className='free-bots__empty'>{section.emptyMessage ?? 'No bots added here yet.'}</div>
-                    )}
-                </section>
-            ))}
+                ) : (
+                    <div className='free-bots__empty'>
+                        {activeSection.emptyMessage ?? 'No bots added here yet.'}
+                    </div>
+                )}
+            </section>
         </div>
     );
 });

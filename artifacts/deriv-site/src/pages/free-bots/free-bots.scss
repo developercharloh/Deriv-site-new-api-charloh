@@ -109,6 +109,77 @@
         font-weight: 700;
     }
 
+    &__category-tabs {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        margin: 0 0 10px;
+        padding: 5px;
+        border: 1px solid rgba(31, 41, 55, 0.12);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 4px 14px rgba(31, 41, 55, 0.08);
+        backdrop-filter: blur(10px);
+    }
+
+    &__category-tab {
+        display: flex;
+        min-width: 0;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 7px 8px;
+        border: 1px solid transparent;
+        border-radius: 9px;
+        background: transparent;
+        color: #465064;
+        font-size: 0.86rem;
+        font-weight: 750;
+        line-height: 1.15;
+        text-align: center;
+        cursor: pointer;
+        transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+
+        &[aria-selected='true'] {
+            border-color: rgba(255, 255, 255, 0.14);
+            background: linear-gradient(135deg, #4c139c 0%, #661fc3 100%);
+            color: #fff;
+            box-shadow: 0 3px 9px rgba(76, 19, 156, 0.24);
+        }
+
+        &:focus-visible {
+            outline: 3px solid rgba(124, 58, 237, 0.48);
+            outline-offset: 2px;
+        }
+    }
+
+    &__category-label {
+        min-width: 0;
+    }
+
+    &__category-count {
+        display: inline-flex;
+        flex: 0 0 auto;
+        min-width: 19px;
+        height: 19px;
+        align-items: center;
+        justify-content: center;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: rgba(31, 41, 55, 0.08);
+        color: inherit;
+        font-size: 0.72rem;
+        font-weight: 800;
+
+        [aria-selected='true'] & {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    }
+
     &__empty {
         padding: 18px 14px;
         border: 1px dashed rgba(31, 41, 55, 0.22);
