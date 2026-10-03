@@ -1,5 +1,15 @@
 <xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
-  <variables></variables>
+  <variables>
+    <variable id="smart_over2_var_stake">Stake</variable>
+    <variable id="smart_over2_var_martingale">Martingale factor</variable>
+    <variable id="smart_over2_var_max_virtual_losses">Maximum Virtual Hook losses</variable>
+    <variable id="smart_over2_var_virtual_hook">Use Virtual Hook</variable>
+    <variable id="smart_over2_var_target_profit">Target Profit</variable>
+    <variable id="smart_over2_var_stop_loss">Stop Loss</variable>
+    <variable id="smart_over2_var_use_martingale">Use Martingale</variable>
+    <variable id="smart_over2_var_over_prediction">Over prediction (2)</variable>
+    <variable id="smart_over2_var_recovery_prediction">Recovery prediction (5)</variable>
+  </variables>
   <block type="trade_definition" id="smart_over2_trade_definition" deletable="false" x="0" y="0">
     <statement name="TRADE_OPTIONS">
       <block type="trade_definition_market" id="smart_over2_market" deletable="false" movable="false">
@@ -34,6 +44,96 @@
         </next>
       </block>
     </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="smart_over2_set_stake">
+        <field name="VAR" id="smart_over2_var_stake">Stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="smart_over2_stake_default">
+            <field name="NUM">0.5</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="smart_over2_set_martingale">
+            <field name="VAR" id="smart_over2_var_martingale">Martingale factor</field>
+            <value name="VALUE">
+              <block type="math_number" id="smart_over2_martingale_default">
+                <field name="NUM">1.2</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="smart_over2_set_max_virtual_losses">
+                <field name="VAR" id="smart_over2_var_max_virtual_losses">Maximum Virtual Hook losses</field>
+                <value name="VALUE">
+                  <block type="math_number" id="smart_over2_virtual_losses_default">
+                    <field name="NUM">2</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="smart_over2_set_virtual_hook">
+                    <field name="VAR" id="smart_over2_var_virtual_hook">Use Virtual Hook</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="smart_over2_virtual_hook_default">
+                        <field name="BOOL">FALSE</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="smart_over2_set_target_profit">
+                        <field name="VAR" id="smart_over2_var_target_profit">Target Profit</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="smart_over2_target_profit_default">
+                            <field name="NUM">5</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="smart_over2_set_stop_loss">
+                            <field name="VAR" id="smart_over2_var_stop_loss">Stop Loss</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="smart_over2_stop_loss_default">
+                                <field name="NUM">30</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="smart_over2_set_use_martingale">
+                                <field name="VAR" id="smart_over2_var_use_martingale">Use Martingale</field>
+                                <value name="VALUE">
+                                  <block type="logic_boolean" id="smart_over2_use_martingale_default">
+                                    <field name="BOOL">TRUE</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="smart_over2_set_over_prediction">
+                                    <field name="VAR" id="smart_over2_var_over_prediction">Over prediction (2)</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="smart_over2_over_prediction_default">
+                                        <field name="NUM">2</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="smart_over2_set_recovery_prediction">
+                                        <field name="VAR" id="smart_over2_var_recovery_prediction">Recovery prediction (5)</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="smart_over2_recovery_prediction_default">
+                                            <field name="NUM">5</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
     <statement name="SUBMARKET">
       <block type="trade_definition_tradeoptions" id="smart_over2_trade_options">
         <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
@@ -47,11 +147,17 @@
           <shadow type="math_number_positive" id="smart_over2_stake">
             <field name="NUM">0.5</field>
           </shadow>
+          <block type="variables_get" id="smart_over2_get_stake">
+            <field name="VAR" id="smart_over2_var_stake">Stake</field>
+          </block>
         </value>
         <value name="PREDICTION">
           <shadow type="math_number_positive" id="smart_over2_prediction">
             <field name="NUM">2</field>
           </shadow>
+          <block type="variables_get" id="smart_over2_get_over_prediction">
+            <field name="VAR" id="smart_over2_var_over_prediction">Over prediction (2)</field>
+          </block>
         </value>
       </block>
     </statement>
@@ -84,6 +190,44 @@
               <shadow type="math_number" id="smart_over2_martingale_multiplier">
                 <field name="NUM">1.2</field>
               </shadow>
+              <block type="variables_get" id="smart_over2_get_martingale">
+                <field name="VAR" id="smart_over2_var_martingale">Martingale factor</field>
+              </block>
+            </value>
+            <value name="USE_MARTINGALE">
+              <block type="variables_get" id="smart_over2_get_use_martingale">
+                <field name="VAR" id="smart_over2_var_use_martingale">Use Martingale</field>
+              </block>
+            </value>
+            <value name="OVER_PREDICTION">
+              <block type="variables_get" id="smart_over2_get_over_prediction_gate">
+                <field name="VAR" id="smart_over2_var_over_prediction">Over prediction (2)</field>
+              </block>
+            </value>
+            <value name="RECOVERY_PREDICTION">
+              <block type="variables_get" id="smart_over2_get_recovery_prediction">
+                <field name="VAR" id="smart_over2_var_recovery_prediction">Recovery prediction (5)</field>
+              </block>
+            </value>
+            <value name="USE_VIRTUAL_HOOK">
+              <block type="variables_get" id="smart_over2_get_virtual_hook">
+                <field name="VAR" id="smart_over2_var_virtual_hook">Use Virtual Hook</field>
+              </block>
+            </value>
+            <value name="MAX_VIRTUAL_LOSSES">
+              <block type="variables_get" id="smart_over2_get_max_virtual_losses">
+                <field name="VAR" id="smart_over2_var_max_virtual_losses">Maximum Virtual Hook losses</field>
+              </block>
+            </value>
+            <value name="TARGET_PROFIT">
+              <block type="variables_get" id="smart_over2_get_target_profit">
+                <field name="VAR" id="smart_over2_var_target_profit">Target Profit</field>
+              </block>
+            </value>
+            <value name="STOP_LOSS">
+              <block type="variables_get" id="smart_over2_get_stop_loss">
+                <field name="VAR" id="smart_over2_var_stop_loss">Stop Loss</field>
+              </block>
             </value>
           </block>
         </value>

@@ -1,14 +1,18 @@
 ---
 name: Smart Over 2 purchase boundary
-description: Runtime purchase safeguards and the Over 2 / repeated Under 5 Martingale cycle.
+description: Runtime purchase safeguards, configurable recovery, virtual trades, and session risk limits.
 ---
 
 The queued Smart Over 2 order must be authoritative at the shared purchase boundary, not only in generated Blockly blocks, because saved workspaces can still request the old Over 2 purchase. During recovery, require the exact queued contract type and prediction; block recovery requests when no order is ready or another purchase is in flight. At stage 0, preserve legacy normal entries when no staged order exists, while retaining duplicate-purchase protection.
 
 Only report a purchase in the Journal after the broker returns an accepted `buy` response. Until then, keep the pending order and do not mark its stage as purchased. When a dynamic prediction changes, refresh proposals and select only a proposal matching that prediction.
 
-The active strategy has two modes: condition-gated Over 2, then ungated Under 5 after any loss. Every recovery loss repeats Under 5; any win resets the next stake to the original base and returns to condition-gated Over 2. The editable Martingale factor defaults to 1.2. Do not add an automatic loss-count stop or stake cap; the user stops the bot manually.
+The active strategy has two modes: condition-gated Over using the configured prediction, then ungated Under using the configured recovery prediction after a loss. Every recovery loss repeats that prediction; any win resets the next stake to the original base and returns to condition-gated entries. The editable Martingale factor defaults to 1.2; when Martingale is off, losses must not raise the next stake.
 
-**Why:** The user replaced the earlier multi-stage recovery plan with this two-mode cycle and explicitly requested an editable 1.2× default with no automatic stop.
+Virtual trades must settle against a broker tick newer than their entry tick. After a virtual settlement, do not start another virtual or live entry until a later broker tick. The configured maximum virtual losses controls when the strategy moves from virtual to real purchases.
 
-**How to apply:** Keep Over 2's existing last-X rules unchanged and do not gate Under 5 recovery on recent digits. Multiply the accepted stake after each settled loss, and reset after every settled win. For purchase changes, test stale standard Purchase calls against queued orders, failed or delayed buys retaining the order, accepted buys using the queued contract, and progression applying only after authoritative settlement.
+Target Profit and Stop Loss apply to cumulative realized Smart Over 2 session profit. Reaching either threshold must stop the bot through the existing stop-button event. These explicit settings supersede the earlier no-automatic-stop behavior.
+
+**Why:** The approved Smart Over 2 configuration now includes editable recovery predictions, Martingale and Virtual Hook toggles, and realized-profit session limits; virtual outcomes must preserve the real strategy's one-tick cadence.
+
+**How to apply:** Keep the normal entry's existing last-X rules unchanged and do not gate recovery on recent digits. Keep queued orders authoritative, apply stake progression only after broker settlement, and test that virtual settlement cannot trigger another entry on the same tick.

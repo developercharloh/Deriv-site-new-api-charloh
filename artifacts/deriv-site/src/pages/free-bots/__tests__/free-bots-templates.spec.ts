@@ -156,6 +156,31 @@ describe('Free Bots template catalog', () => {
                 'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] shadow[type="math_number_positive"] field[name="NUM"]'
             )?.textContent
         ).toBe('2');
+        expect(
+            document.querySelector(
+                'block[type="trade_definition_tradeoptions"] value[name="AMOUNT"] block[type="variables_get"] field[name="VAR"]'
+            )?.textContent
+        ).toBe('Stake');
+        expect(
+            document.querySelector(
+                'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] block[type="variables_get"] field[name="VAR"]'
+            )?.textContent
+        ).toBe('Over prediction (2)');
+        expect(document.querySelector('block[type="trade_definition"] statement[name="INITIALIZATION"]')).not.toBeNull();
+        expect(document.querySelector('block[type="variables_set"] field[name="VAR"]')?.textContent).toBe('Stake');
+        const gateVariableNames = Array.from(
+            document.querySelectorAll('block[type="smart_over2_recovery_gate"] field[name="VAR"]')
+        ).map(field => field.textContent);
+        [
+            'Martingale factor',
+            'Maximum Virtual Hook losses',
+            'Use Virtual Hook',
+            'Target Profit',
+            'Stop Loss',
+            'Use Martingale',
+            'Over prediction (2)',
+            'Recovery prediction (5)',
+        ].forEach(variableName => expect(gateVariableNames).toContain(variableName));
     });
 
     it('does not place the Smart Over 2 gate in other free-bot templates', () => {

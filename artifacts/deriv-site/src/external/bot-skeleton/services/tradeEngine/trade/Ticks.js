@@ -412,6 +412,18 @@ export default Engine =>
                     currentStake: null,
                     martingaleMultiplier: 1.2,
                     consecutiveLosses: 0,
+                    useMartingale: true,
+                    overPrediction: 2,
+                    recoveryPrediction: 5,
+                    useVirtualHook: false,
+                    maxVirtualLosses: 2,
+                    virtualLosses: 0,
+                    pendingVirtualTrade: null,
+                    lastVirtualSettlementEpoch: null,
+                    targetProfit: 0,
+                    stopLoss: 0,
+                    sessionProfit: 0,
+                    stopped: false,
                 };
             }
             return this.smartOver2RecoveryState;
@@ -426,35 +438,161 @@ export default Engine =>
                 ...details,
             });
         }
-        checkSmartOver2Recovery(count = 4, analysisCount = 100, journalScope = null, martingaleMultiplier = 1.2) {
+        getSmartOver2CurrentEpoch() {
+            const epoch = Number(this.latestTick?.epoch ?? this.store?.getState?.().newTick);
+            return Number.isFinite(epoch) ? epoch : null;
+        }
+        checkSmartOver2Recovery(
+            count = 4,
+            analysisCount = 100,
+            journalScope = null,
+            martingaleMultiplier = 1.2,
+            useMartingale = true,
+            overPrediction = 2,
+            recoveryPrediction = 5,
+            useVirtualHook = false,
+            maxVirtualLosses = 2,
+            targetProfit = 0,
+            stopLoss = 0
+        ) {
             const size = Math.max(1, Math.floor(Number(count) || 1));
             void analysisCount;
             const state = this.getSmartOver2RecoveryState();
             const requestedMultiplier = Number(martingaleMultiplier);
             state.martingaleMultiplier =
                 Number.isFinite(requestedMultiplier) && requestedMultiplier >= 1 ? requestedMultiplier : 1.2;
+            state.useMartingale = Boolean(useMartingale);
+            const requestedOverPrediction = Number(overPrediction);
+            state.overPrediction =
+                Number.isInteger(requestedOverPrediction) && requestedOverPrediction >= 0 && requestedOverPrediction <= 8
+                    ? requestedOverPrediction
+                    : 2;
+            const requestedRecoveryPrediction = Number(recoveryPrediction);
+            state.recoveryPrediction =
+                Number.isInteger(requestedRecoveryPrediction) &&
+                requestedRecoveryPrediction >= 1 &&
+                requestedRecoveryPrediction <= 9
+                    ? requestedRecoveryPrediction
+                    : 5;
+            state.useVirtualHook = Boolean(useVirtualHook);
+            const requestedVirtualLosses = Number(maxVirtualLosses);
+            state.maxVirtualLosses =
+                Number.isFinite(requestedVirtualLosses) && requestedVirtualLosses >= 0
+                    ? Math.floor(requestedVirtualLosses)
+                    : 2;
+            const requestedTargetProfit = Number(targetProfit);
+            state.targetProfit =
+                Number.isFinite(requestedTargetProfit) && requestedTargetProfit > 0 ? requestedTargetProfit : 0;
+            const requestedStopLoss = Number(stopLoss);
+            state.stopLoss = Number.isFinite(requestedStopLoss) && requestedStopLoss > 0 ? requestedStopLoss : 0;
+
+            this.setVirtualHookSettings?.(state.maxVirtualLosses, this.virtualHook?.minRealWins ?? 1);
+            this.enableVirtualHook?.(state.useVirtualHook);
+
+            if (!state.useVirtualHook) {
+                state.virtualLosses = 0;
+                state.pendingVirtualTrade = null;
+            }
+            if (state.stopped) return Promise.resolve(false);
+
+            if (state.pendingVirtualTrade) {
+                const currentEpoch = this.getSmartOver2CurrentEpoch();
+                const entryEpoch = Number(state.pendingVirtualTrade.entryEpoch);
+                if (currentEpoch === null || currentEpoch <= entryEpoch) return Promise.resolve(false);
+
+                return this.getLastDigit().then(digitValue => {
+                    const digit = Number(digitValue);
+                    if (!Number.isInteger(digit) || digit < 0 || digit > 9) return false;
+
+                    const virtualTrade = state.pendingVirtualTrade;
+                    const isWin =
+                        virtualTrade.contractType === 'DIGITOVER'
+                            ? digit > Number(virtualTrade.prediction)
+                            : digit < Number(virtualTrade.prediction);
+                    state.pendingVirtualTrade = null;
+                    state.virtualLosses = isWin ? 0 : state.virtualLosses + 1;
+                    state.stage = isWin ? 0 : 1;
+                    state.lastVirtualSettlementEpoch = currentEpoch;
+                    this.emitSmartOver2RecoveryEvent(
+                        virtualTrade.journalScope || journalScope,
+                        'virtual_settlement',
+                        `[Smart Over 2] Virtual ${virtualTrade.contractType === 'DIGITUNDER' ? 'Under' : 'Over'} ` +
+                            `${virtualTrade.prediction} settled ${isWin ? 'WIN' : 'LOSS'} on digit ${digit}. ` +
+                            `${state.virtualLosses} of ${state.maxVirtualLosses} virtual losses.`,
+                        {
+                            stage: state.stage,
+                            outcome: isWin ? 'win' : 'loss',
+                            contractType: virtualTrade.contractType,
+                            prediction: virtualTrade.prediction,
+                            digit,
+                            virtualLosses: state.virtualLosses,
+                            maxVirtualLosses: state.maxVirtualLosses,
+                        }
+                    );
+                    // Wait for the next broker tick before evaluating another
+                    // virtual or live entry, matching the real one-tick cycle.
+                    return false;
+                });
+            }
+
+            if (state.lastVirtualSettlementEpoch !== null) {
+                const currentEpoch = this.getSmartOver2CurrentEpoch();
+                if (currentEpoch === null || currentEpoch <= state.lastVirtualSettlementEpoch) {
+                    return Promise.resolve(false);
+                }
+            }
 
             if (state.stage === 1) {
                 state.pendingPurchase ??= {
                     stage: 1,
                     contractType: 'DIGITUNDER',
-                    prediction: 5,
+                    prediction: state.recoveryPrediction,
                     journalScope,
                 };
                 if (journalScope) state.pendingPurchase.journalScope = journalScope;
+                if (
+                    state.useVirtualHook &&
+                    state.virtualLosses < state.maxVirtualLosses &&
+                    !state.purchaseInFlight
+                ) {
+                    const entryEpoch = this.getSmartOver2CurrentEpoch();
+                    if (entryEpoch === null) return Promise.resolve(false);
+                    state.pendingPurchase = null;
+                    state.pendingVirtualTrade = {
+                        stage: 1,
+                        contractType: 'DIGITUNDER',
+                        prediction: state.recoveryPrediction,
+                        entryEpoch,
+                        journalScope,
+                    };
+                    this.emitSmartOver2RecoveryEvent(
+                        journalScope,
+                        'virtual_purchase',
+                        `[Smart Over 2] Virtual Under ${state.recoveryPrediction} started; waiting for the next tick.`,
+                        {
+                            stage: 1,
+                            contractType: 'DIGITUNDER',
+                            prediction: state.recoveryPrediction,
+                            virtualLosses: state.virtualLosses,
+                            maxVirtualLosses: state.maxVirtualLosses,
+                        }
+                    );
+                    return Promise.resolve(false);
+                }
                 this.emitSmartOver2RecoveryEvent(
                     journalScope,
                     'status',
-                    `[Smart Over 2] Status · Under 5 recovery · Market: ` +
+                    `[Smart Over 2] Status · Under ${state.recoveryPrediction} recovery · Market: ` +
                         `${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'} · ` +
-                        `Under 5 is ready on the next available purchase tick; stake ${Number(state.currentStake ?? this.tradeOptions?.amount).toFixed(2)} ` +
-                        `at ${state.martingaleMultiplier}×; no last-X gate.`,
+                        `Under ${state.recoveryPrediction} is ready on the next available purchase tick; stake ${Number(state.currentStake ?? this.tradeOptions?.amount).toFixed(2)} ` +
+                        `${state.useMartingale ? `at ${state.martingaleMultiplier}×` : 'with Martingale off'}; no last-X gate.`,
                     {
                         stage: 1,
                         conditionStatus: 'READY',
                         digits: [],
                         stake: Number(state.currentStake ?? this.tradeOptions?.amount),
                         martingaleMultiplier: state.martingaleMultiplier,
+                        useMartingale: state.useMartingale,
                     }
                 );
                 return Promise.resolve(true);
@@ -482,18 +620,36 @@ export default Engine =>
                         `all 7–9: ${assessment.skipHighTriple ? 'SKIP' : 'NO'} · ` +
                         `all 0–2: ${assessment.skipLowTriple ? 'SKIP' : 'NO'}`;
                     if (shouldPurchase) {
-                        order = { stage, contractType: 'DIGITOVER', prediction: 2 };
+                        order = { stage, contractType: 'DIGITOVER', prediction: state.overPrediction };
                     }
                 }
 
                 if (shouldPurchase && order && !state.pendingPurchase) {
+                    if (state.useVirtualHook && state.virtualLosses < state.maxVirtualLosses) {
+                        const entryEpoch = this.getSmartOver2CurrentEpoch();
+                        if (entryEpoch === null) return false;
+                        state.pendingVirtualTrade = { ...order, entryEpoch, journalScope };
+                        this.emitSmartOver2RecoveryEvent(
+                            journalScope,
+                            'virtual_purchase',
+                            `[Smart Over 2] Virtual Over ${state.overPrediction} started; waiting for the next tick.`,
+                            {
+                                stage,
+                                contractType: 'DIGITOVER',
+                                prediction: state.overPrediction,
+                                virtualLosses: state.virtualLosses,
+                                maxVirtualLosses: state.maxVirtualLosses,
+                            }
+                        );
+                        return false;
+                    }
                     state.pendingPurchase = { ...order, journalScope };
                 }
 
                 this.emitSmartOver2RecoveryEvent(
                     journalScope,
                     'status',
-                    `[Smart Over 2] Status · ${stage === 0 ? 'Normal Over 2' : 'Under 5 recovery'} · ` +
+                    `[Smart Over 2] Status · ${stage === 0 ? `Normal Over ${state.overPrediction}` : `Under ${state.recoveryPrediction} recovery`} · ` +
                         `Market: ${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'} · ` +
                         `${statusDetails} · Decision: ${conditionStatus}`,
                     {
@@ -628,11 +784,19 @@ export default Engine =>
             state.purchaseInFlight = false;
             const status = String(contract.status || '').toLowerCase();
             const profit = Number(contract.profit);
+            const sellPrice = Number(contract.sell_price);
+            const buyPrice = Number(contract.buy_price);
+            const realizedProfit = Number.isFinite(profit)
+                ? profit
+                : Number.isFinite(sellPrice) && Number.isFinite(buyPrice)
+                  ? sellPrice - buyPrice
+                  : 0;
             const isWin =
                 ['won', 'win'].includes(status) ||
                 (!['lost', 'loss'].includes(status) && Number.isFinite(profit) && profit > 0);
             const result = isWin ? 'WIN' : 'LOSS';
-            const stageLabel = purchasedStage === 0 ? 'Normal Over 2' : 'Under 5 recovery';
+            const stageLabel = purchasedStage === 0 ? 'Normal Over 2' : `Under ${state.recoveryPrediction} recovery`;
+            state.sessionProfit = Number((Number(state.sessionProfit || 0) + realizedProfit).toFixed(2));
             const configuredBaseStake = Number(state.baseStake);
             const tradeOptionStake = Number(this.tradeOptions?.amount);
             const baseStake =
@@ -653,35 +817,61 @@ export default Engine =>
                     ? null
                     : isWin
                       ? baseStake
-                      : Number((currentStake * safeMultiplier).toFixed(2));
+                      : state.useMartingale
+                        ? Number((currentStake * safeMultiplier).toFixed(2))
+                        : baseStake;
 
             if (baseStake !== null) state.baseStake = baseStake;
             if (nextStake !== null) state.currentStake = nextStake;
             if (this.tradeOptions && nextStake !== null) this.tradeOptions.amount = nextStake;
             state.consecutiveLosses = isWin ? 0 : Number(state.consecutiveLosses || 0) + 1;
             state.stage = isWin ? 0 : 1;
+            if (isWin) state.virtualLosses = 0;
             state.pendingPurchase = null;
             state.purchaseInFlight = false;
+            const stopReason =
+                state.targetProfit > 0 && state.sessionProfit >= state.targetProfit
+                    ? 'target_profit'
+                    : state.stopLoss > 0 && state.sessionProfit <= -state.stopLoss
+                      ? 'stop_loss'
+                      : null;
+            state.stopped = Boolean(stopReason);
             const stakeLabel = value => (Number.isFinite(value) ? value.toFixed(2) : 'the configured stake');
             this.emitSmartOver2RecoveryEvent(
                 journalScope,
                 'settlement',
                 isWin
                     ? `[Smart Over 2] ${stageLabel} settled WIN. Stake reset to ${stakeLabel(baseStake)}; ` +
-                      'returning to condition-gated Over 2 entries.'
+                      `returning to condition-gated Over ${state.overPrediction} entries.`
                     : `[Smart Over 2] ${stageLabel} settled LOSS. ` +
-                      `${purchasedStage === 0 ? 'Starting' : 'Repeating'} Under 5 at stake ${stakeLabel(nextStake)} ` +
-                      `with a ${safeMultiplier}× multiplier; recovery continues until a win.`,
+                      `${purchasedStage === 0 ? 'Starting' : 'Repeating'} Under ${state.recoveryPrediction} at stake ${stakeLabel(nextStake)} ` +
+                      `${state.useMartingale ? `with a ${safeMultiplier}× multiplier` : 'with Martingale off'}; recovery continues until a win.`,
                 {
                     stage: isWin ? 0 : 1,
                     outcome: isWin ? 'win' : 'loss',
                     baseStake,
                     nextStake,
                     martingaleMultiplier: safeMultiplier,
+                    useMartingale: state.useMartingale,
                     consecutiveLosses: state.consecutiveLosses,
+                    sessionProfit: state.sessionProfit,
                     contractId: String(settlementId),
                 }
             );
+            if (stopReason) {
+                const stopMessage =
+                    stopReason === 'target_profit'
+                        ? `[Smart Over 2] Target Profit reached at ${state.sessionProfit.toFixed(2)}; stopping.`
+                        : `[Smart Over 2] Stop Loss reached at ${state.sessionProfit.toFixed(2)}; stopping.`;
+                this.emitSmartOver2RecoveryEvent(journalScope, 'risk_stop', stopMessage, {
+                    reason: stopReason,
+                    sessionProfit: state.sessionProfit,
+                    targetProfit: state.targetProfit,
+                    stopLoss: state.stopLoss,
+                    contractId: String(settlementId),
+                });
+                globalObserver.emit('bot.stop_button_click');
+            }
             return false;
         }
         getAnalysisDigits(count = 1000) {

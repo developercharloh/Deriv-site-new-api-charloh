@@ -21,6 +21,14 @@ const registerOutputBlock = ({
     args2 = [],
     message3,
     args3 = [],
+    message4,
+    args4 = [],
+    message5,
+    args5 = [],
+    message6,
+    args6 = [],
+    message7,
+    args7 = [],
     inputsInline = true,
     output = 'Number',
     tooltip,
@@ -36,6 +44,10 @@ const registerOutputBlock = ({
                 ...(message1 ? { message1, args1 } : {}),
                 ...(message2 ? { message2, args2 } : {}),
                 ...(message3 ? { message3, args3 } : {}),
+                ...(message4 ? { message4, args4 } : {}),
+                ...(message5 ? { message5, args5 } : {}),
+                ...(message6 ? { message6, args6 } : {}),
+                ...(message7 ? { message7, args7 } : {}),
                 output,
                 outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
                 ...analysisColours(),
@@ -348,16 +360,35 @@ registerOutputBlock({
     args2: [countInput('ANALYSIS_COUNT', '100')],
     message3: localize('Martingale %1'),
     args3: [countInput('MARTINGALE', '1.2')],
+    message4: localize('Use Martingale %1'),
+    args4: [{ type: 'input_value', name: 'USE_MARTINGALE', check: 'Boolean' }],
+    message5: localize('Over prediction %1 · Recovery prediction %2'),
+    args5: [countInput('OVER_PREDICTION', '2'), countInput('RECOVERY_PREDICTION', '5')],
+    message6: localize('Use Virtual Hook %1'),
+    args6: [{ type: 'input_value', name: 'USE_VIRTUAL_HOOK', check: 'Boolean' }],
+    message7: localize('Max virtual losses %1 · Target Profit %2 · Stop Loss %3'),
+    args7: [
+        countInput('MAX_VIRTUAL_LOSSES', '2'),
+        countInput('TARGET_PROFIT', '0'),
+        countInput('STOP_LOSS', '0'),
+    ],
     hiddenInputs: ['ANALYSIS_COUNT'],
     inputsInline: false,
     output: 'Boolean',
     tooltip:
-        'Uses the configured last-X rules for normal Over 2 entries. After a loss, repeats Under 5 with the selected Martingale value until a win resets the stake.',
+        'Uses the configured Over prediction and entry rules. After a loss, repeats the recovery prediction. The virtual hook, Martingale, Target Profit, and Stop Loss use the linked Run once at start settings.',
     meta: 'Smart Over 2 Recovery Gate',
     generatorCode: block => [
         `Bot.checkSmartOver2Recovery(${numberInput(block, 'COUNT', '4')}, ` +
             `${numberInput(block, 'ANALYSIS_COUNT', '100')}, ${smartOver2JournalScope(block)}, ` +
-            `${numberInput(block, 'MARTINGALE', '1.2')})`,
+            `${numberInput(block, 'MARTINGALE', '1.2')}, ` +
+            `${numberInput(block, 'USE_MARTINGALE', 'true')}, ` +
+            `${numberInput(block, 'OVER_PREDICTION', '2')}, ` +
+            `${numberInput(block, 'RECOVERY_PREDICTION', '5')}, ` +
+            `${numberInput(block, 'USE_VIRTUAL_HOOK', 'false')}, ` +
+            `${numberInput(block, 'MAX_VIRTUAL_LOSSES', '2')}, ` +
+            `${numberInput(block, 'TARGET_PROFIT', '0')}, ` +
+            `${numberInput(block, 'STOP_LOSS', '0')})`,
         generator().ORDER_FUNCTION_CALL,
     ],
 });
@@ -365,10 +396,10 @@ registerOutputBlock({
 window.Blockly.Blocks.smart_over2_recovery_purchase = {
     init() {
         this.jsonInit({
-            message0: localize('Smart Over 2: buy Over 2 or Under 5 recovery'),
+            message0: localize('Smart Over 2: buy the configured entry or recovery prediction'),
             previousStatement: null,
             ...analysisColours(),
-            tooltip: localize('Buys Over 2 normally or Under 5 during recovery, using the current Martingale stake.'),
+            tooltip: localize('Buys the configured entry prediction or recovery prediction, using the current stake.'),
             category: window.Blockly.Categories.Tick_Analysis,
         });
         this.setNextStatement(false);
@@ -394,7 +425,7 @@ window.Blockly.Blocks.smart_over2_recovery_settlement = {
             previousStatement: 'TradeAgain',
             nextStatement: 'TradeAgain',
             ...analysisColours(),
-            tooltip: localize('A loss repeats Under 5 with a larger stake. Any win resets the stake and resumes condition-gated Over 2 entries.'),
+            tooltip: localize('A loss repeats the configured recovery prediction. Any win resets the stake and resumes condition-gated entry predictions.'),
             category: window.Blockly.Categories.Tick_Analysis,
         });
     },

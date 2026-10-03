@@ -106,10 +106,20 @@ describe('Smart Over 2 Blockly entry gate', () => {
         const lookbackInputIndex = gate.inputList.findIndex(input => input.name === 'COUNT');
         const analysisInputIndex = gate.inputList.findIndex(input => input.name === 'ANALYSIS_COUNT');
         const martingaleInputIndex = gate.inputList.findIndex(input => input.name === 'MARTINGALE');
+        const settingInputs = [
+            'USE_MARTINGALE',
+            'OVER_PREDICTION',
+            'RECOVERY_PREDICTION',
+            'USE_VIRTUAL_HOOK',
+            'MAX_VIRTUAL_LOSSES',
+            'TARGET_PROFIT',
+            'STOP_LOSS',
+        ];
         expect(gate.getInputsInline()).toBe(false);
         expect(lookbackInputIndex).toBeGreaterThanOrEqual(0);
         expect(analysisInputIndex).toBeGreaterThan(lookbackInputIndex);
         expect(martingaleInputIndex).toBeGreaterThan(analysisInputIndex);
+        settingInputs.forEach(inputName => expect(gate.getInput(inputName)).not.toBeNull());
         expect(
             gate
                 .getInput('MARTINGALE')
@@ -119,7 +129,7 @@ describe('Smart Over 2 Blockly entry gate', () => {
         ).toBe('Martingale');
         const generatedGate = javascriptGenerator.blockToCode(gate);
         expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
-            'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2", 1.2)'
+            'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2", 1.2, true, 2, 5, false, 2, 0, 0)'
         );
 
         const purchase = workspace.newBlock('smart_over2_recovery_purchase');
@@ -179,6 +189,39 @@ describe('Smart Over 2 Blockly entry gate', () => {
 
         expect(xml).not.toContain('apollo_purchase2');
         expect(xml).toContain('smart_over2_recovery_purchase');
+    });
+
+    it('stores editable Smart Over 2 settings in Run once at start and connects them to the strategy', () => {
+        const xml = readFileSync(
+            resolve(__dirname, '../../../../../../public/bots/Smart_Over_2_Bot.xml'),
+            'utf8'
+        );
+
+        const variables = [
+            ['Stake', 'stake'],
+            ['Martingale factor', 'martingale'],
+            ['Maximum Virtual Hook losses', 'max_virtual_losses'],
+            ['Use Virtual Hook', 'virtual_hook'],
+            ['Target Profit', 'target_profit'],
+            ['Stop Loss', 'stop_loss'],
+            ['Use Martingale', 'use_martingale'],
+            ['Over prediction (2)', 'over_prediction'],
+            ['Recovery prediction (5)', 'recovery_prediction'],
+        ];
+        variables.forEach(([name, id]) => {
+            expect(xml).toContain(`>${name}</variable>`);
+            expect(xml).toContain(`<field name="VAR" id="smart_over2_var_${id}">`);
+        });
+        expect(xml).toContain('<statement name="INITIALIZATION">');
+        expect(xml).toContain('<field name="BOOL">FALSE</field>');
+        expect(xml).toContain('<field name="BOOL">TRUE</field>');
+        expect(xml).toContain('<block type="variables_get" id="smart_over2_get_stake">');
+        expect(xml).toContain('<block type="variables_get" id="smart_over2_get_over_prediction">');
+        expect(xml).toContain('<block type="variables_get" id="smart_over2_get_recovery_prediction">');
+        expect(xml).toContain('<block type="variables_get" id="smart_over2_get_use_martingale">');
+        expect(xml).toContain('<block type="variables_get" id="smart_over2_get_virtual_hook">');
+        expect(xml).toContain('<block type="variables_get" id="smart_over2_get_target_profit">');
+        expect(xml).toContain('<block type="variables_get" id="smart_over2_get_stop_loss">');
     });
 
     it('keeps shared trade settings on short rows without renaming saved fields', () => {
