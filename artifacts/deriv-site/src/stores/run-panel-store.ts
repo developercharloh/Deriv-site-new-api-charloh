@@ -14,6 +14,7 @@ import { helpers } from '@/utils/store-helpers';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
 import { BinaryMatrixEngine, type BinaryMatrixConfig, type BinaryMatrixStatus } from '@/utils/binary-matrix-engine';
 import { readBlocklyNumberVariable } from '@/utils/binary-matrix-settings';
+import { isRiseFallMasterBotIdentity } from '@/utils/bot-template-scope';
 import type { DTPosition } from '@/utils/dtrader-engine';
 import { Buy, ProposalOpenContract } from '@deriv/api-types';
 import { TStores } from '@deriv/stores/types';
@@ -1188,6 +1189,8 @@ export default class RunPanelStore {
         profit?: number;
     }) => {
         const journal = this.root_store.journal;
+        if (!isRiseFallMasterBotIdentity(journal.active_bot_template_id)) return;
+
         const number = (value: unknown, digits = 1) =>
             value === null || value === undefined || value === '' || !Number.isFinite(Number(value))
                 ? 'N/A'

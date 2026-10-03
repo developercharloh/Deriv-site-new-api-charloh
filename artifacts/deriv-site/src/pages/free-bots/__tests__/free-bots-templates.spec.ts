@@ -57,11 +57,16 @@ describe('Free Bots template catalog', () => {
             message: 'Smart Over 2 · Market: R_25 · Last 4: [3, 4, 5, 6]',
             extra: {},
         };
+        const legacyVolatilityScanRow = {
+            message: '[Volatility Scan] Entry order submitted · 1HZ25V · DIGITOVER',
+            extra: {},
+        };
         const otherBotRow = { message: 'Other bot journal entry', extra: { botTemplateId: 'matches-signal' } };
 
         expect(shouldShowJournalEntryForBot(riseFallRow, 'rise-fall-master')).toBe(true);
         expect(shouldShowJournalEntryForBot(riseFallRow, 'matches-signal')).toBe(false);
         expect(shouldShowJournalEntryForBot(legacyRiseFallRow, 'matches-signal')).toBe(false);
+        expect(shouldShowJournalEntryForBot(legacyVolatilityScanRow, 'smart-over-2')).toBe(false);
         expect(shouldShowJournalEntryForBot(otherBotRow, 'matches-signal')).toBe(true);
     });
 

@@ -29,7 +29,48 @@ describe('Binary Matrix analysis observer integration', () => {
     afterEach(() => {
         observer.unregisterAll('bot.analysis.condition');
         observer.unregisterAll('bot.analysis.smart_over2');
+        observer.unregisterAll('bot.volatility.scan');
         api_base.api = null;
+    });
+
+    it('keeps Rise/Fall volatility-scan Journal entries out of Smart Over 2', () => {
+        const journal = {
+            pushMessage: jest.fn(),
+            updateVolatilityScanMessage: jest.fn(),
+            active_bot_template_id: 'smart-over-2',
+        };
+        const rootStore = { dbot: {}, journal };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+        runPanel.onMount();
+
+        const purchaseEvent = {
+            event: 'purchase',
+            market: '1HZ25V',
+            contractType: 'DIGITOVER',
+            contractId: '12345',
+            buyPrice: 0.5,
+            availableAdx: null,
+            availableRsi: null,
+            availableMacd: null,
+        };
+
+        observer.emit('bot.volatility.scan', purchaseEvent);
+        expect(journal.pushMessage).not.toHaveBeenCalled();
+        expect(journal.updateVolatilityScanMessage).not.toHaveBeenCalled();
+
+        journal.active_bot_template_id = 'rise-fall-master';
+        observer.emit('bot.volatility.scan', purchaseEvent);
+
+        expect(journal.pushMessage).toHaveBeenCalledWith(
+            expect.stringContaining('[Volatility Scan] Entry order submitted'),
+            MessageTypes.NOTIFY,
+            'journal__text'
+        );
     });
 
     it('advances visible analysis and appends one matching Journal row per live tick', () => {
