@@ -346,13 +346,13 @@ registerOutputBlock({
     args1: [countInput('COUNT', '4')],
     message2: localize('Analyze %1 ticks'),
     args2: [countInput('ANALYSIS_COUNT', '100')],
-    message3: localize('Martingale multiplier × %1'),
+    message3: localize('Martingale %1'),
     args3: [countInput('MARTINGALE', '1.2')],
     hiddenInputs: ['ANALYSIS_COUNT'],
     inputsInline: false,
     output: 'Boolean',
     tooltip:
-        'Uses the configured last-X rules for normal Over 2 entries. After a loss, repeats Under 5 with the selected stake multiplier until a win resets the stake.',
+        'Uses the configured last-X rules for normal Over 2 entries. After a loss, repeats Under 5 with the selected Martingale value until a win resets the stake.',
     meta: 'Smart Over 2 Recovery Gate',
     generatorCode: block => [
         `Bot.checkSmartOver2Recovery(${numberInput(block, 'COUNT', '4')}, ` +

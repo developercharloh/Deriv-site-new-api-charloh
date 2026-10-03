@@ -221,7 +221,7 @@ const BOTS: BotConfig[] = [
         name: 'Smart Over 2 Bot',
         emoji: '🧠',
         description:
-            'Trades Digit Over 2 on Volatility 50 (1s) Index only when every digit in the editable last-X window is 3–7. Skips entries when the latest three digits are all 7–9 or all 0–2. After any loss, repeats Under 5 with an editable Martingale multiplier until a win resets the stake and resumes condition-gated Over 2 entries. There is no automatic recovery stop.',
+            'Trades Digit Over 2 on Volatility 50 (1s) Index only when every digit in the editable last-X window is 3–7. Skips entries when the latest three digits are all 7–9 or all 0–2. After any loss, repeats Under 5 with an editable Martingale value until a win resets the stake and resumes condition-gated Over 2 entries. There is no automatic recovery stop.',
         market: 'Volatility 50 (1s) Index (1HZ50V)',
         strategy: 'Over 2 Entry Gate · Under 5 Recovery · Adjustable Martingale',
         params: [

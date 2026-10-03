@@ -110,6 +110,13 @@ describe('Smart Over 2 Blockly entry gate', () => {
         expect(lookbackInputIndex).toBeGreaterThanOrEqual(0);
         expect(analysisInputIndex).toBeGreaterThan(lookbackInputIndex);
         expect(martingaleInputIndex).toBeGreaterThan(analysisInputIndex);
+        expect(
+            gate
+                .getInput('MARTINGALE')
+                ?.fieldRow.map(field => field.getText())
+                .join('')
+                .trim()
+        ).toBe('Martingale');
         const generatedGate = javascriptGenerator.blockToCode(gate);
         expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
             'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2", 1.2)'
