@@ -4,10 +4,11 @@ import { excludeOptionFromContextMenu, modifyContextMenu } from '../../../utils'
 window.Blockly.Blocks.trade_definition_restartbuysell = {
     init() {
         this.jsonInit({
-            message0: localize('Restart buy/sell on error (disable for better performance): {{ checkbox }}', {
+            message0: localize('Restart buy/sell on error'),
+            message1: localize('(disable for better performance): {{ checkbox }}', {
                 checkbox: '%1',
             }),
-            args0: [
+            args1: [
                 {
                     type: 'field_checkbox',
                     name: 'TIME_MACHINE_ENABLED',

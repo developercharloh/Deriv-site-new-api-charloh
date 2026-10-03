@@ -4,10 +4,11 @@ import { excludeOptionFromContextMenu, modifyContextMenu } from '../../../utils'
 window.Blockly.Blocks.trade_definition_restartonerror = {
     init() {
         this.jsonInit({
-            message0: localize('Restart last trade on error (bot ignores the unsuccessful trade): {{ checkbox }}', {
+            message0: localize('Restart last trade on error'),
+            message1: localize('(bot ignores the unsuccessful trade): {{ checkbox }}', {
                 checkbox: '%1',
             }),
-            args0: [
+            args1: [
                 {
                     type: 'field_checkbox',
                     name: 'RESTARTONERROR',

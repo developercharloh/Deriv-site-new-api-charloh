@@ -6,22 +6,26 @@ import { excludeOptionFromContextMenu, modifyContextMenu, runIrreversibleEvents 
 window.Blockly.Blocks.trade_definition_market = {
     init() {
         this.jsonInit({
-            message0: localize('Market: {{ input_market }} > {{ input_submarket }} > {{ input_symbol }}', {
+            message0: localize('Market: {{ input_market }}', {
                 input_market: '%1',
-                input_submarket: '%2',
-                input_symbol: '%3',
             }),
+            message1: localize('Submarket: {{ input_submarket }}', { input_submarket: '%1' }),
+            message2: localize('Symbol: {{ input_symbol }}', { input_symbol: '%1' }),
             args0: [
                 {
                     type: 'field_dropdown',
                     name: 'MARKET_LIST',
                     options: [['', '']],
                 },
+            ],
+            args1: [
                 {
                     type: 'field_dropdown',
                     name: 'SUBMARKET_LIST',
                     options: [['', '']],
                 },
+            ],
+            args2: [
                 {
                     type: 'field_dropdown',
                     name: 'SYMBOL_LIST',

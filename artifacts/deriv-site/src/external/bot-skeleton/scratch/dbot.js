@@ -234,16 +234,19 @@ class DBot {
             DBotStore.setInstance(store);
             const window_width = window.innerWidth;
             try {
-                let workspaceScale = 0.7;
+                let workspaceScale = config().workspaces.mainWorkspaceStartScale;
 
                 const { handleFileChange } = DBotStore.instance;
-                if (window_width < 1640) {
-                    if (is_mobile) {
-                        workspaceScale = 0.6;
-                    } else {
-                        const scratch_div_width = document.getElementById('scratch_div')?.offsetWidth;
-                        const zoom_scale = scratch_div_width / window_width / 1.5;
-                        workspaceScale = zoom_scale;
+                if (window_width < 1640 && !is_mobile) {
+                    const scratch_div_width = document.getElementById('scratch_div')?.offsetWidth;
+                    if (scratch_div_width && window_width > 0) {
+                        // Keep blocks readable at narrow desktop widths. Shrink only when the
+                        // actual workspace is narrower than the viewport, not by an arbitrary
+                        // factor that makes every block start at roughly 60% size.
+                        workspaceScale = Math.max(
+                            0.8,
+                            Math.min(config().workspaces.mainWorkspaceStartScale, scratch_div_width / window_width)
+                        );
                     }
                 }
                 const el_scratch_div = document.getElementById('scratch_div');

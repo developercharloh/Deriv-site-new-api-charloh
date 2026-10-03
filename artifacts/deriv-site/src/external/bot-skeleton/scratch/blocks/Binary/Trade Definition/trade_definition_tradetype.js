@@ -4,16 +4,16 @@ import { excludeOptionFromContextMenu, modifyContextMenu } from '../../../utils'
 window.Blockly.Blocks.trade_definition_tradetype = {
     init() {
         this.jsonInit({
-            message0: localize('Trade Type: {{ trade_type_category }} > {{ trade_type }}', {
-                trade_type_category: '%1',
-                trade_type: '%2',
-            }),
+            message0: localize('Category: {{ trade_type_category }}', { trade_type_category: '%1' }),
+            message1: localize('Trade type: {{ trade_type }}', { trade_type: '%1' }),
             args0: [
                 {
                     type: 'field_dropdown',
                     name: 'TRADETYPECAT_LIST',
                     options: [['', '']],
                 },
+            ],
+            args1: [
                 {
                     type: 'field_dropdown',
                     name: 'TRADETYPE_LIST',

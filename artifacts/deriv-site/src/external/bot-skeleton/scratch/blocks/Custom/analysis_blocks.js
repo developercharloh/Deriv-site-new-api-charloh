@@ -16,6 +16,7 @@ const registerOutputBlock = ({
     args0 = [],
     message1,
     args1 = [],
+    inputsInline = true,
     output = 'Number',
     tooltip,
     generatorCode,
@@ -33,7 +34,7 @@ const registerOutputBlock = ({
                 tooltip,
                 category: window.Blockly.Categories.Tick_Analysis,
             });
-            this.setInputsInline(true);
+            this.setInputsInline(inputsInline);
         },
         meta() {
             return {
@@ -311,9 +312,10 @@ registerOutputBlock({
 
 registerOutputBlock({
     type: 'smart_over2_entry_gate',
-    message0: localize('Smart Over 2: last %1 digits must be 3–7'),
+    message0: localize('Smart Over 2: last %1 digits in range 3–7'),
     args0: [countInput('COUNT', '4')],
     message1: localize('Skip if last 3 are all 7–9 or all 0–2'),
+    inputsInline: false,
     output: 'Boolean',
     tooltip: 'Allows Digit Over 2 only when the last X digits are 3–7 inclusive; skips if the latest three are all 7–9 or all 0–2.',
     meta: 'Smart Over 2 Entry Gate',
