@@ -8,7 +8,7 @@ import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
 import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
-import type { BotConfig } from './types';
+import type { BotConfig, FreeBotSection } from './types';
 import './free-bots.scss';
 
 const V2_CONFIG_KEY = 'free_bots_v2_config';
@@ -75,6 +75,7 @@ function confColor(conf: number): string {
 const BOTS: BotConfig[] = [
     {
         id: 'binary-matrix-ai',
+        section: 'premium',
         name: 'Binary Matrix AI',
         emoji: '🧮',
         description:
@@ -94,6 +95,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'rise-fall-master',
+        section: 'premium',
         name: 'Rise / Fall Master Bot',
         emoji: '📈📉',
         description:
@@ -113,6 +115,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'matches-signal',
+        section: 'smart-contract',
         name: 'Matches Bot',
         emoji: '🎯',
         description:
@@ -132,6 +135,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'differ-v2',
+        section: 'smart-contract',
         name: 'Differs V2 Bot',
         emoji: '🔀',
         description:
@@ -151,6 +155,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'even-odd-scanner',
+        section: 'smart-contract',
         name: 'Even / Odd Entry Scanner',
         emoji: '⚡',
         description:
@@ -169,6 +174,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'over-under-signal',
+        section: 'smart-contract',
         name: 'Over / Under Signal Bot',
         emoji: '📊',
         description:
@@ -188,6 +194,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'over2-under7-reversal',
+        section: 'premium',
         name: 'Over2 / Under7 Reversal',
         emoji: '🔁',
         description:
@@ -209,6 +216,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'smart-over-2',
+        section: 'premium',
         name: 'Smart Over 2 Bot',
         emoji: '🧠',
         description:
@@ -228,6 +236,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'digit-pro-v1',
+        section: 'premium',
         name: 'Digit Pro V1⚡💹',
         emoji: '⚡💹',
         description:
@@ -247,6 +256,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'over-destroyer',
+        section: 'smart-contract',
         name: 'Over Destroyer Bot',
         emoji: '📈📉',
         description:
@@ -266,6 +276,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'under-destroyer',
+        section: 'smart-contract',
         name: 'Under Destroyer Bot',
         emoji: '📈📉',
         description:
@@ -285,6 +296,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'elite-default-speed',
+        section: 'smart-contract',
         name: 'Elite Default Speed Bot ⚡⚡🤖',
         emoji: '⚡',
         description:
@@ -303,6 +315,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'even-odd-manual',
+        section: 'smart-contract',
         name: 'Even Odd Manual Trading Bot',
         emoji: '🎲',
         description:
@@ -323,6 +336,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'over-under-manual',
+        section: 'smart-contract',
         name: 'Over Under Manual Trading Bot',
         emoji: '🎯',
         description:
@@ -343,6 +357,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'over-under-ai-signals',
+        section: 'smart-contract',
         name: 'Over Under AI Signals Bot',
         emoji: '🤖',
         description:
@@ -364,6 +379,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'elite-entry-scanner',
+        section: 'smart-contract',
         name: 'Elite Over / Under Entry Scanner 🔥🔥',
         emoji: '🔥',
         description:
@@ -385,6 +401,7 @@ const BOTS: BotConfig[] = [
     },
     {
         id: 'apex-ai',
+        section: 'premium',
         name: 'Apex AI Multi-Strategy Bot',
         emoji: '🦅',
         description:
@@ -404,6 +421,17 @@ const BOTS: BotConfig[] = [
         category: 'MULTI-STRATEGY AI',
     },
 ];
+
+const FREE_BOT_SECTIONS: { id: FreeBotSection; title: string; emptyMessage?: string }[] = [
+    { id: 'premium', title: 'Premium Bots' },
+    { id: 'smart-contract', title: 'Smart Contract Bots' },
+    { id: 'edging', title: 'Edging Bots', emptyMessage: 'No bots added here yet.' },
+];
+
+const BOTS_IN_DISPLAY_ORDER = FREE_BOT_SECTIONS.flatMap(section =>
+    BOTS.filter(bot => bot.section === section.id)
+);
+const BOT_ORDINALS = new Map(BOTS_IN_DISPLAY_ORDER.map((bot, index) => [bot.id, index + 1]));
 
 const CARD_ART: Record<string, string> = {
     'binary-matrix-ai': '/assets/free-bots/mega-mind.jpg',
@@ -1108,14 +1136,43 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
 
 const FreeBots = observer(() => {
     const engineMode: EngineMode = 'v1';
+    const sections = FREE_BOT_SECTIONS.map(section => ({
+        ...section,
+        bots: BOTS.filter(bot => bot.section === section.id),
+    }));
 
     return (
         <div className='free-bots'>
-            <div className='free-bots__grid'>
-                {BOTS.map((bot, index) => (
-                    <BotCard key={bot.id} bot={bot} engineMode={engineMode} ordinal={index + 1} />
-                ))}
-            </div>
+            {sections.map(section => (
+                <section
+                    className='free-bots__section'
+                    key={section.id}
+                    aria-labelledby={`free-bots-${section.id}-title`}
+                >
+                    <div className='free-bots__section-heading'>
+                        <h2 className='free-bots__section-title' id={`free-bots-${section.id}-title`}>
+                            {section.title}
+                        </h2>
+                        <span className='free-bots__section-count'>
+                            {section.bots.length} {section.bots.length === 1 ? 'bot' : 'bots'}
+                        </span>
+                    </div>
+                    {section.bots.length > 0 ? (
+                        <div className='free-bots__grid'>
+                            {section.bots.map(bot => (
+                                <BotCard
+                                    key={bot.id}
+                                    bot={bot}
+                                    engineMode={engineMode}
+                                    ordinal={BOT_ORDINALS.get(bot.id) ?? 0}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className='free-bots__empty'>{section.emptyMessage ?? 'No bots added here yet.'}</div>
+                    )}
+                </section>
+            ))}
         </div>
     );
 });

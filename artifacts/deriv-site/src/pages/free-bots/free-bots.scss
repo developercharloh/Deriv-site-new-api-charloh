@@ -76,6 +76,49 @@
         margin-bottom: 8px;
     }
 
+    &__section {
+        margin-bottom: 18px;
+    }
+
+    &__section-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 0 2px 9px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(31, 41, 55, 0.14);
+    }
+
+    &__section-title {
+        margin: 0;
+        color: #172033;
+        font-size: 1.35rem;
+        font-weight: 900;
+        line-height: 1.2;
+    }
+
+    &__section-count {
+        flex: 0 0 auto;
+        padding: 4px 8px;
+        border: 1px solid rgba(31, 41, 55, 0.12);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.75);
+        color: #5f6877;
+        font-size: 0.8rem;
+        font-weight: 700;
+    }
+
+    &__empty {
+        padding: 18px 14px;
+        border: 1px dashed rgba(31, 41, 55, 0.22);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.58);
+        color: #687386;
+        font-size: 1rem;
+        text-align: center;
+    }
+
     &__card {
         min-width: 0;
         position: relative;

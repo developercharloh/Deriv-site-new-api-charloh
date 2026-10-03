@@ -1,5 +1,8 @@
+export type FreeBotSection = 'premium' | 'smart-contract' | 'edging';
+
 export type BotConfig = {
     id:          string;
+    section:     FreeBotSection;
     name:        string;
     emoji:       string;
     description: string;

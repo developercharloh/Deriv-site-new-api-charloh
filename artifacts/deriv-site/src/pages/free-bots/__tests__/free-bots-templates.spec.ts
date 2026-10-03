@@ -10,6 +10,39 @@ const readCatalogXmlPaths = (): string[] => {
     return Array.from(catalog.matchAll(/xmlPath:\s*'([^']+)'/g), match => match[1]);
 };
 
+const readCatalogBotSections = (): { id: string; section: string; xmlPath: string }[] => {
+    const catalog = fs.readFileSync(catalogPath, 'utf8');
+    const start = catalog.indexOf('const BOTS: BotConfig[] = [');
+    const end = catalog.indexOf('\n];', start);
+    const botDefinitions = catalog.slice(start, end);
+
+    return Array.from(
+        botDefinitions.matchAll(/id:\s*'([^']+)',\s*section:\s*'([^']+)'[\s\S]*?xmlPath:\s*'([^']+)'/g),
+        match => ({ id: match[1], section: match[2], xmlPath: match[3] })
+    );
+};
+
+const readCustomBlockTypes = (): Set<string> => {
+    const customBlocksPath = path.resolve(__dirname, '../../../external/bot-skeleton/scratch/blocks/Custom');
+    const customSources = fs
+        .readdirSync(customBlocksPath)
+        .filter(fileName => fileName.endsWith('.js'))
+        .map(fileName => fs.readFileSync(path.join(customBlocksPath, fileName), 'utf8'));
+    const blockTypes = new Set<string>();
+
+    customSources.forEach(source => {
+        Array.from(source.matchAll(/window\.Blockly\.Blocks\.([a-zA-Z0-9_]+)\s*=/g), match =>
+            blockTypes.add(match[1])
+        );
+        Array.from(
+            source.matchAll(/register(?:OutputBlock|Output|Boolean)\(\s*\{\s*type:\s*'([a-zA-Z0-9_]+)'/g),
+            match => blockTypes.add(match[1])
+        );
+    });
+
+    return blockTypes;
+};
+
 describe('Free Bots template catalog', () => {
     it('references unique, existing, well-formed Blockly XML templates', () => {
         const xmlPaths = readCatalogXmlPaths();
@@ -30,6 +63,27 @@ describe('Free Bots template catalog', () => {
             expect(document.documentElement.localName).toBe('xml');
             expect(document.querySelectorAll('block').length).toBeGreaterThan(0);
         }
+    });
+
+    it('groups bots with registered custom blocks as premium and leaves edging empty', () => {
+        const entries = readCatalogBotSections();
+        const customBlockTypes = readCustomBlockTypes();
+
+        expect(entries).toHaveLength(readCatalogXmlPaths().length);
+        expect(entries.map(entry => entry.id)).toHaveLength(new Set(entries.map(entry => entry.id)).size);
+
+        for (const entry of entries) {
+            const templatePath = path.join(publicBotsPath, entry.xmlPath.slice('/bots/'.length));
+            const xml = fs.readFileSync(templatePath, 'utf8');
+            const document = new DOMParser().parseFromString(xml, 'application/xml');
+            const usesCustomBlock = Array.from(document.querySelectorAll('block[type], shadow[type]')).some(block =>
+                customBlockTypes.has(block.getAttribute('type') || '')
+            );
+
+            expect(entry.section).toBe(usesCustomBlock ? 'premium' : 'smart-contract');
+        }
+
+        expect(entries.filter(entry => entry.section === 'edging')).toHaveLength(0);
     });
 
     it('keeps Rise/Fall journal variables out of the Apex AI template', () => {
