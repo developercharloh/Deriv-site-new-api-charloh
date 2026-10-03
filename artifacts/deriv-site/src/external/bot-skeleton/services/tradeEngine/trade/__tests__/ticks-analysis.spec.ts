@@ -206,7 +206,7 @@ describe('Ticks last-digit analysis events', () => {
         await expect(engine.checkSmartOver2Entry(3)).resolves.toBe(false);
     });
 
-    it('repeats ungated Over 2 throughout real recovery', async () => {
+    it('uses ungated Under 5 for real recovery when the Virtual Hook is off', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
@@ -218,7 +218,7 @@ describe('Ticks last-digit analysis events', () => {
 
         await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 2 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
         expect(engine.getLastDigitList).not.toHaveBeenCalled();
         expect(emit).toHaveBeenCalledWith(
@@ -226,7 +226,7 @@ describe('Ticks last-digit analysis events', () => {
             expect.objectContaining({
                 event: 'status',
                 stage: 1,
-                message: expect.stringContaining('Over 2 is ready'),
+                message: expect.stringContaining('Under 5 is ready'),
                 stake: 0.6,
                 martingaleMultiplier: 1.2,
             })
@@ -235,13 +235,13 @@ describe('Ticks last-digit analysis events', () => {
         state.pendingPurchase = null;
         await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 2 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
         expect(engine.getLastDigitList).not.toHaveBeenCalled();
         emit.mockRestore();
     });
 
-    it('keeps the first Over trade real, virtualizes recovery, and stays real after the hook-loss limit', async () => {
+    it('requires consecutive virtual losses before real Under recovery and restarts the hook after a real loss', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
@@ -329,7 +329,7 @@ describe('Ticks last-digit analysis events', () => {
         engine.latestTick = { epoch: 105, quote: '2591.367' };
         await expect(check()).resolves.toBe(true);
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 2 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
         expect(state.recoveryRealMode).toBe(true);
         const recoveryOrder = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
@@ -343,14 +343,21 @@ describe('Ticks last-digit analysis events', () => {
         };
         expect(engine.completeSmartOver2Recovery('smart-over-2')).toBe(false);
         expect(state.stage).toBe(1);
-        expect(state.recoveryRealMode).toBe(true);
+        expect(state.recoveryRealMode).toBe(false);
+        expect(state.virtualLosses).toBe(0);
+        expect(state.currentStake).toBe(0.72);
 
         engine.latestTick = { epoch: 106, quote: '2591.354' };
-        await expect(check()).resolves.toBe(true);
-        expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 2 })
+        await expect(check()).resolves.toBe(false);
+        expect(state.pendingVirtualTrade).toEqual(
+            expect.objectContaining({
+                stage: 1,
+                contractType: 'DIGITUNDER',
+                prediction: 5,
+                entryEpoch: 106,
+            })
         );
-        expect(state.pendingVirtualTrade).toBeNull();
+        expect(state.pendingPurchase).toBeNull();
         expect(emit).toHaveBeenCalledWith(
             'bot.smart_over2.recovery',
             expect.objectContaining({ event: 'virtual_settlement', outcome: 'loss', digit: 7 })
@@ -358,7 +365,43 @@ describe('Ticks last-digit analysis events', () => {
         emit.mockRestore();
     });
 
-    it('keeps base stake with Martingale off and uses configured Over for real recovery', async () => {
+    it('keeps Virtual Hook active after a win and resets the consecutive-loss count', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const state = engine.getSmartOver2RecoveryState();
+        state.stage = 1;
+        state.virtualLosses = 1;
+        engine.latestTick = { epoch: 200, quote: '2591.300' };
+        engine.getLastDigit = jest.fn().mockResolvedValueOnce(3);
+        engine.getLastDigitList = jest.fn();
+        const check = () =>
+            engine.checkSmartOver2Recovery(4, 100, 'smart-over-2', 1.2, true, 2, 5, true, 2, 0, 0);
+
+        await expect(check()).resolves.toBe(false);
+        expect(state.pendingVirtualTrade).toEqual(
+            expect.objectContaining({ contractType: 'DIGITUNDER', prediction: 5, entryEpoch: 200 })
+        );
+
+        engine.latestTick = { epoch: 201, quote: '2591.303' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.stage).toBe(1);
+        expect(state.virtualLosses).toBe(0);
+        expect(state.recoveryRealMode).toBe(false);
+        expect(state.pendingVirtualTrade).toBeNull();
+        expect(state.pendingPurchase).toBeNull();
+
+        await expect(check()).resolves.toBe(false);
+        expect(state.pendingVirtualTrade).toBeNull();
+        engine.latestTick = { epoch: 202, quote: '2591.304' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.pendingVirtualTrade).toEqual(
+            expect.objectContaining({ contractType: 'DIGITUNDER', prediction: 5, entryEpoch: 202 })
+        );
+        expect(state.pendingPurchase).toBeNull();
+        expect(engine.getLastDigitList).not.toHaveBeenCalled();
+    });
+
+    it('keeps base stake with Martingale off and uses configured Under for real recovery', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
@@ -373,7 +416,7 @@ describe('Ticks last-digit analysis events', () => {
             engine.checkSmartOver2Recovery(4, 100, 'smart-over-2', 2, false, 3, 7, false, 2, 10, 6)
         ).resolves.toBe(true);
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ contractType: 'DIGITOVER', prediction: 3 })
+            expect.objectContaining({ contractType: 'DIGITUNDER', prediction: 7 })
         );
 
         engine.lastSettledContract = {
@@ -427,54 +470,54 @@ describe('Ticks last-digit analysis events', () => {
         emit.mockRestore();
     });
 
-    it('keeps a queued Over 2 real recovery order until the broker accepts it', async () => {
+    it('keeps a queued Under 5 real recovery order until the broker accepts it', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
         state.stage = 1;
         state.pendingPurchase = {
             stage: 1,
-            contractType: 'DIGITOVER',
-            prediction: 2,
+            contractType: 'DIGITUNDER',
+            prediction: 5,
             journalScope: 'smart-over-2',
         };
         engine.purchase = jest.fn().mockResolvedValue('submitted');
 
         await expect(engine.purchaseSmartOver2Recovery('smart-over-2')).resolves.toBe('submitted');
 
-        expect(engine.purchase).toHaveBeenCalledWith('DIGITOVER', 2);
+        expect(engine.purchase).toHaveBeenCalledWith('DIGITUNDER', 5);
         expect(state.lastPurchasedStage).toBeNull();
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 2 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
     });
 
-    it('forces stale Under 5 calls to use the queued Over 2 real recovery order', () => {
+    it('forces stale Over 2 calls to use the queued Under 5 real recovery order', () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
         state.stage = 1;
         state.pendingPurchase = {
             stage: 1,
-            contractType: 'DIGITOVER',
-            prediction: 2,
+            contractType: 'DIGITUNDER',
+            prediction: 5,
             journalScope: 'smart-over-2',
         };
 
-        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITUNDER', 5)).toEqual({
+        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITOVER', 2)).toEqual({
             blocked: false,
-            contractType: 'DIGITOVER',
-            prediction: 2,
+            contractType: 'DIGITUNDER',
+            prediction: 5,
             order: state.pendingPurchase,
         });
 
         state.purchaseInFlight = true;
-        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITUNDER', 5)).toEqual(
+        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITOVER', 2)).toEqual(
             expect.objectContaining({ blocked: true })
         );
         state.purchaseInFlight = false;
         state.pendingPurchase = null;
-        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITUNDER', 5)).toEqual(
+        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITOVER', 2)).toEqual(
             expect.objectContaining({ blocked: true })
         );
     });
@@ -505,15 +548,15 @@ describe('Ticks last-digit analysis events', () => {
         state.stage = 1;
         state.pendingPurchase = {
             stage: 1,
-            contractType: 'DIGITOVER',
-            prediction: 2,
+            contractType: 'DIGITUNDER',
+            prediction: 5,
             journalScope: 'smart-over-2',
         };
 
         const order = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
         expect(engine.abortSmartOver2RecoveryPurchase(order)).toBe(true);
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 2 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
         expect(state.purchaseInFlight).toBe(false);
         expect(state.lastPurchasedStage).toBeNull();
@@ -532,13 +575,13 @@ describe('Ticks last-digit analysis events', () => {
         state.stage = 1;
         state.pendingPurchase = {
             stage: 1,
-            contractType: 'DIGITOVER',
-            prediction: 2,
+            contractType: 'DIGITUNDER',
+            prediction: 5,
             journalScope: 'smart-over-2',
         };
 
         const order = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
-        expect(order).toEqual(expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 2 }));
+        expect(order).toEqual(expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 }));
         expect(state.purchaseInFlight).toBe(true);
         expect(state.lastPurchasedStage).toBeNull();
 
@@ -552,10 +595,10 @@ describe('Ticks last-digit analysis events', () => {
             expect.objectContaining({
                 event: 'purchase',
                 stage: 1,
-                contractType: 'DIGITOVER',
-                prediction: 2,
+                contractType: 'DIGITUNDER',
+                prediction: 5,
                 contractId: '123',
-                message: expect.stringContaining('purchased Over 2'),
+                message: expect.stringContaining('purchased Under 5'),
             })
         );
         emit.mockRestore();
@@ -578,7 +621,7 @@ describe('Ticks last-digit analysis events', () => {
         expect(insufficient.ready).toBe(false);
     });
 
-    it('compounds after every loss, repeats real Over 2, and resets to base after a win', async () => {
+    it('compounds real losses, repeats Under 5 recovery when the hook is off, and resets on a win', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
@@ -604,7 +647,7 @@ describe('Ticks last-digit analysis events', () => {
         expect(state.currentStake).toBe(0.6);
         expect(engine.tradeOptions.amount).toBe(0.6);
 
-        expect(settle('over-two-loss-1', 1, 'lost')).toBe(false);
+        expect(settle('under-five-loss-1', 1, 'lost')).toBe(false);
         expect(state.stage).toBe(1);
         expect(state.currentStake).toBe(0.72);
         expect(engine.tradeOptions.amount).toBe(0.72);
@@ -612,10 +655,10 @@ describe('Ticks last-digit analysis events', () => {
         state.pendingPurchase = null;
         await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
         expect(state.pendingPurchase).toEqual(
-            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 2 })
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
 
-        expect(settle('over-two-win', 1, 'won')).toBe(false);
+        expect(settle('under-five-win', 1, 'won')).toBe(false);
         expect(state.stage).toBe(0);
         expect(state.currentStake).toBe(0.5);
         expect(state.consecutiveLosses).toBe(0);

@@ -517,8 +517,8 @@ export default Engine =>
                             : digit < Number(virtualTrade.prediction);
                     state.pendingVirtualTrade = null;
                     state.virtualLosses = isWin ? 0 : state.virtualLosses + 1;
-                    state.stage = isWin ? 0 : 1;
-                    if (isWin) state.recoveryRealMode = false;
+                    state.stage = 1;
+                    state.recoveryRealMode = false;
                     state.lastVirtualSettlementEpoch = currentEpoch;
                     this.emitSmartOver2RecoveryEvent(
                         virtualTrade.journalScope || journalScope,
@@ -555,22 +555,13 @@ export default Engine =>
             }
 
             if (state.stage === 1) {
-                state.pendingPurchase ??= {
-                    stage: 1,
-                    contractType: 'DIGITOVER',
-                    prediction: state.overPrediction,
-                    journalScope,
-                };
-                if (journalScope) state.pendingPurchase.journalScope = journalScope;
-                if (state.useVirtualHook && state.virtualLosses >= state.maxVirtualLosses) {
-                    state.recoveryRealMode = true;
-                }
-                if (
+                const shouldStartVirtualHook =
                     state.useVirtualHook &&
+                    state.maxVirtualLosses > 0 &&
                     !state.recoveryRealMode &&
                     state.virtualLosses < state.maxVirtualLosses &&
-                    !state.purchaseInFlight
-                ) {
+                    !state.purchaseInFlight;
+                if (shouldStartVirtualHook) {
                     const entryEpoch = this.getSmartOver2CurrentEpoch();
                     if (entryEpoch === null) return Promise.resolve(false);
                     state.pendingPurchase = null;
@@ -605,12 +596,26 @@ export default Engine =>
                     );
                     return Promise.resolve(false);
                 }
+                state.recoveryRealMode = true;
+                if (
+                    !state.pendingPurchase ||
+                    state.pendingPurchase.contractType !== 'DIGITUNDER' ||
+                    Number(state.pendingPurchase.prediction) !== Number(state.recoveryPrediction)
+                ) {
+                    state.pendingPurchase = {
+                        stage: 1,
+                        contractType: 'DIGITUNDER',
+                        prediction: state.recoveryPrediction,
+                        journalScope,
+                    };
+                }
+                if (journalScope) state.pendingPurchase.journalScope = journalScope;
                 this.emitSmartOver2RecoveryEvent(
                     journalScope,
                     'status',
-                    `[Smart Over 2] Status · Over ${state.overPrediction} real recovery · Market: ` +
+                    `[Smart Over 2] Status · Under ${state.recoveryPrediction} real recovery · Market: ` +
                         `${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'} · ` +
-                        `Over ${state.overPrediction} is ready on the next available purchase tick; stake ${Number(state.currentStake ?? this.tradeOptions?.amount).toFixed(2)} ` +
+                        `Under ${state.recoveryPrediction} is ready on the next available purchase tick; stake ${Number(state.currentStake ?? this.tradeOptions?.amount).toFixed(2)} ` +
                         `${state.useMartingale ? `at ${state.martingaleMultiplier}×` : 'with Martingale off'}; no last-X gate.`,
                     {
                         stage: 1,
@@ -657,7 +662,7 @@ export default Engine =>
                 this.emitSmartOver2RecoveryEvent(
                     journalScope,
                     'status',
-                    `[Smart Over 2] Status · ${stage === 0 ? `Normal Over ${state.overPrediction}` : `Over ${state.overPrediction} real recovery`} · ` +
+                    `[Smart Over 2] Status · Normal Over ${state.overPrediction} · ` +
                         `Market: ${this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A'} · ` +
                         `${statusDetails} · Decision: ${conditionStatus}`,
                     {
@@ -748,7 +753,7 @@ export default Engine =>
             this.emitSmartOver2RecoveryEvent(
                 order.journalScope,
                 'purchase',
-                `[Smart Over 2] ${order.stage === 0 ? 'Normal entry' : 'Real Over recovery'} · ` +
+                `[Smart Over 2] ${order.stage === 0 ? 'Normal entry' : 'Real Under recovery'} · ` +
                     `purchased ${contractName}.`,
                 {
                     stage: order.stage,
@@ -807,7 +812,7 @@ export default Engine =>
             const stageLabel =
                 purchasedStage === 0
                     ? `Normal Over ${state.overPrediction}`
-                    : `Over ${state.overPrediction} real recovery`;
+                    : `Real Under ${state.recoveryPrediction} recovery`;
             state.sessionProfit = Number((Number(state.sessionProfit || 0) + realizedProfit).toFixed(2));
             const configuredBaseStake = Number(state.baseStake);
             const tradeOptionStake = Number(this.tradeOptions?.amount);
@@ -838,10 +843,8 @@ export default Engine =>
             if (this.tradeOptions && nextStake !== null) this.tradeOptions.amount = nextStake;
             state.consecutiveLosses = isWin ? 0 : Number(state.consecutiveLosses || 0) + 1;
             state.stage = isWin ? 0 : 1;
-            if (isWin) {
-                state.virtualLosses = 0;
-                state.recoveryRealMode = false;
-            }
+            state.virtualLosses = 0;
+            state.recoveryRealMode = false;
             state.pendingPurchase = null;
             state.purchaseInFlight = false;
             const stopReason =
@@ -852,10 +855,12 @@ export default Engine =>
                       : null;
             state.stopped = Boolean(stopReason);
             const stakeLabel = value => (Number.isFinite(value) ? value.toFixed(2) : 'the configured stake');
+            const virtualHookCycleEnabled = state.useVirtualHook && state.maxVirtualLosses > 0;
             const nextRecoveryAction =
-                purchasedStage === 0 && state.useVirtualHook && state.maxVirtualLosses > 0
-                    ? `Starting Virtual Hook Under ${state.recoveryPrediction}; real Over ${state.overPrediction} recovery follows after ${state.maxVirtualLosses} virtual losses.`
-                    : `${purchasedStage === 0 ? 'Starting' : 'Repeating'} real Over ${state.overPrediction} recovery`;
+                virtualHookCycleEnabled
+                    ? `${purchasedStage === 0 ? 'Starting' : 'Restarting'} Virtual Hook Under ${state.recoveryPrediction}; ` +
+                      `a real Under ${state.recoveryPrediction} recovery follows after ${state.maxVirtualLosses} consecutive virtual losses.`
+                    : `${purchasedStage === 0 ? 'Starting' : 'Repeating'} real Under ${state.recoveryPrediction} recovery`;
             this.emitSmartOver2RecoveryEvent(
                 journalScope,
                 'settlement',
@@ -864,7 +869,7 @@ export default Engine =>
                       `returning to condition-gated Over ${state.overPrediction} entries.`
                     : `[Smart Over 2] ${stageLabel} settled LOSS. ` +
                       `${nextRecoveryAction} at stake ${stakeLabel(nextStake)} ` +
-                      `${state.useMartingale ? `with a ${safeMultiplier}× multiplier` : 'with Martingale off'}; recovery continues until a win.`,
+                      `${state.useMartingale ? `with a ${safeMultiplier}× multiplier` : 'with Martingale off'}.`,
                 {
                     stage: isWin ? 0 : 1,
                     outcome: isWin ? 'win' : 'loss',

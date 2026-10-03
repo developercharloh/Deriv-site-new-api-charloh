@@ -376,7 +376,7 @@ registerOutputBlock({
     inputsInline: false,
     output: 'Boolean',
     tooltip:
-        'Uses the configured Over prediction and entry rules. The Virtual Hook uses its linked prediction for the configured number of losses, then real recovery repeats the configured Over prediction until a win. Martingale, Target Profit, and Stop Loss use the linked Run once at start settings.',
+        'Normal entries use the configured Over prediction and entry rules. After a real loss, the Virtual Hook simulates Under using its linked prediction; a virtual win resets its consecutive-loss count but keeps the hook active. After the configured consecutive virtual losses, one real Under recovery uses the same prediction. A real recovery win returns to normal Over entries; a loss restarts the hook. Martingale, Target Profit, and Stop Loss use the linked Run once at start settings.',
     meta: 'Smart Over 2 Recovery Gate',
     generatorCode: block => [
         `Bot.checkSmartOver2Recovery(${numberInput(block, 'COUNT', '4')}, ` +
@@ -396,10 +396,10 @@ registerOutputBlock({
 window.Blockly.Blocks.smart_over2_recovery_purchase = {
     init() {
         this.jsonInit({
-            message0: localize('Smart Over 2: buy the configured Over prediction'),
+            message0: localize('Smart Over 2: buy Over entry or Under recovery'),
             previousStatement: null,
             ...analysisColours(),
-            tooltip: localize('Buys the configured Over prediction for a normal entry or real recovery, using the current stake.'),
+            tooltip: localize('Buys the configured Over prediction for a normal entry, or the configured Under prediction for real recovery, using the current stake.'),
             category: window.Blockly.Categories.Tick_Analysis,
         });
         this.setNextStatement(false);
