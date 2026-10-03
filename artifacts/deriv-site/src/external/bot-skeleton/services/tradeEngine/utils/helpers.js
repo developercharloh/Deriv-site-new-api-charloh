@@ -8,6 +8,13 @@ import { error as logError } from './broadcast';
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
         const supportsPrediction = !['DIGITEVEN', 'DIGITODD'].includes(type);
+        const passthrough = {
+            contract_type: type,
+            purchase_reference,
+        };
+        if (supportsPrediction && trade_option.prediction !== undefined) {
+            passthrough.prediction = Number(trade_option.prediction);
+        }
         const proposal = {
             amount: trade_option.amount,
             basis: trade_option.basis,
@@ -16,10 +23,7 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
             duration: trade_option.duration,
             duration_unit: trade_option.duration_unit,
             multiplier: trade_option.multiplier,
-            passthrough: {
-                contract_type: type,
-                purchase_reference,
-            },
+            passthrough,
             proposal: 1,
             underlying_symbol: trade_option.symbol,
         };

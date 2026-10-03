@@ -131,29 +131,36 @@ describe('Free Bots template catalog', () => {
         expect(shouldShowJournalEntryForBot(otherBotRow, 'matches-signal')).toBe(true);
     });
 
-    it('keeps Smart Over 2 configured for the gated Over 2 contract', () => {
+    it('uses the recovery-aware purchase block while keeping Over 2 as the normal entry', () => {
         const xml = fs.readFileSync(path.join(publicBotsPath, 'Smart_Over_2_Bot.xml'), 'utf8');
         const document = new DOMParser().parseFromString(xml, 'application/xml');
 
-        expect(document.querySelector('block[type="smart_over2_entry_gate"]')).not.toBeNull();
+        expect(document.querySelector('block[type="smart_over2_recovery_gate"]')).not.toBeNull();
         expect(
             document.querySelector(
-                'block[type="smart_over2_entry_gate"] value[name="COUNT"] shadow[type="math_number"]'
+                'block[type="smart_over2_recovery_gate"] value[name="COUNT"] shadow[type="math_number"]'
             )
         ).not.toBeNull();
-        expect(document.querySelector('block[type="smart_over2_entry_gate"] field[name="NUM"]')?.textContent).toBe(
+        expect(document.querySelector('block[type="smart_over2_recovery_gate"] field[name="NUM"]')?.textContent).toBe(
             '4'
         );
-        expect(document.querySelector('block[type="apollo_purchase2"] field[name="PURCHASE_LIST"]')?.textContent).toBe(
-            'DIGITOVER'
-        );
-        expect(document.querySelector('block[type="apollo_purchase2"] field[name="NUM"]')?.textContent).toBe('2');
+        expect(document.querySelector('block[type="smart_over2_recovery_purchase"]')).not.toBeNull();
+        expect(document.querySelector('block[type="apollo_purchase2"]')).toBeNull();
+        expect(
+            document.querySelector(
+                'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] shadow[type="math_number_positive"] field[name="NUM"]'
+            )?.textContent
+        ).toBe('2');
     });
 
     it('does not place the Smart Over 2 gate in other free-bot templates', () => {
         const templatesWithGate = readCatalogXmlPaths().filter(xmlPath => {
             const templatePath = path.join(publicBotsPath, xmlPath.slice('/bots/'.length));
-            return fs.readFileSync(templatePath, 'utf8').includes('type="smart_over2_entry_gate"');
+            const xml = fs.readFileSync(templatePath, 'utf8');
+            return (
+                xml.includes('type="smart_over2_entry_gate"') ||
+                xml.includes('type="smart_over2_recovery_gate"')
+            );
         });
 
         expect(templatesWithGate).toEqual(['/bots/Smart_Over_2_Bot.xml']);

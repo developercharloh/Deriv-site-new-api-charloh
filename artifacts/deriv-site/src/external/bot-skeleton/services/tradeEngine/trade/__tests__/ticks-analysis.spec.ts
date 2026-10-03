@@ -215,13 +215,17 @@ describe('Ticks last-digit analysis events', () => {
 
         await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
         expect(engine.getLastDigitList).not.toHaveBeenCalled();
-        expect(state.pendingPurchase).toEqual({ stage: 1, contractType: 'DIGITOVER', prediction: 4 });
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 4 })
+        );
 
         state.stage = 2;
         state.pendingPurchase = null;
         engine.getLastDigitList.mockResolvedValue([0, 1, 2, 3]);
         await expect(engine.checkSmartOver2Recovery(4, 100, 'smart-over-2')).resolves.toBe(true);
-        expect(state.pendingPurchase).toEqual({ stage: 2, contractType: 'DIGITOVER', prediction: 4 });
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 2, contractType: 'DIGITOVER', prediction: 4 })
+        );
 
         state.pendingPurchase = null;
         engine.getLastDigitList.mockResolvedValue([0, 1, 2, 4]);
@@ -229,18 +233,136 @@ describe('Ticks last-digit analysis events', () => {
         expect(state.pendingPurchase).toBeNull();
     });
 
-    it('submits the queued dynamic direction and barrier through the existing purchase path', async () => {
+    it('keeps the queued dynamic order until the broker accepts it', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
-        state.pendingPurchase = { stage: 3, contractType: 'DIGITUNDER', prediction: 4 };
+        state.stage = 3;
+        state.pendingPurchase = {
+            stage: 3,
+            contractType: 'DIGITUNDER',
+            prediction: 4,
+            journalScope: 'smart-over-2',
+        };
         engine.purchase = jest.fn().mockResolvedValue('submitted');
 
         await expect(engine.purchaseSmartOver2Recovery('smart-over-2')).resolves.toBe('submitted');
 
         expect(engine.purchase).toHaveBeenCalledWith('DIGITUNDER', 4);
-        expect(state.lastPurchasedStage).toBe(3);
+        expect(state.lastPurchasedStage).toBeNull();
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 3, contractType: 'DIGITUNDER', prediction: 4 })
+        );
+    });
+
+    it('forces stale Over 2 purchase calls to use the queued Over 4 recovery order', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const state = engine.getSmartOver2RecoveryState();
+        state.stage = 1;
+        state.pendingPurchase = {
+            stage: 1,
+            contractType: 'DIGITOVER',
+            prediction: 4,
+            journalScope: 'smart-over-2',
+        };
+
+        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITOVER', 2)).toEqual({
+            blocked: false,
+            contractType: 'DIGITOVER',
+            prediction: 4,
+            order: state.pendingPurchase,
+        });
+
+        state.purchaseInFlight = true;
+        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITOVER', 2)).toEqual(
+            expect.objectContaining({ blocked: true })
+        );
+        state.purchaseInFlight = false;
+        state.pendingPurchase = null;
+        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITOVER', 2)).toEqual(
+            expect.objectContaining({ blocked: true })
+        );
+    });
+
+    it('preserves legacy normal entries but blocks a repeat while the staged contract is unsettled', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const state = engine.getSmartOver2RecoveryState();
+
+        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITOVER', 2)).toEqual({
+            blocked: false,
+            contractType: 'DIGITOVER',
+            prediction: 2,
+            order: null,
+        });
+
+        state.lastPurchasedStage = 0;
+        expect(engine.getSmartOver2RecoveryPurchasePlan('DIGITOVER', 2)).toEqual(
+            expect.objectContaining({ blocked: true })
+        );
+    });
+
+    it('retains the queued recovery order without a purchase Journal entry after a failed attempt', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const state = engine.getSmartOver2RecoveryState();
+        const emit = jest.spyOn(observer, 'emit');
+        state.stage = 1;
+        state.pendingPurchase = {
+            stage: 1,
+            contractType: 'DIGITOVER',
+            prediction: 4,
+            journalScope: 'smart-over-2',
+        };
+
+        const order = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
+        expect(engine.abortSmartOver2RecoveryPurchase(order)).toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 4 })
+        );
+        expect(state.purchaseInFlight).toBe(false);
+        expect(state.lastPurchasedStage).toBeNull();
+        expect(emit).not.toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({ event: 'purchase' })
+        );
+        emit.mockRestore();
+    });
+
+    it('records the recovery stage and Journal purchase only after broker acceptance', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const state = engine.getSmartOver2RecoveryState();
+        const emit = jest.spyOn(observer, 'emit');
+        state.stage = 1;
+        state.pendingPurchase = {
+            stage: 1,
+            contractType: 'DIGITOVER',
+            prediction: 4,
+            journalScope: 'smart-over-2',
+        };
+
+        const order = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
+        expect(order).toEqual(expect.objectContaining({ stage: 1, prediction: 4 }));
+        expect(state.purchaseInFlight).toBe(true);
+        expect(state.lastPurchasedStage).toBeNull();
+
+        expect(engine.completeSmartOver2RecoveryPurchase(order, { contract_id: 123 })).toBe(true);
+        expect(state.purchaseInFlight).toBe(false);
         expect(state.pendingPurchase).toBeNull();
+        expect(state.lastPurchasedStage).toBe(1);
+        expect(emit).toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({
+                event: 'purchase',
+                stage: 1,
+                prediction: 4,
+                contractId: '123',
+                message: expect.stringContaining('purchased Over 4'),
+            })
+        );
+        emit.mockRestore();
     });
 
     it('chooses the stronger recent Over 4 or Under 4 bias and falls back to the latest non-4 digit on ties', () => {

@@ -135,6 +135,15 @@ export default Engine =>
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
                 return Promise.resolve();
             }
+            // A Smart Over 2 workspace can have older saved Purchase blocks that
+            // still request Over 2 during recovery. The staged order is authoritative
+            // at the broker boundary, not just in the Journal message.
+            const recoveryPlan = this.getSmartOver2RecoveryPurchasePlan?.(contract_type, prediction);
+            if (recoveryPlan?.blocked) return Promise.resolve(false);
+            if (recoveryPlan?.order) {
+                contract_type = recoveryPlan.contractType;
+                prediction = recoveryPlan.prediction;
+            }
             // Blockly conditions are user-editable and saved workspaces can retain
             // older purchase branches. Once the current cycle has evaluated signal
             // confidence and indicators, enforce the same requirements here so the
@@ -188,18 +197,34 @@ export default Engine =>
             if (!tryAcquireBotContractGate(this, signalKey, false)) {
                 return Promise.resolve();
             }
+            let recoveryOrder = null;
+            let purchaseLeaseReleased = false;
+            const releasePurchaseLease = () => {
+                if (purchaseLeaseReleased) return;
+                purchaseLeaseReleased = true;
+                if (recoveryOrder) this.abortSmartOver2RecoveryPurchase?.(recoveryOrder);
+                releaseBotContractGate(this, undefined, signalKey);
+            };
+            if (recoveryPlan?.order) {
+                recoveryOrder = this.beginSmartOver2RecoveryPurchase?.(recoveryPlan.order);
+                if (!recoveryOrder) {
+                    releasePurchaseLease();
+                    return Promise.resolve(false);
+                }
+            }
             globalObserver.emit('bot.purchase.mapping', {
                 contractType: contract_type,
                 prediction: ['DIGITEVEN', 'DIGITODD'].includes(contract_type) ? null : prediction ?? null,
                 label: getPurchaseMappingLabel(contract_type, prediction),
             });
             const purchaseTradeOptions = getPurchaseTradeOptions(this.tradeOptions, prediction, contract_type);
-            const releasePurchaseLease = () =>
-                releaseBotContractGate(this, undefined, signalKey);
 
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
                 const { buy } = response;
+                if (recoveryOrder) {
+                    this.completeSmartOver2RecoveryPurchase?.(recoveryOrder, buy);
+                }
 
                 contractStatus({
                     id: 'contract.purchase_received',
@@ -269,55 +294,74 @@ export default Engine =>
             };
 
             if (this.is_proposal_subscription_required) {
-                let selectedProposal;
+                let proposalsReady;
                 try {
-                    selectedProposal = this.selectProposal(contract_type);
+                    proposalsReady = this.prepareProposalsForPurchase?.(purchaseTradeOptions) ??
+                        this.waitForProposalsReady();
                 } catch (error) {
                     releasePurchaseLease();
                     throw error;
                 }
-                const { id, askPrice } = selectedProposal;
+                return Promise.resolve(proposalsReady).then(isReady => {
+                    if (!isReady) {
+                        releasePurchaseLease();
+                        notify('warning', 'Purchase blocked: the matching contract proposal was not ready.');
+                        return false;
+                    }
 
-                const action = () => {
-                    this.recordFastPurchaseRequest(contract_type);
-                    return api_base.api.send({ buy: id, price: askPrice });
-                };
+                    let selectedProposal;
+                    try {
+                        selectedProposal = this.selectProposal(contract_type, prediction);
+                    } catch (error) {
+                        releasePurchaseLease();
+                        throw error;
+                    }
+                    const { id, askPrice } = selectedProposal;
 
-                this.isSold = false;
+                    const action = () => {
+                        this.recordFastPurchaseRequest(contract_type);
+                        return api_base.api.send({ buy: id, price: askPrice });
+                    };
 
-                contractStatus({
-                    id: 'contract.purchase_sent',
-                    data: askPrice,
-                });
+                    this.isSold = false;
 
-                if (!this.options.timeMachineEnabled) {
-                    return doUntilDone(action).then(onSuccess).catch(error => {
+                    contractStatus({
+                        id: 'contract.purchase_sent',
+                        data: askPrice,
+                    });
+
+                    if (!this.options.timeMachineEnabled) {
+                        return doUntilDone(action).then(onSuccess).catch(error => {
+                            releasePurchaseLease();
+                            throw error;
+                        });
+                    }
+
+                    return recoverFromError(
+                        action,
+                        (errorCode, makeDelay) => {
+                            // if disconnected no need to resubscription (handled by live-api)
+                            if (errorCode !== 'DisconnectError') {
+                                this.renewProposalsOnPurchase();
+                            } else {
+                                this.clearProposals();
+                            }
+
+                            const unsubscribe = this.store.subscribe(() => {
+                                const { scope, proposalsReady } = this.store.getState();
+                                if (scope === BEFORE_PURCHASE && proposalsReady) {
+                                    makeDelay().then(() => this.observer.emit('REVERT', 'before'));
+                                    unsubscribe();
+                                }
+                            });
+                        },
+                        ['PriceMoved', 'InvalidContractProposal'],
+                        this.getNextPurchaseDelayIndex()
+                    ).then(onSuccess).catch(error => {
                         releasePurchaseLease();
                         throw error;
                     });
-                }
-
-                return recoverFromError(
-                    action,
-                    (errorCode, makeDelay) => {
-                        // if disconnected no need to resubscription (handled by live-api)
-                        if (errorCode !== 'DisconnectError') {
-                            this.renewProposalsOnPurchase();
-                        } else {
-                            this.clearProposals();
-                        }
-
-                        const unsubscribe = this.store.subscribe(() => {
-                            const { scope, proposalsReady } = this.store.getState();
-                            if (scope === BEFORE_PURCHASE && proposalsReady) {
-                                makeDelay().then(() => this.observer.emit('REVERT', 'before'));
-                                unsubscribe();
-                            }
-                        });
-                    },
-                    ['PriceMoved', 'InvalidContractProposal'],
-                    this.getNextPurchaseDelayIndex()
-                ).then(onSuccess).catch(error => {
+                }, error => {
                     releasePurchaseLease();
                     throw error;
                 });

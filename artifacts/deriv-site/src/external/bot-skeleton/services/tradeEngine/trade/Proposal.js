@@ -50,8 +50,20 @@ export default Engine =>
             });
         }
 
-        selectProposal(contract_type) {
+        prepareProposalsForPurchase(purchaseTradeOptions) {
+            const proposalOptions = {
+                ...this.options,
+                ...purchaseTradeOptions,
+            };
+
+            this.makeProposals(proposalOptions);
+            return this.waitForProposalsReady();
+        }
+
+        selectProposal(contract_type, prediction) {
             const { proposals } = this.data;
+            const shouldMatchPrediction = prediction !== undefined && prediction !== null && prediction !== '';
+            const expectedPrediction = Number(prediction);
 
             if (proposals.length === 0) {
                 throw Error(getLocalizedErrorMessage('ProposalsNotReady'));
@@ -60,7 +72,8 @@ export default Engine =>
             const to_buy = proposals.find(proposal => {
                 if (
                     proposal.contract_type === contract_type &&
-                    proposal.purchase_reference === this.getPurchaseReference()
+                    proposal.purchase_reference === this.getPurchaseReference() &&
+                    (!shouldMatchPrediction || Number(proposal.prediction) === expectedPrediction)
                 ) {
                     // Below happens when a user has had one of the proposals return
                     // with a ContractBuyValidationError. We allow the logic to continue

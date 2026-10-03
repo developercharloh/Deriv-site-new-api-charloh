@@ -406,6 +406,7 @@ export default Engine =>
                     stage: 0,
                     stopped: false,
                     pendingPurchase: null,
+                    purchaseInFlight: false,
                     lastPurchasedStage: null,
                     lastProcessedSettlementId: null,
                 };
@@ -439,7 +440,13 @@ export default Engine =>
             }
 
             if (state.stage === 1) {
-                state.pendingPurchase ??= { stage: 1, contractType: 'DIGITOVER', prediction: 4 };
+                state.pendingPurchase ??= {
+                    stage: 1,
+                    contractType: 'DIGITOVER',
+                    prediction: 4,
+                    journalScope,
+                };
+                if (journalScope) state.pendingPurchase.journalScope = journalScope;
                 this.emitSmartOver2RecoveryEvent(
                     journalScope,
                     'status',
@@ -519,7 +526,7 @@ export default Engine =>
                 }
 
                 if (shouldPurchase && order && !state.pendingPurchase) {
-                    state.pendingPurchase = order;
+                    state.pendingPurchase = { ...order, journalScope };
                 }
 
                 this.emitSmartOver2RecoveryEvent(
@@ -538,25 +545,103 @@ export default Engine =>
                 return shouldPurchase;
             });
         }
-        purchaseSmartOver2Recovery(journalScope = null) {
-            const state = this.getSmartOver2RecoveryState();
+        getSmartOver2RecoveryPurchasePlan(contractType, prediction) {
+            const state = this.smartOver2RecoveryState;
+            if (!state) {
+                return { blocked: false, contractType, prediction, order: null };
+            }
+
             const order = state.pendingPurchase;
-            if (!order || state.stopped) return Promise.resolve(false);
+            if (
+                state.stopped ||
+                state.purchaseInFlight
+            ) {
+                return { blocked: true, contractType, prediction, order: null };
+            }
+
+            if (!order) {
+                // Older saved workspaces can still use the original entry gate
+                // and standard Purchase block. Keep normal stage-0 entries
+                // compatible, but never let an unqueued recovery order through.
+                if (state.stage === 0 && state.lastPurchasedStage === null) {
+                    return { blocked: false, contractType, prediction, order: null };
+                }
+                return { blocked: true, contractType, prediction, order: null };
+            }
+
+            if (order.stage !== state.stage) {
+                return { blocked: true, contractType, prediction, order: null };
+            }
+
+            return {
+                blocked: false,
+                contractType: order.contractType,
+                prediction: order.prediction,
+                order,
+            };
+        }
+        beginSmartOver2RecoveryPurchase(order) {
+            const state = this.getSmartOver2RecoveryState();
+            const pending = state.pendingPurchase;
+            if (
+                state.stopped ||
+                state.purchaseInFlight ||
+                !pending ||
+                pending.stage !== state.stage ||
+                pending.stage !== order?.stage ||
+                pending.contractType !== order?.contractType ||
+                Number(pending.prediction) !== Number(order?.prediction)
+            ) {
+                return null;
+            }
+
+            state.purchaseInFlight = true;
+            return { ...pending };
+        }
+        completeSmartOver2RecoveryPurchase(order, buy = {}) {
+            const state = this.getSmartOver2RecoveryState();
+            const pending = state.pendingPurchase;
+            if (
+                !order ||
+                !pending ||
+                state.stage !== order.stage ||
+                pending.stage !== order.stage ||
+                pending.contractType !== order.contractType ||
+                Number(pending.prediction) !== Number(order.prediction)
+            ) {
+                state.purchaseInFlight = false;
+                return false;
+            }
 
             state.pendingPurchase = null;
+            state.purchaseInFlight = false;
             state.lastPurchasedStage = order.stage;
             const contractName = `${order.contractType === 'DIGITUNDER' ? 'Under' : 'Over'} ${order.prediction}`;
             this.emitSmartOver2RecoveryEvent(
-                journalScope,
+                order.journalScope,
                 'purchase',
                 `[Smart Over 2] ${order.stage === 0 ? 'Normal entry' : `Recovery ${order.stage}`} · ` +
-                    `buying ${contractName}.`,
+                    `purchased ${contractName}.`,
                 {
                     stage: order.stage,
                     contractType: order.contractType,
                     prediction: order.prediction,
+                    contractId: buy.contract_id === undefined ? undefined : String(buy.contract_id),
                 }
             );
+            return true;
+        }
+        abortSmartOver2RecoveryPurchase(order) {
+            const state = this.smartOver2RecoveryState;
+            if (!state?.pendingPurchase || state.pendingPurchase.stage !== order?.stage) return false;
+            state.purchaseInFlight = false;
+            return true;
+        }
+        purchaseSmartOver2Recovery(journalScope = null) {
+            const state = this.getSmartOver2RecoveryState();
+            const order = state.pendingPurchase;
+            if (!order || state.stopped || state.purchaseInFlight) return Promise.resolve(false);
+            if (journalScope) order.journalScope = journalScope;
 
             return this.purchase(order.contractType, order.prediction);
         }
@@ -577,6 +662,7 @@ export default Engine =>
 
             state.lastProcessedSettlementId = String(settlementId);
             state.lastPurchasedStage = null;
+            state.purchaseInFlight = false;
             const status = String(contract.status || '').toLowerCase();
             const profit = Number(contract.profit);
             const isWin =
@@ -588,6 +674,7 @@ export default Engine =>
             if (purchasedStage === 3 && !isWin) {
                 state.stopped = true;
                 state.pendingPurchase = null;
+                state.purchaseInFlight = false;
                 this.emitSmartOver2RecoveryEvent(
                     journalScope,
                     'stopped',
@@ -633,6 +720,7 @@ export default Engine =>
 
             state.stage = 0;
             state.pendingPurchase = null;
+            state.purchaseInFlight = false;
             this.emitSmartOver2RecoveryEvent(
                 journalScope,
                 'settlement',
