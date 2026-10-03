@@ -1020,7 +1020,12 @@ export default class RunPanelStore {
     };
 
     onSmartOver2Analysis = (analysis: TSmartOver2Analysis) => {
-        if (analysis.journalScope !== 'rise-fall-master') return;
+        if (
+            analysis.journalScope !== 'rise-fall-master' ||
+            this.root_store.journal.active_bot_template_id !== 'rise-fall-master'
+        ) {
+            return;
+        }
 
         const entryWindowStatus = !analysis.entryWindowReady
             ? `WAITING (need ${analysis.count})`

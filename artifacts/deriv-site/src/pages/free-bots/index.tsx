@@ -872,6 +872,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                 localStorage.setItem(V2_CONFIG_KEY, v2CfgStr);
                 window.dispatchEvent(new StorageEvent('storage', { key: V2_CONFIG_KEY, newValue: v2CfgStr }));
                 setWorkspaceBotTemplateIdentity((window as any).Blockly?.derivWorkspace, bot.id);
+                store.journal.setActiveBotTemplateId(bot.id);
                 store.save_modal.updateBotName(bot.name);
                 setStatus('loaded');
                 openBotBuilderTab(dashboard);
@@ -997,6 +998,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
              }, 6000);
 
             setStatus('loaded');
+            store.journal.setActiveBotTemplateId(bot.id);
             store.save_modal.updateBotName(bot.name);
             setWorkspaceBotTemplateIdentity(Blockly.derivWorkspace, bot.id);
 

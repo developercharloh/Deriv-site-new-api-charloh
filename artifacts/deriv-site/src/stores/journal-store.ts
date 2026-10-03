@@ -13,6 +13,7 @@ import { localize } from '@deriv-com/translations';
 import { isCustomJournalMessage } from '../utils/journal-notifications';
 import { getStoredItemsByKey, getStoredItemsByUser, setStoredItemsByKey } from '../utils/session-storage';
 import { getSetting, storeSetting } from '../utils/settings';
+import { isRiseFallJournalEntry, shouldShowJournalEntryForBot } from '@/utils/bot-template-scope';
 import { TAccountList } from './client-store';
 import RootStore from './root-store';
 
@@ -20,6 +21,7 @@ type TExtra = {
     current_currency?: string;
     currency?: string;
     profit?: number;
+    botTemplateId?: string;
 };
 
 type TlogSuccess = {
@@ -68,6 +70,9 @@ export interface IJournalStore {
     playAudio: (sound: string) => void;
     checked_filters: string[];
     filterMessage: (checked: boolean, item_id: string) => void;
+    active_bot_template_id: string | null;
+    setActiveBotTemplateId: (identity: string | null) => void;
+    visible_messages: TMessageItem[];
     clear: () => void;
     registerReactions: () => void;
     restoreStoredJournals: () => void;
@@ -83,6 +88,7 @@ export default class JournalStore {
             journal_filters: observable.shallow,
             filters: observable.shallow,
             unfiltered_messages: observable.shallow,
+            active_bot_template_id: observable,
             toggleFilterDialog: action.bound,
             onLogSuccess: action.bound,
             onError: action.bound,
@@ -91,10 +97,12 @@ export default class JournalStore {
             updateAdaptiveAnalysisMessage: action.bound,
             updateVolatilityScanMessage: action.bound,
             filtered_messages: computed,
+            visible_messages: computed,
             getServerTime: action.bound,
             playAudio: action.bound,
             checked_filters: computed,
             filterMessage: action.bound,
+            setActiveBotTemplateId: action.bound,
             clear: action.bound,
             registerReactions: action.bound,
             restoreStoredJournals: action.bound,
@@ -102,13 +110,16 @@ export default class JournalStore {
 
         this.root_store = root_store;
         this.core = core;
+        this.active_bot_template_id = this.readActiveBotTemplateId();
         this.disposeReactionsFn = this.registerReactions();
         this.restoreStoredJournals();
     }
 
     JOURNAL_CACHE = 'journal_cache';
+    ACTIVE_BOT_TEMPLATE_KEY = 'free_bots_active_bot_template_id';
 
     is_filter_dialog_visible = false;
+    active_bot_template_id: string | null = null;
 
     filters = [
         { id: MessageTypes.ERROR, label: localize('Errors') },
@@ -117,6 +128,29 @@ export default class JournalStore {
     ];
     journal_filters: string[] = [];
     unfiltered_messages: TMessageItem[] = [];
+
+    readActiveBotTemplateId() {
+        if (typeof window === 'undefined') return null;
+        try {
+            return window.localStorage.getItem(this.ACTIVE_BOT_TEMPLATE_KEY);
+        } catch {
+            return null;
+        }
+    }
+
+    setActiveBotTemplateId(identity: string | null) {
+        this.active_bot_template_id = identity || null;
+        if (typeof window === 'undefined') return;
+        try {
+            if (identity) {
+                window.localStorage.setItem(this.ACTIVE_BOT_TEMPLATE_KEY, identity);
+            } else {
+                window.localStorage.removeItem(this.ACTIVE_BOT_TEMPLATE_KEY);
+            }
+        } catch {
+            // Journal visibility still follows the in-memory bot selection when storage is unavailable.
+        }
+    }
 
     restoreStoredJournals() {
         const client = this.core.client as RootStore['client'];
@@ -252,7 +286,7 @@ export default class JournalStore {
         message: Error | string,
         message_type: string,
         className?: string,
-        extra: { current_currency?: string; currency?: string } = {}
+        extra: TExtra = {}
     ) {
         const { client } = this.core;
         const { loginid, account_list } = client as RootStore['client'];
@@ -264,6 +298,12 @@ export default class JournalStore {
             extra.current_currency = isVirtual ? 'Demo' : current_account?.currency;
         } else if (message === LogTypes.WELCOME) {
             return;
+        }
+
+        if (isRiseFallJournalEntry(message)) {
+            extra.botTemplateId = 'rise-fall-master';
+        } else if (!extra.botTemplateId && this.active_bot_template_id) {
+            extra.botTemplateId = this.active_bot_template_id;
         }
 
         const date = formatDate(this.getServerTime());
@@ -355,13 +395,19 @@ export default class JournalStore {
 
     get filtered_messages() {
         return (
-            this.unfiltered_messages
+            this.visible_messages
                 // filter messages based on filtered-checkbox
                 .filter(
                     message =>
                         this.journal_filters.length &&
                         this.journal_filters.some(filter => message.message_type === filter)
                 )
+        );
+    }
+
+    get visible_messages() {
+        return this.unfiltered_messages.filter(message =>
+            shouldShowJournalEntryForBot(message, this.active_bot_template_id)
         );
     }
 

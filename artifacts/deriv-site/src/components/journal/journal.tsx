@@ -21,12 +21,12 @@ const Journal = observer(() => {
         filtered_messages,
         is_filter_dialog_visible,
         toggleFilterDialog,
-        unfiltered_messages,
+        visible_messages,
     } = journal;
     const { is_stop_button_visible, contract_stage } = run_panel;
 
     const filtered_messages_length = Array.isArray(filtered_messages) && filtered_messages.length;
-    const unfiltered_messages_length = Array.isArray(unfiltered_messages) && unfiltered_messages.length;
+    const visible_messages_length = Array.isArray(visible_messages) && visible_messages.length;
     const { isDesktop } = useDevice();
 
     return (
@@ -61,7 +61,7 @@ const Journal = observer(() => {
                     <>
                         {contract_stage >= contract_stages.STARTING &&
                         !!Object.keys(checked_filters as TCheckedFilters).length &&
-                        !unfiltered_messages_length &&
+                        !visible_messages_length &&
                         is_stop_button_visible ? (
                             <JournalLoader is_mobile={!isDesktop} />
                         ) : (

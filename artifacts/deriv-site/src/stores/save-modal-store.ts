@@ -165,6 +165,7 @@ export default class SaveModalStore implements ISaveModalStore {
 
         this.updateBotName(bot_name);
         setWorkspaceBotTemplateIdentity(window.Blockly?.derivWorkspace, bot_name);
+        this.root_store.journal.setActiveBotTemplateId(bot_name);
 
         if (active_tab === 0) {
             const workspace_id = selected_strategy.id ?? Blockly?.utils?.genUid();

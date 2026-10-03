@@ -197,6 +197,8 @@ export default class LoadModalStore {
             strategy_id: null,
             showIncompatibleStrategyDialog: null,
         });
+        setWorkspaceBotTemplateIdentity(window.Blockly.derivWorkspace, file_name);
+        this.root_store.journal.setActiveBotTemplateId(file_name || null);
 
         const { active_tab } = this.root_store.dashboard;
         if (active_tab === 1) this.toggleLoadModal();
@@ -293,6 +295,7 @@ export default class LoadModalStore {
             window.Blockly.derivWorkspace.asyncClear();
             window.Blockly.Xml.domToWorkspace(window.Blockly.utils.xml.textToDom(workspace.cached_xml.main), workspace);
             setWorkspaceBotTemplateIdentity(workspace, this.root_store.save_modal.bot_name);
+            this.root_store.journal.setActiveBotTemplateId(this.root_store.save_modal.bot_name);
             window.Blockly.derivWorkspace.strategy_to_load = workspace.cached_xml.main;
             scheduleWorkspaceReveal(workspace);
         }
@@ -310,6 +313,7 @@ export default class LoadModalStore {
                 showIncompatibleStrategyDialog: false,
                 show_snackbar: is_show_notification,
             });
+            this.root_store.journal.setActiveBotTemplateId(strategy.name);
             window.Blockly.derivWorkspace.strategy_to_load = strategy.xml;
         }
     };
@@ -328,6 +332,7 @@ export default class LoadModalStore {
             showIncompatibleStrategyDialog: false,
             show_snackbar: false,
         });
+        this.root_store.journal.setActiveBotTemplateId(this.selected_strategy?.name || null);
     };
 
     loadFileFromRecent = async () => {
@@ -342,6 +347,7 @@ export default class LoadModalStore {
                 window.Blockly.derivWorkspace,
                 this.root_store.save_modal.bot_name
             );
+            this.root_store.journal.setActiveBotTemplateId(this.root_store.save_modal.bot_name);
             scheduleWorkspaceReveal(window.Blockly.derivWorkspace);
             this.is_open_button_loading = false;
             return;
@@ -357,6 +363,7 @@ export default class LoadModalStore {
             drop_event: {},
             showIncompatibleStrategyDialog: false,
         });
+        this.root_store.journal.setActiveBotTemplateId(this.selected_strategy.name);
         const recent_files = await getSavedWorkspaces();
         recent_files.map((strategy: TStrategy) => {
             const { xml, id } = strategy;
@@ -484,6 +491,7 @@ export default class LoadModalStore {
             strategy_id = window.Blockly.utils.idGenerator.genUid(),
             convertedDom,
             block_string,
+            file_name,
         } = window.Blockly.xmlValues;
         const derivWorkspace = window.Blockly.derivWorkspace;
         const saved_dropdown_selections = captureDropdownSelections(convertedDom);
@@ -512,6 +520,8 @@ export default class LoadModalStore {
         }
         derivWorkspace.current_strategy_id = strategy_id;
         await restoreDropdownSelections(derivWorkspace, saved_dropdown_selections);
+        setWorkspaceBotTemplateIdentity(derivWorkspace, file_name);
+        this.root_store.journal.setActiveBotTemplateId(file_name || null);
 
         /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
         /* [/AI] */

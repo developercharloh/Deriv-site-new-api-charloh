@@ -35,6 +35,7 @@ describe('Binary Matrix analysis observer integration', () => {
     it('advances visible analysis and appends one matching Journal row per live tick', () => {
         const journal = {
             pushMessage: jest.fn(),
+            active_bot_template_id: 'rise-fall-master',
         };
         const rootStore = {
             dbot: {},
@@ -86,6 +87,7 @@ describe('Binary Matrix analysis observer integration', () => {
     it('journals the last digits, entry window, both skip rules, and final Smart Over 2 decision', () => {
         const journal = {
             pushMessage: jest.fn(),
+            active_bot_template_id: 'rise-fall-master',
         };
         const rootStore = {
             dbot: {},
@@ -137,6 +139,20 @@ describe('Binary Matrix analysis observer integration', () => {
             skipHighTriple: false,
             skipLowTriple: true,
             result: false,
+        });
+        journal.active_bot_template_id = 'smart-over-2';
+        observer.emit('bot.analysis.smart_over2', {
+            market: 'R_25',
+            journalScope: 'rise-fall-master',
+            count: 4,
+            digits: [3, 4, 5, 6],
+            lastThree: [4, 5, 6],
+            entryWindowReady: true,
+            entryWindowMatches: true,
+            skipWindowReady: true,
+            skipHighTriple: false,
+            skipLowTriple: false,
+            result: true,
         });
 
         const messages = journal.pushMessage.mock.calls.map(([message]) => message);

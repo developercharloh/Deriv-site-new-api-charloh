@@ -43,7 +43,7 @@
 - [Blockly payout gate](blockly-payout-gate.md) — encode a 1.60x payout floor as live payout ÷ stake with a 62.5% break-even threshold.
 - [Bot template refresh](deriv-bot-template-workspaces.md) — published Blockly template changes do not rewrite saved/open workspaces; users must load a fresh workspace to receive them.
 - [Blockly trade-definition restart node](deriv-trade-definition-restart-node.md) — include the restart-on-error child in new XML and default it safely for older saved workspaces.
-- [Rise/Fall template isolation](rise-fall-template-isolation.md) — scope stale workspace refreshes by saved bot identity so Rise/Fall Journal blocks cannot contaminate another template.
+- [Rise/Fall bot isolation](rise-fall-template-isolation.md) — scope workspace refreshes and retained Journal entries by the active bot; preserve Last-X number inputs and trading logic.
 - [Signal confidence semantics](deriv-signal-confidence.md) — confidence is recent directional agreement over a configurable 60-tick default and remains informational.
 - [Purchase evaluation cycle](deriv-purchase-evaluation-cycle.md) — bind asynchronous confidence and indicator checks to one before-purchase cycle, not the moving current tick.
 - [Rise/Fall volatility scan observability](rise-fall-volatility-scan-observability.md) — preserve scanner direction and keep per-market indicator results visible while scanning.

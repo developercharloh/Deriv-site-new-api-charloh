@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { shouldShowJournalEntryForBot } from '@/utils/bot-template-scope';
 
 const catalogPath = path.resolve(__dirname, '..', 'index.tsx');
 const publicBotsPath = path.resolve(__dirname, '../../../../public/bots');
@@ -35,6 +36,33 @@ describe('Free Bots template catalog', () => {
         const apexXml = fs.readFileSync(path.join(publicBotsPath, 'Apex_AI.xml'), 'utf8');
 
         expect(apexXml).not.toMatch(/journal|v_msg|previous direction|indicator candles|model signal/i);
+    });
+
+    it('keeps the Rise/Fall-specific journal signature only in its own Free Bot', () => {
+        const templatesWithRiseFallJournal = readCatalogXmlPaths().filter(xmlPath => {
+            const templatePath = path.join(publicBotsPath, xmlPath.slice('/bots/'.length));
+            const xml = fs.readFileSync(templatePath, 'utf8');
+            return xml.includes('bp_direct_journal') || xml.includes('INDICATORS | ADX:');
+        });
+
+        expect(templatesWithRiseFallJournal).toEqual(['/bots/Rise_Fall_Master_Bot.xml']);
+    });
+
+    it('hides Rise/Fall Journal rows in other bots without deleting their stored history', () => {
+        const riseFallRow = {
+            message: 'INDICATORS | ADX: 24 | RSI: 51 | MACD Histogram: 0.4',
+            extra: { botTemplateId: 'rise-fall-master' },
+        };
+        const legacyRiseFallRow = {
+            message: 'Smart Over 2 · Market: R_25 · Last 4: [3, 4, 5, 6]',
+            extra: {},
+        };
+        const otherBotRow = { message: 'Other bot journal entry', extra: { botTemplateId: 'matches-signal' } };
+
+        expect(shouldShowJournalEntryForBot(riseFallRow, 'rise-fall-master')).toBe(true);
+        expect(shouldShowJournalEntryForBot(riseFallRow, 'matches-signal')).toBe(false);
+        expect(shouldShowJournalEntryForBot(legacyRiseFallRow, 'matches-signal')).toBe(false);
+        expect(shouldShowJournalEntryForBot(otherBotRow, 'matches-signal')).toBe(true);
     });
 
     it('keeps Smart Over 2 configured for the gated Over 2 contract', () => {
