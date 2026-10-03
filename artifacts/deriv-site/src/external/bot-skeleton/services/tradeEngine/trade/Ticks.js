@@ -844,7 +844,7 @@ export default Engine =>
             state.consecutiveLosses = isWin ? 0 : Number(state.consecutiveLosses || 0) + 1;
             state.stage = isWin ? 0 : 1;
             state.virtualLosses = 0;
-            state.recoveryRealMode = false;
+            state.recoveryRealMode = purchasedStage === 1 && !isWin;
             state.pendingPurchase = null;
             state.purchaseInFlight = false;
             const stopReason =
@@ -857,10 +857,12 @@ export default Engine =>
             const stakeLabel = value => (Number.isFinite(value) ? value.toFixed(2) : 'the configured stake');
             const virtualHookCycleEnabled = state.useVirtualHook && state.maxVirtualLosses > 0;
             const nextRecoveryAction =
-                virtualHookCycleEnabled
-                    ? `${purchasedStage === 0 ? 'Starting' : 'Restarting'} Virtual Hook Under ${state.recoveryPrediction}; ` +
-                      `a real Under ${state.recoveryPrediction} recovery follows after ${state.maxVirtualLosses} consecutive virtual losses.`
-                    : `${purchasedStage === 0 ? 'Starting' : 'Repeating'} real Under ${state.recoveryPrediction} recovery`;
+                purchasedStage === 1
+                    ? `Continuing real Under ${state.recoveryPrediction} recoveries until a win`
+                    : virtualHookCycleEnabled
+                      ? `Starting Virtual Hook Under ${state.recoveryPrediction}; ` +
+                        `a real Under ${state.recoveryPrediction} recovery follows after ${state.maxVirtualLosses} consecutive virtual losses`
+                      : `Starting real Under ${state.recoveryPrediction} recovery`;
             this.emitSmartOver2RecoveryEvent(
                 journalScope,
                 'settlement',

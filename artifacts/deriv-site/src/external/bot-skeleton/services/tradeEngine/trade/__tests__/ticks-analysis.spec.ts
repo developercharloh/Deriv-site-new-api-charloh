@@ -241,7 +241,7 @@ describe('Ticks last-digit analysis events', () => {
         emit.mockRestore();
     });
 
-    it('requires consecutive virtual losses before real Under recovery and restarts the hook after a real loss', async () => {
+    it('requires consecutive virtual losses to start real Under recovery, then repeats real recovery until a win', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
@@ -343,24 +343,74 @@ describe('Ticks last-digit analysis events', () => {
         };
         expect(engine.completeSmartOver2Recovery('smart-over-2')).toBe(false);
         expect(state.stage).toBe(1);
-        expect(state.recoveryRealMode).toBe(false);
+        expect(state.recoveryRealMode).toBe(true);
         expect(state.virtualLosses).toBe(0);
         expect(state.currentStake).toBe(0.72);
 
         engine.latestTick = { epoch: 106, quote: '2591.354' };
-        await expect(check()).resolves.toBe(false);
-        expect(state.pendingVirtualTrade).toEqual(
-            expect.objectContaining({
-                stage: 1,
-                contractType: 'DIGITUNDER',
-                prediction: 5,
-                entryEpoch: 106,
-            })
+        await expect(check()).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
         );
-        expect(state.pendingPurchase).toBeNull();
+        expect(state.pendingVirtualTrade).toBeNull();
+        const nextRecoveryOrder = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
+        engine.completeSmartOver2RecoveryPurchase(nextRecoveryOrder, {
+            buy_price: 0.72,
+            contract_id: 'second-recovery',
+        });
+        engine.lastSettledContract = {
+            contract_id: 'second-recovery',
+            status: 'lost',
+            buy_price: 0.72,
+            sell_price: 0,
+            profit: -0.72,
+        };
+        expect(engine.completeSmartOver2Recovery('smart-over-2')).toBe(false);
+        expect(state.stage).toBe(1);
+        expect(state.recoveryRealMode).toBe(true);
+        expect(state.currentStake).toBe(0.86);
+        expect(state.pendingVirtualTrade).toBeNull();
+
+        engine.latestTick = { epoch: 107, quote: '2591.347' };
+        await expect(check()).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 1, contractType: 'DIGITUNDER', prediction: 5 })
+        );
+        const winningRecoveryOrder = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
+        engine.completeSmartOver2RecoveryPurchase(winningRecoveryOrder, {
+            buy_price: 0.86,
+            contract_id: 'winning-recovery',
+        });
+        engine.lastSettledContract = {
+            contract_id: 'winning-recovery',
+            status: 'won',
+            buy_price: 0.86,
+            sell_price: 1.72,
+            profit: 0.86,
+        };
+        expect(engine.completeSmartOver2Recovery('smart-over-2')).toBe(false);
+        expect(state.stage).toBe(0);
+        expect(state.recoveryRealMode).toBe(false);
+        expect(state.currentStake).toBe(0.5);
+        expect(state.pendingVirtualTrade).toBeNull();
+
+        engine.latestTick = { epoch: 108, quote: '2591.352' };
+        await expect(check()).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 0, contractType: 'DIGITOVER', prediction: 2 })
+        );
+        expect(engine.getLastDigit).toHaveBeenCalledTimes(2);
         expect(emit).toHaveBeenCalledWith(
             'bot.smart_over2.recovery',
             expect.objectContaining({ event: 'virtual_settlement', outcome: 'loss', digit: 7 })
+        );
+        expect(emit).toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({
+                event: 'settlement',
+                contractId: 'second-recovery',
+                message: expect.stringContaining('Continuing real Under 5 recoveries until a win'),
+            })
         );
         emit.mockRestore();
     });

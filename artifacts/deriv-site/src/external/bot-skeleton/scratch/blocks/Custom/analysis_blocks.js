@@ -376,7 +376,7 @@ registerOutputBlock({
     inputsInline: false,
     output: 'Boolean',
     tooltip:
-        'Normal entries use the configured Over prediction and entry rules. After a real loss, the Virtual Hook simulates Under using its linked prediction; a virtual win resets its consecutive-loss count but keeps the hook active. After the configured consecutive virtual losses, one real Under recovery uses the same prediction. A real recovery win returns to normal Over entries; a loss restarts the hook. Martingale, Target Profit, and Stop Loss use the linked Run once at start settings.',
+        'Normal entries use the configured Over prediction and entry rules. After a real Over loss, the Virtual Hook simulates Under using its linked prediction; a virtual win resets its consecutive-loss count but keeps the hook active. After the configured consecutive virtual losses, real Under recovery begins. Real Under losses continue real Under recovery with Martingale until a win, then normal Over entries resume. Martingale, Target Profit, and Stop Loss use the linked Run once at start settings.',
     meta: 'Smart Over 2 Recovery Gate',
     generatorCode: block => [
         `Bot.checkSmartOver2Recovery(${numberInput(block, 'COUNT', '4')}, ` +
