@@ -229,7 +229,7 @@ describe('Rise/Fall Master Bot XML', () => {
             workspace.getBlockById('smart_over2_before_purchase') as any
         );
 
-        expect(String(generated)).toContain('Bot.checkSmartOver2Entry(4, true)');
+        expect(String(generated)).toContain('Bot.checkSmartOver2Entry(4, "rise-fall-master")');
         expect(String(generated)).toContain("Bot.purchase('DIGITOVER', 2)");
         expect(String(generated)).not.toContain('DIGITUNDER');
 

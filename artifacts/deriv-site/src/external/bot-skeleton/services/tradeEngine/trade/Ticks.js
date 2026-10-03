@@ -282,7 +282,7 @@ export default Engine =>
                 return result;
             });
         }
-        checkSmartOver2Entry(count = 4, reportToJournal = false) {
+        checkSmartOver2Entry(count = 4, journalScope = null) {
             return this.getLastDigitList().then(digits => {
                 const size = Math.max(1, Math.floor(Number(count) || 1));
                 const recent = digits.slice(-size).map(Number);
@@ -302,7 +302,7 @@ export default Engine =>
                     !skipHighTriple &&
                     !skipLowTriple;
 
-                if (reportToJournal) {
+                if (journalScope === 'rise-fall-master' || journalScope === 'smart-over-2') {
                     globalObserver.emit('bot.analysis.smart_over2', {
                         market: this.symbol || 'N/A',
                         count: size,
@@ -314,7 +314,7 @@ export default Engine =>
                         skipHighTriple,
                         skipLowTriple,
                         result,
-                        journalScope: 'rise-fall-master',
+                        journalScope,
                     });
                 }
 

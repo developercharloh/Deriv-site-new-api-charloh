@@ -318,9 +318,9 @@ registerOutputBlock({
     tooltip: 'Allows Digit Over 2 only when the last X digits are 3–7 inclusive; skips if the latest three are all 7–9 or all 0–2.',
     meta: 'Smart Over 2 Entry Gate',
     generatorCode: block => {
-        const journalEnabled = block.workspace?.__smartOver2JournalScope === 'rise-fall-master';
+        const journalScope = JSON.stringify(block.workspace?.__smartOver2JournalScope ?? null);
         return [
-            `Bot.checkSmartOver2Entry(${numberInput(block, 'COUNT', '4')}, ${journalEnabled})`,
+            `Bot.checkSmartOver2Entry(${numberInput(block, 'COUNT', '4')}, ${journalScope})`,
             generator().ORDER_FUNCTION_CALL,
         ];
     },

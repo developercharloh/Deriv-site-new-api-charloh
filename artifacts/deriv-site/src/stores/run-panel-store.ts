@@ -14,7 +14,7 @@ import { helpers } from '@/utils/store-helpers';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
 import { BinaryMatrixEngine, type BinaryMatrixConfig, type BinaryMatrixStatus } from '@/utils/binary-matrix-engine';
 import { readBlocklyNumberVariable } from '@/utils/binary-matrix-settings';
-import { isRiseFallMasterBotIdentity } from '@/utils/bot-template-scope';
+import { getSmartOver2JournalScope, isRiseFallMasterBotIdentity } from '@/utils/bot-template-scope';
 import type { DTPosition } from '@/utils/dtrader-engine';
 import { Buy, ProposalOpenContract } from '@deriv/api-types';
 import { TStores } from '@deriv/stores/types';
@@ -1021,12 +1021,8 @@ export default class RunPanelStore {
     };
 
     onSmartOver2Analysis = (analysis: TSmartOver2Analysis) => {
-        if (
-            analysis.journalScope !== 'rise-fall-master' ||
-            this.root_store.journal.active_bot_template_id !== 'rise-fall-master'
-        ) {
-            return;
-        }
+        const activeJournalScope = getSmartOver2JournalScope(this.root_store.journal.active_bot_template_id);
+        if (!analysis.journalScope || analysis.journalScope !== activeJournalScope) return;
 
         const entryWindowStatus = !analysis.entryWindowReady
             ? `WAITING (need ${analysis.count})`

@@ -48,14 +48,18 @@ describe('Free Bots template catalog', () => {
         expect(templatesWithRiseFallJournal).toEqual(['/bots/Rise_Fall_Master_Bot.xml']);
     });
 
-    it('hides Rise/Fall Journal rows in other bots without deleting their stored history', () => {
+    it('keeps shared Smart Over 2 analysis in its two bots and hides it elsewhere', () => {
         const riseFallRow = {
             message: 'INDICATORS | ADX: 24 | RSI: 51 | MACD Histogram: 0.4',
             extra: { botTemplateId: 'rise-fall-master' },
         };
-        const legacyRiseFallRow = {
+        const legacySmartOver2Row = {
             message: 'Smart Over 2 · Market: R_25 · Last 4: [3, 4, 5, 6]',
             extra: {},
+        };
+        const previouslyMisattributedSmartOver2Row = {
+            message: 'Smart Over 2 · Market: R_25 · Last 4: [3, 4, 5, 6]',
+            extra: { botTemplateId: 'rise-fall-master' },
         };
         const legacyVolatilityScanRow = {
             message: '[Volatility Scan] Entry order submitted · 1HZ25V · DIGITOVER',
@@ -65,7 +69,10 @@ describe('Free Bots template catalog', () => {
 
         expect(shouldShowJournalEntryForBot(riseFallRow, 'rise-fall-master')).toBe(true);
         expect(shouldShowJournalEntryForBot(riseFallRow, 'matches-signal')).toBe(false);
-        expect(shouldShowJournalEntryForBot(legacyRiseFallRow, 'matches-signal')).toBe(false);
+        expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'rise-fall-master')).toBe(true);
+        expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'smart-over-2')).toBe(true);
+        expect(shouldShowJournalEntryForBot(previouslyMisattributedSmartOver2Row, 'smart-over-2')).toBe(true);
+        expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'matches-signal')).toBe(false);
         expect(shouldShowJournalEntryForBot(legacyVolatilityScanRow, 'smart-over-2')).toBe(false);
         expect(shouldShowJournalEntryForBot(otherBotRow, 'matches-signal')).toBe(true);
     });

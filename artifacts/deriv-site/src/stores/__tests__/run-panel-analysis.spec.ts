@@ -125,7 +125,7 @@ describe('Binary Matrix analysis observer integration', () => {
         ]);
     });
 
-    it('journals the last digits, entry window, both skip rules, and final Smart Over 2 decision', () => {
+    it('journals Smart Over 2 analysis only in the bot whose gate emitted it', () => {
         const journal = {
             pushMessage: jest.fn(),
             active_bot_template_id: 'rise-fall-master',
@@ -195,9 +195,22 @@ describe('Binary Matrix analysis observer integration', () => {
             skipLowTriple: false,
             result: true,
         });
+        observer.emit('bot.analysis.smart_over2', {
+            market: 'R_25',
+            journalScope: 'smart-over-2',
+            count: 4,
+            digits: [3, 4, 5, 6],
+            lastThree: [4, 5, 6],
+            entryWindowReady: true,
+            entryWindowMatches: true,
+            skipWindowReady: true,
+            skipHighTriple: false,
+            skipLowTriple: false,
+            result: true,
+        });
 
         const messages = journal.pushMessage.mock.calls.map(([message]) => message);
-        expect(messages).toHaveLength(2);
+        expect(messages).toHaveLength(3);
         expect(messages[0]).toContain('Last 4: [3, 4, 5, 6]');
         expect(messages[0]).toContain('3–7 window: MET');
         expect(messages[0]).toContain('all 7–9: NO');
@@ -208,7 +221,10 @@ describe('Binary Matrix analysis observer integration', () => {
         expect(messages[1]).toContain('all 7–9: NO');
         expect(messages[1]).toContain('all 0–2: MATCH — SKIP');
         expect(messages[1]).toContain('Entry: BLOCKED');
+        expect(messages[2]).toContain('Last 4: [3, 4, 5, 6]');
+        expect(messages[2]).toContain('Entry: ALLOWED');
         expect(journal.pushMessage.mock.calls.map(([, type]) => type)).toEqual([
+            MessageTypes.NOTIFY,
             MessageTypes.NOTIFY,
             MessageTypes.NOTIFY,
         ]);

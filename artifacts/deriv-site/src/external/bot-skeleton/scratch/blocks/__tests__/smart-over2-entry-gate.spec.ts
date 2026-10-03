@@ -48,17 +48,22 @@ describe('Smart Over 2 Blockly entry gate', () => {
         const code = Array.isArray(generated) ? generated[0] : generated;
 
         expect(gate.isEnabled()).toBe(true);
-        expect(code).toBe('Bot.checkSmartOver2Entry(6, false)');
+        expect(code).toBe('Bot.checkSmartOver2Entry(6, null)');
+
+        setWorkspaceBotTemplateIdentity(workspace, 'matches-signal');
+        const unrelatedGenerated = javascriptGenerator.blockToCode(gate);
+        const unrelatedCode = Array.isArray(unrelatedGenerated) ? unrelatedGenerated[0] : unrelatedGenerated;
+        expect(unrelatedCode).toBe('Bot.checkSmartOver2Entry(6, null)');
 
         setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2');
-        const otherBotGenerated = javascriptGenerator.blockToCode(gate);
-        const otherBotCode = Array.isArray(otherBotGenerated) ? otherBotGenerated[0] : otherBotGenerated;
-        expect(otherBotCode).toBe('Bot.checkSmartOver2Entry(6, false)');
+        const smartOver2Generated = javascriptGenerator.blockToCode(gate);
+        const smartOver2Code = Array.isArray(smartOver2Generated) ? smartOver2Generated[0] : smartOver2Generated;
+        expect(smartOver2Code).toBe('Bot.checkSmartOver2Entry(6, "smart-over-2")');
 
         setWorkspaceBotTemplateIdentity(workspace, 'Rise_Fall_Master_Bot');
         const riseFallGenerated = javascriptGenerator.blockToCode(gate);
         const riseFallCode = Array.isArray(riseFallGenerated) ? riseFallGenerated[0] : riseFallGenerated;
-        expect(riseFallCode).toBe('Bot.checkSmartOver2Entry(6, true)');
+        expect(riseFallCode).toBe('Bot.checkSmartOver2Entry(6, "rise-fall-master")');
 
         workspace.dispose();
     });
