@@ -59,6 +59,20 @@ interface VirtualPair {
     entryTickSerial: number;
     quotes: { over: { askPrice: number; payout: number }; under: { askPrice: number; payout: number } };
     digits: number[];
+    entrySpot: string;
+    entryEpoch?: number;
+}
+
+export interface EdgingProVirtualSettlement {
+    outcome: 'win' | 'loss';
+    entryTickSerial: number;
+    market: string;
+    contractType: string;
+    prediction: number;
+    entryEpoch?: number;
+    settlementEpoch?: number;
+    entrySpot?: string;
+    exitSpot?: string;
 }
 
 interface LivePair {
@@ -96,6 +110,8 @@ export class EdgingProEngine {
     private wins = 0;
     private losses = 0;
     private consecutiveVirtualLosses = 0;
+    private latestSpot = '';
+    private latestEpoch?: number;
     private status: EdgingProStatus = 'idle';
     private lastAnalysis: EdgingProEntryAssessment;
 
@@ -104,6 +120,7 @@ export class EdgingProEngine {
     onStats: (stats: EdgingProStats) => void = () => {};
     onPosition: (position: DTPosition) => void = () => {};
     onAnalysis: (analysis: EdgingProAnalysis) => void = () => {};
+    onVirtualSettlement: (settlement: EdgingProVirtualSettlement) => void = () => {};
     onAlert: (alert: { kind: 'tp' | 'sl'; profit: number }) => void = () => {};
 
     constructor(config: EdgingProConfig) {
@@ -203,15 +220,17 @@ export class EdgingProEngine {
     }
 
     private bindTrader(): void {
-        this.trader.onTick = (_spot, digit) => this.handleTick(digit);
+        this.trader.onTick = (spot, digit, epoch) => this.handleTick(digit, spot, epoch);
         this.trader.onPosition = position => this.handlePosition(position);
         this.trader.onStatus = status => this.handleTraderStatus(status);
         this.trader.onLog = log => this.onLog(log);
     }
 
-    private handleTick(digit: number): void {
+    private handleTick(digit: number, spot = '', epoch?: number): void {
         if (!this.running || this.status === 'error') return;
         this.tickSerial += 1;
+        this.latestSpot = spot;
+        this.latestEpoch = epoch;
         this.digits = [...this.digits, digit].slice(-this.config.lastX);
         this.lastAnalysis = assessEdgingProEntry(this.digits, this.config.lastX);
         const analysis: EdgingProAnalysis = { ...this.lastAnalysis, tickSerial: this.tickSerial };
@@ -220,7 +239,7 @@ export class EdgingProEngine {
         this.emitStats();
 
         if (this.pendingVirtualPair && this.tickSerial > this.pendingVirtualPair.entryTickSerial) {
-            this.settleVirtualPair(digit);
+            this.settleVirtualPair(digit, spot, epoch);
             return;
         }
         if (
@@ -309,6 +328,8 @@ export class EdgingProEngine {
                 under: { askPrice: under.askPrice, payout: under.payout },
             },
             digits: entryDigits,
+            entrySpot: this.latestSpot,
+            entryEpoch: this.latestEpoch,
         };
         this.writeLog(
             `Virtual pair opened after [${entryDigits.join(' ')}]. Waiting for the next tick to score both legs.`,
@@ -317,7 +338,7 @@ export class EdgingProEngine {
         this.emitStats();
     }
 
-    private settleVirtualPair(settlementDigit: number): void {
+    private settleVirtualPair(settlementDigit: number, settlementSpot = '', settlementEpoch?: number): void {
         const virtualPair = this.pendingVirtualPair;
         if (!virtualPair) return;
         const profit = calculateEdgingProPairProfit(
@@ -340,6 +361,19 @@ export class EdgingProEngine {
                 `Virtual pair ${profit > 0 ? 'win' : 'break-even'} on digit ${settlementDigit} · ${this.signedMoney(profit)} · loss counter reset.`,
                 profit > 0 ? 'win' : 'system',
             );
+        }
+        if (profit !== 0) {
+            this.onVirtualSettlement({
+                outcome: profit > 0 ? 'win' : 'loss',
+                entryTickSerial: virtualPair.entryTickSerial,
+                market: this.config.symbol,
+                contractType: 'DIGITOVER',
+                prediction: this.config.overPrediction,
+                entryEpoch: virtualPair.entryEpoch,
+                settlementEpoch,
+                entrySpot: virtualPair.entrySpot,
+                exitSpot: settlementSpot,
+            });
         }
         this.emitStats();
         this.setStatus('scanning');

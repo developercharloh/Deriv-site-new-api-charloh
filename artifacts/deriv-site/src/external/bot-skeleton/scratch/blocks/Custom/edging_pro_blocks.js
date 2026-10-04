@@ -106,6 +106,36 @@ window.Blockly.Blocks.edging_pro_strategy = {
     },
 };
 
+window.Blockly.Blocks.edging_pro_purchase_condition = {
+    init() {
+        this.jsonInit({
+            message0: localize('Edging pro entry condition · Last X digits are all 4 or 5'),
+            previousStatement: 'Purchase',
+            nextStatement: 'Purchase',
+            colour: window.Blockly.Colours.Special1.colour,
+            colourSecondary: window.Blockly.Colours.Special1.colourSecondary,
+            colourTertiary: window.Blockly.Colours.Special1.colourTertiary,
+            tooltip: localize(
+                'Place this block in Purchase conditions. Edging pro reads Last X from Run once at start and permits a pair only when every digit is 4 or 5.'
+            ),
+            category: window.Blockly.Categories.Before_Purchase,
+        });
+        this.setInputsInline(false);
+    },
+    meta() {
+        return {
+            display_name: localize('Edging pro purchase condition'),
+            description: localize(
+                'Applies the Last X digits 4–5 entry rule configured in the Edging pro startup block.'
+            ),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
 // The Run panel routes workspaces containing this block to the paired-contract
 // runtime instead of the standard single-contract Blockly purchase loop.
 window.Blockly.JavaScript.javascriptGenerator.forBlock.edging_pro_strategy = () => '';
+window.Blockly.JavaScript.javascriptGenerator.forBlock.edging_pro_purchase_condition = () => '';

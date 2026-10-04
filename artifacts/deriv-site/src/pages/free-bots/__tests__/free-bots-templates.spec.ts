@@ -121,6 +121,20 @@ describe('Free Bots template catalog', () => {
         );
     });
 
+    it('attaches Edging pro settings to Run once and its entry rule to Purchase conditions', () => {
+        const xml = fs.readFileSync(path.join(publicBotsPath, 'Edging_Pro_Engine.xml'), 'utf8');
+        const document = new DOMParser().parseFromString(xml, 'application/xml');
+
+        expect(
+            document.querySelector('statement[name="INITIALIZATION"] > block[type="edging_pro_strategy"]')
+        ).not.toBeNull();
+        expect(
+            document.querySelector('statement[name="BEFOREPURCHASE_STACK"] > block[type="edging_pro_purchase_condition"]')
+        ).not.toBeNull();
+        expect(document.querySelectorAll('block[type="edging_pro_strategy"]')).toHaveLength(1);
+        expect(document.querySelectorAll('block[type="edging_pro_purchase_condition"]')).toHaveLength(1);
+    });
+
     it('keeps Rise/Fall journal variables out of the Apex AI template', () => {
         const apexXml = fs.readFileSync(path.join(publicBotsPath, 'Apex_AI.xml'), 'utf8');
 

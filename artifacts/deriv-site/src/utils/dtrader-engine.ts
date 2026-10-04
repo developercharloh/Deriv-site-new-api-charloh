@@ -194,7 +194,7 @@ export interface DTConfig {
 
 export class DTraderEngine {
     // ── Public callbacks ──────────────────────────────────────────────────────
-    public onTick:     (spot: string, digit: number) => void = () => {};
+    public onTick:     (spot: string, digit: number, epoch?: number) => void = () => {};
     public onProposal: (p: DTProposal | null)         => void = () => {};
     public onPosition: (p: DTPosition)                => void = () => {};
     public onStatus:   (s: DTStatus)                  => void = () => {};
@@ -1040,7 +1040,7 @@ export class DTraderEngine {
         const spot  = this.formatQuote(tick.quote, this.pipSize);
         const digit = this.lastDigit(tick.quote, this.pipSize);
         if (this.status === 'subscribing') this.setStatus('ready');
-        this.onTick(spot, digit);
+        this.onTick(spot, digit, tick.epoch);
         this.pushDigit(digit);
         this.pushPrice(tick.quote);
         this.detectBarrierBreach(tick.quote);

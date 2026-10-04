@@ -7,6 +7,7 @@ jest.mock('@/utils/edging-pro-engine', () => ({
             pause: jest.fn(),
             resume: jest.fn(),
             onLog: undefined as ((entry: { message: string; type: string }) => void) | undefined,
+            onVirtualSettlement: undefined as ((settlement: any) => void) | undefined,
             onStatus: undefined as ((status: string) => void) | undefined,
             onPosition: undefined as ((position: unknown) => void) | undefined,
         };
@@ -59,10 +60,30 @@ describe('Edging pro DBot Builder run integration', () => {
         const strategyBlock = {
             type: 'edging_pro_strategy',
             getFieldValue: (field: string) => fieldValues[field],
+            getNextBlock: () => null,
+        };
+        const purchaseConditionBlock = {
+            type: 'edging_pro_purchase_condition',
+            getNextBlock: () => null,
+        };
+        const tradeDefinitionBlock = {
+            type: 'trade_definition',
+            getInputTargetBlock: (name: string) => (name === 'INITIALIZATION' ? strategyBlock : null),
+        };
+        const beforePurchaseBlock = {
+            type: 'before_purchase',
+            getInputTargetBlock: (name: string) =>
+                name === 'BEFOREPURCHASE_STACK' ? purchaseConditionBlock : null,
         };
         (window as any).Blockly = {
             derivWorkspace: {
-                getAllBlocks: () => [marketBlock, strategyBlock],
+                getAllBlocks: () => [
+                    tradeDefinitionBlock,
+                    marketBlock,
+                    strategyBlock,
+                    beforePurchaseBlock,
+                    purchaseConditionBlock,
+                ],
             },
         };
 
@@ -76,7 +97,10 @@ describe('Edging pro DBot Builder run integration', () => {
             active_bot_template_id: 'edging-pro-engine',
         };
         const summaryCard = { clear: jest.fn(), onBotContractEvent: jest.fn() };
-        const transactions = { onBotContractEvent: jest.fn() };
+        const transactions = {
+            onBotContractEvent: jest.fn(),
+            pushVirtualHookTransaction: jest.fn(),
+        };
         const ui = {
             setAccountSwitcherDisabledMessage: jest.fn(),
             setPromptHandler: jest.fn(),
@@ -109,6 +133,29 @@ describe('Edging pro DBot Builder run integration', () => {
         expect(engine.start).toHaveBeenCalledTimes(1);
         expect(runPanel.is_running).toBe(true);
         expect(ui.setAccountSwitcherDisabledMessage).toHaveBeenCalled();
+
+        engine.onVirtualSettlement({
+            outcome: 'loss',
+            entryTickSerial: 17,
+            market: '1HZ50V',
+            contractType: 'DIGITOVER',
+            prediction: 5,
+            entryEpoch: 100,
+            settlementEpoch: 101,
+            entrySpot: '1024.15',
+            exitSpot: '1024.16',
+        });
+        expect(transactions.pushVirtualHookTransaction).toHaveBeenCalledWith(
+            expect.objectContaining({
+                journalScope: 'edging-pro',
+                virtualTradeId: `edging-pro:${runPanel.run_id}:17`,
+                outcome: 'loss',
+                contractType: 'DIGITOVER',
+                market: '1HZ50V',
+                entrySpot: '1024.15',
+                exitSpot: '1024.16',
+            })
+        );
 
         runPanel.onPauseButtonClick();
         expect(engine.pause).toHaveBeenCalledTimes(1);

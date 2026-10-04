@@ -53,4 +53,49 @@ describe('EdgingProEngine Journal analysis', () => {
             }),
         );
     });
+
+    it('emits settled virtual wins and losses with tick identity and spots for Transactions', () => {
+        const engine = new EdgingProEngine(config);
+        const settlements: any[] = [];
+        engine.onVirtualSettlement = settlement => settlements.push(settlement);
+
+        const internal = engine as any;
+        const pair = (entryTickSerial: number, entrySpot: string, entryEpoch: number) => ({
+            entryTickSerial,
+            quotes: {
+                over: { askPrice: 0.5, payout: 1.5 },
+                under: { askPrice: 0.5, payout: 1.5 },
+            },
+            digits: [4, 5, 4],
+            entrySpot,
+            entryEpoch,
+        });
+
+        internal.pendingVirtualPair = pair(8, '1024.15', 100);
+        internal.settleVirtualPair(6, '1024.16', 101);
+        internal.pendingVirtualPair = pair(9, '1024.16', 101);
+        internal.settleVirtualPair(4, '1024.17', 102);
+
+        expect(settlements).toEqual([
+            expect.objectContaining({
+                outcome: 'win',
+                entryTickSerial: 8,
+                market: '1HZ50V',
+                contractType: 'DIGITOVER',
+                prediction: 5,
+                entryEpoch: 100,
+                settlementEpoch: 101,
+                entrySpot: '1024.15',
+                exitSpot: '1024.16',
+            }),
+            expect.objectContaining({
+                outcome: 'loss',
+                entryTickSerial: 9,
+                entryEpoch: 101,
+                settlementEpoch: 102,
+                entrySpot: '1024.16',
+                exitSpot: '1024.17',
+            }),
+        ]);
+    });
 });

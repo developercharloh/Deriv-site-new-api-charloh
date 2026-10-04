@@ -1026,12 +1026,36 @@ export default class RunPanelStore {
 
     startNativeEdgingProBot = () => {
         const workspace = window.Blockly?.derivWorkspace;
-        const strategyBlock = workspace
-            ?.getAllBlocks?.(true)
-            ?.find((block: any) => block.type === 'edging_pro_strategy');
+        const blocks = workspace?.getAllBlocks?.(true) ?? [];
+        const strategyBlock = blocks.find((block: any) => block.type === 'edging_pro_strategy');
         if (!strategyBlock) return false;
         if (this.native_edging_pro_engine) return true;
 
+        const isInStatement = (rootType: string, inputName: string, target: any) => {
+            const root = blocks.find((block: any) => block.type === rootType);
+            let current = root?.getInputTargetBlock?.(inputName);
+            while (current) {
+                if (current === target) return true;
+                current = current.getNextBlock?.();
+            }
+            return false;
+        };
+        const purchaseConditionBlock = blocks.find(
+            (block: any) => block.type === 'edging_pro_purchase_condition'
+        );
+        if (
+            !isInStatement('trade_definition', 'INITIALIZATION', strategyBlock) ||
+            !isInStatement('before_purchase', 'BEFOREPURCHASE_STACK', purchaseConditionBlock)
+        ) {
+            this.onEdgingProJournalLog({
+                message:
+                    'Connect the Edging pro settings in Run once at start and its entry-condition block in Purchase conditions before running.',
+                type: 'error',
+            });
+            return false;
+        }
+
+        this.run_id = `run-${Date.now()}`;
         const fieldNumber = (name: string, fallback: number) => {
             const value = Number(strategyBlock.getFieldValue(name));
             return Number.isFinite(value) ? value : fallback;
@@ -1055,6 +1079,13 @@ export default class RunPanelStore {
         this.native_edging_pro_engine = engine;
 
         engine.onLog = entry => this.onEdgingProJournalLog(entry);
+        engine.onVirtualSettlement = settlement => {
+            this.root_store.transactions?.pushVirtualHookTransaction?.({
+                ...settlement,
+                journalScope: 'edging-pro',
+                virtualTradeId: `edging-pro:${this.run_id}:${settlement.entryTickSerial}`,
+            });
+        };
         engine.onStatus = (status: EdgingProStatus) => {
             if (status === 'stopped' || status === 'idle' || status === 'error') {
                 if (this.native_edging_pro_engine !== engine) return;

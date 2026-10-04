@@ -39,6 +39,12 @@ describe('bot builder toolbox structure', () => {
         expect(toolboxSource).toContain("type='multiplier_stop_loss'");
     });
 
+    it('shows the Edging pro entry rule in the Purchase conditions menu', () => {
+        expect(toolboxSource).toContain("<Block type='edging_pro_purchase_condition' />");
+        expect(edgingBlocksSource).toContain('window.Blockly.Blocks.edging_pro_purchase_condition');
+        expect(edgingBlocksSource).toContain('javascriptGenerator.forBlock.edging_pro_purchase_condition');
+    });
+
     it('exposes the XML-backed Edging pro strategy and its editable settings', () => {
         expect(toolboxSource).toContain("id='edging_bots'");
         expect(toolboxSource).toContain("type='edging_pro_strategy'");

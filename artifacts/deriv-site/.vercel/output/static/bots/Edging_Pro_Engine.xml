@@ -33,6 +33,19 @@
         </next>
       </block>
     </statement>
+    <statement name="INITIALIZATION">
+      <block type="edging_pro_strategy" id="edging_strategy">
+        <field name="LAST_X">4</field>
+        <field name="STAKE">0.5</field>
+        <field name="OVER_PREDICTION">5</field>
+        <field name="UNDER_PREDICTION">4</field>
+        <field name="MARTINGALE">2</field>
+        <field name="TAKE_PROFIT">10</field>
+        <field name="STOP_LOSS">30</field>
+        <field name="USE_VIRTUAL_HOOK">TRUE</field>
+        <field name="VIRTUAL_LOSS_THRESHOLD">2</field>
+      </block>
+    </statement>
     <statement name="SUBMARKET">
       <block type="trade_definition_tradeoptions" id="edging_trade_options">
         <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
@@ -55,21 +68,14 @@
       </block>
     </statement>
   </block>
-  <block type="before_purchase" id="edging_before_purchase" deletable="false" x="0" y="650"></block>
+  <block type="before_purchase" id="edging_before_purchase" deletable="false" x="0" y="650">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="edging_pro_purchase_condition" id="edging_purchase_condition"></block>
+    </statement>
+  </block>
   <block type="after_purchase" id="edging_after_purchase" x="700" y="0">
     <statement name="AFTERPURCHASE_STACK">
       <block type="trade_again" id="edging_trade_again"></block>
     </statement>
-  </block>
-  <block type="edging_pro_strategy" id="edging_strategy" x="0" y="900">
-    <field name="LAST_X">4</field>
-    <field name="STAKE">0.5</field>
-    <field name="OVER_PREDICTION">5</field>
-    <field name="UNDER_PREDICTION">4</field>
-    <field name="MARTINGALE">2</field>
-    <field name="TAKE_PROFIT">10</field>
-    <field name="STOP_LOSS">30</field>
-    <field name="USE_VIRTUAL_HOOK">TRUE</field>
-    <field name="VIRTUAL_LOSS_THRESHOLD">2</field>
   </block>
 </xml>
