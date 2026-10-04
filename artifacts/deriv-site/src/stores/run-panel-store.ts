@@ -1248,16 +1248,18 @@ export default class RunPanelStore {
     };
 
     onSmartOver2RecoveryEvent = (event: TSmartOver2RecoveryEvent) => {
+        // Transactions are account-wide; a completed virtual result must be
+        // saved even when the Journal is currently showing another bot.
+        if (event.event === 'virtual_settlement') {
+            this.root_store.transactions?.pushVirtualHookTransaction?.(event);
+        }
+
         const activeJournalScope = getSmartOver2JournalScope(this.root_store.journal.active_bot_template_id);
         if (!event.journalScope || event.journalScope !== activeJournalScope || !event.message) return;
 
         if (event.event === 'status') {
             this.root_store.journal.updateSmartOver2AnalysisMessage(event.message);
             return;
-        }
-
-        if (event.event === 'virtual_settlement') {
-            this.root_store.transactions?.pushVirtualHookTransaction?.(event);
         }
 
         this.root_store.journal.pushMessage(event.message, MessageTypes.NOTIFY, 'journal__text');

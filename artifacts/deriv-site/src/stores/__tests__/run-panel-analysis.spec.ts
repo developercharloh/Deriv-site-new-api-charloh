@@ -266,7 +266,8 @@ describe('Binary Matrix analysis observer integration', () => {
             updateSmartOver2AnalysisMessage: jest.fn(),
             active_bot_template_id: 'smart-over-2',
         };
-        const rootStore = { dbot: {}, journal };
+        const transactions = { pushVirtualHookTransaction: jest.fn() };
+        const rootStore = { dbot: {}, journal, transactions };
         const core = {
             client: { loginid: null },
             common: { is_socket_opened: false },
@@ -290,6 +291,20 @@ describe('Binary Matrix analysis observer integration', () => {
             journalScope: 'rise-fall-master',
             message: '[Smart Over 2] Recovery event from another bot.',
         });
+        observer.emit('bot.smart_over2.recovery', {
+            event: 'virtual_settlement',
+            journalScope: 'rise-fall-master',
+            outcome: 'loss',
+            contractType: 'DIGITUNDER',
+            prediction: 5,
+            virtualTradeId: 'smart-over2:101:DIGITUNDER:5',
+            market: 'R_25',
+            entryEpoch: 101,
+            settlementEpoch: 102,
+            entrySpot: '2591.458',
+            exitSpot: '2591.421',
+            message: '[Smart Over 2] Virtual Under 5 settled LOSS on digit 7.',
+        });
 
         expect(journal.updateSmartOver2AnalysisMessage).toHaveBeenCalledTimes(1);
         expect(journal.updateSmartOver2AnalysisMessage).toHaveBeenCalledWith(
@@ -300,6 +315,15 @@ describe('Binary Matrix analysis observer integration', () => {
             '[Smart Over 2] Recovery 1 settled LOSS. Starting Recovery 2.',
             MessageTypes.NOTIFY,
             'journal__text'
+        );
+        expect(transactions.pushVirtualHookTransaction).toHaveBeenCalledTimes(1);
+        expect(transactions.pushVirtualHookTransaction).toHaveBeenCalledWith(
+            expect.objectContaining({
+                event: 'virtual_settlement',
+                outcome: 'loss',
+                virtualTradeId: expect.any(String),
+                journalScope: 'rise-fall-master',
+            })
         );
     });
 
