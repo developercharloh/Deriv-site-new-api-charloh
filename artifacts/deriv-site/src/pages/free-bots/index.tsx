@@ -10,6 +10,7 @@ import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig, FreeBotSection } from './types';
 import FreeBotCategoryTabs from './FreeBotCategoryTabs';
+import EdgingProRunnerModal from './EdgingProRunnerModal';
 import './free-bots.scss';
 
 const V2_CONFIG_KEY = 'free_bots_v2_config';
@@ -452,6 +453,27 @@ const BOTS: BotConfig[] = [
         gradient: 'linear-gradient(135deg, #1a0800 0%, #5c1a00 50%, #ff6b00 100%)',
     },
     {
+        id: 'edging-pro-engine',
+        section: 'edging',
+        name: 'Edging pro Engine',
+        emoji: '⚔️',
+        description:
+            'Opens paired one-tick Digit Over 5 and Digit Under 4 trades when each of the latest X digits is 4 or 5. Includes per-leg stake, Martingale, Take Profit, Stop Loss, and an optional Virtual Hook that waits for consecutive virtual pair losses.',
+        market: 'Volatility 50 (1s) Index (1HZ50V)',
+        strategy: 'Digit Over 5 + Digit Under 4 · Last X digits 4–5 · Virtual Hook',
+        params: [
+            { label: 'Stake', value: '$0.50 per leg' },
+            { label: 'Predictions', value: 'Over 5 + Under 4' },
+            { label: 'Last X', value: '4 digits (each 4 or 5)' },
+            { label: 'Virtual Hook', value: 'On · 2 consecutive losses' },
+            { label: 'Martingale', value: '2×' },
+            { label: 'Take Profit / Stop Loss', value: '$10 / $30' },
+            { label: 'Duration', value: '1 Tick' },
+        ],
+        nativeRunner: 'edging-pro',
+        gradient: 'linear-gradient(135deg, #101628 0%, #244c52 46%, #4a164d 100%)',
+    },
+    {
         id: 'apex-ai',
         section: 'premium',
         name: 'Apex AI Multi-Strategy Bot',
@@ -493,6 +515,7 @@ const BOTS_IN_ORDINAL_ORDER = [
 const BOT_ORDINALS = new Map(BOTS_IN_ORDINAL_ORDER.map((bot, index) => [bot.id, index + 1]));
 
 const CARD_ART: Record<string, string> = {
+    'edging-pro-engine': '/assets/free-bots/mega-mind.jpg',
     'binary-matrix-ai': '/assets/free-bots/mega-mind.jpg',
     'rise-fall-master': '/assets/free-bots/hitnrun.jpg',
     'matches-signal': '/assets/free-bots/super-bot.jpg',
@@ -515,6 +538,7 @@ const CARD_ART: Record<string, string> = {
 };
 
 const CARD_CATEGORY: Record<string, string> = {
+    'edging-pro-engine': 'PAIRED DIGITS',
     'binary-matrix-ai': 'EVEN / ODD · OVER / UNDER',
     'rise-fall-master': 'RISE / FALL',
     'matches-signal': 'MATCHES',
@@ -536,6 +560,7 @@ const CARD_CATEGORY: Record<string, string> = {
 };
 
 const CARD_ACCENT: Record<string, string> = {
+    'edging-pro-engine': '#32c7a5',
     'binary-matrix-ai': '#178da8',
     'rise-fall-master': '#0d9959',
     'matches-signal': '#7027d0',
@@ -936,11 +961,18 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
     const [status,     setStatus]     = useState<BotStatus>('idle');
     const [errorMsg,   setErrorMsg]   = useState('');
     const [showSignal, setShowSignal] = useState(false);
+    const [showNativeRunner, setShowNativeRunner] = useState(false);
 
     const signal = useSignal(bot.signalKey);
+    const isNativeRunner = bot.nativeRunner === 'edging-pro';
 
     const loadBot = async () => {
         if (!store) return;
+        if (!bot.xmlPath) {
+            setStatus('error');
+            setErrorMsg('This bot runs in its own engine and does not have a Blockly template.');
+            return;
+        }
         const { dashboard } = store;
         setStatus('loading');
         setErrorMsg('');
@@ -1146,7 +1178,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
 
                     <div className='free-bots__card-actions'>
                         {/* V2 mode: same Load-into-builder flow, also saves parsed config */}
-                        {isV2Mode && (
+                        {isV2Mode && !isNativeRunner && (
                             <button
                                 className={`free-bots__card-btn free-bots__card-btn--v2 ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
                                 onClick={loadBot}
@@ -1157,7 +1189,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                         )}
 
                         {/* V1 mode: normal Load Bot button */}
-                        {engineMode !== 'v2' && (
+                        {engineMode !== 'v2' && !isNativeRunner && (
                             <button
                                 className={`free-bots__card-btn free-bots__card-btn--load ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
                                 onClick={loadBot}
@@ -1165,6 +1197,15 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                             >
                                 <span aria-hidden='true'>⇩</span>
                                 {status === 'loading' ? 'Loading…' : status === 'loaded' ? 'Loaded' : 'Load bot'}
+                            </button>
+                        )}
+
+                        {isNativeRunner && (
+                            <button
+                                className='free-bots__card-btn free-bots__card-btn--v2'
+                                onClick={() => setShowNativeRunner(true)}
+                            >
+                                ⚡ Open Engine
                             </button>
                         )}
 
@@ -1181,13 +1222,20 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             </div>
 
             {/* Signal modal — V1 and V2 aware */}
-            {showSignal && signal && (
+            {showSignal && signal && bot.xmlPath && (
                 <SignalTradeModal
                     botId={bot.id}
                     xmlPath={bot.xmlPath}
                     signal={signal}
                     engineMode={engineMode}
                     onClose={() => setShowSignal(false)}
+                />
+            )}
+
+            {showNativeRunner && isNativeRunner && (
+                <EdgingProRunnerModal
+                    bot={bot}
+                    onClose={() => setShowNativeRunner(false)}
                 />
             )}
 

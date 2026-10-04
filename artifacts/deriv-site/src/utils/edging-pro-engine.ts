@@ -1,6 +1,6 @@
 import {
     DTraderEngine,
-    type DTDigitPairConfig,
+    type DTDigitPairLegConfig,
     type DTLog,
     type DTPosition,
     type DTStatus,
@@ -34,6 +34,7 @@ export interface EdgingProConfig {
 export type EdgingProStatus =
     | 'idle'
     | 'scanning'
+    | 'paused'
     | 'virtual'
     | 'buying'
     | 'waiting'
@@ -61,7 +62,6 @@ interface VirtualPair {
 }
 
 interface LivePair {
-    entryTickSerial: number;
     buyComplete: boolean;
     acceptedIds: string[];
     positions: Map<string, DTPosition>;
@@ -157,7 +157,7 @@ export class EdgingProEngine {
         if (!this.running || this.paused) return;
         this.paused = true;
         this.writeLog('Paused. Open contracts will still settle; no new pair will be entered.', 'system');
-        if (!this.activeLivePair && !this.pendingQuotes && !this.pendingVirtualPair) this.setStatus('scanning');
+        this.setStatus(this.activeLivePair ? 'waiting' : 'paused');
     }
 
     resume(): void {
@@ -210,13 +210,14 @@ export class EdgingProEngine {
     }
 
     private handleTick(digit: number): void {
-        if (!this.running) return;
+        if (!this.running || this.status === 'error') return;
         this.tickSerial += 1;
         this.digits = [...this.digits, digit].slice(-this.config.lastX);
         this.lastAnalysis = assessEdgingProEntry(this.digits, this.config.lastX);
         const analysis: EdgingProAnalysis = { ...this.lastAnalysis, tickSerial: this.tickSerial };
         this.onAnalysis(analysis);
         this.publishAnalysis(analysis);
+        this.emitStats();
 
         if (this.pendingVirtualPair && this.tickSerial > this.pendingVirtualPair.entryTickSerial) {
             this.settleVirtualPair(digit);
@@ -263,10 +264,9 @@ export class EdgingProEngine {
     }
 
     private async beginVirtualPair(assessment: EdgingProEntryAssessment): Promise<void> {
-        if (this.pendingQuotes || !this.running || this.paused) return;
+        if (this.pendingQuotes || !this.running || this.paused || assessment.status !== 'MET') return;
         this.pendingQuotes = true;
         const triggerTick = this.tickSerial;
-        const entryDigits = [...assessment.digits];
         this.setStatus('virtual');
         this.writeLog(
             `Virtual pair pricing · Over ${this.config.overPrediction} + Under ${this.config.underPrediction} · $${this.currentStake.toFixed(2)} per leg.`,
@@ -276,6 +276,11 @@ export class EdgingProEngine {
         this.pendingQuotes = false;
         if (!this.running || this.stopRequested) {
             this.finishStop();
+            return;
+        }
+        if (this.paused) {
+            this.writeLog('Virtual entry cancelled because the runner was paused while pricing.', 'system');
+            this.setStatus('paused');
             return;
         }
         const over = result.quotes.find(quote => quote.side === 'over');
@@ -296,6 +301,7 @@ export class EdgingProEngine {
             return;
         }
 
+        const entryDigits = [...this.lastAnalysis.digits];
         this.pendingVirtualPair = {
             entryTickSerial: Math.max(triggerTick, this.tickSerial),
             quotes: {
@@ -322,7 +328,7 @@ export class EdgingProEngine {
             virtualPair.quotes.under,
         );
         this.pendingVirtualPair = null;
-        if (profit <= 0) {
+        if (profit < 0) {
             this.consecutiveVirtualLosses += 1;
             this.writeLog(
                 `Virtual pair loss on digit ${settlementDigit} · ${this.signedMoney(profit)} · ${this.consecutiveVirtualLosses}/${this.config.virtualLossThreshold} consecutive losses.`,
@@ -331,8 +337,8 @@ export class EdgingProEngine {
         } else {
             this.consecutiveVirtualLosses = 0;
             this.writeLog(
-                `Virtual pair win on digit ${settlementDigit} · ${this.signedMoney(profit)} · loss counter reset.`,
-                'win',
+                `Virtual pair ${profit > 0 ? 'win' : 'break-even'} on digit ${settlementDigit} · ${this.signedMoney(profit)} · loss counter reset.`,
+                profit > 0 ? 'win' : 'system',
             );
         }
         this.emitStats();
@@ -341,10 +347,8 @@ export class EdgingProEngine {
 
     private async beginLivePair(): Promise<void> {
         if (!this.running || this.paused || this.activeLivePair || this.pendingQuotes) return;
-        const entryTickSerial = this.tickSerial;
-        const signalKey = `${this.config.symbol}:edging-pro:${entryTickSerial}`;
-        const firstLease = tryAcquireBotContractGate(this, signalKey, true);
-        const secondLease = firstLease && tryAcquireBotContractGate(this, signalKey, true);
+        const firstLease = tryAcquireBotContractGate(this, undefined, true);
+        const secondLease = firstLease && tryAcquireBotContractGate(this, undefined, true);
         if (!firstLease || !secondLease) {
             if (firstLease) releaseBotContractGate(this);
             this.writeLog('Entry skipped: another bot runner owns the live contract gate.', 'system');
@@ -352,7 +356,6 @@ export class EdgingProEngine {
         }
 
         const pair: LivePair = {
-            entryTickSerial,
             buyComplete: false,
             acceptedIds: [],
             positions: new Map(),
@@ -420,7 +423,7 @@ export class EdgingProEngine {
         this.finishLivePairIfSettled(pair);
     }
 
-    private pairConfigs(stake: number): DTDigitPairConfig[] {
+    private pairConfigs(stake: number): DTDigitPairLegConfig[] {
         const common = {
             symbol: this.config.symbol,
             currency: this.config.currency,
@@ -478,12 +481,17 @@ export class EdgingProEngine {
                 `Real pair win · ${this.signedMoney(pairProfit)} · stake reset to $${this.currentStake.toFixed(2)} per leg.`,
                 'win',
             );
-        } else {
+        } else if (pairProfit < 0) {
             this.losses += 1;
-            if (pairProfit < 0) this.currentStake = Number((this.currentStake * this.config.martingale).toFixed(2));
+            this.currentStake = Number((this.currentStake * this.config.martingale).toFixed(2));
             this.writeLog(
-                `Real pair ${pairProfit < 0 ? 'loss' : 'break-even'} · ${this.signedMoney(pairProfit)} · next stake $${this.currentStake.toFixed(2)} per leg.`,
-                pairProfit < 0 ? 'loss' : 'system',
+                `Real pair loss · ${this.signedMoney(pairProfit)} · next stake $${this.currentStake.toFixed(2)} per leg.`,
+                'loss',
+            );
+        } else {
+            this.writeLog(
+                `Real pair break-even · ${this.signedMoney(pairProfit)} · stake remains $${this.currentStake.toFixed(2)} per leg.`,
+                'system',
             );
         }
         this.consecutiveVirtualLosses = 0;
@@ -518,8 +526,8 @@ export class EdgingProEngine {
         if (status === 'error') {
             this.writeLog('Deriv connection reported an error; no further entries will be attempted until it recovers.', 'error');
             this.setStatus('error');
-        } else if (status === 'ready' && !this.activeLivePair && !this.pendingQuotes) {
-            this.setStatus(this.paused ? 'scanning' : 'scanning');
+        } else if (status === 'ready') {
+            if (!this.paused && !this.activeLivePair && !this.pendingQuotes) this.setStatus('scanning');
         }
     }
 

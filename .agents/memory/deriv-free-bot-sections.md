@@ -1,10 +1,10 @@
 ---
 name: Free Bot section classification
-description: Product rule for assigning Free Bots to sections based on their Blockly template blocks.
+description: Distinguish Blockly template classification from explicit native-runner placement.
 ---
 
-Classify Free Bots that use registered custom Blockly blocks as **Premium Bots**. Classify templates without custom blocks as **Smart Contract Bots**. There are currently no **Edging Bots**.
+For Blockly-template bots, classify registered custom blocks as **Premium Bots** and templates without custom blocks as **Smart Contract Bots**. Native runners are assigned explicitly; Edging pro Engine is a native runner in **Edging Bots**.
 
-**Why:** The user explicitly set this classification for the Free Bots catalog.
+**Why:** The custom-block rule applies to XML-backed bots. The user explicitly placed the native Edging pro Engine in the Edging section, so template classification must not override that placement.
 
-**How to apply:** When adding or changing a Free Bot template, inspect its XML against the custom Blockly block registry before assigning its section.
+**How to apply:** Inspect XML-backed bots against the custom-block registry. For native runners, use their explicit section and runner metadata instead.

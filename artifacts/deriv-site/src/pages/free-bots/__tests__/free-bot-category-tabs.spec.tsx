@@ -6,7 +6,7 @@ import type { FreeBotSection } from '../types';
 const tabs: FreeBotCategoryTab[] = [
     { id: 'smart-contract', label: 'Smart Contract Bots', count: 11 },
     { id: 'premium', label: 'Premium Bots', count: 7 },
-    { id: 'edging', label: 'Edging Bots', count: 0 },
+    { id: 'edging', label: 'Edging Bots', count: 1 },
 ];
 
 const CategoryTabsHarness: React.FC = () => {
@@ -41,13 +41,13 @@ describe('FreeBotCategoryTabs', () => {
         expect(screen.getByRole('tabpanel')).toHaveTextContent('Premium Bots list');
     });
 
-    it('supports arrow-key tab navigation and opens the empty Edging category', () => {
+    it('supports arrow-key tab navigation and opens the Edging category', () => {
         render(<CategoryTabsHarness />);
         const smartContractTab = screen.getByRole('tab', { name: 'Smart Contract Bots, 11 bots' });
 
         fireEvent.keyDown(smartContractTab, { key: 'ArrowLeft' });
 
-        const edgingTab = screen.getByRole('tab', { name: 'Edging Bots, 0 bots' });
+        const edgingTab = screen.getByRole('tab', { name: 'Edging Bots, 1 bot' });
         expect(edgingTab).toHaveAttribute('aria-selected', 'true');
         expect(edgingTab).toHaveFocus();
         expect(screen.getByRole('tabpanel')).toHaveTextContent('Edging Bots list');

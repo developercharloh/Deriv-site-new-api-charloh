@@ -16,10 +16,16 @@ const readCatalogBotSections = (): { id: string; section: string; xmlPath: strin
     const end = catalog.indexOf('\n];', start);
     const botDefinitions = catalog.slice(start, end);
 
-    return Array.from(
-        botDefinitions.matchAll(/id:\s*'([^']+)',\s*section:\s*'([^']+)'[\s\S]*?xmlPath:\s*'([^']+)'/g),
-        match => ({ id: match[1], section: match[2], xmlPath: match[3] })
+    const objectBodies = Array.from(
+        botDefinitions.matchAll(/^    \{\s*([\s\S]*?)^    \},?$/gm),
+        match => match[1]
     );
+    return objectBodies.flatMap(body => {
+        const id = body.match(/^\s*id:\s*'([^']+)'/m)?.[1];
+        const section = body.match(/^\s*section:\s*'([^']+)'/m)?.[1];
+        const xmlPath = body.match(/^\s*xmlPath:\s*'([^']+)'/m)?.[1];
+        return id && section && xmlPath ? [{ id, section, xmlPath }] : [];
+    });
 };
 
 const readCustomBlockTypes = (): Set<string> => {
@@ -65,7 +71,7 @@ describe('Free Bots template catalog', () => {
         }
     });
 
-    it('groups bots with registered custom blocks as premium and leaves edging empty', () => {
+    it('keeps Blockly bot placement tied to custom blocks and registers Edging pro as a native runner', () => {
         const entries = readCatalogBotSections();
         const customBlockTypes = readCustomBlockTypes();
 
@@ -83,7 +89,10 @@ describe('Free Bots template catalog', () => {
             expect(entry.section).toBe(usesCustomBlock ? 'premium' : 'smart-contract');
         }
 
-        expect(entries.filter(entry => entry.section === 'edging')).toHaveLength(0);
+        const catalogSource = fs.readFileSync(path.join(__dirname, '..', 'index.tsx'), 'utf8');
+        expect(catalogSource).toMatch(
+            /id: 'edging-pro-engine',\s*section: 'edging',[\s\S]*?nativeRunner: 'edging-pro'/
+        );
     });
 
     it('keeps Rise/Fall journal variables out of the Apex AI template', () => {
@@ -293,12 +302,17 @@ describe('Free Bots template catalog', () => {
         expect(v3Xml).not.toContain('Under Prediction');
         expect(
             v3Document.querySelector(
-                'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] shadow field[name="NUM"]'
+                'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] block[type="variables_get"] field[name="VAR"]'
             )?.textContent
+        ).toBe('Over Prediction');
+        expect(
+            v3Document.querySelector('block[type="smart_over2_v3_settings"] field[name="OVER_PREDICTION"]')
+                ?.textContent
         ).toBe('2');
         expect(
             v3Document.querySelector('block[type="smart_over2_v3_settings"] field[name="ENTRY_DIGIT_COUNT"]')
-        ).toBeNull();
+                ?.textContent
+        ).toBe('4');
         expect(
             v3Document.querySelector('block[type="smart_over2_v3_settings"] field[name="USE_VIRTUAL_HOOK"]')
                 ?.textContent
