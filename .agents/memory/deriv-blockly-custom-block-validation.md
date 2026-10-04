@@ -3,8 +3,8 @@ name: Blockly custom block validation
 description: Runtime validation rules for custom Blockly block definitions and generated code
 ---
 
-Blockly's runtime `jsonInit` validates that every declared `args0` entry is referenced by a `%N` token in `message0`; a normal Rsbuild build will not catch missing or extra placeholders. A smoke test should instantiate each custom block with real Blockly and run the JavaScript generator.
+Blockly's runtime `jsonInit` validates that every declared `args0` entry is referenced by a `%N` token in `message0`; a normal Rsbuild build will not catch missing or extra placeholders. A smoke test should instantiate each custom block with real Blockly and run the JavaScript generator. Custom value blocks must return `[code, operatorPrecedence]`; compile a connected condition-and-purchase workspace with `workspaceToCode`, not just a single block's text.
 
-**Why:** A production build can succeed while a user dragging one malformed block into the workspace throws immediately, preventing the bot from loading.
+**Why:** A production build can succeed while a malformed block or generator prevents a strategy from loading or running. A test that accepts either raw code or a tuple can miss an invalid value-block result.
 
-**How to apply:** When adding custom blocks, include the block in the runtime smoke suite and assert both initialization and generated `Bot.*` code before publishing.
+**How to apply:** When adding custom blocks, assert runtime initialization and generated `Bot.*` code. For Boolean/Number blocks, assert the tuple and generate a representative connected workspace before publishing.
