@@ -112,6 +112,7 @@ export class EdgingProEngine {
     private consecutiveVirtualLosses = 0;
     private latestSpot = '';
     private latestEpoch?: number;
+    private lastProcessedTickKey: string | null = null;
     private status: EdgingProStatus = 'idle';
     private lastAnalysis: EdgingProEntryAssessment;
 
@@ -151,6 +152,7 @@ export class EdgingProEngine {
 
         this.running = true;
         this.stopRequested = false;
+        this.lastProcessedTickKey = null;
         setActiveEngine(this);
         this.setStatus('scanning');
         this.emitStats();
@@ -220,14 +222,21 @@ export class EdgingProEngine {
     }
 
     private bindTrader(): void {
-        this.trader.onTick = (spot, digit, epoch) => this.handleTick(digit, spot, epoch);
+        this.trader.onTick = (spot, digit, epoch, tickId) => this.handleTick(digit, spot, epoch, tickId);
         this.trader.onPosition = position => this.handlePosition(position);
         this.trader.onStatus = status => this.handleTraderStatus(status);
         this.trader.onLog = log => this.onLog(log);
     }
 
-    private handleTick(digit: number, spot = '', epoch?: number): void {
+    private handleTick(digit: number, spot = '', epoch?: number, tickId?: string): void {
         if (!this.running || this.status === 'error') return;
+        const tickKey = tickId
+            ? `${this.config.symbol}:id:${tickId}`
+            : Number.isFinite(epoch)
+              ? `${epoch}:${spot}`
+              : null;
+        if (tickKey !== null && tickKey === this.lastProcessedTickKey) return;
+        if (tickKey !== null) this.lastProcessedTickKey = tickKey;
         this.tickSerial += 1;
         this.latestSpot = spot;
         this.latestEpoch = epoch;

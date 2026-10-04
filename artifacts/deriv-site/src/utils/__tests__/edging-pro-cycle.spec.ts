@@ -7,7 +7,7 @@ jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
 jest.mock('@/utils/dtrader-engine', () => ({
     DTraderEngine: jest.fn().mockImplementation(() => {
         const trader = {
-            onTick: (_spot: string, _digit: number) => {},
+            onTick: (_spot: string, _digit: number, _epoch?: number, _tickId?: string) => {},
             onPosition: (_position: unknown) => {},
             onStatus: (_status: string) => {},
             onLog: (_log: unknown) => {},
@@ -101,6 +101,43 @@ describe('EdgingProEngine Virtual Hook cycle', () => {
             consecutiveVirtualLosses: 0,
             activeContracts: 0,
         }));
+        engine.stop();
+    });
+
+    it('submits one Over 5 and one Under 4 buy for a tick, ignoring a replayed tick after settlement', async () => {
+        const engine = new EdgingProEngine({ ...config, useVirtualHook: false });
+        expect(engine.start()).toBe(true);
+        const trader = mockTraderInstances[0];
+
+        trader.onTick('100.00', 4, 100, 'tick-100');
+        trader.onTick('100.01', 5, 101, 'tick-101');
+        await flushPromises();
+
+        expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(1);
+        expect(trader.buyDigitPairNow.mock.calls[0][0]).toEqual([
+            expect.objectContaining({
+                side: 'over',
+                config: expect.objectContaining({ contractType: 'DIGITOVER', barrier: '5' }),
+            }),
+            expect.objectContaining({
+                side: 'under',
+                config: expect.objectContaining({ contractType: 'DIGITUNDER', barrier: '4' }),
+            }),
+        ]);
+
+        trader.onPosition({ contractId: 'over-contract', isOpen: false, profit: -0.5 } as any);
+        trader.onPosition({ contractId: 'under-contract', isOpen: false, profit: -0.5 } as any);
+        trader.onTick('100.01', 5, 101, 'tick-101');
+        await flushPromises();
+
+        expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(1);
+
+        // A new tick may have the same displayed price; its distinct broker ID must still count.
+        trader.onTick('100.01', 5, 102, 'tick-102');
+        await flushPromises();
+        expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(2);
+        trader.onPosition({ contractId: 'over-contract', isOpen: false, profit: -0.5 } as any);
+        trader.onPosition({ contractId: 'under-contract', isOpen: false, profit: -0.5 } as any);
         engine.stop();
     });
 });
