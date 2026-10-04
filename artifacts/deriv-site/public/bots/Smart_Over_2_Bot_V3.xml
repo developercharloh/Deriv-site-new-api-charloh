@@ -5,6 +5,7 @@
     <variable id="smart_over2_v3_var_target_profit">Target Profit</variable>
     <variable id="smart_over2_v3_var_stop_loss">Stop Loss</variable>
     <variable id="smart_over2_v3_var_use_martingale">Use Martingale</variable>
+    <variable id="smart_over2_v3_var_over_prediction">Over Prediction</variable>
   </variables>
   <block type="trade_definition" id="smart_over2_v3_trade_definition" deletable="false" x="0" y="0">
     <statement name="TRADE_OPTIONS">
@@ -100,12 +101,17 @@
     </statement>
     <statement name="SUBMARKET">
       <block type="trade_definition_tradeoptions" id="smart_over2_v3_trade_options">
-        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
         <field name="DURATIONTYPE_LIST">t</field>
         <value name="DURATION">
           <shadow type="math_number_positive" id="smart_over2_v3_duration">
             <field name="NUM">1</field>
           </shadow>
+        </value>
+        <value name="PREDICTION">
+          <block type="variables_get" id="smart_over2_v3_get_over_prediction">
+            <field name="VAR" id="smart_over2_v3_var_over_prediction">Over Prediction</field>
+          </block>
         </value>
         <value name="AMOUNT">
           <shadow type="math_number_positive" id="smart_over2_v3_stake">

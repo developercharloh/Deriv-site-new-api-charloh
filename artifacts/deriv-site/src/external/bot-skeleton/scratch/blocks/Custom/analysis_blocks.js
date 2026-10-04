@@ -577,11 +577,20 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_v3_settings =
     const maxVirtualLosses = Number(block.getFieldValue('MAX_VIRTUAL_LOSSES'));
     const entryDigitCount = Number(block.getFieldValue('ENTRY_DIGIT_COUNT'));
     const overPrediction = Number(block.getFieldValue('OVER_PREDICTION'));
+    const predictionVariableId = 'smart_over2_v3_var_over_prediction';
+    const predictionVariable = block.workspace?.getVariableById?.(predictionVariableId);
+    const variableDatabase = window.Blockly.JavaScript.variableDB_;
+    const predictionVariableName = predictionVariable
+        ? variableDatabase?.getName(predictionVariableId, window.Blockly.Variables.CATEGORY_NAME)
+        : null;
+    const predictionValue = Number.isFinite(overPrediction) ? overPrediction : 2;
+    const predictionAssignment = predictionVariableName ? `${predictionVariableName} = ${predictionValue};\n` : '';
     return (
+        predictionAssignment +
         `Bot.configureSmartOver2V3(${useVirtualHook}, ` +
         `${Number.isFinite(maxVirtualLosses) ? maxVirtualLosses : 2}, ` +
         `${Number.isFinite(entryDigitCount) ? entryDigitCount : 4}, ` +
-        `${Number.isFinite(overPrediction) ? overPrediction : 2});\n`
+        `${predictionValue});\n`
     );
 };
 

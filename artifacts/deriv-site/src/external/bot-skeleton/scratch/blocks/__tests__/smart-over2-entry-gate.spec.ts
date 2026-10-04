@@ -172,16 +172,36 @@ describe('Smart Over 2 Blockly entry gate', () => {
     it('registers the recovery-free V3 settings, gate, purchase, and settlement blocks', () => {
         const workspace = new Blockly.Workspace();
         javascriptGenerator.init(workspace);
+        const predictionVariableId = 'smart_over2_v3_var_over_prediction';
+        workspace.createVariable('Over Prediction', '', predictionVariableId);
+        const variableDatabase = new Blockly.Names('window');
+        variableDatabase.variableMap = workspace.getVariableMap();
+        (Blockly.JavaScript as any).variableDB_ = variableDatabase;
+        const predictionVariableName = variableDatabase.getName(
+            predictionVariableId,
+            Blockly.Variables.CATEGORY_NAME
+        );
         setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2-v3');
 
         const settings = workspace.newBlock('smart_over2_v3_settings');
         expect(settings.getFieldValue('ENTRY_DIGIT_COUNT')).toBe(4);
         expect(settings.getFieldValue('OVER_PREDICTION')).toBe(2);
-        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2V3(true, 2, 4, 2);\n');
+        expect(javascriptGenerator.blockToCode(settings)).toBe(
+            `${predictionVariableName} = 2;\nBot.configureSmartOver2V3(true, 2, 4, 2);\n`
+        );
         settings.setFieldValue('3', 'MAX_VIRTUAL_LOSSES');
         settings.setFieldValue('3', 'ENTRY_DIGIT_COUNT');
         settings.setFieldValue('5', 'OVER_PREDICTION');
-        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2V3(true, 3, 3, 5);\n');
+        expect(javascriptGenerator.blockToCode(settings)).toBe(
+            `${predictionVariableName} = 5;\nBot.configureSmartOver2V3(true, 3, 3, 5);\n`
+        );
+
+        const predictionGetter = workspace.newBlock('variables_get');
+        predictionGetter.setFieldValue(predictionVariableId, 'VAR');
+        expect(javascriptGenerator.blockToCode(predictionGetter)).toEqual([
+            predictionVariableName,
+            javascriptGenerator.ORDER_ATOMIC,
+        ]);
 
         const gate = workspace.newBlock('smart_over2_v3_entry_gate');
         const generatedGate = javascriptGenerator.blockToCode(gate);
@@ -217,8 +237,12 @@ describe('Smart Over 2 Blockly entry gate', () => {
         expect(initialization).toContain('<block type="smart_over2_v3_settings" id="smart_over2_v3_settings">');
         expect(initialization).toContain('<field name="ENTRY_DIGIT_COUNT">4</field>');
         expect(initialization).toContain('<field name="OVER_PREDICTION">2</field>');
-        expect(xml).toContain('has_prediction="false"');
-        expect(xml).not.toContain('<value name="PREDICTION">');
+        expect(xml).toContain('has_prediction="true"');
+        expect(xml).toContain('<variable id="smart_over2_v3_var_over_prediction">Over Prediction</variable>');
+        expect(xml).toContain('<value name="PREDICTION">');
+        expect(xml).toMatch(
+            /<value name="PREDICTION">\s*<block type="variables_get" id="smart_over2_v3_get_over_prediction">\s*<field name="VAR" id="smart_over2_v3_var_over_prediction">Over Prediction<\/field>\s*<\/block>\s*<\/value>/
+        );
         expect(xml).not.toContain('smart_over2_v3_get_entry_digit_count');
 
         const variables = xml.match(/<variables>[\s\S]*?<\/variables>/)?.[0] ?? '<variables></variables>';
