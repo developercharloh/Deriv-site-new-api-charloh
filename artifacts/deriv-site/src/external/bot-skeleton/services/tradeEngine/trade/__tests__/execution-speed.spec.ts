@@ -145,12 +145,16 @@ describe('SLOW broker-tick release', () => {
     it('attaches the engine monitor even when tick history is already warm', () => {
         window.localStorage.setItem('dbot_execution_speed', 'slow');
         const engine = Object.create(TradeEngine.prototype);
+        engine.smartOver2RecoveryState = { stage: 1 };
+        engine.smartOver2RecoverySettings = { useVirtualHook: true, maxVirtualLosses: 2, entryDigitCount: 6 };
         engine.checkTicksPromiseExists = jest.fn(() => ({ promise: Promise.resolve() }));
         engine.loginAndGetBalance = jest.fn(() => Promise.resolve());
         engine.watchTicks = jest.fn();
 
         engine.init('token', { symbol: 'R_25', contractTypes: ['DIGITEVEN'] });
 
+        expect(engine.smartOver2RecoveryState).toBeNull();
+        expect(engine.smartOver2RecoverySettings).toBeNull();
         expect(engine.checkTicksPromiseExists).not.toHaveBeenCalled();
         expect(engine.watchTicks).toHaveBeenCalledWith('R_25');
     });
@@ -208,6 +212,36 @@ describe('shared trade-cycle restart', () => {
 
         expect(engine.store.getState().scope).toBe(constants.BEFORE_PURCHASE);
         expect(engine.makeDirectPurchaseDecision).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps Run once Smart Over 2 settings when the first Bot.start resets session state', () => {
+        window.localStorage.setItem('dbot_execution_speed', 'slow');
+
+        const engine: any = Object.create(TradeEngine.prototype);
+        engine.options = { symbol: 'R_25' };
+        engine.store = createStore(rootReducer, applyMiddleware(thunk));
+        engine.hasStarted = false;
+        engine.fastClockActive = false;
+        engine.activeContracts = new Map();
+        engine.virtualHook = { enabled: false, maxVirtualLosses: 3, minRealWins: 1 };
+        engine.smartOver2RecoverySettings = { useVirtualHook: true, maxVirtualLosses: 2, entryDigitCount: 6 };
+        engine.smartOver2RecoveryState = { stage: 1, useVirtualHook: false };
+        engine.validateTradeOptions = options => options;
+        engine.checkLimits = jest.fn();
+        engine.makeDirectPurchaseDecision = jest.fn();
+
+        engine.start({ amount: 0.5, currency: 'USD', contractTypes: ['DIGITEVEN'] });
+
+        expect(engine.smartOver2RecoveryState).toEqual(
+            expect.objectContaining({
+                stage: 0,
+                useVirtualHook: true,
+                maxVirtualLosses: 2,
+                entryDigitCount: 6,
+            })
+        );
+        expect(engine.virtualHook.enabled).toBe(true);
+        expect(engine.virtualHook.maxVirtualLosses).toBe(2);
     });
 
     it('preserves a prepared FAST slot when the generated cycle restarts', () => {

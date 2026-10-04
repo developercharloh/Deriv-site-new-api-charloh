@@ -103,7 +103,6 @@ describe('Smart Over 2 Blockly entry gate', () => {
         setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2');
 
         const gate = workspace.newBlock('smart_over2_recovery_gate');
-        const lookbackInputIndex = gate.inputList.findIndex(input => input.name === 'COUNT');
         const analysisInputIndex = gate.inputList.findIndex(input => input.name === 'ANALYSIS_COUNT');
         const martingaleInputIndex = gate.inputList.findIndex(input => input.name === 'MARTINGALE');
         const settingInputs = [
@@ -114,8 +113,11 @@ describe('Smart Over 2 Blockly entry gate', () => {
             'STOP_LOSS',
         ];
         expect(gate.getInputsInline()).toBe(false);
-        expect(lookbackInputIndex).toBeGreaterThanOrEqual(0);
-        expect(analysisInputIndex).toBeGreaterThan(lookbackInputIndex);
+        // Preserve the hidden legacy connection for saved workspaces. The
+        // generator intentionally ignores it; new templates configure count
+        // once in the initialization block.
+        expect(gate.getInput('COUNT')).not.toBeNull();
+        expect(analysisInputIndex).toBeGreaterThanOrEqual(0);
         expect(martingaleInputIndex).toBeGreaterThan(analysisInputIndex);
         settingInputs.forEach(inputName => expect(gate.getInput(inputName)).not.toBeNull());
         expect(gate.getInput('USE_VIRTUAL_HOOK')).toBeNull();
@@ -129,20 +131,21 @@ describe('Smart Over 2 Blockly entry gate', () => {
         ).toBe('Martingale');
         const generatedGate = javascriptGenerator.blockToCode(gate);
         expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
-            'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, "DIGITUNDER")'
+            'Bot.checkSmartOver2Recovery(undefined, 100, "smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, "DIGITUNDER")'
         );
 
         const settings = workspace.newBlock('smart_over2_recovery_settings');
-        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2Recovery(true, 2);\n');
+        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2Recovery(true, 2, 4);\n');
         settings.setFieldValue('FALSE', 'USE_VIRTUAL_HOOK');
         settings.setFieldValue('7', 'MAX_VIRTUAL_LOSSES');
-        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2Recovery(false, 7);\n');
+        settings.setFieldValue('6', 'ENTRY_DIGIT_COUNT');
+        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2Recovery(false, 7, 6);\n');
 
         setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2-v2');
         const v2Gate = workspace.newBlock('smart_over2_recovery_gate');
         const generatedV2Gate = javascriptGenerator.blockToCode(v2Gate);
         expect(Array.isArray(generatedV2Gate) ? generatedV2Gate[0] : generatedV2Gate).toContain(
-            '"smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, "DIGITOVER"'
+            'undefined, 100, "smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, "DIGITOVER"'
         );
 
         const purchase = workspace.newBlock('smart_over2_recovery_purchase');
@@ -230,8 +233,10 @@ describe('Smart Over 2 Blockly entry gate', () => {
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_recovery_prediction">');
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_use_martingale">');
         expect(xml).toContain('<block type="smart_over2_recovery_settings" id="smart_over2_recovery_settings">');
+        expect(xml).toContain('<field name="ENTRY_DIGIT_COUNT">4</field>');
         expect(xml).toContain('<field name="USE_VIRTUAL_HOOK">TRUE</field>');
         expect(xml).toContain('<field name="MAX_VIRTUAL_LOSSES">2</field>');
+        expect(xml).not.toContain('<value name="COUNT">');
         expect(xml).not.toContain('smart_over2_var_max_virtual_losses');
         expect(xml).not.toContain('smart_over2_var_virtual_hook');
         expect(xml).not.toMatch(

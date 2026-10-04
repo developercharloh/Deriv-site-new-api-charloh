@@ -146,9 +146,20 @@ registerOutputBlock({
 window.Blockly.Blocks.smart_over2_recovery_settings = {
     init() {
         this.jsonInit({
-            message0: localize('Virtual Hook %1 · real recovery after %2 consecutive losses'),
+            message0: localize('Last %1 digits · Virtual Hook %2'),
             args0: [
+                {
+                    type: 'field_number',
+                    name: 'ENTRY_DIGIT_COUNT',
+                    value: 4,
+                    min: 1,
+                    max: 1000,
+                    precision: 1,
+                },
                 { type: 'field_checkbox', name: 'USE_VIRTUAL_HOOK', checked: true },
+            ],
+            message1: localize('Real recovery after %1 consecutive losses'),
+            args1: [
                 {
                     type: 'field_number',
                     name: 'MAX_VIRTUAL_LOSSES',
@@ -178,7 +189,12 @@ window.Blockly.Blocks.smart_over2_recovery_settings = {
 window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_recovery_settings = block => {
     const useVirtualHook = block.getFieldValue('USE_VIRTUAL_HOOK') === 'TRUE';
     const maxVirtualLosses = Number(block.getFieldValue('MAX_VIRTUAL_LOSSES'));
-    return `Bot.configureSmartOver2Recovery(${useVirtualHook}, ${Number.isFinite(maxVirtualLosses) ? maxVirtualLosses : 2});\n`;
+    const entryDigitCount = Number(block.getFieldValue('ENTRY_DIGIT_COUNT'));
+    return (
+        `Bot.configureSmartOver2Recovery(${useVirtualHook}, ` +
+        `${Number.isFinite(maxVirtualLosses) ? maxVirtualLosses : 2}, ` +
+        `${Number.isFinite(entryDigitCount) ? entryDigitCount : 4});\n`
+    );
 };
 
 registerOutputBlock({
@@ -393,30 +409,31 @@ registerOutputBlock({
 
 registerOutputBlock({
     type: 'smart_over2_recovery_gate',
-    message0: localize('Smart Over 2 recovery gate'),
-    message1: localize('Last %1 digits'),
-    args1: [countInput('COUNT', '4')],
-    message2: localize('Analyze %1 ticks'),
-    args2: [countInput('ANALYSIS_COUNT', '100')],
-    message3: localize('Martingale %1'),
-    args3: [countInput('MARTINGALE', '1.2')],
-    message4: localize('Use Martingale %1'),
-    args4: [{ type: 'input_value', name: 'USE_MARTINGALE', check: 'Boolean' }],
-    message5: localize('Over prediction %1 · Recovery prediction %2'),
-    args5: [countInput('OVER_PREDICTION', '2'), countInput('RECOVERY_PREDICTION', '5')],
-    message6: localize('Target Profit %1 · Stop Loss %2'),
-    args6: [
+    // Keep the legacy COUNT connection hidden so older saved workspaces still
+    // load, but use the Run-once setting as the sole entry-count source.
+    message0: localize('Smart Over 2 recovery gate %1'),
+    args0: [countInput('COUNT', '4')],
+    message1: localize('Analyze %1 ticks'),
+    args1: [countInput('ANALYSIS_COUNT', '100')],
+    message2: localize('Martingale %1'),
+    args2: [countInput('MARTINGALE', '1.2')],
+    message3: localize('Use Martingale %1'),
+    args3: [{ type: 'input_value', name: 'USE_MARTINGALE', check: 'Boolean' }],
+    message4: localize('Over prediction %1 · Recovery prediction %2'),
+    args4: [countInput('OVER_PREDICTION', '2'), countInput('RECOVERY_PREDICTION', '5')],
+    message5: localize('Target Profit %1 · Stop Loss %2'),
+    args5: [
         countInput('TARGET_PROFIT', '0'),
         countInput('STOP_LOSS', '0'),
     ],
-    hiddenInputs: ['ANALYSIS_COUNT'],
+    hiddenInputs: ['ANALYSIS_COUNT', 'COUNT'],
     inputsInline: false,
     output: 'Boolean',
     tooltip:
         'Normal entries use the configured Over prediction and entry rules. After a real Over loss, Virtual Hook simulates the template recovery contract using its linked prediction. A virtual win resets the consecutive-loss count but keeps the hook active; after the configured number of consecutive virtual losses, real recovery begins. Real recovery losses continue with Martingale until a win, then normal condition-gated Over entries resume. Configure Virtual Hook settings in Run once at start.',
     meta: 'Smart Over 2 Recovery Gate',
     generatorCode: block => [
-        `Bot.checkSmartOver2Recovery(${numberInput(block, 'COUNT', '4')}, ` +
+        `Bot.checkSmartOver2Recovery(undefined, ` +
             `${numberInput(block, 'ANALYSIS_COUNT', '100')}, ${smartOver2JournalScope(block)}, ` +
             `${numberInput(block, 'MARTINGALE', '1.2')}, ` +
             `${numberInput(block, 'USE_MARTINGALE', 'true')}, ` +

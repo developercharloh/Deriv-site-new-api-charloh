@@ -170,6 +170,10 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const [token, options] = expectInitArg(args);
         const { symbol } = options;
 
+        // A fresh generated run executes its Run-once settings after init().
+        // Clear settings from any prior workspace before those settings load.
+        this.smartOver2RecoveryState = null;
+        this.smartOver2RecoverySettings = null;
         this.initArgs = args;
         this.options = options;
         this.startPromise = this.loginAndGetBalance(token);
@@ -197,7 +201,13 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             ['CALL', 'PUT'].includes(this.volatilitySelectionLock?.signal);
         const isNewBotSession = !this.hasStarted;
         this.hasStarted = true;
-        if (isNewBotSession) this.smartOver2RecoveryState = null;
+        if (isNewBotSession) {
+            if (this.resetSmartOver2RecoverySession) {
+                this.resetSmartOver2RecoverySession();
+            } else {
+                this.smartOver2RecoveryState = null;
+            }
+        }
         if (isNewBotSession) this.resetVolatilitySelection?.();
         if (isNewBotSession) this.store.dispatch(resetFastReady());
         if (isNewBotSession && this.isBinaryMatrixWorkspace()) {

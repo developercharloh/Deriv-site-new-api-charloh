@@ -1,5 +1,6 @@
 - [Vercel deployment via CLI prebuilt](vercel-deploy-approach.md) — check the pnpm dlx cache before REST fallback; REST deploys need explicit production aliases
 - [Deriv-site Tabs id stripping](deriv-site-tabs-scroll.md) — custom Tabs component drops the wrapper div's `id`, so id-based mobile scroll/height CSS silently no-ops.
+- [Smart Over 2 startup controls](smart-over2-startup-controls.md) — both templates set Last-X digit count and Virtual Hook options once at start; the gate does not expose the count.
 - [Deriv-site AI orb testing quirks](deriv-site-ai-orb-testing.md) — floating orb has a perpetual bounce animation that breaks Playwright's normal click; live bot runs always hit a login gate unrelated to the feature under test.
 - [Deriv-site verification](deriv-site-verification.md) — Rsbuild workflow/build is the reliable app check; package-level typecheck currently includes unrelated dependency gaps.
 - [Alpha Scan cockpit regression surface](alpha-scan-cockpit-regression.md) — visual replacements must preserve the settled browser markers and validate coverage against the discovered symbol universe.

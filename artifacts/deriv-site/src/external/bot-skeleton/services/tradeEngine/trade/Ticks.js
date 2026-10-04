@@ -414,6 +414,7 @@ export default Engine =>
                     consecutiveLosses: 0,
                     useMartingale: true,
                     overPrediction: 2,
+                    entryDigitCount: 4,
                     recoveryPrediction: 5,
                     recoveryContractType: 'DIGITUNDER',
                     useVirtualHook: false,
@@ -430,7 +431,7 @@ export default Engine =>
             }
             return this.smartOver2RecoveryState;
         }
-        configureSmartOver2Recovery(useVirtualHook = true, maxVirtualLosses = 2) {
+        configureSmartOver2Recovery(useVirtualHook = true, maxVirtualLosses = 2, entryDigitCount = 4) {
             const state = this.getSmartOver2RecoveryState();
             state.useVirtualHook = Boolean(useVirtualHook);
             const requestedVirtualLosses = Number(maxVirtualLosses);
@@ -438,6 +439,16 @@ export default Engine =>
                 Number.isFinite(requestedVirtualLosses) && requestedVirtualLosses >= 0
                     ? Math.floor(requestedVirtualLosses)
                     : 2;
+            const requestedEntryDigitCount = Number(entryDigitCount);
+            state.entryDigitCount =
+                Number.isFinite(requestedEntryDigitCount) && requestedEntryDigitCount >= 1
+                    ? Math.min(1000, Math.floor(requestedEntryDigitCount))
+                    : 4;
+            this.smartOver2RecoverySettings = {
+                useVirtualHook: state.useVirtualHook,
+                maxVirtualLosses: state.maxVirtualLosses,
+                entryDigitCount: state.entryDigitCount,
+            };
             this.setVirtualHookSettings?.(state.maxVirtualLosses, this.virtualHook?.minRealWins ?? 1);
             this.enableVirtualHook?.(state.useVirtualHook);
             if (!state.useVirtualHook) {
@@ -445,6 +456,16 @@ export default Engine =>
                 state.pendingVirtualTrade = null;
             }
             return true;
+        }
+        resetSmartOver2RecoverySession() {
+            const settings = this.smartOver2RecoverySettings;
+            this.smartOver2RecoveryState = null;
+            if (!settings) return false;
+            return this.configureSmartOver2Recovery(
+                settings.useVirtualHook,
+                settings.maxVirtualLosses,
+                settings.entryDigitCount
+            );
         }
         emitSmartOver2RecoveryEvent(journalScope, event, message, details = {}) {
             if (!journalScope) return;
@@ -465,7 +486,7 @@ export default Engine =>
             return quote === null || quote === undefined ? null : String(quote);
         }
         checkSmartOver2Recovery(
-            count = 4,
+            count = undefined,
             analysisCount = 100,
             journalScope = null,
             martingaleMultiplier = 1.2,
@@ -478,9 +499,13 @@ export default Engine =>
             stopLoss = 0,
             recoveryContractType = undefined
         ) {
-            const size = Math.max(1, Math.floor(Number(count) || 1));
             void analysisCount;
             const state = this.getSmartOver2RecoveryState();
+            const requestedEntryDigitCount = Number(count);
+            if (Number.isFinite(requestedEntryDigitCount) && requestedEntryDigitCount >= 1) {
+                state.entryDigitCount = Math.min(1000, Math.floor(requestedEntryDigitCount));
+            }
+            const size = Math.max(1, Math.floor(Number(state.entryDigitCount) || 4));
             if (recoveryContractType === 'DIGITOVER' || recoveryContractType === 'DIGITUNDER') {
                 state.recoveryContractType = recoveryContractType;
             }
@@ -513,6 +538,11 @@ export default Engine =>
                         ? Math.floor(requestedVirtualLosses)
                         : 2;
             }
+            this.smartOver2RecoverySettings = {
+                useVirtualHook: state.useVirtualHook,
+                maxVirtualLosses: state.maxVirtualLosses,
+                entryDigitCount: state.entryDigitCount,
+            };
             const requestedTargetProfit = Number(targetProfit);
             state.targetProfit =
                 Number.isFinite(requestedTargetProfit) && requestedTargetProfit > 0 ? requestedTargetProfit : 0;

@@ -529,6 +529,53 @@ describe('Ticks last-digit analysis events', () => {
         );
     });
 
+    it('keeps the Run once digit count after the trade gate stops accepting a count', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const emit = jest.spyOn(observer, 'emit');
+        engine.configureSmartOver2Recovery(true, 2, 6);
+        engine.getLastDigitList = jest.fn().mockResolvedValue([0, 1, 2, 8, 8, 8]);
+
+        await engine.checkSmartOver2Recovery(undefined, 100, 'smart-over-2');
+
+        expect(engine.getSmartOver2RecoveryState().entryDigitCount).toBe(6);
+        expect(emit).toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({
+                event: 'status',
+                message: expect.stringContaining('Last 6:'),
+            })
+        );
+        emit.mockRestore();
+    });
+
+    it('preserves Run once Virtual Hook settings when a new session resets recovery state', () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        engine.setVirtualHookSettings = jest.fn();
+        engine.enableVirtualHook = jest.fn();
+        engine.configureSmartOver2Recovery(true, 3, 6);
+        const previousState = engine.getSmartOver2RecoveryState();
+        previousState.stage = 1;
+        previousState.virtualLosses = 2;
+
+        expect(engine.resetSmartOver2RecoverySession()).toBe(true);
+
+        const resetState = engine.getSmartOver2RecoveryState();
+        expect(resetState).not.toBe(previousState);
+        expect(resetState).toEqual(
+            expect.objectContaining({
+                stage: 0,
+                useVirtualHook: true,
+                maxVirtualLosses: 3,
+                entryDigitCount: 6,
+                virtualLosses: 0,
+            })
+        );
+        expect(engine.enableVirtualHook).toHaveBeenLastCalledWith(true);
+        expect(engine.setVirtualHookSettings).toHaveBeenLastCalledWith(3, 1);
+    });
+
     it('keeps base stake with Martingale off and uses configured Under for real recovery', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

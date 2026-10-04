@@ -139,14 +139,7 @@ describe('Free Bots template catalog', () => {
         const document = new DOMParser().parseFromString(xml, 'application/xml');
 
         expect(document.querySelector('block[type="smart_over2_recovery_gate"]')).not.toBeNull();
-        expect(
-            document.querySelector(
-                'block[type="smart_over2_recovery_gate"] value[name="COUNT"] shadow[type="math_number"]'
-            )
-        ).not.toBeNull();
-        expect(document.querySelector('block[type="smart_over2_recovery_gate"] field[name="NUM"]')?.textContent).toBe(
-            '4'
-        );
+        expect(document.querySelector('block[type="smart_over2_recovery_gate"] value[name="COUNT"]')).toBeNull();
         expect(
             document.querySelector(
                 'block[type="smart_over2_recovery_gate"] value[name="MARTINGALE"] shadow[type="math_number"] field[name="NUM"]'
@@ -177,6 +170,10 @@ describe('Free Bots template catalog', () => {
                 'block[type="trade_definition"] statement[name="INITIALIZATION"] block[type="smart_over2_recovery_settings"]'
             )
         ).not.toBeNull();
+        expect(
+            document.querySelector('block[type="smart_over2_recovery_settings"] field[name="ENTRY_DIGIT_COUNT"]')
+                ?.textContent
+        ).toBe('4');
         expect(
             document.querySelector('block[type="smart_over2_recovery_settings"] field[name="USE_VIRTUAL_HOOK"]')
                 ?.textContent
@@ -240,9 +237,10 @@ describe('Free Bots template catalog', () => {
         ).toBe('2');
         expect(
             v2Document.querySelector(
-                'block[type="smart_over2_recovery_gate"] value[name="COUNT"] shadow[type="math_number"] field[name="NUM"]'
+                'block[type="smart_over2_recovery_settings"] field[name="ENTRY_DIGIT_COUNT"]'
             )?.textContent
         ).toBe('4');
+        expect(v2Document.querySelector('block[type="smart_over2_recovery_gate"] value[name="COUNT"]')).toBeNull();
         expect(
             v2Document.querySelector(
                 'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] block[type="variables_get"] field[name="VAR"]'
