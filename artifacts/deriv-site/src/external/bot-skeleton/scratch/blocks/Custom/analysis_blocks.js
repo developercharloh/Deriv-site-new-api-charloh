@@ -574,13 +574,15 @@ registerOutputBlock({
     tooltip:
         'Allows a V3 Over 2 attempt only when all four latest digits are 3–6 inclusive. Qualifying entries are simulated until the virtual-loss threshold is reached.',
     meta: 'Smart Over 2 V3 Entry Gate',
-    generatorCode: block =>
+    generatorCode: block => [
         `Bot.checkSmartOver2V3Entry(` +
-        `${numberInput(block, 'MARTINGALE', '1.2')}, ` +
-        `${numberInput(block, 'USE_MARTINGALE', 'true')}, ` +
-        `${numberInput(block, 'TARGET_PROFIT', '5')}, ` +
-        `${numberInput(block, 'STOP_LOSS', '30')}, ` +
-        `${smartOver2JournalScope(block)})`,
+            `${numberInput(block, 'MARTINGALE', '1.2')}, ` +
+            `${numberInput(block, 'USE_MARTINGALE', 'true')}, ` +
+            `${numberInput(block, 'TARGET_PROFIT', '5')}, ` +
+            `${numberInput(block, 'STOP_LOSS', '30')}, ` +
+            `${smartOver2JournalScope(block)})`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
 });
 
 window.Blockly.Blocks.smart_over2_v3_purchase = {

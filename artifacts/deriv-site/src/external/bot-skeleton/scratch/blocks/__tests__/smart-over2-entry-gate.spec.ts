@@ -182,9 +182,10 @@ describe('Smart Over 2 Blockly entry gate', () => {
 
         const gate = workspace.newBlock('smart_over2_v3_entry_gate');
         const generatedGate = javascriptGenerator.blockToCode(gate);
-        expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
-            'Bot.checkSmartOver2V3Entry(1.2, true, 5, 30, "smart-over-2")'
-        );
+        expect(generatedGate).toEqual([
+            'Bot.checkSmartOver2V3Entry(1.2, true, 5, 30, "smart-over-2")',
+            javascriptGenerator.ORDER_FUNCTION_CALL,
+        ]);
 
         const purchase = workspace.newBlock('smart_over2_v3_purchase');
         expect(javascriptGenerator.blockToCode(purchase)).toBe('Bot.purchaseSmartOver2V3("smart-over-2");\n');
@@ -193,6 +194,13 @@ describe('Smart Over 2 Blockly entry gate', () => {
         expect(javascriptGenerator.blockToCode(settlement)).toBe(
             'Bot.completeSmartOver2V3Settlement("smart-over-2");\n'
         );
+
+        const conditional = workspace.newBlock('controls_if');
+        conditional.getInput('IF0')?.connection?.connect(gate.outputConnection!);
+        conditional.getInput('DO0')?.connection?.connect(purchase.previousConnection!);
+        const generatedWorkspace = javascriptGenerator.workspaceToCode(workspace);
+        expect(generatedWorkspace).toContain('Bot.checkSmartOver2V3Entry(1.2, true, 5, 30, "smart-over-2")');
+        expect(generatedWorkspace).toContain('Bot.purchaseSmartOver2V3("smart-over-2");');
 
         workspace.dispose();
     });
