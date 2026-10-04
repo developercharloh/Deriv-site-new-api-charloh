@@ -5,8 +5,8 @@
     <variable id="smart_over2_var_target_profit">Target Profit</variable>
     <variable id="smart_over2_var_stop_loss">Stop Loss</variable>
     <variable id="smart_over2_var_use_martingale">Use Martingale</variable>
-    <variable id="smart_over2_var_over_prediction">Over prediction (2)</variable>
-    <variable id="smart_over2_var_recovery_prediction">Recovery prediction (4)</variable>
+    <variable id="smart_over2_var_over_prediction">Over Prediction</variable>
+    <variable id="smart_over2_var_recovery_prediction">Recovery Prediction</variable>
   </variables>
   <block type="trade_definition" id="smart_over2_trade_definition" deletable="false" x="0" y="0">
     <statement name="TRADE_OPTIONS">
@@ -84,7 +84,7 @@
                                 </value>
                                 <next>
                                   <block type="variables_set" id="smart_over2_set_over_prediction">
-                                    <field name="VAR" id="smart_over2_var_over_prediction">Over prediction (2)</field>
+                                     <field name="VAR" id="smart_over2_var_over_prediction">Over Prediction</field>
                                     <value name="VALUE">
                                       <block type="math_number" id="smart_over2_over_prediction_default">
                                         <field name="NUM">2</field>
@@ -92,7 +92,7 @@
                                     </value>
                                     <next>
                                       <block type="variables_set" id="smart_over2_set_recovery_prediction">
-                                        <field name="VAR" id="smart_over2_var_recovery_prediction">Recovery prediction (4)</field>
+                                         <field name="VAR" id="smart_over2_var_recovery_prediction">Recovery Prediction</field>
                                         <value name="VALUE">
                                           <block type="math_number" id="smart_over2_recovery_prediction_default">
                                             <field name="NUM">4</field>
@@ -142,7 +142,7 @@
             <field name="NUM">2</field>
           </shadow>
           <block type="variables_get" id="smart_over2_get_over_prediction">
-            <field name="VAR" id="smart_over2_var_over_prediction">Over prediction (2)</field>
+            <field name="VAR" id="smart_over2_var_over_prediction">Over Prediction</field>
           </block>
         </value>
       </block>
@@ -182,12 +182,12 @@
             </value>
             <value name="OVER_PREDICTION">
               <block type="variables_get" id="smart_over2_get_over_prediction_gate">
-                <field name="VAR" id="smart_over2_var_over_prediction">Over prediction (2)</field>
+                <field name="VAR" id="smart_over2_var_over_prediction">Over Prediction</field>
               </block>
             </value>
             <value name="RECOVERY_PREDICTION">
               <block type="variables_get" id="smart_over2_get_recovery_prediction">
-                <field name="VAR" id="smart_over2_var_recovery_prediction">Recovery prediction (4)</field>
+                <field name="VAR" id="smart_over2_var_recovery_prediction">Recovery Prediction</field>
               </block>
             </value>
             <value name="TARGET_PROFIT">

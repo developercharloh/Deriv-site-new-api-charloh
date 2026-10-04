@@ -161,7 +161,7 @@ describe('Free Bots template catalog', () => {
             document.querySelector(
                 'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] block[type="variables_get"] field[name="VAR"]'
             )?.textContent
-        ).toBe('Over prediction (2)');
+        ).toBe('Over Prediction');
         expect(document.querySelector('block[type="trade_definition"] statement[name="INITIALIZATION"]')).not.toBeNull();
         expect(document.querySelector('block[type="variables_set"] field[name="VAR"]')?.textContent).toBe('Stake');
         expect(document.querySelector('block[type="smart_over2_recovery_settings"]')).not.toBeNull();
@@ -195,8 +195,8 @@ describe('Free Bots template catalog', () => {
             'Target Profit',
             'Stop Loss',
             'Use Martingale',
-            'Over prediction (2)',
-            'Recovery prediction (5)',
+            'Over Prediction',
+            'Under Prediction',
         ].forEach(variableName => expect(gateVariableNames).toContain(variableName));
         expect(gateVariableNames).not.toContain('Maximum Virtual Hook losses');
         expect(gateVariableNames).not.toContain('Use Virtual Hook');
@@ -255,15 +255,18 @@ describe('Free Bots template catalog', () => {
             v2Document.querySelector(
                 'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] block[type="variables_get"] field[name="VAR"]'
             )?.textContent
-        ).toBe('Over prediction (2)');
+        ).toBe('Over Prediction');
+        expect(v2Document.querySelector('variable[id="smart_over2_var_over_prediction"]')?.textContent).toBe(
+            'Over Prediction'
+        );
         expect(v2Document.querySelector('variable[id="smart_over2_var_recovery_prediction"]')?.textContent).toBe(
-            'Recovery prediction (4)'
+            'Recovery Prediction'
         );
         expect(
             v2Document.querySelector(
                 'block[type="smart_over2_recovery_gate"] value[name="RECOVERY_PREDICTION"] block[type="variables_get"] field[name="VAR"]'
             )?.textContent
-        ).toBe('Recovery prediction (4)');
+        ).toBe('Recovery Prediction');
     });
 
     it('recognizes a V2 built-in template filename when choosing the recovery direction', () => {
