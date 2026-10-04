@@ -272,6 +272,89 @@ describe('Binary Matrix analysis observer integration', () => {
         );
     });
 
+    it('shows V3 digits, range qualification, and Virtual Hook progress in the Journal status row', () => {
+        const journal = {
+            pushMessage: jest.fn(),
+            updateSmartOver2AnalysisMessage: jest.fn(),
+            active_bot_template_id: 'smart-over-2-v3',
+        };
+        const rootStore = { dbot: {}, journal };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+        runPanel.onMount();
+
+        observer.emit('bot.analysis.smart_over2', {
+            version: 'v3',
+            market: '1HZ50V',
+            journalScope: 'smart-over-2',
+            count: 4,
+            digits: [3, 4, 5, 7],
+            lastThree: [4, 5, 7],
+            entryWindowReady: true,
+            entryWindowMatches: false,
+            skipWindowReady: false,
+            skipHighTriple: false,
+            skipLowTriple: false,
+            result: false,
+            useVirtualHook: true,
+            virtualLosses: 0,
+            maxVirtualLosses: 1,
+            waitingForVirtualHook: false,
+        });
+        observer.emit('bot.analysis.smart_over2', {
+            version: 'v3',
+            market: '1HZ50V',
+            journalScope: 'smart-over-2',
+            count: 4,
+            digits: [3, 4, 5, 6],
+            lastThree: [4, 5, 6],
+            entryWindowReady: true,
+            entryWindowMatches: true,
+            skipWindowReady: false,
+            skipHighTriple: false,
+            skipLowTriple: false,
+            result: true,
+            useVirtualHook: true,
+            virtualLosses: 0,
+            maxVirtualLosses: 1,
+            waitingForVirtualHook: true,
+        });
+        observer.emit('bot.analysis.smart_over2', {
+            version: 'v3',
+            market: '1HZ50V',
+            journalScope: 'smart-over-2',
+            count: 4,
+            digits: [3, 4, 5, 6],
+            lastThree: [4, 5, 6],
+            entryWindowReady: true,
+            entryWindowMatches: true,
+            skipWindowReady: false,
+            skipHighTriple: false,
+            skipLowTriple: false,
+            result: true,
+            useVirtualHook: true,
+            virtualLosses: 1,
+            maxVirtualLosses: 1,
+            waitingForVirtualHook: false,
+        });
+
+        const messages = journal.updateSmartOver2AnalysisMessage.mock.calls.map(([message]) => message);
+        expect(messages).toHaveLength(3);
+        expect(messages[0]).toContain('Last 4: [3, 4, 5, 7]');
+        expect(messages[0]).toContain('every digit 3–6: NOT MET');
+        expect(messages[0]).toContain('Entry: BLOCKED');
+        expect(messages[1]).toContain('every digit 3–6: MET');
+        expect(messages[1]).toContain('Virtual Hook: 0/1 consecutive losses');
+        expect(messages[1]).toContain('Entry: WAITING FOR VIRTUAL LOSSES');
+        expect(messages[2]).toContain('Virtual Hook: 1/1 consecutive losses');
+        expect(messages[2]).toContain('Entry: LIVE OVER 2 READY');
+        expect(journal.pushMessage).not.toHaveBeenCalled();
+    });
+
     it('updates the Smart Over 2 status row instead of appending a row per tick', () => {
         const journal = Object.create(JournalStore.prototype) as any;
         journal.active_bot_template_id = 'smart-over-2';

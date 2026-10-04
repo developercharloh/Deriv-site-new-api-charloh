@@ -563,6 +563,25 @@ export default Engine =>
                       ? 'MET'
                       : 'NOT MET';
 
+                globalObserver.emit('bot.analysis.smart_over2', {
+                    market: this.tradeOptions?.symbol || this.options?.symbol || this.symbol || 'N/A',
+                    journalScope,
+                    version: 'v3',
+                    count: assessment.count,
+                    digits: assessment.digits,
+                    lastThree: assessment.digits.slice(-3),
+                    entryWindowReady: assessment.entryWindowReady,
+                    entryWindowMatches: assessment.entryWindowMatches,
+                    skipWindowReady: false,
+                    skipHighTriple: false,
+                    skipLowTriple: false,
+                    result: assessment.result,
+                    useVirtualHook: state.useVirtualHook,
+                    virtualLosses: state.virtualLosses,
+                    maxVirtualLosses: state.maxVirtualLosses,
+                    waitingForVirtualHook: shouldStartVirtual,
+                });
+
                 if (!assessment.result) {
                     this.emitSmartOver2V3Event(
                         journalScope,

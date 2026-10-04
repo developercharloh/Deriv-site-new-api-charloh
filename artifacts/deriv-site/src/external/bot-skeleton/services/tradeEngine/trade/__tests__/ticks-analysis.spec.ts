@@ -32,6 +32,37 @@ describe('Ticks last-digit analysis events', () => {
         );
     });
 
+    it('publishes V3 live digits and the 3–6 gate result on the shared analysis event', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const emit = jest.spyOn(observer, 'emit');
+        engine.configureSmartOver2V3(true, 1);
+        engine.tradeOptions = { amount: 0.5, symbol: '1HZ50V' };
+        engine.latestTick = { epoch: 100, quote: '2591.500' };
+        engine.getLastDigitList = jest.fn().mockResolvedValue([3, 4, 5, 7]);
+
+        await expect(engine.checkSmartOver2V3Entry(1.2, true, 5, 30, 'smart-over-2')).resolves.toBe(false);
+
+        expect(emit).toHaveBeenCalledWith(
+            'bot.analysis.smart_over2',
+            expect.objectContaining({
+                version: 'v3',
+                journalScope: 'smart-over-2',
+                market: '1HZ50V',
+                count: 4,
+                digits: [3, 4, 5, 7],
+                entryWindowReady: true,
+                entryWindowMatches: false,
+                result: false,
+                useVirtualHook: true,
+                virtualLosses: 0,
+                maxVirtualLosses: 1,
+                waitingForVirtualHook: false,
+            })
+        );
+        emit.mockRestore();
+    });
+
     it('simulates Over 2 until the configured virtual losses, then queues only a live Over 2', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

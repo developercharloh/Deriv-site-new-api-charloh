@@ -35,6 +35,7 @@ export type TLastDigitsAnalysis = {
 export type TSmartOver2Analysis = {
     market: string;
     journalScope?: string | null;
+    version?: 'v3';
     count: number;
     digits: number[];
     lastThree: number[];
@@ -44,6 +45,10 @@ export type TSmartOver2Analysis = {
     skipHighTriple: boolean;
     skipLowTriple: boolean;
     result: boolean;
+    useVirtualHook?: boolean;
+    virtualLosses?: number;
+    maxVirtualLosses?: number;
+    waitingForVirtualHook?: boolean;
 };
 
 type TSmartOver2RecoveryEvent = {
@@ -1039,6 +1044,29 @@ export default class RunPanelStore {
     onSmartOver2Analysis = (analysis: TSmartOver2Analysis) => {
         const activeJournalScope = getSmartOver2JournalScope(this.root_store.journal.active_bot_template_id);
         if (!analysis.journalScope || analysis.journalScope !== activeJournalScope) return;
+
+        if (analysis.version === 'v3') {
+            const entryWindowStatus = !analysis.entryWindowReady
+                ? `WAITING (need ${analysis.count})`
+                : analysis.entryWindowMatches
+                  ? 'MET'
+                  : 'NOT MET';
+            const virtualHookStatus = analysis.useVirtualHook
+                ? `Virtual Hook: ${analysis.virtualLosses ?? 0}/${analysis.maxVirtualLosses ?? 0} consecutive losses`
+                : 'Virtual Hook: OFF';
+            const entryStatus = !analysis.result
+                ? 'BLOCKED'
+                : analysis.waitingForVirtualHook
+                  ? 'WAITING FOR VIRTUAL LOSSES'
+                  : 'LIVE OVER 2 READY';
+            const message =
+                `[Smart Over 2] Status · V3 · Market: ${analysis.market || 'N/A'} · ` +
+                `Last ${analysis.count}: [${analysis.digits.join(', ')}] · ` +
+                `every digit 3–6: ${entryWindowStatus} · ${virtualHookStatus} · Entry: ${entryStatus}`;
+
+            this.root_store.journal.updateSmartOver2AnalysisMessage(message);
+            return;
+        }
 
         const entryWindowStatus = !analysis.entryWindowReady
             ? `WAITING (need ${analysis.count})`
