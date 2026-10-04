@@ -5,6 +5,7 @@ import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../uti
 import { consumeFastReady, fastRearm, purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
 import {
+    requestBotContractGate,
     getBotContractSessionId,
     releaseBotContractGate,
     setBotContractGateContract,
@@ -130,21 +131,23 @@ export default Engine =>
             return true;
         }
 
-        purchase(contract_type, prediction) {
+        async purchase(contract_type, prediction) {
             // Prevent calling purchase twice
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
-                return Promise.resolve();
+                return;
             }
+            const requestedContractType = contract_type;
+            const requestedPrediction = prediction;
             // A Smart Over 2 workspace can have older saved Purchase blocks that
             // still request Over 2 during recovery. The staged order is authoritative
             // at the broker boundary, not just in the Journal message.
-            const smartOver2V3Plan = this.getSmartOver2V3PurchasePlan?.(contract_type, prediction);
+            let smartOver2V3Plan = this.getSmartOver2V3PurchasePlan?.(contract_type, prediction);
             if (smartOver2V3Plan?.blocked) return Promise.resolve(false);
             if (smartOver2V3Plan?.order) {
                 contract_type = smartOver2V3Plan.contractType;
                 prediction = smartOver2V3Plan.prediction;
             }
-            const recoveryPlan = this.getSmartOver2RecoveryPurchasePlan?.(contract_type, prediction);
+            let recoveryPlan = this.getSmartOver2RecoveryPurchasePlan?.(contract_type, prediction);
             if (recoveryPlan?.blocked) return Promise.resolve(false);
             if (recoveryPlan?.order) {
                 contract_type = recoveryPlan.contractType;
@@ -182,15 +185,33 @@ export default Engine =>
             // case, the Redux tick epoch is the value that released this
             // engine's before-purchase cycle and must be consumed once.
             const isFast = getBotExecutionSpeed() === 'fast';
+            const isCoordinatedSmartOver2 =
+                isFast && Boolean(this.isSmartOver2TurboWorkspace?.());
             const currentTradeState = this.store.getState();
             const currentTick = currentTradeState.newTick;
             const symbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
+            let waitedForBotGate = false;
             const signalKey =
                 isFast
                     ? `fast:${getBotContractSessionId(this)}:${String(currentTradeState.fastSlot || 0)}`
                     : currentTick === null || currentTick === undefined || currentTick === ''
                       ? undefined
                       : `${symbol ?? 'unknown'}:${String(currentTick)}`;
+            const purchaseTick = currentTradeState.newTick ?? this.latestTick?.epoch ?? null;
+            const isPurchaseSignalCurrent = () => {
+                const state = this.store.getState();
+                const observedTick = state.newTick ?? this.latestTick?.epoch ?? null;
+                const observedSymbol = this.tradeOptions?.symbol || this.options?.symbol || this.symbol;
+                return (
+                    state.scope === BEFORE_PURCHASE &&
+                    !state.paused &&
+                    !this.paused &&
+                    (!isCoordinatedSmartOver2 ||
+                        (getBotExecutionSpeed() === 'fast' &&
+                            observedSymbol === symbol &&
+                            observedTick === purchaseTick))
+                );
+            };
             // FAST is clock-paced and must be able to place one contract per
             // clock slot. SLOW keeps the single-contract gate so its normal
             // broker-tick flow cannot duplicate a purchase. FAST settlement
@@ -200,9 +221,17 @@ export default Engine =>
             // Waiting for settlement is required for deterministic Martingale
             // progression; the next clock slot will re-arm after this one is
             // settled.
-            if (!tryAcquireBotContractGate(this, signalKey, false)) {
-                return Promise.resolve();
-            }
+            const gateAcquired = isCoordinatedSmartOver2
+                ? await requestBotContractGate(
+                      this,
+                      signalKey,
+                      isPurchaseSignalCurrent,
+                      () => {
+                          waitedForBotGate = true;
+                      }
+                  )
+                : tryAcquireBotContractGate(this, signalKey, false);
+            if (!gateAcquired) return false;
             let recoveryOrder = null;
             let smartOver2V3Order = null;
             let purchaseLeaseReleased = false;
@@ -213,6 +242,47 @@ export default Engine =>
                 if (recoveryOrder) this.abortSmartOver2RecoveryPurchase?.(recoveryOrder);
                 releaseBotContractGate(this, undefined, signalKey);
             };
+
+            if (!isPurchaseSignalCurrent()) {
+                releasePurchaseLease();
+                return false;
+            }
+
+            if (isCoordinatedSmartOver2) {
+                // A queued bot may have waited through several market updates.
+                // Re-read the staged Smart Over 2 order only after it owns the
+                // account gate, so no stale recovery/V3 plan can be purchased.
+                try {
+                    contract_type = requestedContractType;
+                    prediction = requestedPrediction;
+                    smartOver2V3Plan = this.getSmartOver2V3PurchasePlan?.(contract_type, prediction);
+                    if (smartOver2V3Plan?.blocked) {
+                        releasePurchaseLease();
+                        return false;
+                    }
+                    if (smartOver2V3Plan?.order) {
+                        contract_type = smartOver2V3Plan.contractType;
+                        prediction = smartOver2V3Plan.prediction;
+                    }
+                    recoveryPlan = this.getSmartOver2RecoveryPurchasePlan?.(contract_type, prediction);
+                    if (recoveryPlan?.blocked) {
+                        releasePurchaseLease();
+                        return false;
+                    }
+                    if (recoveryPlan?.order) {
+                        contract_type = recoveryPlan.contractType;
+                        prediction = recoveryPlan.prediction;
+                    }
+                    if (!this.isPurchaseConditionGateOpen(contract_type)) {
+                        releasePurchaseLease();
+                        return false;
+                    }
+                } catch (error) {
+                    releasePurchaseLease();
+                    throw error;
+                }
+            }
+
             if (smartOver2V3Plan?.order) {
                 smartOver2V3Order = this.beginSmartOver2V3Purchase?.(smartOver2V3Plan.order);
                 if (!smartOver2V3Order) {
@@ -314,16 +384,21 @@ export default Engine =>
             if (this.is_proposal_subscription_required) {
                 let proposalsReady;
                 try {
-                    proposalsReady = this.prepareProposalsForPurchase?.(purchaseTradeOptions) ??
+                    proposalsReady = this.prepareProposalsForPurchase?.(
+                        purchaseTradeOptions,
+                        waitedForBotGate
+                    ) ??
                         this.waitForProposalsReady();
                 } catch (error) {
                     releasePurchaseLease();
                     throw error;
                 }
                 return Promise.resolve(proposalsReady).then(isReady => {
-                    if (!isReady) {
+                    if (!isReady || !isPurchaseSignalCurrent()) {
                         releasePurchaseLease();
-                        notify('warning', 'Purchase blocked: the matching contract proposal was not ready.');
+                        if (!isReady) {
+                            notify('warning', 'Purchase blocked: the matching contract proposal was not ready.');
+                        }
                         return false;
                     }
 
@@ -337,6 +412,11 @@ export default Engine =>
                     const { id, askPrice } = selectedProposal;
 
                     const action = () => {
+                        if (!isPurchaseSignalCurrent()) {
+                            const error = new Error('The purchase signal expired before the order was sent.');
+                            error.error = { code: 'STALE_PURCHASE_SIGNAL' };
+                            throw error;
+                        }
                         this.recordFastPurchaseRequest(contract_type);
                         return api_base.api.send({ buy: id, price: askPrice });
                     };
@@ -351,6 +431,7 @@ export default Engine =>
                     if (!this.options.timeMachineEnabled) {
                         return doUntilDone(action).then(onSuccess).catch(error => {
                             releasePurchaseLease();
+                            if (error?.error?.code === 'STALE_PURCHASE_SIGNAL') return false;
                             throw error;
                         });
                     }
@@ -377,6 +458,7 @@ export default Engine =>
                         this.getNextPurchaseDelayIndex()
                     ).then(onSuccess).catch(error => {
                         releasePurchaseLease();
+                        if (error?.error?.code === 'STALE_PURCHASE_SIGNAL') return false;
                         throw error;
                     });
                 }, error => {
@@ -392,6 +474,11 @@ export default Engine =>
                 throw error;
             }
             const action = () => {
+                if (!isPurchaseSignalCurrent()) {
+                    const error = new Error('The purchase signal expired before the order was sent.');
+                    error.error = { code: 'STALE_PURCHASE_SIGNAL' };
+                    throw error;
+                }
                 this.recordFastPurchaseRequest(contract_type);
                 return api_base.api.send(trade_option);
             };
@@ -406,6 +493,7 @@ export default Engine =>
             if (!this.options.timeMachineEnabled) {
                 return doUntilDone(action).then(onSuccess).catch(error => {
                     releasePurchaseLease();
+                    if (error?.error?.code === 'STALE_PURCHASE_SIGNAL') return false;
                     throw error;
                 });
             }
@@ -428,6 +516,7 @@ export default Engine =>
                 this.getNextPurchaseDelayIndex()
             ).then(onSuccess).catch(error => {
                 releasePurchaseLease();
+                if (error?.error?.code === 'STALE_PURCHASE_SIGNAL') return false;
                 throw error;
             });
         }

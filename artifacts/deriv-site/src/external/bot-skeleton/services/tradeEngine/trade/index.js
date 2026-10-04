@@ -21,6 +21,7 @@ import {
     FAST_CONTRACT_DURATION_VALUE,
     getBotExecutionSpeed,
 } from '@/constants/bot-execution-speed';
+import { cancelQueuedBotContractGate } from '@/utils/bot-contract-gate';
 import { FastExecutionClock } from '@/utils/fast-execution-clock';
 
 const watchBefore = store =>
@@ -315,6 +316,11 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         );
     }
 
+    isSmartOver2TurboWorkspace() {
+        const blocks = window.Blockly?.derivWorkspace?.getAllBlocks?.(true) ?? [];
+        return blocks.some(block => block.type?.startsWith('smart_over2_'));
+    }
+
     getSmartOver2TradeOptions(tradeOptions) {
         if (!this.isSmartOver2Workspace()) return tradeOptions;
 
@@ -500,6 +506,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
     pause() {
         if (this.paused) return;
         this.paused = true;
+        cancelQueuedBotContractGate(this);
         this.store.dispatch(pause());
         this.stopFastClock();
     }

@@ -81,6 +81,30 @@ describe('trade engine purchase state isolation', () => {
         expect(engine.renewProposalsOnPurchase).toHaveBeenCalledTimes(1);
     });
 
+    it('forces a new proposal reference after waiting for the shared gate', async () => {
+        const engine: any = new TestEngine();
+        const options = {
+            amount: 0.5,
+            basis: 'stake',
+            contractTypes: ['DIGITOVER'],
+            currency: 'USD',
+            duration: 1,
+            duration_unit: 't',
+            prediction: 5,
+            symbol: '1HZ50V',
+        };
+        engine.options = options;
+        engine.trade_option = { ...options };
+        engine.purchaseReference = 'proposal-before-wait';
+        engine.renewProposalsOnPurchase = jest.fn();
+        engine.waitForProposalsReady = jest.fn().mockResolvedValue(true);
+
+        await expect(engine.prepareProposalsForPurchase(options, true)).resolves.toBe(true);
+
+        expect(engine.getPurchaseReference()).not.toBe('proposal-before-wait');
+        expect(engine.renewProposalsOnPurchase).toHaveBeenCalledTimes(1);
+    });
+
     it('selects only a proposal with the requested recovery prediction', () => {
         const engine: any = new TestEngine();
         engine.data = {

@@ -50,13 +50,13 @@ export default Engine =>
             });
         }
 
-        prepareProposalsForPurchase(purchaseTradeOptions) {
+        prepareProposalsForPurchase(purchaseTradeOptions, forceRefresh = false) {
             const proposalOptions = {
                 ...this.options,
                 ...purchaseTradeOptions,
             };
 
-            this.makeProposals(proposalOptions);
+            this.makeProposals(proposalOptions, forceRefresh);
             return this.waitForProposalsReady();
         }
 

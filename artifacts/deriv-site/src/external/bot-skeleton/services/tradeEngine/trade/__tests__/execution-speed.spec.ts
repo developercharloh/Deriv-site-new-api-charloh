@@ -138,6 +138,26 @@ describe('FAST trade-cycle release', () => {
 });
 
 describe('Smart Over 2 V3 trade options', () => {
+    it.each([
+        'smart_over2_entry_gate',
+        'smart_over2_recovery_gate',
+        'smart_over2_v3_entry_gate',
+    ])('recognizes %s as eligible for coordinated Turbo', blockType => {
+        const previousBlockly = window.Blockly;
+        const engine = Object.create(TradeEngine.prototype);
+        (window as any).Blockly = {
+            derivWorkspace: {
+                getAllBlocks: () => [{ type: blockType }],
+            },
+        };
+
+        try {
+            expect(engine.isSmartOver2TurboWorkspace()).toBe(true);
+        } finally {
+            (window as any).Blockly = previousBlockly;
+        }
+    });
+
     it('uses the startup Over Prediction in options prepared for proposals', () => {
         const state = {
             overPrediction: 5,

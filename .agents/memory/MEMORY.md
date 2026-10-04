@@ -57,3 +57,4 @@
 - [Nexus digit confirmation fixtures](nexus-digit-confirmation-fixtures.md) — synthetic fresh ticks must match the selected digit route or recovery correctly fails confirmation.
 - [Nexus fresh-tick identity](deriv-fresh-tick-identity.md) — count new broker tick events, not distinct quote values, without weakening the three-tick confirmation.
 - [Alpha Scan fixture event order](alpha-scan-fixture-event-order.md) — simulated contracts must report open before settlement so recovery excludes the market actually traded.
+- [Smart Over 2 Turbo queue freshness](deriv-smart-over2-turbo-queue.md) — queued intent expires on market-tick change, not the 300 ms FAST scheduler slot; refresh staged plans and proposals after queueing.

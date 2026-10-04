@@ -17,8 +17,10 @@ jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
 }));
 
 import {
+    cancelQueuedBotContractGate,
     getBotContractSessionId,
     markBotTick,
+    requestBotContractGate,
     releaseBotContractGate,
     setBotContractGateContract,
     tryAcquireBotContractGate,
@@ -645,6 +647,58 @@ describe('automated contract gate', () => {
         releaseBotContractGate(firstRunner, 12345);
         expect(tryAcquireBotContractGate(secondRunner)).toBe(true);
         releaseBotContractGate(secondRunner);
+    });
+
+    it('hands queued FAST gate requests forward in FIFO order', async () => {
+        const firstRunner = {};
+        const secondRunner = {};
+        const thirdRunner = {};
+
+        expect(tryAcquireBotContractGate(firstRunner, 'fast:first:1')).toBe(true);
+        const secondGrant = requestBotContractGate(secondRunner, 'fast:second:1');
+        const thirdGrant = requestBotContractGate(thirdRunner, 'fast:third:1');
+        let thirdResolved = false;
+        thirdGrant.then(() => {
+            thirdResolved = true;
+        });
+
+        releaseBotContractGate(firstRunner);
+        await expect(secondGrant).resolves.toBe(true);
+        await Promise.resolve();
+        expect(thirdResolved).toBe(false);
+
+        releaseBotContractGate(secondRunner);
+        await expect(thirdGrant).resolves.toBe(true);
+        releaseBotContractGate(thirdRunner);
+    });
+
+    it('skips expired queued signals and grants the next valid runner', async () => {
+        const firstRunner = {};
+        const staleRunner = {};
+        const currentRunner = {};
+
+        expect(tryAcquireBotContractGate(firstRunner, 'fast:first:1')).toBe(true);
+        const staleGrant = requestBotContractGate(staleRunner, 'fast:stale:1', () => false);
+        const currentGrant = requestBotContractGate(currentRunner, 'fast:current:1', () => true);
+
+        releaseBotContractGate(firstRunner);
+        await expect(staleGrant).resolves.toBe(false);
+        await expect(currentGrant).resolves.toBe(true);
+        releaseBotContractGate(currentRunner);
+    });
+
+    it('cancels a queued runner when it is paused or stopped', async () => {
+        const firstRunner = {};
+        const queuedRunner = {};
+
+        expect(tryAcquireBotContractGate(firstRunner, 'fast:first:1')).toBe(true);
+        const queuedGrant = requestBotContractGate(queuedRunner, 'fast:queued:1');
+        expect(cancelQueuedBotContractGate(queuedRunner)).toBe(1);
+        await expect(queuedGrant).resolves.toBe(false);
+
+        releaseBotContractGate(firstRunner);
+        expect(tryAcquireBotContractGate(queuedRunner, 'fast:queued:2')).toBe(true);
+        releaseBotContractGate(queuedRunner);
     });
 
     it('releases a SLOW lease when settlement has no Redux signal key', () => {
