@@ -35,6 +35,37 @@ describe('Binary Matrix analysis observer integration', () => {
         api_base.api = null;
     });
 
+    it('updates the Edging pro Journal row with the latest digits and explicit condition status', () => {
+        const journal = {
+            pushMessage: jest.fn(),
+            updateEdgingProAnalysisMessage: jest.fn(),
+            active_bot_template_id: 'edging-pro-engine',
+        };
+        const runPanel = new RunPanelStore(
+            { dbot: {}, journal } as any,
+            {
+                client: { loginid: null },
+                common: { is_socket_opened: false },
+                ui: {},
+            } as any
+        );
+
+        runPanel.onLastDigitsAnalysis({
+            market: '1HZ50V',
+            condition: 'CONSECUTIVE_DIGITS_BETWEEN_4_AND_5',
+            count: 4,
+            compareValue: '4–5 inclusive',
+            digits: [4, 5, 5, 4],
+            result: true,
+            status: 'MET',
+        });
+
+        expect(journal.updateEdgingProAnalysisMessage).toHaveBeenCalledWith(
+            '[Edging pro] Last 4 digits on 1HZ50V: [4, 5, 5, 4] · 4–5 condition: MET'
+        );
+        expect(journal.pushMessage).not.toHaveBeenCalled();
+    });
+
     it('keeps Rise/Fall volatility-scan Journal entries out of Smart Over 2', () => {
         const journal = {
             pushMessage: jest.fn(),

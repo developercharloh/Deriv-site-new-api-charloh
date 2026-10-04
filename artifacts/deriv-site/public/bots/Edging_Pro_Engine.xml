@@ -1,0 +1,75 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <block type="trade_definition" id="edging_trade_definition" deletable="false" x="0" y="0">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="edging_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ50V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="edging_trade_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="edging_contract_type" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="edging_interval" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="edging_restart" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="edging_restart_on_error" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="edging_trade_options">
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="edging_duration">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="edging_stake">
+            <field name="NUM">0.5</field>
+          </shadow>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="edging_prediction">
+            <field name="NUM">5</field>
+          </shadow>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="edging_before_purchase" deletable="false" x="0" y="650"></block>
+  <block type="after_purchase" id="edging_after_purchase" x="700" y="0">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="trade_again" id="edging_trade_again"></block>
+    </statement>
+  </block>
+  <block type="edging_pro_strategy" id="edging_strategy" x="0" y="900">
+    <field name="LAST_X">4</field>
+    <field name="STAKE">0.5</field>
+    <field name="OVER_PREDICTION">5</field>
+    <field name="UNDER_PREDICTION">4</field>
+    <field name="MARTINGALE">2</field>
+    <field name="TAKE_PROFIT">10</field>
+    <field name="STOP_LOSS">30</field>
+    <field name="USE_VIRTUAL_HOOK">TRUE</field>
+    <field name="VIRTUAL_LOSS_THRESHOLD">2</field>
+  </block>
+</xml>

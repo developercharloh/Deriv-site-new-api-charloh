@@ -1214,6 +1214,20 @@ export const ToolboxItems = () =>
                 </Block>
             </Category>
 
+            <Category id='edging_bots' name={localize('Edging Bots')}>
+                <Block type='edging_pro_strategy'>
+                    <Field name='LAST_X'>4</Field>
+                    <Field name='STAKE'>0.5</Field>
+                    <Field name='OVER_PREDICTION'>5</Field>
+                    <Field name='UNDER_PREDICTION'>4</Field>
+                    <Field name='MARTINGALE'>2</Field>
+                    <Field name='TAKE_PROFIT'>10</Field>
+                    <Field name='STOP_LOSS'>30</Field>
+                    <Field name='USE_VIRTUAL_HOOK'>TRUE</Field>
+                    <Field name='VIRTUAL_LOSS_THRESHOLD'>2</Field>
+                </Block>
+            </Category>
+
             <Examples id='examples'>
                 <Example id='sell_available'>
                     <Block type='during_purchase'>

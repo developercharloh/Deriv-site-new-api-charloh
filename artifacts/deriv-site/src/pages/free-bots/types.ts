@@ -10,7 +10,6 @@ export type BotConfig = {
     strategy:    string;
     params:      { label: string; value: string }[];
     xmlPath?:    string;
-    nativeRunner?: 'edging-pro';
     gradient:    string;
     art?:        string;
     category?:   string;

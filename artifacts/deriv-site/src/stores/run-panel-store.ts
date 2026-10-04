@@ -13,6 +13,7 @@ import GTM from '@/utils/gtm';
 import { helpers } from '@/utils/store-helpers';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
 import { BinaryMatrixEngine, type BinaryMatrixConfig, type BinaryMatrixStatus } from '@/utils/binary-matrix-engine';
+import { EdgingProEngine, type EdgingProStatus } from '@/utils/edging-pro-engine';
 import { readBlocklyNumberVariable } from '@/utils/binary-matrix-settings';
 import { getSmartOver2JournalScope, isRiseFallMasterBotIdentity } from '@/utils/bot-template-scope';
 import type { DTPosition } from '@/utils/dtrader-engine';
@@ -26,9 +27,10 @@ export type TLastDigitsAnalysis = {
     market: string;
     condition: string;
     count: number;
-    compareValue: number;
+    compareValue: number | string;
     digits: number[];
     result: boolean;
+    status?: 'WAITING' | 'MET' | 'NOT MET';
     purchaseMapping?: string | null;
 };
 
@@ -169,6 +171,8 @@ export default class RunPanelStore {
              updateNativeBot: action,
              unregisterNativeBot: action,
              startNativeApolloBot: action,
+             startNativeEdgingProBot: action,
+             onEdgingProJournalLog: action.bound,
         });
 
         this.root_store = root_store;
@@ -193,6 +197,7 @@ export default class RunPanelStore {
     native_bot_stop_handler: (() => void) | null = null;
     native_bot_pause_handler: ((paused: boolean) => void) | null = null;
     native_apollo_engine: BinaryMatrixEngine | null = null;
+    native_edging_pro_engine: EdgingProEngine | null = null;
     last_digits_analysis: TLastDigitsAnalysis | null = null;
     parity_analysis: TParityAnalysis | null = null;
 
@@ -279,6 +284,26 @@ export default class RunPanelStore {
         if (is_ios || isSafari()) this.preloadAudio();
 
         this.registerBotListeners();
+
+        const hasEdgingProStrategyBlock = window.Blockly?.derivWorkspace
+            ?.getAllBlocks?.(true)
+            ?.some((block: any) => block.type === 'edging_pro_strategy');
+        if (hasEdgingProStrategyBlock) {
+            ui?.setAccountSwitcherDisabledMessage(
+                localize(
+                    'Account switching is disabled while your bot is running. Please stop your bot before switching accounts.'
+                )
+            );
+            runInAction(() => {
+                summary_card.clear();
+                this.clearLastDigitsAnalysis();
+                this.toggleDrawer(true);
+            });
+            const started = this.startNativeEdgingProBot();
+            if (!started) this.unregisterBotListeners();
+            this.setShowBotStopMessage(false);
+            return;
+        }
 
         if (!this.dbot.shouldRunBot()) {
             this.unregisterBotListeners();
@@ -855,7 +880,9 @@ export default class RunPanelStore {
 
     unregisterBotListeners = () => {
         observer.unregisterAll('bot.running');
+        observer.unregisterAll('bot.sell');
         observer.unregisterAll('bot.stop');
+        observer.unregisterAll('bot.bot_ready');
         observer.unregisterAll('bot.click_stop');
         observer.unregisterAll('bot.stop_button_click');
         observer.unregisterAll('bot.trade_again');
@@ -997,6 +1024,88 @@ export default class RunPanelStore {
         );
     };
 
+    startNativeEdgingProBot = () => {
+        const workspace = window.Blockly?.derivWorkspace;
+        const strategyBlock = workspace
+            ?.getAllBlocks?.(true)
+            ?.find((block: any) => block.type === 'edging_pro_strategy');
+        if (!strategyBlock) return false;
+        if (this.native_edging_pro_engine) return true;
+
+        const fieldNumber = (name: string, fallback: number) => {
+            const value = Number(strategyBlock.getFieldValue(name));
+            return Number.isFinite(value) ? value : fallback;
+        };
+        const marketBlock = workspace
+            .getAllBlocks(true)
+            .find((block: any) => block.type === 'trade_definition_market');
+        const engine = new EdgingProEngine({
+            symbol: marketBlock?.getFieldValue?.('SYMBOL_LIST') || '1HZ50V',
+            currency: this.core.client.currency || 'USD',
+            initialStake: fieldNumber('STAKE', 0.5),
+            martingale: fieldNumber('MARTINGALE', 2),
+            takeProfit: fieldNumber('TAKE_PROFIT', 10),
+            stopLoss: fieldNumber('STOP_LOSS', 30),
+            lastX: Math.floor(fieldNumber('LAST_X', 4)),
+            overPrediction: Math.floor(fieldNumber('OVER_PREDICTION', 5)),
+            underPrediction: Math.floor(fieldNumber('UNDER_PREDICTION', 4)),
+            useVirtualHook: strategyBlock.getFieldValue('USE_VIRTUAL_HOOK') === 'TRUE',
+            virtualLossThreshold: Math.floor(fieldNumber('VIRTUAL_LOSS_THRESHOLD', 2)),
+        });
+        this.native_edging_pro_engine = engine;
+
+        engine.onLog = entry => this.onEdgingProJournalLog(entry);
+        engine.onStatus = (status: EdgingProStatus) => {
+            if (status === 'stopped' || status === 'idle' || status === 'error') {
+                if (this.native_edging_pro_engine !== engine) return;
+                this.native_edging_pro_engine = null;
+                this.unregisterNativeBot();
+                this.unregisterBotListeners();
+                return;
+            }
+
+            const stage =
+                status === 'buying'
+                    ? contract_stages.PURCHASE_SENT
+                    : status === 'waiting'
+                      ? contract_stages.PURCHASE_RECEIVED
+                      : status === 'scanning' || status === 'virtual'
+                        ? contract_stages.RUNNING
+                        : contract_stages.STARTING;
+            this.updateNativeBot(stage, status === 'waiting');
+        };
+        engine.onPosition = position => {
+            this.root_store.transactions.onBotContractEvent(
+                this.nativePositionToContractInfo(position) as unknown as Parameters<
+                    typeof this.root_store.transactions.onBotContractEvent
+                >[0]
+            );
+        };
+
+        if (!engine.start()) {
+            if (this.native_edging_pro_engine === engine) this.native_edging_pro_engine = null;
+            return false;
+        }
+
+        this.registerNativeBot(
+            () => engine.stop(),
+            paused => (paused ? engine.pause() : engine.resume())
+        );
+        this.updateNativeBot(contract_stages.RUNNING, false);
+        return true;
+    };
+
+    onEdgingProJournalLog = (entry: { message?: string; type?: string }) => {
+        const message = String(entry?.message || '');
+        if (!message || /^Last \d+ consecutive digits:/.test(message)) return;
+        this.root_store.journal.pushMessage(
+            `[Edging pro] ${message}`,
+            entry.type === 'error' ? MessageTypes.ERROR : MessageTypes.NOTIFY,
+            'journal__text',
+            { botTemplateId: 'edging-pro-engine' }
+        );
+    };
+
     setContractStage = (contract_stage: TContractStage) => {
         this.contract_stage = contract_stage;
     };
@@ -1010,6 +1119,17 @@ export default class RunPanelStore {
     };
 
     onLastDigitsAnalysis = (analysis: TLastDigitsAnalysis) => {
+        if (analysis.condition === 'CONSECUTIVE_DIGITS_BETWEEN_4_AND_5') {
+            const status = analysis.status || (analysis.result ? 'MET' : 'NOT MET');
+            const resultText =
+                status === 'WAITING' ? `WAITING (${analysis.digits.length}/${analysis.count})` : status;
+            this.root_store.journal.updateEdgingProAnalysisMessage(
+                `[Edging pro] Last ${analysis.count} digits on ${analysis.market || 'N/A'}: ` +
+                    `[${analysis.digits.join(', ')}] · 4–5 condition: ${resultText}`
+            );
+            return;
+        }
+
         // Update the live banner and Journal from the same event. Binary Matrix
         // evaluates several conditions asynchronously; keeping these writes in
         // one observer callback prevents the Journal from drifting behind the

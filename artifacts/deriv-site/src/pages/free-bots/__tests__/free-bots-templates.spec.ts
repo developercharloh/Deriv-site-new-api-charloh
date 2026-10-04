@@ -71,7 +71,7 @@ describe('Free Bots template catalog', () => {
         }
     });
 
-    it('keeps Blockly bot placement tied to custom blocks and registers Edging pro as a native runner', () => {
+    it('keeps Blockly bot placement tied to custom blocks while retaining the Edging Bots section', () => {
         const entries = readCatalogBotSections();
         const customBlockTypes = readCustomBlockTypes();
 
@@ -86,12 +86,38 @@ describe('Free Bots template catalog', () => {
                 customBlockTypes.has(block.getAttribute('type') || '')
             );
 
-            expect(entry.section).toBe(usesCustomBlock ? 'premium' : 'smart-contract');
+            if (entry.id === 'edging-pro-engine') {
+                expect(entry.section).toBe('edging');
+                expect(usesCustomBlock).toBe(true);
+            } else {
+                expect(entry.section).toBe(usesCustomBlock ? 'premium' : 'smart-contract');
+            }
         }
 
         const catalogSource = fs.readFileSync(path.join(__dirname, '..', 'index.tsx'), 'utf8');
         expect(catalogSource).toMatch(
-            /id: 'edging-pro-engine',\s*section: 'edging',[\s\S]*?nativeRunner: 'edging-pro'/
+            /id: 'edging-pro-engine',\s*section: 'edging',[\s\S]*?xmlPath: '\/bots\/Edging_Pro_Engine\.xml'/
+        );
+        expect(catalogSource).not.toContain('EdgingProRunnerModal');
+    });
+
+    it('ships Edging pro as an XML-configured paired-digit strategy', () => {
+        const xml = fs.readFileSync(path.join(publicBotsPath, 'Edging_Pro_Engine.xml'), 'utf8');
+        const document = new DOMParser().parseFromString(xml, 'application/xml');
+        const strategy = document.querySelector('block[type="edging_pro_strategy"]');
+
+        expect(document.querySelector('parsererror')).toBeNull();
+        expect(document.querySelector('block[type="trade_definition_market"] field[name="SYMBOL_LIST"]')?.textContent).toBe(
+            '1HZ50V'
+        );
+        expect(strategy).not.toBeNull();
+        expect(strategy?.querySelector('field[name="LAST_X"]')?.textContent).toBe('4');
+        expect(strategy?.querySelector('field[name="STAKE"]')?.textContent).toBe('0.5');
+        expect(strategy?.querySelector('field[name="OVER_PREDICTION"]')?.textContent).toBe('5');
+        expect(strategy?.querySelector('field[name="UNDER_PREDICTION"]')?.textContent).toBe('4');
+        expect(strategy?.querySelector('field[name="USE_VIRTUAL_HOOK"]')?.textContent).toBe('TRUE');
+        expect(document.querySelectorAll('block[type="trade_definition"], block[type="before_purchase"], block[type="after_purchase"]')).toHaveLength(
+            3
         );
     });
 

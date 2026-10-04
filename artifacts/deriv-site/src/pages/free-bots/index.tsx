@@ -10,7 +10,6 @@ import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig, FreeBotSection } from './types';
 import FreeBotCategoryTabs from './FreeBotCategoryTabs';
-import EdgingProRunnerModal from './EdgingProRunnerModal';
 import './free-bots.scss';
 
 const V2_CONFIG_KEY = 'free_bots_v2_config';
@@ -470,7 +469,7 @@ const BOTS: BotConfig[] = [
             { label: 'Take Profit / Stop Loss', value: '$10 / $30' },
             { label: 'Duration', value: '1 Tick' },
         ],
-        nativeRunner: 'edging-pro',
+        xmlPath: '/bots/Edging_Pro_Engine.xml',
         gradient: 'linear-gradient(135deg, #101628 0%, #244c52 46%, #4a164d 100%)',
     },
     {
@@ -961,10 +960,9 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
     const [status,     setStatus]     = useState<BotStatus>('idle');
     const [errorMsg,   setErrorMsg]   = useState('');
     const [showSignal, setShowSignal] = useState(false);
-    const [showNativeRunner, setShowNativeRunner] = useState(false);
 
     const signal = useSignal(bot.signalKey);
-    const isNativeRunner = bot.nativeRunner === 'edging-pro';
+    const isEdgingProBot = bot.id === 'edging-pro-engine';
 
     const loadBot = async () => {
         if (!store) return;
@@ -987,7 +985,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                 throw new Error('This bot file is empty and cannot be loaded.');
             }
 
-            if (engineMode === 'v2') {
+            if (engineMode === 'v2' && !isEdgingProBot) {
                 // Fix #2 & #5: V2 path — parse config, persist, fire autostart.
                 // Do NOT load into Blockly — that arms DBot's engine and causes V1 to fire.
                 const v2Cfg    = parseXmlV2Config(xmlText);
@@ -1143,7 +1141,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
         }
     };
 
-    const isV2Mode = engineMode === 'v2';
+    const isV2Mode = engineMode === 'v2' && !isEdgingProBot;
 
     return (
         <>
@@ -1178,7 +1176,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
 
                     <div className='free-bots__card-actions'>
                         {/* V2 mode: same Load-into-builder flow, also saves parsed config */}
-                        {isV2Mode && !isNativeRunner && (
+                        {isV2Mode && (
                             <button
                                 className={`free-bots__card-btn free-bots__card-btn--v2 ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
                                 onClick={loadBot}
@@ -1189,7 +1187,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                         )}
 
                         {/* V1 mode: normal Load Bot button */}
-                        {engineMode !== 'v2' && !isNativeRunner && (
+                        {!isV2Mode && (
                             <button
                                 className={`free-bots__card-btn free-bots__card-btn--load ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
                                 onClick={loadBot}
@@ -1197,15 +1195,6 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                             >
                                 <span aria-hidden='true'>⇩</span>
                                 {status === 'loading' ? 'Loading…' : status === 'loaded' ? 'Loaded' : 'Load bot'}
-                            </button>
-                        )}
-
-                        {isNativeRunner && (
-                            <button
-                                className='free-bots__card-btn free-bots__card-btn--v2'
-                                onClick={() => setShowNativeRunner(true)}
-                            >
-                                ⚡ Open Engine
                             </button>
                         )}
 
@@ -1229,13 +1218,6 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                     signal={signal}
                     engineMode={engineMode}
                     onClose={() => setShowSignal(false)}
-                />
-            )}
-
-            {showNativeRunner && isNativeRunner && (
-                <EdgingProRunnerModal
-                    bot={bot}
-                    onClose={() => setShowNativeRunner(false)}
                 />
             )}
 

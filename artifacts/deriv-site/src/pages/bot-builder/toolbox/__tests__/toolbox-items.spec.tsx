@@ -11,6 +11,10 @@ describe('bot builder toolbox structure', () => {
         path.resolve(__dirname, '../../../../external/bot-skeleton/scratch/blocks/Custom/analysis_blocks.js'),
         'utf8'
     );
+    const edgingBlocksSource = fs.readFileSync(
+        path.resolve(__dirname, '../../../../external/bot-skeleton/scratch/blocks/Custom/edging_pro_blocks.js'),
+        'utf8'
+    );
 
     it('keeps the screenshot menu order and exposes Binary Matrix AI', () => {
         const categoryIds = [...toolboxSource.matchAll(/<Category id='([^']+)'/g)].map(match => match[1]);
@@ -33,6 +37,24 @@ describe('bot builder toolbox structure', () => {
         expect(toolboxSource).toContain("type='apollo_purchase2'");
         expect(toolboxSource).toContain("type='multiplier_take_profit'");
         expect(toolboxSource).toContain("type='multiplier_stop_loss'");
+    });
+
+    it('exposes the XML-backed Edging pro strategy and its editable settings', () => {
+        expect(toolboxSource).toContain("id='edging_bots'");
+        expect(toolboxSource).toContain("type='edging_pro_strategy'");
+        expect(edgingBlocksSource).toContain('window.Blockly.Blocks.edging_pro_strategy');
+        expect(edgingBlocksSource).toContain('javascriptGenerator.forBlock.edging_pro_strategy');
+        [
+            'LAST_X',
+            'STAKE',
+            'OVER_PREDICTION',
+            'UNDER_PREDICTION',
+            'MARTINGALE',
+            'TAKE_PROFIT',
+            'STOP_LOSS',
+            'USE_VIRTUAL_HOOK',
+            'VIRTUAL_LOSS_THRESHOLD',
+        ].forEach(field => expect(edgingBlocksSource).toContain(`name: '${field}'`));
     });
 
     it('puts the live digit and tick analysis blocks in Analysis Logics', () => {
