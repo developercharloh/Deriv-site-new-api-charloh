@@ -182,6 +182,11 @@ describe('Free Bots template catalog', () => {
             document.querySelector('block[type="smart_over2_recovery_settings"] field[name="MAX_VIRTUAL_LOSSES"]')
                 ?.textContent
         ).toBe('2');
+        expect(
+            document.querySelector(
+                'block[type="smart_over2_recovery_settings"] field[name="RECOVERY_CONTRACT_TYPE"]'
+            )?.textContent
+        ).toBe('DIGITUNDER');
         const gateVariableNames = Array.from(
             document.querySelectorAll('block[type="smart_over2_recovery_gate"] field[name="VAR"]')
         ).map(field => field.textContent);
@@ -237,6 +242,11 @@ describe('Free Bots template catalog', () => {
         ).toBe('2');
         expect(
             v2Document.querySelector(
+                'block[type="smart_over2_recovery_settings"] field[name="RECOVERY_CONTRACT_TYPE"]'
+            )?.textContent
+        ).toBe('DIGITOVER');
+        expect(
+            v2Document.querySelector(
                 'block[type="smart_over2_recovery_settings"] field[name="ENTRY_DIGIT_COUNT"]'
             )?.textContent
         ).toBe('4');
@@ -254,5 +264,9 @@ describe('Free Bots template catalog', () => {
                 'block[type="smart_over2_recovery_gate"] value[name="RECOVERY_PREDICTION"] block[type="variables_get"] field[name="VAR"]'
             )?.textContent
         ).toBe('Recovery prediction (4)');
+    });
+
+    it('recognizes a V2 built-in template filename when choosing the recovery direction', () => {
+        expect(getSmartOver2RecoveryContractType('Smart_Over_2_Bot_V2.xml')).toBe('DIGITOVER');
     });
 });

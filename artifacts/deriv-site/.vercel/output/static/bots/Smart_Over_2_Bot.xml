@@ -103,6 +103,7 @@
                             <field name="ENTRY_DIGIT_COUNT">4</field>
                             <field name="USE_VIRTUAL_HOOK">TRUE</field>
                             <field name="MAX_VIRTUAL_LOSSES">2</field>
+                            <field name="RECOVERY_CONTRACT_TYPE">DIGITUNDER</field>
                           </block>
                                 </next>
                               </block>

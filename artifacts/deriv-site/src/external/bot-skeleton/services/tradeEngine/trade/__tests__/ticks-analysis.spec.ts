@@ -210,6 +210,8 @@ describe('Ticks last-digit analysis events', () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
         const state = engine.getSmartOver2RecoveryState();
+        state.useVirtualHook = false;
+        state.maxVirtualLosses = 0;
         state.stage = 1;
         state.currentStake = 0.6;
         state.martingaleMultiplier = 1.2;
@@ -239,6 +241,20 @@ describe('Ticks last-digit analysis events', () => {
         );
         expect(engine.getLastDigitList).not.toHaveBeenCalled();
         emit.mockRestore();
+    });
+
+    it('defaults Smart Over 2 Virtual Hook on and enables it in the trade engine', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const state = engine.getSmartOver2RecoveryState();
+        const enableVirtualHook = jest.fn();
+        engine.enableVirtualHook = enableVirtualHook;
+        engine.getLastDigitList = jest.fn().mockResolvedValue([]);
+
+        expect(state.useVirtualHook).toBe(true);
+        expect(state.maxVirtualLosses).toBe(2);
+        await engine.checkSmartOver2Recovery(undefined, 100, 'smart-over-2');
+        expect(enableVirtualHook).toHaveBeenLastCalledWith(true);
     });
 
     it('requires consecutive virtual losses to start real Under recovery, then repeats real recovery until a win', async () => {
@@ -454,10 +470,13 @@ describe('Ticks last-digit analysis events', () => {
     it('uses Over 4 for both V2 virtual simulation and real recovery after Run once settings', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
+        const enableVirtualHook = jest.fn();
+        engine.enableVirtualHook = enableVirtualHook;
+        engine.configureSmartOver2Recovery(true, 2, 4, 'DIGITOVER');
+        expect(engine.resetSmartOver2RecoverySession()).toBe(true);
         const state = engine.getSmartOver2RecoveryState();
         state.stage = 1;
         state.virtualLosses = 1;
-        engine.configureSmartOver2Recovery(true, 2);
         engine.latestTick = { epoch: 300, quote: '2591.300' };
         engine.getLastDigit = jest.fn().mockResolvedValueOnce(5).mockResolvedValueOnce(4).mockResolvedValueOnce(4);
         const check = () =>
@@ -473,8 +492,10 @@ describe('Ticks last-digit analysis events', () => {
                 undefined,
                 0,
                 0,
-                'DIGITOVER'
+                undefined
             );
+        expect(state.recoveryContractType).toBe('DIGITOVER');
+        expect(engine.enableVirtualHook).toHaveBeenLastCalledWith(true);
 
         await expect(check()).resolves.toBe(false);
         expect(state.pendingVirtualTrade).toEqual(

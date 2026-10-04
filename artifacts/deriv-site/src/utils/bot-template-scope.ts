@@ -13,6 +13,7 @@ const SMART_OVER_2_BOT_IDENTITIES = new Set([
 const normalizeIdentity = (identity: unknown) =>
     String(identity ?? '')
         .trim()
+        .replace(/\.xml$/i, '')
         .toLowerCase()
         .replace(/[^a-z0-9]/g, '');
 
@@ -64,8 +65,25 @@ export const shouldShowJournalEntryForBot = (entry: unknown, identity: unknown) 
 export const setWorkspaceBotTemplateIdentity = (workspace: unknown, identity: unknown) => {
     if (!workspace || typeof workspace !== 'object') return;
 
+    const recoveryContractType = getSmartOver2RecoveryContractType(identity);
     (workspace as { __smartOver2JournalScope?: string | null }).__smartOver2JournalScope =
         getSmartOver2JournalScope(identity);
     (workspace as { __smartOver2RecoveryContractType?: string | null }).__smartOver2RecoveryContractType =
-        getSmartOver2RecoveryContractType(identity);
+        recoveryContractType;
+
+    if (!recoveryContractType) return;
+
+    const blocks =
+        (workspace as {
+            getAllBlocks?: (ordered?: boolean) => Array<{
+                type?: string;
+                getField?: (name: string) => { getValue?: () => string; setValue?: (value: string) => void } | null;
+            }>;
+        }).getAllBlocks?.(false) ?? [];
+    blocks
+        .filter(block => block.type === 'smart_over2_recovery_settings')
+        .forEach(block => {
+            const field = block.getField?.('RECOVERY_CONTRACT_TYPE');
+            if (field?.getValue?.() !== recoveryContractType) field?.setValue?.(recoveryContractType);
+        });
 };

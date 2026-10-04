@@ -131,21 +131,29 @@ describe('Smart Over 2 Blockly entry gate', () => {
         ).toBe('Martingale');
         const generatedGate = javascriptGenerator.blockToCode(gate);
         expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
-            'Bot.checkSmartOver2Recovery(undefined, 100, "smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, "DIGITUNDER")'
+            'Bot.checkSmartOver2Recovery(undefined, 100, "smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, undefined)'
         );
 
         const settings = workspace.newBlock('smart_over2_recovery_settings');
-        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2Recovery(true, 2, 4);\n');
+        expect(javascriptGenerator.blockToCode(settings)).toBe(
+            'Bot.configureSmartOver2Recovery(true, 2, 4, "DIGITUNDER");\n'
+        );
         settings.setFieldValue('FALSE', 'USE_VIRTUAL_HOOK');
         settings.setFieldValue('7', 'MAX_VIRTUAL_LOSSES');
         settings.setFieldValue('6', 'ENTRY_DIGIT_COUNT');
-        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2Recovery(false, 7, 6);\n');
+        expect(javascriptGenerator.blockToCode(settings)).toBe(
+            'Bot.configureSmartOver2Recovery(false, 7, 6, "DIGITUNDER");\n'
+        );
 
         setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2-v2');
+        expect(settings.getFieldValue('RECOVERY_CONTRACT_TYPE')).toBe('DIGITOVER');
+        expect(javascriptGenerator.blockToCode(settings)).toBe(
+            'Bot.configureSmartOver2Recovery(false, 7, 6, "DIGITOVER");\n'
+        );
         const v2Gate = workspace.newBlock('smart_over2_recovery_gate');
         const generatedV2Gate = javascriptGenerator.blockToCode(v2Gate);
         expect(Array.isArray(generatedV2Gate) ? generatedV2Gate[0] : generatedV2Gate).toContain(
-            'undefined, 100, "smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, "DIGITOVER"'
+            'undefined, 100, "smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, undefined'
         );
 
         const purchase = workspace.newBlock('smart_over2_recovery_purchase');

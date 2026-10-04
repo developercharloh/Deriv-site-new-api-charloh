@@ -6,7 +6,11 @@ const numberInput = (block, name, fallback) =>
     generator().valueToCode(block, name, generator().ORDER_ATOMIC) || fallback;
 const smartOver2JournalScope = block => JSON.stringify(block.workspace?.__smartOver2JournalScope ?? null);
 const smartOver2RecoveryContractType = block =>
-    JSON.stringify(block.workspace?.__smartOver2RecoveryContractType ?? 'DIGITUNDER');
+    JSON.stringify(
+        block.getFieldValue?.('RECOVERY_CONTRACT_TYPE') ||
+            block.workspace?.__smartOver2RecoveryContractType ||
+            'DIGITUNDER'
+    );
 const analysisColours = () => ({
     colour: window.Blockly.Colours.Base.colour,
     colourSecondary: window.Blockly.Colours.Base.colourSecondary,
@@ -168,10 +172,23 @@ window.Blockly.Blocks.smart_over2_recovery_settings = {
                     precision: 1,
                 },
             ],
+            message2: localize('Recovery contract %1'),
+            args2: [
+                {
+                    type: 'field_dropdown',
+                    name: 'RECOVERY_CONTRACT_TYPE',
+                    options: [
+                        [localize('Under'), 'DIGITUNDER'],
+                        [localize('Over'), 'DIGITOVER'],
+                    ],
+                },
+            ],
             previousStatement: null,
             nextStatement: null,
             ...analysisColours(),
-            tooltip: localize('Set Virtual Hook options once at the start of the bot.'),
+            tooltip: localize(
+                'Set the entry lookback, Virtual Hook options, and recovery contract once at the start of the bot.'
+            ),
             category: window.Blockly.Categories.Tick_Analysis,
         });
     },
@@ -193,7 +210,8 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_recovery_sett
     return (
         `Bot.configureSmartOver2Recovery(${useVirtualHook}, ` +
         `${Number.isFinite(maxVirtualLosses) ? maxVirtualLosses : 2}, ` +
-        `${Number.isFinite(entryDigitCount) ? entryDigitCount : 4});\n`
+        `${Number.isFinite(entryDigitCount) ? entryDigitCount : 4}, ` +
+        `${smartOver2RecoveryContractType(block)});\n`
     );
 };
 
@@ -442,7 +460,7 @@ registerOutputBlock({
             `undefined, undefined, ` +
             `${numberInput(block, 'TARGET_PROFIT', '0')}, ` +
             `${numberInput(block, 'STOP_LOSS', '0')}, ` +
-            `${smartOver2RecoveryContractType(block)})`,
+            `undefined)`,
         generator().ORDER_FUNCTION_CALL,
     ],
 });

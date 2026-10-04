@@ -417,7 +417,7 @@ export default Engine =>
                     entryDigitCount: 4,
                     recoveryPrediction: 5,
                     recoveryContractType: 'DIGITUNDER',
-                    useVirtualHook: false,
+                    useVirtualHook: true,
                     maxVirtualLosses: 2,
                     virtualLosses: 0,
                     recoveryRealMode: false,
@@ -431,9 +431,17 @@ export default Engine =>
             }
             return this.smartOver2RecoveryState;
         }
-        configureSmartOver2Recovery(useVirtualHook = true, maxVirtualLosses = 2, entryDigitCount = 4) {
+        configureSmartOver2Recovery(
+            useVirtualHook = true,
+            maxVirtualLosses = 2,
+            entryDigitCount = 4,
+            recoveryContractType = 'DIGITUNDER'
+        ) {
             const state = this.getSmartOver2RecoveryState();
             state.useVirtualHook = Boolean(useVirtualHook);
+            if (recoveryContractType === 'DIGITOVER' || recoveryContractType === 'DIGITUNDER') {
+                state.recoveryContractType = recoveryContractType;
+            }
             const requestedVirtualLosses = Number(maxVirtualLosses);
             state.maxVirtualLosses =
                 Number.isFinite(requestedVirtualLosses) && requestedVirtualLosses >= 0
@@ -448,6 +456,7 @@ export default Engine =>
                 useVirtualHook: state.useVirtualHook,
                 maxVirtualLosses: state.maxVirtualLosses,
                 entryDigitCount: state.entryDigitCount,
+                recoveryContractType: state.recoveryContractType,
             };
             this.setVirtualHookSettings?.(state.maxVirtualLosses, this.virtualHook?.minRealWins ?? 1);
             this.enableVirtualHook?.(state.useVirtualHook);
@@ -464,7 +473,8 @@ export default Engine =>
             return this.configureSmartOver2Recovery(
                 settings.useVirtualHook,
                 settings.maxVirtualLosses,
-                settings.entryDigitCount
+                settings.entryDigitCount,
+                settings.recoveryContractType
             );
         }
         emitSmartOver2RecoveryEvent(journalScope, event, message, details = {}) {
@@ -542,6 +552,7 @@ export default Engine =>
                 useVirtualHook: state.useVirtualHook,
                 maxVirtualLosses: state.maxVirtualLosses,
                 entryDigitCount: state.entryDigitCount,
+                recoveryContractType: state.recoveryContractType,
             };
             const requestedTargetProfit = Number(targetProfit);
             state.targetProfit =
