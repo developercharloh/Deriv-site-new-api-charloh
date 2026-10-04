@@ -66,6 +66,63 @@ export interface DTProposal {
 
 export type DTBuyGuard = (proposal: DTProposal) => string | null;
 
+export type DTDigitPairSide = 'over' | 'under';
+
+export interface DTDigitPairLegConfig {
+    side: DTDigitPairSide;
+    config: Partial<DTConfig>;
+}
+
+export interface DTDigitPairQuote {
+    side: DTDigitPairSide;
+    askPrice: number;
+    payout: number;
+}
+
+export interface DTDigitPairAccepted {
+    side: DTDigitPairSide;
+    contractId: string;
+    buyPrice: number;
+    payout: number;
+    stake: number;
+}
+
+export interface DTDigitPairFailure {
+    side: DTDigitPairSide;
+    message: string;
+}
+
+export interface DTDigitPairResult {
+    quotes: DTDigitPairQuote[];
+    accepted: DTDigitPairAccepted[];
+    failed: DTDigitPairFailure[];
+}
+
+type DTDigitPairStage = 'proposal' | 'buy';
+
+interface PendingDigitPairLeg {
+    side: DTDigitPairSide;
+    config: DTConfig;
+    stage: 'awaiting-proposal' | 'quoted' | 'awaiting-buy' | 'done';
+    proposal?: { id: string; askPrice: number; payout: number };
+    accepted?: DTDigitPairAccepted;
+    error?: string;
+}
+
+interface PendingDigitPairOperation {
+    id: number;
+    mode: 'quote' | 'buy';
+    legs: PendingDigitPairLeg[];
+    guard?: () => string | null;
+    resolve: (result: DTDigitPairResult) => void;
+}
+
+interface DTDigitPairRequestContext {
+    operationId: number;
+    side: DTDigitPairSide;
+    stage: DTDigitPairStage;
+}
+
 export const getPayoutMultiplier = (proposal: DTProposal): number =>
     proposal.askPrice > 0 ? proposal.payout / proposal.askPrice : 0;
 
@@ -183,6 +240,10 @@ export class DTraderEngine {
 
     // Buy in-flight guard
     private buyInflight = false;
+    private digitPairOperations = new Map<number, PendingDigitPairOperation>();
+    private digitPairRequestContexts = new Map<number, DTDigitPairRequestContext>();
+    private digitPairOperationCounter = 0;
+    private pairedOperationInFlight = false;
     /** When true, the next live proposal will trigger an automatic buy and
      *  this flag clears. Used by placeBuyNow() so a single button tap can
      *  set the contract type AND fire the trade with one fresh proposal. */
@@ -305,6 +366,23 @@ export class DTraderEngine {
         this.msgSub = null;
         this.myReqIds.clear();
         this.buyInflight = false;
+        this.digitPairOperations.forEach(operation => {
+            operation.resolve({
+                quotes: operation.legs.flatMap(leg =>
+                    leg.proposal
+                        ? [{ side: leg.side, askPrice: leg.proposal.askPrice, payout: leg.proposal.payout }]
+                        : []
+                ),
+                accepted: operation.legs.flatMap(leg => (leg.accepted ? [leg.accepted] : [])),
+                failed: operation.legs.map(leg => ({
+                    side: leg.side,
+                    message: leg.error || 'The paired trade operation stopped before it completed.',
+                })),
+            });
+        });
+        this.digitPairOperations.clear();
+        this.digitPairRequestContexts.clear();
+        this.pairedOperationInFlight = false;
         this.pendingBuy = false;
         this.currentProposal = null;
         this.currentProposalCfgKey = null;
@@ -398,6 +476,234 @@ export class DTraderEngine {
         // tapped a buy button, they want it to feel snappy.
         if (this.proposalDebounce) { clearTimeout(this.proposalDebounce); this.proposalDebounce = null; }
         this.refreshProposal();
+    }
+
+    /**
+     * Ask Deriv for fresh prices for both one-tick digit legs. The returned
+     * payout values let virtual runs measure the combined pair result instead
+     * of guessing from the digit alone.
+     */
+    quoteDigitPair(configs: DTDigitPairLegConfig[]): Promise<DTDigitPairResult> {
+        return this.beginDigitPairOperation('quote', configs);
+    }
+
+    /**
+     * Price both legs first, then submit both buys without waiting for either
+     * buy acknowledgement. The guard runs after proposals arrive and directly
+     * before either order is sent, so an expired entry signal cannot trade.
+     */
+    buyDigitPairNow(
+        configs: DTDigitPairLegConfig[],
+        guard?: () => string | null
+    ): Promise<DTDigitPairResult> {
+        return this.beginDigitPairOperation('buy', configs, guard);
+    }
+
+    private beginDigitPairOperation(
+        mode: 'quote' | 'buy',
+        configs: DTDigitPairLegConfig[],
+        guard?: () => string | null
+    ): Promise<DTDigitPairResult> {
+        const fail = (message: string): Promise<DTDigitPairResult> =>
+            Promise.resolve({
+                quotes: [],
+                accepted: [],
+                failed: [
+                    { side: 'over', message },
+                    { side: 'under', message },
+                ],
+            });
+        if (!this.cfg) return fail('The Deriv trader is not started.');
+        if (!api_base.api || !api_base.is_authorized) return fail('Log in to Deriv before using the paired runner.');
+        if (this.pairedOperationInFlight || this.buyInflight) {
+            return fail('Another purchase or paired pricing request is already in progress.');
+        }
+        if (
+            configs.length !== 2 ||
+            new Set(configs.map(item => item.side)).size !== 2 ||
+            !configs.some(item => item.side === 'over') ||
+            !configs.some(item => item.side === 'under')
+        ) {
+            return fail('A paired order must contain exactly one Over leg and one Under leg.');
+        }
+
+        let legs: PendingDigitPairLeg[];
+        try {
+            legs = configs.map(({ side, config }) => {
+                const resolved = { ...this.cfg!, ...config };
+                const expectedType = side === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
+                if (resolved.contractType !== expectedType) {
+                    throw new Error(`The ${side} leg must use ${expectedType}.`);
+                }
+                if (
+                    resolved.symbol !== this.cfg!.symbol ||
+                    resolved.durationValue !== 1 ||
+                    resolved.durationUnit !== 't' ||
+                    !Number.isFinite(Number(resolved.stake)) ||
+                    Number(resolved.stake) <= 0 ||
+                    resolved.barrier === null ||
+                    resolved.barrier === ''
+                ) {
+                    throw new Error('Both digit legs need the active market, a one-tick duration, a positive stake, and a barrier.');
+                }
+                return { side, config: resolved, stage: 'awaiting-proposal' };
+            });
+        } catch (error: any) {
+            return fail(error?.message || 'The paired order settings are invalid.');
+        }
+
+        const operationId = ++this.digitPairOperationCounter;
+        this.pairedOperationInFlight = true;
+        return new Promise(resolve => {
+            const operation: PendingDigitPairOperation = { id: operationId, mode, legs, guard, resolve };
+            this.digitPairOperations.set(operationId, operation);
+            legs.forEach(leg => {
+                const payload: Record<string, unknown> = {
+                    proposal: 1,
+                    amount: leg.config.stake,
+                    basis: 'stake',
+                    contract_type: leg.config.contractType,
+                    currency: leg.config.currency,
+                    underlying_symbol: leg.config.symbol,
+                    duration: leg.config.durationValue,
+                    duration_unit: leg.config.durationUnit,
+                    barrier: leg.config.barrier,
+                };
+                this.sendDigitPairRequest(operationId, leg.side, 'proposal', payload);
+            });
+        });
+    }
+
+    private sendDigitPairRequest(
+        operationId: number,
+        side: DTDigitPairSide,
+        stage: DTDigitPairStage,
+        payload: Record<string, unknown>
+    ): void {
+        const reqId = this.reqBase + (++this.reqCounter);
+        const context: DTDigitPairRequestContext = { operationId, side, stage };
+        this.myReqIds.add(reqId);
+        this.digitPairRequestContexts.set(reqId, context);
+        try {
+            const api = api_base.api as any;
+            if (!api) throw new Error('Deriv connection is no longer available.');
+            api.send({ req_id: reqId, ...payload });
+        } catch (error: any) {
+            this.myReqIds.delete(reqId);
+            this.digitPairRequestContexts.delete(reqId);
+            this.handleDigitPairRequestFailure(context, error?.message || 'The Deriv request could not be sent.');
+        }
+    }
+
+    private handleDigitPairRequestFailure(context: DTDigitPairRequestContext, message: string): void {
+        const operation = this.digitPairOperations.get(context.operationId);
+        const leg = operation?.legs.find(item => item.side === context.side);
+        if (!operation || !leg) return;
+        leg.stage = 'done';
+        leg.error = message;
+        this.log(`Paired ${context.side} ${context.stage} failed: ${message}`, 'error');
+        if (context.stage === 'proposal') this.finishDigitPairProposalsIfReady(operation);
+        else this.finishDigitPairBuysIfReady(operation);
+    }
+
+    private handleDigitPairResponse(msg: Record<string, any>, context: DTDigitPairRequestContext): void {
+        const operation = this.digitPairOperations.get(context.operationId);
+        const leg = operation?.legs.find(item => item.side === context.side);
+        if (!operation || !leg) return;
+        if (msg.error) {
+            this.handleDigitPairRequestFailure(
+                context,
+                msg.error.message || msg.error.code || `Deriv rejected the ${context.stage} request.`
+            );
+            return;
+        }
+
+        if (context.stage === 'proposal') {
+            const proposal = msg.proposal;
+            const askPrice = Number(proposal?.ask_price);
+            const payout = Number(proposal?.payout);
+            if (!proposal?.id || !Number.isFinite(askPrice) || askPrice <= 0 || !Number.isFinite(payout)) {
+                this.handleDigitPairRequestFailure(context, 'Deriv returned an incomplete proposal.');
+                return;
+            }
+            leg.proposal = { id: String(proposal.id), askPrice, payout };
+            leg.stage = 'quoted';
+            this.finishDigitPairProposalsIfReady(operation);
+            return;
+        }
+
+        const buy = msg.buy;
+        if (!buy?.contract_id) {
+            this.handleDigitPairRequestFailure(context, 'Deriv accepted no contract for this leg.');
+            return;
+        }
+        const accepted: DTDigitPairAccepted = {
+            side: leg.side,
+            contractId: String(buy.contract_id),
+            buyPrice: Number(buy.buy_price ?? leg.proposal?.askPrice ?? leg.config.stake),
+            payout: Number(buy.payout ?? leg.proposal?.payout ?? 0),
+            stake: Number(leg.config.stake),
+        };
+        leg.accepted = accepted;
+        leg.stage = 'done';
+        this.registerBuyAck(buy, leg.config, false);
+        this.finishDigitPairBuysIfReady(operation);
+    }
+
+    private finishDigitPairProposalsIfReady(operation: PendingDigitPairOperation): void {
+        if (operation.legs.some(leg => leg.stage === 'awaiting-proposal')) return;
+        const failedLegs = operation.legs.filter(leg => leg.error);
+        if (failedLegs.length) {
+            this.finishDigitPairOperation(operation);
+            return;
+        }
+        if (operation.mode === 'quote') {
+            this.finishDigitPairOperation(operation);
+            return;
+        }
+
+        let guardMessage: string | null = null;
+        try {
+            guardMessage = operation.guard?.() ?? null;
+        } catch (error: any) {
+            guardMessage = error?.message || 'The entry condition could not be revalidated.';
+        }
+        if (guardMessage) {
+            operation.legs.forEach(leg => {
+                leg.stage = 'done';
+                leg.error = guardMessage!;
+            });
+            this.finishDigitPairOperation(operation);
+            return;
+        }
+
+        operation.legs.forEach(leg => {
+            leg.stage = 'awaiting-buy';
+            this.sendDigitPairRequest(operation.id, leg.side, 'buy', {
+                buy: leg.proposal!.id,
+                price: leg.proposal!.askPrice,
+            });
+        });
+    }
+
+    private finishDigitPairBuysIfReady(operation: PendingDigitPairOperation): void {
+        if (operation.legs.some(leg => leg.stage === 'awaiting-buy')) return;
+        this.finishDigitPairOperation(operation);
+    }
+
+    private finishDigitPairOperation(operation: PendingDigitPairOperation): void {
+        if (!this.digitPairOperations.has(operation.id)) return;
+        this.digitPairOperations.delete(operation.id);
+        this.pairedOperationInFlight = false;
+        operation.resolve({
+            quotes: operation.legs.flatMap(leg =>
+                leg.proposal
+                    ? [{ side: leg.side, askPrice: leg.proposal.askPrice, payout: leg.proposal.payout }]
+                    : []
+            ),
+            accepted: operation.legs.flatMap(leg => (leg.accepted ? [leg.accepted] : [])),
+            failed: operation.legs.flatMap(leg => (leg.error ? [{ side: leg.side, message: leg.error }] : [])),
+        });
     }
 
     // ── Buy ───────────────────────────────────────────────────────────────────
@@ -624,11 +930,18 @@ export class DTraderEngine {
         const reqId = msg?.req_id            as number | undefined;
 
         const isMyReq = reqId !== undefined && this.myReqIds.has(reqId);
+        const pairRequest = reqId !== undefined ? this.digitPairRequestContexts.get(reqId) : undefined;
         const isMyTick = subId !== undefined && subId === this.tickSubId;
         const isMyProp = subId !== undefined && subId === this.proposalSubId;
         const isMyPos  = subId !== undefined && this.posSubIdSet.has(subId);
 
         if (!isMyReq && !isMyTick && !isMyProp && !isMyPos) return;
+        if (pairRequest) {
+            this.myReqIds.delete(reqId!);
+            this.digitPairRequestContexts.delete(reqId!);
+            this.handleDigitPairResponse(msg, pairRequest);
+            return;
+        }
 
         if (msg.error) {
             const m = msg.error.message ?? 'Unknown error';
@@ -836,17 +1149,22 @@ export class DTraderEngine {
             this.emitBuyError('Buy failed — no contract returned');
             return;
         }
+        if (!this.cfg) return;
+        this.registerBuyAck(buy, this.cfg, true);
+    }
+
+    private registerBuyAck(buy: any, config: DTConfig, refreshProposal: boolean): void {
         const contractId = String(buy.contract_id);
         const buyPrice   = parseFloat(buy.buy_price ?? '0');
         const payout     = parseFloat(buy.payout    ?? '0');
-        const stake      = this.cfg?.stake ?? buyPrice;
+        const stake      = config.stake ?? buyPrice;
         this.emitBuySuccess(`Bought #${contractId}  $${buyPrice.toFixed(2)} → payout $${payout.toFixed(2)}`);
 
         const pos: DTPosition = {
             contractId,
-            contractType: this.cfg?.contractType ?? 'CALL',
-            barrier:      this.cfg?.barrier ?? null,
-            symbol:       this.cfg?.symbol ?? '',
+            contractType: config.contractType,
+            barrier:      config.barrier ?? null,
+            symbol:       config.symbol,
             stake,
             payout,
             buyPrice,
@@ -879,7 +1197,7 @@ export class DTraderEngine {
         // side. If the user taps BUY again before the proposal subscription
         // pushes a fresh id, the trade gets rejected with a generic
         // "Refresh the page or relaunch the app" error. Force a refresh now.
-        this.refreshProposal();
+        if (refreshProposal) this.refreshProposal();
     }
 
     private handlePOC(poc: any, subId: string | undefined): void {
