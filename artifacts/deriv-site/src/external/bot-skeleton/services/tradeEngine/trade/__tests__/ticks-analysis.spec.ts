@@ -32,6 +32,18 @@ describe('Ticks last-digit analysis events', () => {
         );
     });
 
+    it('checks only the Last X digits selected in the startup setting', () => {
+        expect(getSmartOver2V3EntryAssessment([3, 7, 3, 5], 2)).toEqual(
+            expect.objectContaining({
+                count: 2,
+                digits: [3, 5],
+                entryWindowReady: true,
+                entryWindowMatches: true,
+                result: true,
+            })
+        );
+    });
+
     it('publishes V3 live digits and the 3–6 gate result on the shared analysis event', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
@@ -54,6 +66,7 @@ describe('Ticks last-digit analysis events', () => {
                 entryWindowReady: true,
                 entryWindowMatches: false,
                 result: false,
+                prediction: 2,
                 useVirtualHook: true,
                 virtualLosses: 0,
                 maxVirtualLosses: 1,
@@ -66,7 +79,7 @@ describe('Ticks last-digit analysis events', () => {
     it('simulates Over 2 until the configured virtual losses, then queues only a live Over 2', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
-        engine.configureSmartOver2V3(true, 2, 1);
+        engine.configureSmartOver2V3(true, 2, 4, 2);
         const state = engine.getSmartOver2V3State();
         expect(state.entryDigitCount).toBe(4);
         engine.tradeOptions = { amount: 0.5, symbol: '1HZ50V' };
@@ -130,6 +143,68 @@ describe('Ticks last-digit analysis events', () => {
         expect(state.lastPurchasedContractId).toBeNull();
         expect(state.currentStake).toBe(0.6);
         expect(engine.getSmartOver2V3PurchasePlan('DIGITUNDER', 5).blocked).toBe(true);
+    });
+
+    it('uses startup Last X and Over Prediction for both virtual checks and real Over orders', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const emit = jest.spyOn(observer, 'emit');
+        engine.configureSmartOver2V3(true, 1, 2, 4);
+        engine.tradeOptions = { amount: 0.5, symbol: '1HZ50V' };
+        engine.latestTick = { epoch: 100, quote: '2591.500' };
+        engine.getLastDigitList = jest.fn().mockResolvedValue([3, 7, 3, 5]);
+        engine.getLastDigit = jest.fn().mockResolvedValue(4);
+        engine.purchase = jest.fn().mockResolvedValue(true);
+        const check = () => engine.checkSmartOver2V3Entry(1.2, true, 5, 30, 'smart-over-2');
+        const state = engine.getSmartOver2V3State();
+
+        await expect(check()).resolves.toBe(false);
+        expect(state.entryDigitCount).toBe(2);
+        expect(state.overPrediction).toBe(4);
+        expect(state.pendingVirtualTrade).toEqual(
+            expect.objectContaining({ contractType: 'DIGITOVER', prediction: 4, entryEpoch: 100 })
+        );
+
+        engine.latestTick = { epoch: 101, quote: '2591.490' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.virtualLosses).toBe(1);
+        expect(state.pendingVirtualTrade).toBeNull();
+
+        engine.latestTick = { epoch: 102, quote: '2591.480' };
+        await expect(check()).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ contractType: 'DIGITOVER', prediction: 4 })
+        );
+        const plan = engine.getSmartOver2V3PurchasePlan('DIGITUNDER', 2);
+        expect(plan).toEqual(
+            expect.objectContaining({ blocked: false, contractType: 'DIGITOVER', prediction: 4 })
+        );
+        await expect(engine.purchaseSmartOver2V3('smart-over-2')).resolves.toBe(true);
+        expect(engine.purchase).toHaveBeenCalledWith('DIGITOVER', 4);
+
+        const order = engine.beginSmartOver2V3Purchase(plan.order);
+        expect(order).toEqual(expect.objectContaining({ contractType: 'DIGITOVER', prediction: 4 }));
+        expect(engine.completeSmartOver2V3Purchase(order, { buy_price: 0.5, contract_id: 'v3-live-over4' })).toBe(
+            true
+        );
+        engine.lastSettledContract = {
+            contract_id: 'v3-live-over4',
+            status: 'lost',
+            buy_price: 0.5,
+            sell_price: 0,
+            profit: -0.5,
+        };
+        engine.latestTick = { epoch: 103, quote: '2591.470' };
+        expect(engine.completeSmartOver2V3Settlement('smart-over-2')).toBe(false);
+        expect(emit).toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({
+                event: 'settlement',
+                prediction: 4,
+                message: expect.stringContaining('Live Over 4 settled'),
+            })
+        );
+        emit.mockRestore();
     });
 
     it('publishes the evaluated digits and false result for an unmet threshold', async () => {

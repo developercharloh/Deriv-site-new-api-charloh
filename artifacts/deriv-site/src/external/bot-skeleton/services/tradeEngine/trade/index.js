@@ -343,8 +343,19 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         if (!this.isSmartOver2V3Workspace()) return tradeOptions;
 
         const state = this.getSmartOver2V3State?.();
+        if (!state) return tradeOptions;
+        const prediction =
+            Number.isInteger(Number(state.overPrediction)) &&
+            Number(state.overPrediction) >= 0 &&
+            Number(state.overPrediction) <= 8
+                ? Number(state.overPrediction)
+                : 2;
+        const tradeOptionsWithPrediction = {
+            ...tradeOptions,
+            prediction,
+        };
         const suppliedStake = Number(tradeOptions?.amount);
-        if (!state || !Number.isFinite(suppliedStake) || suppliedStake <= 0) return tradeOptions;
+        if (!Number.isFinite(suppliedStake) || suppliedStake <= 0) return tradeOptionsWithPrediction;
 
         const existingBaseStake = Number(state.baseStake);
         if (!Number.isFinite(existingBaseStake) || existingBaseStake <= 0) {
@@ -358,7 +369,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         }
 
         return {
-            ...tradeOptions,
+            ...tradeOptionsWithPrediction,
             amount: state.currentStake,
         };
     }

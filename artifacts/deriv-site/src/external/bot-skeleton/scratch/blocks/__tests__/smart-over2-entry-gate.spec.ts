@@ -175,10 +175,13 @@ describe('Smart Over 2 Blockly entry gate', () => {
         setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2-v3');
 
         const settings = workspace.newBlock('smart_over2_v3_settings');
-        expect(settings.getField('ENTRY_DIGIT_COUNT')).toBeNull();
-        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2V3(true, 2);\n');
+        expect(settings.getFieldValue('ENTRY_DIGIT_COUNT')).toBe(4);
+        expect(settings.getFieldValue('OVER_PREDICTION')).toBe(2);
+        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2V3(true, 2, 4, 2);\n');
         settings.setFieldValue('3', 'MAX_VIRTUAL_LOSSES');
-        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2V3(true, 3);\n');
+        settings.setFieldValue('3', 'ENTRY_DIGIT_COUNT');
+        settings.setFieldValue('5', 'OVER_PREDICTION');
+        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2V3(true, 3, 3, 5);\n');
 
         const gate = workspace.newBlock('smart_over2_v3_entry_gate');
         const generatedGate = javascriptGenerator.blockToCode(gate);
@@ -202,6 +205,32 @@ describe('Smart Over 2 Blockly entry gate', () => {
         expect(generatedWorkspace).toContain('Bot.checkSmartOver2V3Entry(1.2, true, 5, 30, "smart-over-2")');
         expect(generatedWorkspace).toContain('Bot.purchaseSmartOver2V3("smart-over-2");');
 
+        workspace.dispose();
+    });
+
+    it('places editable Last X Digits and Over Prediction fields in Run once at start', () => {
+        const xmlPath = resolve(__dirname, '../../../../../../public/bots/Smart_Over_2_Bot_V3.xml');
+        const xml = readFileSync(xmlPath, 'utf8');
+        expect(() => Blockly.utils.xml.textToDom(xml)).not.toThrow();
+
+        const initialization = xml.match(/<statement name="INITIALIZATION">([\s\S]*?)<\/statement>/)?.[1] ?? '';
+        expect(initialization).toContain('<block type="smart_over2_v3_settings" id="smart_over2_v3_settings">');
+        expect(initialization).toContain('<field name="ENTRY_DIGIT_COUNT">4</field>');
+        expect(initialization).toContain('<field name="OVER_PREDICTION">2</field>');
+        expect(xml).toContain('has_prediction="false"');
+        expect(xml).not.toContain('<value name="PREDICTION">');
+        expect(xml).not.toContain('smart_over2_v3_get_entry_digit_count');
+
+        const variables = xml.match(/<variables>[\s\S]*?<\/variables>/)?.[0] ?? '<variables></variables>';
+        const initializationXml = Blockly.utils.xml.textToDom(
+            `<xml xmlns="https://developers.google.com/blockly/xml">${variables}${initialization}</xml>`
+        );
+        const workspace = new Blockly.Workspace();
+        expect(() => Blockly.Xml.domToWorkspace(initializationXml, workspace)).not.toThrow();
+        const settings = workspace.getBlockById('smart_over2_v3_settings');
+        expect(settings?.getFieldValue('ENTRY_DIGIT_COUNT')).toBe(4);
+        expect(settings?.getFieldValue('OVER_PREDICTION')).toBe(2);
+        expect(settings?.getPreviousBlock()?.id).toBe('smart_over2_v3_set_use_martingale');
         workspace.dispose();
     });
 

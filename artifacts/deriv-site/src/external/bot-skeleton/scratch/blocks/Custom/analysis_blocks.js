@@ -518,10 +518,32 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_recovery_sett
 window.Blockly.Blocks.smart_over2_v3_settings = {
     init() {
         this.jsonInit({
-            message0: localize('Virtual Hook %1'),
-            args0: [{ type: 'field_checkbox', name: 'USE_VIRTUAL_HOOK', checked: true }],
-            message1: localize('Place a real Over 2 after %1 consecutive virtual losses'),
+            message0: localize('Last X digits to check %1'),
+            args0: [
+                {
+                    type: 'field_number',
+                    name: 'ENTRY_DIGIT_COUNT',
+                    value: 4,
+                    min: 1,
+                    max: 100,
+                    precision: 1,
+                },
+            ],
+            message1: localize('Over prediction %1'),
             args1: [
+                {
+                    type: 'field_number',
+                    name: 'OVER_PREDICTION',
+                    value: 2,
+                    min: 0,
+                    max: 8,
+                    precision: 1,
+                },
+            ],
+            message2: localize('Virtual Hook %1'),
+            args2: [{ type: 'field_checkbox', name: 'USE_VIRTUAL_HOOK', checked: true }],
+            message3: localize('Place a real trade after %1 consecutive virtual losses'),
+            args3: [
                 {
                     type: 'field_number',
                     name: 'MAX_VIRTUAL_LOSSES',
@@ -534,15 +556,15 @@ window.Blockly.Blocks.smart_over2_v3_settings = {
             nextStatement: null,
             ...analysisColours(),
             tooltip: localize(
-                'V3 always checks the latest four digits and uses Virtual Hook until the configured consecutive-loss threshold.'
+                'Choose how many recent digits must each be 3–6 and the Over prediction. Virtual Hook simulates that Over contract before live trades.'
             ),
             category: window.Blockly.Categories.Tick_Analysis,
         });
     },
     meta() {
         return {
-            display_name: localize('Smart Over 2 V3 Virtual Hook settings'),
-            description: localize('Keeps the four-digit entry window fixed and sets the virtual-loss limit before live Over 2 trades.'),
+            display_name: localize('Smart Over 2 V3 startup settings'),
+            description: localize('Sets the Last X digit gate, Over prediction, and Virtual Hook before trading starts.'),
         };
     },
     customContextMenu(menu) {
@@ -553,15 +575,19 @@ window.Blockly.Blocks.smart_over2_v3_settings = {
 window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_v3_settings = block => {
     const useVirtualHook = block.getFieldValue('USE_VIRTUAL_HOOK') === 'TRUE';
     const maxVirtualLosses = Number(block.getFieldValue('MAX_VIRTUAL_LOSSES'));
+    const entryDigitCount = Number(block.getFieldValue('ENTRY_DIGIT_COUNT'));
+    const overPrediction = Number(block.getFieldValue('OVER_PREDICTION'));
     return (
         `Bot.configureSmartOver2V3(${useVirtualHook}, ` +
-        `${Number.isFinite(maxVirtualLosses) ? maxVirtualLosses : 2});\n`
+        `${Number.isFinite(maxVirtualLosses) ? maxVirtualLosses : 2}, ` +
+        `${Number.isFinite(entryDigitCount) ? entryDigitCount : 4}, ` +
+        `${Number.isFinite(overPrediction) ? overPrediction : 2});\n`
     );
 };
 
 registerOutputBlock({
     type: 'smart_over2_v3_entry_gate',
-    message0: localize('Smart Over 2 V3 · all four latest digits must be 3–6'),
+    message0: localize('All configured latest digits must be 3–6'),
     message1: localize('Martingale %1 · Use Martingale %2'),
     args1: [
         countInput('MARTINGALE', '1.2'),
@@ -572,7 +598,7 @@ registerOutputBlock({
     inputsInline: false,
     output: 'Boolean',
     tooltip:
-        'Allows a V3 Over 2 attempt only when all four latest digits are 3–6 inclusive. Qualifying entries are simulated until the virtual-loss threshold is reached.',
+        'Uses the Last X Digits and Over Prediction from the V3 startup settings. Entry requires every selected digit to be 3–6; Virtual Hook uses the same Over prediction.',
     meta: 'Smart Over 2 V3 Entry Gate',
     generatorCode: block => [
         `Bot.checkSmartOver2V3Entry(` +
@@ -588,10 +614,10 @@ registerOutputBlock({
 window.Blockly.Blocks.smart_over2_v3_purchase = {
     init() {
         this.jsonInit({
-            message0: localize('Smart Over 2 V3: buy Over 2'),
+            message0: localize('Smart Over 2 V3: buy configured Over prediction'),
             previousStatement: null,
             ...analysisColours(),
-            tooltip: localize('Places only the queued Over 2 trade after the V3 Virtual Hook allows a real entry.'),
+            tooltip: localize('Places only the queued Over prediction after the V3 Virtual Hook allows a real entry.'),
             category: window.Blockly.Categories.Tick_Analysis,
         });
         this.setNextStatement(false);
@@ -599,7 +625,7 @@ window.Blockly.Blocks.smart_over2_v3_purchase = {
     meta() {
         return {
             display_name: localize('Smart Over 2 V3 purchase'),
-            description: localize('Places the V3 Over 2 trade authorized by its entry gate.'),
+            description: localize('Places the configured V3 Over trade authorized by its entry gate.'),
         };
     },
     customContextMenu(menu) {
@@ -613,18 +639,18 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_v3_purchase =
 window.Blockly.Blocks.smart_over2_v3_settlement = {
     init() {
         this.jsonInit({
-            message0: localize('Smart Over 2 V3: record the Over 2 result'),
+            message0: localize('Smart Over 2 V3: record the Over prediction result'),
             previousStatement: 'TradeAgain',
             nextStatement: 'TradeAgain',
             ...analysisColours(),
-            tooltip: localize('Records a live V3 Over 2 settlement and starts a new Virtual Hook cycle.'),
+            tooltip: localize('Records the configured live V3 Over settlement and starts a new Virtual Hook cycle.'),
             category: window.Blockly.Categories.Tick_Analysis,
         });
     },
     meta() {
         return {
             display_name: localize('Smart Over 2 V3 settlement'),
-            description: localize('Updates V3 stake and session risk state after a live Over 2 result.'),
+            description: localize('Updates V3 stake and session risk state after a live Over settlement.'),
         };
     },
     customContextMenu(menu) {

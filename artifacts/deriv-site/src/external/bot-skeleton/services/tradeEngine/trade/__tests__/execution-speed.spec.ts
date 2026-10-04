@@ -137,6 +137,32 @@ describe('FAST trade-cycle release', () => {
     });
 });
 
+describe('Smart Over 2 V3 trade options', () => {
+    it('uses the startup Over Prediction in options prepared for proposals', () => {
+        const state = {
+            overPrediction: 5,
+            baseStake: 0.5,
+            currentStake: 0.5,
+        };
+        const engine = {
+            isSmartOver2V3Workspace: () => true,
+            getSmartOver2V3State: () => state,
+        };
+
+        expect(
+            TradeEngine.prototype.getSmartOver2V3TradeOptions.call(engine, {
+                symbol: '1HZ50V',
+                amount: 0.5,
+                prediction: 2,
+            })
+        ).toEqual({
+            symbol: '1HZ50V',
+            amount: 0.5,
+            prediction: 5,
+        });
+    });
+});
+
 describe('SLOW broker-tick release', () => {
     afterEach(() => {
         window.localStorage.removeItem('dbot_execution_speed');

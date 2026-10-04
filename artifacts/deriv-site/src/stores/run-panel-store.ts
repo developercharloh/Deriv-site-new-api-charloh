@@ -45,6 +45,7 @@ export type TSmartOver2Analysis = {
     skipHighTriple: boolean;
     skipLowTriple: boolean;
     result: boolean;
+    prediction?: number;
     useVirtualHook?: boolean;
     virtualLosses?: number;
     maxVirtualLosses?: number;
@@ -1058,11 +1059,12 @@ export default class RunPanelStore {
                 ? 'BLOCKED'
                 : analysis.waitingForVirtualHook
                   ? 'WAITING FOR VIRTUAL LOSSES'
-                  : 'LIVE OVER 2 READY';
+                  : `LIVE OVER ${analysis.prediction ?? 2} READY`;
             const message =
                 `[Smart Over 2] Status · V3 · Market: ${analysis.market || 'N/A'} · ` +
                 `Last ${analysis.count}: [${analysis.digits.join(', ')}] · ` +
-                `every digit 3–6: ${entryWindowStatus} · ${virtualHookStatus} · Entry: ${entryStatus}`;
+                `every digit 3–6: ${entryWindowStatus} · Over prediction: ${analysis.prediction ?? 2} · ` +
+                `${virtualHookStatus} · Entry: ${entryStatus}`;
 
             this.root_store.journal.updateSmartOver2AnalysisMessage(message);
             return;

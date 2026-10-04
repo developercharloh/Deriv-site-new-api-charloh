@@ -135,7 +135,8 @@ export const getSmartOver2EntryAssessment = (digits, count = 4) => {
 };
 
 export const getSmartOver2V3EntryAssessment = (digits, count = 4) => {
-    const size = Math.max(1, Math.floor(Number(count) || 4));
+    const requestedSize = Number(count);
+    const size = Number.isFinite(requestedSize) ? Math.max(1, Math.min(100, Math.floor(requestedSize))) : 4;
     const numericDigits = digits.map(Number).filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
     const recent = numericDigits.slice(-size);
     const entryWindowReady = recent.length >= size;
@@ -420,6 +421,7 @@ export default Engine =>
             if (!this.smartOver2V3State) {
                 this.smartOver2V3State = {
                     entryDigitCount: 4,
+                    overPrediction: 2,
                     useVirtualHook: true,
                     maxVirtualLosses: 2,
                     virtualLosses: 0,
@@ -428,6 +430,7 @@ export default Engine =>
                     pendingPurchase: null,
                     purchaseInFlight: false,
                     lastPurchasedContractId: null,
+                    lastPurchasedPrediction: null,
                     lastProcessedSettlementId: null,
                     baseStake: null,
                     currentStake: null,
@@ -441,17 +444,26 @@ export default Engine =>
             }
             return this.smartOver2V3State;
         }
-        configureSmartOver2V3(useVirtualHook = true, maxVirtualLosses = 2) {
+        configureSmartOver2V3(useVirtualHook = true, maxVirtualLosses = 2, entryDigitCount = 4, overPrediction = 2) {
             const state = this.getSmartOver2V3State();
             const requestedLosses = Number(maxVirtualLosses);
+            const requestedCount = Number(entryDigitCount);
+            const requestedPrediction = Number(overPrediction);
             state.useVirtualHook = Boolean(useVirtualHook);
             state.maxVirtualLosses =
                 Number.isFinite(requestedLosses) && requestedLosses >= 0 ? Math.floor(requestedLosses) : 2;
-            state.entryDigitCount = 4;
+            state.entryDigitCount = Number.isFinite(requestedCount)
+                ? Math.max(1, Math.min(100, Math.floor(requestedCount)))
+                : 4;
+            state.overPrediction =
+                Number.isFinite(requestedPrediction) && requestedPrediction >= 0 && requestedPrediction <= 8
+                    ? Math.floor(requestedPrediction)
+                    : 2;
             this.smartOver2V3Settings = {
                 useVirtualHook: state.useVirtualHook,
                 maxVirtualLosses: state.maxVirtualLosses,
                 entryDigitCount: state.entryDigitCount,
+                overPrediction: state.overPrediction,
             };
             this.setVirtualHookSettings?.(state.maxVirtualLosses, this.virtualHook?.minRealWins ?? 1);
             this.enableVirtualHook?.(state.useVirtualHook);
@@ -467,7 +479,9 @@ export default Engine =>
             if (!settings) return false;
             return this.configureSmartOver2V3(
                 settings.useVirtualHook,
-                settings.maxVirtualLosses
+                settings.maxVirtualLosses,
+                settings.entryDigitCount,
+                settings.overPrediction
             );
         }
         emitSmartOver2V3Event(journalScope, event, message, details = {}) {
@@ -517,19 +531,20 @@ export default Engine =>
                     if (!Number.isInteger(digit) || digit < 0 || digit > 9) return false;
 
                     const virtualTrade = state.pendingVirtualTrade;
-                    const isWin = digit > 2;
+                    const prediction = Number(virtualTrade.prediction);
+                    const isWin = digit > prediction;
                     state.pendingVirtualTrade = null;
                     state.virtualLosses = isWin ? 0 : state.virtualLosses + 1;
                     state.lastSettlementEpoch = currentEpoch;
                     this.emitSmartOver2V3Event(
                         virtualTrade.journalScope || journalScope,
                         'virtual_settlement',
-                        `[Smart Over 2 V3] Virtual Over 2 settled ${isWin ? 'WIN' : 'LOSS'} on digit ${digit}. ` +
+                        `[Smart Over 2 V3] Virtual Over ${prediction} settled ${isWin ? 'WIN' : 'LOSS'} on digit ${digit}. ` +
                             `${state.virtualLosses} of ${state.maxVirtualLosses} consecutive virtual losses.`,
                         {
                             outcome: isWin ? 'win' : 'loss',
                             contractType: 'DIGITOVER',
-                            prediction: 2,
+                            prediction,
                             digit,
                             virtualLosses: state.virtualLosses,
                             maxVirtualLosses: state.maxVirtualLosses,
@@ -576,6 +591,7 @@ export default Engine =>
                     skipHighTriple: false,
                     skipLowTriple: false,
                     result: assessment.result,
+                    prediction: state.overPrediction,
                     useVirtualHook: state.useVirtualHook,
                     virtualLosses: state.virtualLosses,
                     maxVirtualLosses: state.maxVirtualLosses,
@@ -587,12 +603,14 @@ export default Engine =>
                         journalScope,
                         'status',
                         `[Smart Over 2] Status · V3 · Market: ${this.tradeOptions?.symbol || this.symbol || 'N/A'} · ` +
-                            `Last ${assessment.count}: ${lastWindow} · every digit 3–6: ${windowStatus} · Entry: BLOCKED`,
+                            `Last ${assessment.count}: ${lastWindow} · every digit 3–6: ${windowStatus} · ` +
+                            `Over prediction: ${state.overPrediction} · Entry: BLOCKED`,
                         {
                             conditionStatus: 'BLOCKED',
                             digits: assessment.digits,
                             entryWindowReady: assessment.entryWindowReady,
                             entryWindowMatches: assessment.entryWindowMatches,
+                            prediction: state.overPrediction,
                         }
                     );
                     return false;
@@ -600,10 +618,15 @@ export default Engine =>
 
                 if (shouldStartVirtual) {
                     if (currentEpoch === null) return false;
-                    const virtualTradeId = [journalScope || 'smart-over-2-v3', currentEpoch, 'DIGITOVER', 2].join(':');
+                    const virtualTradeId = [
+                        journalScope || 'smart-over-2-v3',
+                        currentEpoch,
+                        'DIGITOVER',
+                        state.overPrediction,
+                    ].join(':');
                     state.pendingVirtualTrade = {
                         contractType: 'DIGITOVER',
-                        prediction: 2,
+                        prediction: state.overPrediction,
                         entryEpoch: currentEpoch,
                         entrySpot: this.getSmartOver2CurrentQuote(),
                         virtualTradeId,
@@ -612,10 +635,10 @@ export default Engine =>
                     this.emitSmartOver2V3Event(
                         journalScope,
                         'virtual_purchase',
-                        `[Smart Over 2 V3] Virtual Over 2 started; waiting for the next tick.`,
+                        `[Smart Over 2 V3] Virtual Over ${state.overPrediction} started; waiting for the next tick.`,
                         {
                             contractType: 'DIGITOVER',
-                            prediction: 2,
+                            prediction: state.overPrediction,
                             virtualLosses: state.virtualLosses,
                             maxVirtualLosses: state.maxVirtualLosses,
                             entryEpoch: currentEpoch,
@@ -628,7 +651,7 @@ export default Engine =>
 
                 state.pendingPurchase = {
                     contractType: 'DIGITOVER',
-                    prediction: 2,
+                    prediction: state.overPrediction,
                     journalScope,
                 };
                 this.emitSmartOver2V3Event(
@@ -636,12 +659,13 @@ export default Engine =>
                     'status',
                     `[Smart Over 2] Status · V3 · Market: ${this.tradeOptions?.symbol || this.symbol || 'N/A'} · ` +
                         `Last ${assessment.count}: ${lastWindow} · every digit 3–6: MET · ` +
-                        `Virtual losses: ${state.virtualLosses}/${state.maxVirtualLosses} · Real Over 2 ready.`,
+                        `Virtual losses: ${state.virtualLosses}/${state.maxVirtualLosses} · Real Over ${state.overPrediction} ready.`,
                     {
                         conditionStatus: 'READY',
                         digits: assessment.digits,
                         virtualLosses: state.virtualLosses,
                         maxVirtualLosses: state.maxVirtualLosses,
+                        prediction: state.overPrediction,
                     }
                 );
                 return true;
@@ -655,7 +679,7 @@ export default Engine =>
             return {
                 blocked: false,
                 contractType: 'DIGITOVER',
-                prediction: 2,
+                prediction: order.prediction,
                 order,
             };
         }
@@ -666,7 +690,9 @@ export default Engine =>
                 state.purchaseInFlight ||
                 !pending ||
                 pending.contractType !== 'DIGITOVER' ||
-                Number(pending.prediction) !== 2 ||
+                !Number.isInteger(Number(pending.prediction)) ||
+                Number(pending.prediction) < 0 ||
+                Number(pending.prediction) > 8 ||
                 pending !== order
             ) {
                 return null;
@@ -684,7 +710,9 @@ export default Engine =>
                 pending.contractType !== order.contractType ||
                 Number(pending.prediction) !== Number(order.prediction) ||
                 order.contractType !== 'DIGITOVER' ||
-                Number(order.prediction) !== 2
+                !Number.isInteger(Number(order.prediction)) ||
+                Number(order.prediction) < 0 ||
+                Number(order.prediction) > 8
             ) {
                 state.purchaseInFlight = false;
                 return false;
@@ -693,15 +721,16 @@ export default Engine =>
             state.purchaseInFlight = false;
             state.lastPurchasedContractId =
                 buy.contract_id === undefined || buy.contract_id === null ? null : String(buy.contract_id);
+            state.lastPurchasedPrediction = Number(order.prediction);
             const acceptedStake = Number(buy.buy_price);
             if (Number.isFinite(acceptedStake) && acceptedStake > 0) state.currentStake = acceptedStake;
             this.emitSmartOver2V3Event(
                 order.journalScope,
                 'purchase',
-                `[Smart Over 2 V3] Live Over 2 purchased.`,
+                `[Smart Over 2 V3] Live Over ${order.prediction} purchased.`,
                 {
                     contractType: 'DIGITOVER',
-                    prediction: 2,
+                    prediction: Number(order.prediction),
                     contractId: state.lastPurchasedContractId,
                 }
             );
@@ -709,7 +738,13 @@ export default Engine =>
         }
         abortSmartOver2V3Purchase(order) {
             const state = this.smartOver2V3State;
-            if (!state?.purchaseInFlight || order?.contractType !== 'DIGITOVER' || Number(order?.prediction) !== 2) {
+            if (
+                !state?.purchaseInFlight ||
+                order?.contractType !== 'DIGITOVER' ||
+                !Number.isInteger(Number(order?.prediction)) ||
+                Number(order?.prediction) < 0 ||
+                Number(order?.prediction) > 8
+            ) {
                 return false;
             }
             state.purchaseInFlight = false;
@@ -718,11 +753,18 @@ export default Engine =>
         purchaseSmartOver2V3(journalScope = null) {
             const state = this.getSmartOver2V3State();
             const order = state.pendingPurchase;
-            if (!order || state.purchaseInFlight || order.contractType !== 'DIGITOVER' || Number(order.prediction) !== 2) {
+            if (
+                !order ||
+                state.purchaseInFlight ||
+                order.contractType !== 'DIGITOVER' ||
+                !Number.isInteger(Number(order.prediction)) ||
+                Number(order.prediction) < 0 ||
+                Number(order.prediction) > 8
+            ) {
                 return Promise.resolve(false);
             }
             if (journalScope) order.journalScope = journalScope;
-            return this.purchase('DIGITOVER', 2);
+            return this.purchase('DIGITOVER', Number(order.prediction));
         }
         completeSmartOver2V3Settlement(journalScope = null) {
             const state = this.getSmartOver2V3State();
@@ -749,6 +791,12 @@ export default Engine =>
                 : Number.isFinite(sellPrice) && Number.isFinite(buyPrice)
                   ? sellPrice - buyPrice
                   : 0;
+            const settledPrediction =
+                state.lastPurchasedPrediction !== null &&
+                state.lastPurchasedPrediction !== undefined &&
+                Number.isInteger(Number(state.lastPurchasedPrediction))
+                ? Number(state.lastPurchasedPrediction)
+                : state.overPrediction;
             const isWin =
                 ['won', 'win'].includes(status) ||
                 (!['lost', 'loss'].includes(status) && Number.isFinite(profit) && profit > 0);
@@ -782,6 +830,7 @@ export default Engine =>
             state.pendingVirtualTrade = null;
             state.pendingPurchase = null;
             state.purchaseInFlight = false;
+            state.lastPurchasedPrediction = null;
             state.lastSettlementEpoch = this.getSmartOver2CurrentEpoch();
             const stopReason =
                 state.targetProfit > 0 && state.sessionProfit >= state.targetProfit
@@ -793,13 +842,13 @@ export default Engine =>
             this.emitSmartOver2V3Event(
                 journalScope,
                 'settlement',
-                `[Smart Over 2 V3] Live Over 2 settled ${isWin ? 'WIN' : 'LOSS'} · ` +
+                `[Smart Over 2 V3] Live Over ${settledPrediction} settled ${isWin ? 'WIN' : 'LOSS'} · ` +
                     `session P/L ${state.sessionProfit.toFixed(2)} · ` +
                     `virtual loss count reset; new live trades require ${state.maxVirtualLosses} consecutive virtual losses.` +
                     (nextStake === null ? '' : ` Next stake: ${nextStake.toFixed(2)}.`),
                 {
                     contractType: 'DIGITOVER',
-                    prediction: 2,
+                    prediction: settledPrediction,
                     outcome: isWin ? 'win' : 'loss',
                     sessionProfit: state.sessionProfit,
                     baseStake,

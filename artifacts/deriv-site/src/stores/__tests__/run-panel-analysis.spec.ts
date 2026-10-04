@@ -300,6 +300,7 @@ describe('Binary Matrix analysis observer integration', () => {
             skipHighTriple: false,
             skipLowTriple: false,
             result: false,
+            prediction: 4,
             useVirtualHook: true,
             virtualLosses: 0,
             maxVirtualLosses: 1,
@@ -318,6 +319,7 @@ describe('Binary Matrix analysis observer integration', () => {
             skipHighTriple: false,
             skipLowTriple: false,
             result: true,
+            prediction: 4,
             useVirtualHook: true,
             virtualLosses: 0,
             maxVirtualLosses: 1,
@@ -336,6 +338,7 @@ describe('Binary Matrix analysis observer integration', () => {
             skipHighTriple: false,
             skipLowTriple: false,
             result: true,
+            prediction: 4,
             useVirtualHook: true,
             virtualLosses: 1,
             maxVirtualLosses: 1,
@@ -346,12 +349,15 @@ describe('Binary Matrix analysis observer integration', () => {
         expect(messages).toHaveLength(3);
         expect(messages[0]).toContain('Last 4: [3, 4, 5, 7]');
         expect(messages[0]).toContain('every digit 3–6: NOT MET');
+        expect(messages[0]).toContain('Over prediction: 4');
         expect(messages[0]).toContain('Entry: BLOCKED');
         expect(messages[1]).toContain('every digit 3–6: MET');
+        expect(messages[1]).toContain('Over prediction: 4');
         expect(messages[1]).toContain('Virtual Hook: 0/1 consecutive losses');
         expect(messages[1]).toContain('Entry: WAITING FOR VIRTUAL LOSSES');
         expect(messages[2]).toContain('Virtual Hook: 1/1 consecutive losses');
-        expect(messages[2]).toContain('Entry: LIVE OVER 2 READY');
+        expect(messages[2]).toContain('Over prediction: 4');
+        expect(messages[2]).toContain('Entry: LIVE OVER 4 READY');
         expect(journal.pushMessage).not.toHaveBeenCalled();
     });
 
