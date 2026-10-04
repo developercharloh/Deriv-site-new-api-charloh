@@ -138,6 +138,12 @@ export default Engine =>
             // A Smart Over 2 workspace can have older saved Purchase blocks that
             // still request Over 2 during recovery. The staged order is authoritative
             // at the broker boundary, not just in the Journal message.
+            const smartOver2V3Plan = this.getSmartOver2V3PurchasePlan?.(contract_type, prediction);
+            if (smartOver2V3Plan?.blocked) return Promise.resolve(false);
+            if (smartOver2V3Plan?.order) {
+                contract_type = smartOver2V3Plan.contractType;
+                prediction = smartOver2V3Plan.prediction;
+            }
             const recoveryPlan = this.getSmartOver2RecoveryPurchasePlan?.(contract_type, prediction);
             if (recoveryPlan?.blocked) return Promise.resolve(false);
             if (recoveryPlan?.order) {
@@ -198,13 +204,22 @@ export default Engine =>
                 return Promise.resolve();
             }
             let recoveryOrder = null;
+            let smartOver2V3Order = null;
             let purchaseLeaseReleased = false;
             const releasePurchaseLease = () => {
                 if (purchaseLeaseReleased) return;
                 purchaseLeaseReleased = true;
+                if (smartOver2V3Order) this.abortSmartOver2V3Purchase?.(smartOver2V3Order);
                 if (recoveryOrder) this.abortSmartOver2RecoveryPurchase?.(recoveryOrder);
                 releaseBotContractGate(this, undefined, signalKey);
             };
+            if (smartOver2V3Plan?.order) {
+                smartOver2V3Order = this.beginSmartOver2V3Purchase?.(smartOver2V3Plan.order);
+                if (!smartOver2V3Order) {
+                    releasePurchaseLease();
+                    return Promise.resolve(false);
+                }
+            }
             if (recoveryPlan?.order) {
                 recoveryOrder = this.beginSmartOver2RecoveryPurchase?.(recoveryPlan.order);
                 if (!recoveryOrder) {
@@ -222,6 +237,9 @@ export default Engine =>
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
                 const { buy } = response;
+                if (smartOver2V3Order) {
+                    this.completeSmartOver2V3Purchase?.(smartOver2V3Order, buy);
+                }
                 if (recoveryOrder) {
                     this.completeSmartOver2RecoveryPurchase?.(recoveryOrder, buy);
                 }

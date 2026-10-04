@@ -264,6 +264,29 @@ const BOTS: BotConfig[] = [
         gradient: 'linear-gradient(135deg, #10202f 0%, #155e75 48%, #22c55e 100%)',
     },
     {
+        id: 'smart-over-2-v3',
+        section: 'premium',
+        name: 'Smart Over 2 Bot V3',
+        emoji: '🧠',
+        description:
+            'Trades Over 2 only when all four latest digits are 3–6 inclusive. Virtual Over 2 attempts continue until the configured consecutive-loss limit is reached, then the next qualifying entry is traded live. No Under or recovery contract.',
+        market: 'Volatility 50 (1s) Index (1HZ50V)',
+        strategy: 'Over 2 Only · Four-Digit 3–6 Entry Filter · Virtual Hook → Live Over 2',
+        params: [
+            { label: 'Entry Rule', value: 'All four latest digits must be 3–6 inclusive' },
+            { label: 'Contract', value: 'Over 2 only' },
+            { label: 'Virtual Hook', value: 'Enabled by default · Over 2' },
+            { label: 'Virtual loss limit', value: '2 consecutive (editable at start)' },
+            { label: 'Base Stake', value: '$0.50' },
+            { label: 'Martingale', value: '1.2× (editable)' },
+            { label: 'Target Profit', value: '$5' },
+            { label: 'Stop Loss', value: '$30' },
+            { label: 'Duration', value: '1 Tick' },
+        ],
+        xmlPath: '/bots/Smart_Over_2_Bot_V3.xml',
+        gradient: 'linear-gradient(135deg, #10202f 0%, #155e75 48%, #22c55e 100%)',
+    },
+    {
         id: 'digit-pro-v1',
         section: 'premium',
         name: 'Digit Pro V1⚡💹',
@@ -459,10 +482,13 @@ const FREE_BOT_SECTIONS: { id: FreeBotSection; title: string; emptyMessage?: str
 
 // Keep the existing catalog numbering stable even though Smart Contract is now the first tab.
 const BOTS_IN_ORDINAL_ORDER = [
-    ...BOTS.filter(bot => bot.section === 'premium' && bot.id !== 'smart-over-2-v2'),
+    ...BOTS.filter(
+        bot => bot.section === 'premium' && !['smart-over-2-v2', 'smart-over-2-v3'].includes(bot.id)
+    ),
     ...BOTS.filter(bot => bot.section === 'smart-contract'),
     ...BOTS.filter(bot => bot.section === 'edging'),
     ...BOTS.filter(bot => bot.id === 'smart-over-2-v2'),
+    ...BOTS.filter(bot => bot.id === 'smart-over-2-v3'),
 ];
 const BOT_ORDINALS = new Map(BOTS_IN_ORDINAL_ORDER.map((bot, index) => [bot.id, index + 1]));
 
@@ -476,6 +502,7 @@ const CARD_ART: Record<string, string> = {
     'over2-under7-reversal': '/assets/free-bots/hitnrun.jpg',
     'smart-over-2': '/assets/free-bots/concept-ai.jpg',
     'smart-over-2-v2': '/assets/free-bots/concept-ai.jpg',
+    'smart-over-2-v3': '/assets/free-bots/concept-ai.jpg',
     'digit-pro-v1': '/assets/free-bots/digit-ticker.jpg',
     'over-destroyer': '/assets/free-bots/destroyer.jpg',
     'under-destroyer': '/assets/free-bots/mega-mind.jpg',

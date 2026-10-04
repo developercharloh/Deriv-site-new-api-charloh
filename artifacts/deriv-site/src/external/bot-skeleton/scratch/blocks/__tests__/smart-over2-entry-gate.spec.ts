@@ -169,12 +169,65 @@ describe('Smart Over 2 Blockly entry gate', () => {
         workspace.dispose();
     });
 
+    it('registers the recovery-free V3 settings, gate, purchase, and settlement blocks', () => {
+        const workspace = new Blockly.Workspace();
+        javascriptGenerator.init(workspace);
+        setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2-v3');
+
+        const settings = workspace.newBlock('smart_over2_v3_settings');
+        expect(settings.getField('ENTRY_DIGIT_COUNT')).toBeNull();
+        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2V3(true, 2);\n');
+        settings.setFieldValue('3', 'MAX_VIRTUAL_LOSSES');
+        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2V3(true, 3);\n');
+
+        const gate = workspace.newBlock('smart_over2_v3_entry_gate');
+        const generatedGate = javascriptGenerator.blockToCode(gate);
+        expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
+            'Bot.checkSmartOver2V3Entry(1.2, true, 5, 30, "smart-over-2")'
+        );
+
+        const purchase = workspace.newBlock('smart_over2_v3_purchase');
+        expect(javascriptGenerator.blockToCode(purchase)).toBe('Bot.purchaseSmartOver2V3("smart-over-2");\n');
+
+        const settlement = workspace.newBlock('smart_over2_v3_settlement');
+        expect(javascriptGenerator.blockToCode(settlement)).toBe(
+            'Bot.completeSmartOver2V3Settlement("smart-over-2");\n'
+        );
+
+        workspace.dispose();
+    });
+
     it('accepts the Smart Over 2 recovery purchase as the mandatory Purchase block', () => {
         const blocks = [
             { type: 'trade_definition_tradeoptions' },
             { type: 'trade_definition' },
             { type: 'before_purchase' },
             { type: 'smart_over2_recovery_purchase' },
+        ];
+        const requiredBlockTypes = [
+            'trade_definition_tradeoptions',
+            'trade_definition',
+            'purchase',
+            'before_purchase',
+        ];
+
+        expect(getMissingRequiredBlocks(blocks, requiredBlockTypes)).toEqual([]);
+
+        const previousWorkspace = (Blockly as any).derivWorkspace;
+        (Blockly as any).derivWorkspace = { getAllBlocks: () => blocks };
+        try {
+            expect(hasAllRequiredBlocks()).toBe(true);
+        } finally {
+            (Blockly as any).derivWorkspace = previousWorkspace;
+        }
+    });
+
+    it('accepts the Smart Over 2 V3 purchase as the mandatory Purchase block', () => {
+        const blocks = [
+            { type: 'trade_definition_tradeoptions' },
+            { type: 'trade_definition' },
+            { type: 'before_purchase' },
+            { type: 'smart_over2_v3_purchase' },
         ];
         const requiredBlockTypes = [
             'trade_definition_tradeoptions',

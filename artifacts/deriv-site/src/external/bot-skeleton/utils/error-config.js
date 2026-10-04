@@ -26,6 +26,7 @@ export const error_message_map = () => ({
     purchase: generateErrorMessage('Purchase', 'purchase conditions'),
     apollo_purchase2: generateErrorMessage('Purchase', 'purchase conditions'),
     smart_over2_recovery_purchase: generateErrorMessage('Purchase', 'purchase conditions'),
+    smart_over2_v3_purchase: generateErrorMessage('Purchase', 'purchase conditions'),
     trade_definition_tradeoptions: generateErrorMessage('Trade options', 'trade parameters'),
     trade_definition_multiplier: generateErrorMessage('Trade options multipliers', 'trade parameters'),
     trade_definition_accumulator: generateErrorMessage('Trade options accumulators', 'trade parameters'),

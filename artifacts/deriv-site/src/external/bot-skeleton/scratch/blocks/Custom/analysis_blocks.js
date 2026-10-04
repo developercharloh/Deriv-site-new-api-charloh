@@ -514,3 +514,121 @@ window.Blockly.Blocks.smart_over2_recovery_settlement = {
 
 window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_recovery_settlement = block =>
     `Bot.completeSmartOver2Recovery(${smartOver2JournalScope(block)});\n`;
+
+window.Blockly.Blocks.smart_over2_v3_settings = {
+    init() {
+        this.jsonInit({
+            message0: localize('Virtual Hook %1'),
+            args0: [{ type: 'field_checkbox', name: 'USE_VIRTUAL_HOOK', checked: true }],
+            message1: localize('Place a real Over 2 after %1 consecutive virtual losses'),
+            args1: [
+                {
+                    type: 'field_number',
+                    name: 'MAX_VIRTUAL_LOSSES',
+                    value: 2,
+                    min: 0,
+                    precision: 1,
+                },
+            ],
+            previousStatement: null,
+            nextStatement: null,
+            ...analysisColours(),
+            tooltip: localize(
+                'V3 always checks the latest four digits and uses Virtual Hook until the configured consecutive-loss threshold.'
+            ),
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Smart Over 2 V3 Virtual Hook settings'),
+            description: localize('Keeps the four-digit entry window fixed and sets the virtual-loss limit before live Over 2 trades.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_v3_settings = block => {
+    const useVirtualHook = block.getFieldValue('USE_VIRTUAL_HOOK') === 'TRUE';
+    const maxVirtualLosses = Number(block.getFieldValue('MAX_VIRTUAL_LOSSES'));
+    return (
+        `Bot.configureSmartOver2V3(${useVirtualHook}, ` +
+        `${Number.isFinite(maxVirtualLosses) ? maxVirtualLosses : 2});\n`
+    );
+};
+
+registerOutputBlock({
+    type: 'smart_over2_v3_entry_gate',
+    message0: localize('Smart Over 2 V3 · all four latest digits must be 3–6'),
+    message1: localize('Martingale %1 · Use Martingale %2'),
+    args1: [
+        countInput('MARTINGALE', '1.2'),
+        { type: 'input_value', name: 'USE_MARTINGALE', check: 'Boolean' },
+    ],
+    message2: localize('Target Profit %1 · Stop Loss %2'),
+    args2: [countInput('TARGET_PROFIT', '5'), countInput('STOP_LOSS', '30')],
+    inputsInline: false,
+    output: 'Boolean',
+    tooltip:
+        'Allows a V3 Over 2 attempt only when all four latest digits are 3–6 inclusive. Qualifying entries are simulated until the virtual-loss threshold is reached.',
+    meta: 'Smart Over 2 V3 Entry Gate',
+    generatorCode: block =>
+        `Bot.checkSmartOver2V3Entry(` +
+        `${numberInput(block, 'MARTINGALE', '1.2')}, ` +
+        `${numberInput(block, 'USE_MARTINGALE', 'true')}, ` +
+        `${numberInput(block, 'TARGET_PROFIT', '5')}, ` +
+        `${numberInput(block, 'STOP_LOSS', '30')}, ` +
+        `${smartOver2JournalScope(block)})`,
+});
+
+window.Blockly.Blocks.smart_over2_v3_purchase = {
+    init() {
+        this.jsonInit({
+            message0: localize('Smart Over 2 V3: buy Over 2'),
+            previousStatement: null,
+            ...analysisColours(),
+            tooltip: localize('Places only the queued Over 2 trade after the V3 Virtual Hook allows a real entry.'),
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+        this.setNextStatement(false);
+    },
+    meta() {
+        return {
+            display_name: localize('Smart Over 2 V3 purchase'),
+            description: localize('Places the V3 Over 2 trade authorized by its entry gate.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_v3_purchase = block =>
+    `Bot.purchaseSmartOver2V3(${smartOver2JournalScope(block)});\n`;
+
+window.Blockly.Blocks.smart_over2_v3_settlement = {
+    init() {
+        this.jsonInit({
+            message0: localize('Smart Over 2 V3: record the Over 2 result'),
+            previousStatement: 'TradeAgain',
+            nextStatement: 'TradeAgain',
+            ...analysisColours(),
+            tooltip: localize('Records a live V3 Over 2 settlement and starts a new Virtual Hook cycle.'),
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Smart Over 2 V3 settlement'),
+            description: localize('Updates V3 stake and session risk state after a live Over 2 result.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_v3_settlement = block =>
+    `Bot.completeSmartOver2V3Settlement(${smartOver2JournalScope(block)});\n`;

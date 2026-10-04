@@ -126,8 +126,10 @@ describe('Free Bots template catalog', () => {
         expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'rise-fall-master')).toBe(true);
         expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'smart-over-2')).toBe(true);
         expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'smart-over-2-v2')).toBe(true);
+        expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'smart-over-2-v3')).toBe(true);
         expect(getSmartOver2RecoveryContractType('smart-over-2')).toBe('DIGITUNDER');
         expect(getSmartOver2RecoveryContractType('smart-over-2-v2')).toBe('DIGITOVER');
+        expect(getSmartOver2RecoveryContractType('smart-over-2-v3')).toBe('DIGITOVER');
         expect(shouldShowJournalEntryForBot(previouslyMisattributedSmartOver2Row, 'smart-over-2')).toBe(true);
         expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'matches-signal')).toBe(false);
         expect(shouldShowJournalEntryForBot(legacyVolatilityScanRow, 'smart-over-2')).toBe(false);
@@ -204,22 +206,29 @@ describe('Free Bots template catalog', () => {
         expect(document.querySelector('block[type="smart_over2_recovery_gate"] value[name="MAX_VIRTUAL_LOSSES"]')).toBeNull();
     });
 
-    it('includes separate V1 and V2 templates in the Premium Bots catalog', () => {
+    it('includes separate V1, V2, and V3 templates in the Premium Bots catalog', () => {
         const templatesWithGate = readCatalogXmlPaths().filter(xmlPath => {
             const templatePath = path.join(publicBotsPath, xmlPath.slice('/bots/'.length));
             const xml = fs.readFileSync(templatePath, 'utf8');
             return (
                 xml.includes('type="smart_over2_entry_gate"') ||
-                xml.includes('type="smart_over2_recovery_gate"')
+                xml.includes('type="smart_over2_recovery_gate"') ||
+                xml.includes('type="smart_over2_v3_entry_gate"')
             );
         });
 
-        expect(templatesWithGate).toEqual(['/bots/Smart_Over_2_Bot.xml', '/bots/Smart_Over_2_Bot_V2.xml']);
+        expect(templatesWithGate).toEqual([
+            '/bots/Smart_Over_2_Bot.xml',
+            '/bots/Smart_Over_2_Bot_V2.xml',
+            '/bots/Smart_Over_2_Bot_V3.xml',
+        ]);
 
         const catalog = fs.readFileSync(catalogPath, 'utf8');
         expect(catalog).toContain("name: 'Smart Over 2 Bot V1'");
         expect(catalog).toContain("name: 'Smart Over 2 Bot V2'");
+        expect(catalog).toContain("name: 'Smart Over 2 Bot V3'");
         expect(catalog).toContain("id: 'smart-over-2-v2',\n        section: 'premium'");
+        expect(catalog).toContain("id: 'smart-over-2-v3',\n        section: 'premium'");
 
         const v2Xml = fs.readFileSync(path.join(publicBotsPath, 'Smart_Over_2_Bot_V2.xml'), 'utf8');
         const v2Document = new DOMParser().parseFromString(v2Xml, 'application/xml');
@@ -267,6 +276,37 @@ describe('Free Bots template catalog', () => {
                 'block[type="smart_over2_recovery_gate"] value[name="RECOVERY_PREDICTION"] block[type="variables_get"] field[name="VAR"]'
             )?.textContent
         ).toBe('Recovery Prediction');
+
+        const v3Xml = fs.readFileSync(path.join(publicBotsPath, 'Smart_Over_2_Bot_V3.xml'), 'utf8');
+        const v3Document = new DOMParser().parseFromString(v3Xml, 'application/xml');
+        expect(v3Document.querySelector('parsererror')).toBeNull();
+        expect(
+            v3Document.querySelector(
+                'block[type="trade_definition"] statement[name="INITIALIZATION"] block[type="smart_over2_v3_settings"]'
+            )
+        ).not.toBeNull();
+        expect(v3Document.querySelector('block[type="smart_over2_v3_entry_gate"]')).not.toBeNull();
+        expect(v3Document.querySelector('block[type="smart_over2_v3_purchase"]')).not.toBeNull();
+        expect(v3Document.querySelector('block[type="smart_over2_v3_settlement"]')).not.toBeNull();
+        expect(v3Document.querySelector('variable[id*="recovery"]')).toBeNull();
+        expect(v3Document.querySelector('[type*="recovery"]')).toBeNull();
+        expect(v3Xml).not.toContain('Under Prediction');
+        expect(
+            v3Document.querySelector(
+                'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] shadow field[name="NUM"]'
+            )?.textContent
+        ).toBe('2');
+        expect(
+            v3Document.querySelector('block[type="smart_over2_v3_settings"] field[name="ENTRY_DIGIT_COUNT"]')
+        ).toBeNull();
+        expect(
+            v3Document.querySelector('block[type="smart_over2_v3_settings"] field[name="USE_VIRTUAL_HOOK"]')
+                ?.textContent
+        ).toBe('TRUE');
+        expect(
+            v3Document.querySelector('block[type="smart_over2_v3_settings"] field[name="MAX_VIRTUAL_LOSSES"]')
+                ?.textContent
+        ).toBe('2');
     });
 
     it('recognizes a V2 built-in template filename when choosing the recovery direction', () => {

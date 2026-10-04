@@ -1,6 +1,11 @@
 import { config } from '../constants/config';
 
-const PURCHASE_BLOCK_TYPES = ['purchase', 'apollo_purchase2', 'smart_over2_recovery_purchase'];
+const PURCHASE_BLOCK_TYPES = [
+    'purchase',
+    'apollo_purchase2',
+    'smart_over2_recovery_purchase',
+    'smart_over2_v3_purchase',
+];
 
 export const isPurchaseBlockType = blockType => PURCHASE_BLOCK_TYPES.includes(blockType);
 

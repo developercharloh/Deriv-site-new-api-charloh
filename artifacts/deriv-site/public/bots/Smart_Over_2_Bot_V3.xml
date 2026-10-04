@@ -1,0 +1,169 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="smart_over2_v3_var_stake">Stake</variable>
+    <variable id="smart_over2_v3_var_martingale">Martingale factor</variable>
+    <variable id="smart_over2_v3_var_target_profit">Target Profit</variable>
+    <variable id="smart_over2_v3_var_stop_loss">Stop Loss</variable>
+    <variable id="smart_over2_v3_var_use_martingale">Use Martingale</variable>
+  </variables>
+  <block type="trade_definition" id="smart_over2_v3_trade_definition" deletable="false" x="0" y="0">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="smart_over2_v3_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ50V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="smart_over2_v3_trade_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="smart_over2_v3_contract_type" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="smart_over2_v3_interval" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="smart_over2_v3_restart" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="smart_over2_v3_restart_on_error" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="smart_over2_v3_set_stake">
+        <field name="VAR" id="smart_over2_v3_var_stake">Stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="smart_over2_v3_stake_default">
+            <field name="NUM">0.5</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="smart_over2_v3_set_martingale">
+            <field name="VAR" id="smart_over2_v3_var_martingale">Martingale factor</field>
+            <value name="VALUE">
+              <block type="math_number" id="smart_over2_v3_martingale_default">
+                <field name="NUM">1.2</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="smart_over2_v3_set_target_profit">
+                <field name="VAR" id="smart_over2_v3_var_target_profit">Target Profit</field>
+                <value name="VALUE">
+                  <block type="math_number" id="smart_over2_v3_target_profit_default">
+                    <field name="NUM">5</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="smart_over2_v3_set_stop_loss">
+                    <field name="VAR" id="smart_over2_v3_var_stop_loss">Stop Loss</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="smart_over2_v3_stop_loss_default">
+                        <field name="NUM">30</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="smart_over2_v3_set_use_martingale">
+                        <field name="VAR" id="smart_over2_v3_var_use_martingale">Use Martingale</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="smart_over2_v3_use_martingale_default">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="smart_over2_v3_settings" id="smart_over2_v3_settings">
+                            <field name="USE_VIRTUAL_HOOK">TRUE</field>
+                            <field name="MAX_VIRTUAL_LOSSES">2</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="smart_over2_v3_trade_options">
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="smart_over2_v3_duration">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="smart_over2_v3_stake">
+            <field name="NUM">0.5</field>
+          </shadow>
+          <block type="variables_get" id="smart_over2_v3_get_stake">
+            <field name="VAR" id="smart_over2_v3_var_stake">Stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="smart_over2_v3_prediction">
+            <field name="NUM">2</field>
+          </shadow>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="smart_over2_v3_after_purchase" x="720" y="0">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="smart_over2_v3_settlement" id="smart_over2_v3_settlement">
+        <next>
+          <block type="trade_again" id="smart_over2_v3_trade_again"></block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="smart_over2_v3_before_purchase" deletable="false" x="0" y="576">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="smart_over2_v3_entry_if">
+        <value name="IF0">
+          <block type="smart_over2_v3_entry_gate" id="smart_over2_v3_entry_gate">
+            <value name="MARTINGALE">
+              <shadow type="math_number" id="smart_over2_v3_martingale_multiplier">
+                <field name="NUM">1.2</field>
+              </shadow>
+              <block type="variables_get" id="smart_over2_v3_get_martingale">
+                <field name="VAR" id="smart_over2_v3_var_martingale">Martingale factor</field>
+              </block>
+            </value>
+            <value name="USE_MARTINGALE">
+              <block type="variables_get" id="smart_over2_v3_get_use_martingale">
+                <field name="VAR" id="smart_over2_v3_var_use_martingale">Use Martingale</field>
+              </block>
+            </value>
+            <value name="TARGET_PROFIT">
+              <block type="variables_get" id="smart_over2_v3_get_target_profit">
+                <field name="VAR" id="smart_over2_v3_var_target_profit">Target Profit</field>
+              </block>
+            </value>
+            <value name="STOP_LOSS">
+              <block type="variables_get" id="smart_over2_v3_get_stop_loss">
+                <field name="VAR" id="smart_over2_v3_var_stop_loss">Stop Loss</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="smart_over2_v3_purchase" id="smart_over2_v3_purchase"></block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>

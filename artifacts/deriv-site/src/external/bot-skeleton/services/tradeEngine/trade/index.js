@@ -174,6 +174,8 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         // Clear settings from any prior workspace before those settings load.
         this.smartOver2RecoveryState = null;
         this.smartOver2RecoverySettings = null;
+        this.smartOver2V3State = null;
+        this.smartOver2V3Settings = null;
         this.initArgs = args;
         this.options = options;
         this.startPromise = this.loginAndGetBalance(token);
@@ -207,6 +209,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             } else {
                 this.smartOver2RecoveryState = null;
             }
+            this.resetSmartOver2V3Session?.();
         }
         if (isNewBotSession) this.resetVolatilitySelection?.();
         if (isNewBotSession) this.store.dispatch(resetFastReady());
@@ -218,7 +221,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         }
         const binaryMatrixTradeOptions = this.getBinaryMatrixTradeOptions(validated_trade_options);
         this.tradeOptions = {
-            ...this.getSmartOver2TradeOptions(binaryMatrixTradeOptions),
+            ...this.getSmartOver2V3TradeOptions(this.getSmartOver2TradeOptions(binaryMatrixTradeOptions)),
             ...(executionSpeed === 'fast'
                 ? {
                       duration: FAST_CONTRACT_DURATION_VALUE,
@@ -305,10 +308,41 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         );
     }
 
+    isSmartOver2V3Workspace() {
+        const blocks = window.Blockly?.derivWorkspace?.getAllBlocks?.(true) ?? [];
+        return blocks.some(block =>
+            ['smart_over2_v3_entry_gate', 'smart_over2_v3_purchase'].includes(block.type)
+        );
+    }
+
     getSmartOver2TradeOptions(tradeOptions) {
         if (!this.isSmartOver2Workspace()) return tradeOptions;
 
         const state = this.getSmartOver2RecoveryState?.();
+        const suppliedStake = Number(tradeOptions?.amount);
+        if (!state || !Number.isFinite(suppliedStake) || suppliedStake <= 0) return tradeOptions;
+
+        const existingBaseStake = Number(state.baseStake);
+        if (!Number.isFinite(existingBaseStake) || existingBaseStake <= 0) {
+            state.baseStake = suppliedStake;
+            state.currentStake = suppliedStake;
+        }
+
+        const currentStake = Number(state.currentStake);
+        if (!Number.isFinite(currentStake) || currentStake <= 0) {
+            state.currentStake = state.baseStake;
+        }
+
+        return {
+            ...tradeOptions,
+            amount: state.currentStake,
+        };
+    }
+
+    getSmartOver2V3TradeOptions(tradeOptions) {
+        if (!this.isSmartOver2V3Workspace()) return tradeOptions;
+
+        const state = this.getSmartOver2V3State?.();
         const suppliedStake = Number(tradeOptions?.amount);
         if (!state || !Number.isFinite(suppliedStake) || suppliedStake <= 0) return tradeOptions;
 
@@ -434,7 +468,9 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const binaryMatrixTradeOptions = this.getBinaryMatrixTradeOptions({
             ...this.tradeOptions,
         });
-        const nextTradeOptions = this.getSmartOver2TradeOptions(binaryMatrixTradeOptions);
+        const nextTradeOptions = this.getSmartOver2V3TradeOptions(
+            this.getSmartOver2TradeOptions(binaryMatrixTradeOptions)
+        );
         if (!nextTradeOptions) return;
 
         this.tradeOptions = nextTradeOptions;
