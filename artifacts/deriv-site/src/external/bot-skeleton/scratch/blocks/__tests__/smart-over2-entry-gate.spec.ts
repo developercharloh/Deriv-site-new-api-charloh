@@ -118,6 +118,8 @@ describe('Smart Over 2 Blockly entry gate', () => {
         expect(analysisInputIndex).toBeGreaterThan(lookbackInputIndex);
         expect(martingaleInputIndex).toBeGreaterThan(analysisInputIndex);
         settingInputs.forEach(inputName => expect(gate.getInput(inputName)).not.toBeNull());
+        expect(gate.getInput('USE_VIRTUAL_HOOK')).toBeNull();
+        expect(gate.getInput('MAX_VIRTUAL_LOSSES')).toBeNull();
         expect(
             gate
                 .getInput('MARTINGALE')
@@ -132,6 +134,9 @@ describe('Smart Over 2 Blockly entry gate', () => {
 
         const settings = workspace.newBlock('smart_over2_recovery_settings');
         expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2Recovery(true, 2);\n');
+        settings.setFieldValue('FALSE', 'USE_VIRTUAL_HOOK');
+        settings.setFieldValue('7', 'MAX_VIRTUAL_LOSSES');
+        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2Recovery(false, 7);\n');
 
         setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2-v2');
         const v2Gate = workspace.newBlock('smart_over2_recovery_gate');
@@ -208,8 +213,6 @@ describe('Smart Over 2 Blockly entry gate', () => {
         const variables = [
             ['Stake', 'stake'],
             ['Martingale factor', 'martingale'],
-            ['Maximum Virtual Hook losses', 'max_virtual_losses'],
-            ['Use Virtual Hook', 'virtual_hook'],
             ['Target Profit', 'target_profit'],
             ['Stop Loss', 'stop_loss'],
             ['Use Martingale', 'use_martingale'],
@@ -227,9 +230,13 @@ describe('Smart Over 2 Blockly entry gate', () => {
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_recovery_prediction">');
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_use_martingale">');
         expect(xml).toContain('<block type="smart_over2_recovery_settings" id="smart_over2_recovery_settings">');
-        expect(xml).toContain('<block type="variables_get" id="smart_over2_settings_get_virtual_hook">');
-        expect(xml).toContain('<block type="variables_get" id="smart_over2_settings_get_max_virtual_losses">');
-        expect(xml).not.toContain('id="smart_over2_get_virtual_hook"');
+        expect(xml).toContain('<field name="USE_VIRTUAL_HOOK">TRUE</field>');
+        expect(xml).toContain('<field name="MAX_VIRTUAL_LOSSES">2</field>');
+        expect(xml).not.toContain('smart_over2_var_max_virtual_losses');
+        expect(xml).not.toContain('smart_over2_var_virtual_hook');
+        expect(xml).not.toMatch(
+            /<block type="smart_over2_recovery_gate"[^>]*>[\s\S]*?<value name="(?:USE_VIRTUAL_HOOK|MAX_VIRTUAL_LOSSES)"/
+        );
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_target_profit">');
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_stop_loss">');
     });

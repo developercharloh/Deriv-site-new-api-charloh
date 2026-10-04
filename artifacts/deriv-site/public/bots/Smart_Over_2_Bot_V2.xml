@@ -2,8 +2,6 @@
   <variables>
     <variable id="smart_over2_var_stake">Stake</variable>
     <variable id="smart_over2_var_martingale">Martingale factor</variable>
-    <variable id="smart_over2_var_max_virtual_losses">Maximum Virtual Hook losses</variable>
-    <variable id="smart_over2_var_virtual_hook">Use Virtual Hook</variable>
     <variable id="smart_over2_var_target_profit">Target Profit</variable>
     <variable id="smart_over2_var_stop_loss">Stop Loss</variable>
     <variable id="smart_over2_var_use_martingale">Use Martingale</variable>
@@ -61,23 +59,7 @@
               </block>
             </value>
             <next>
-              <block type="variables_set" id="smart_over2_set_max_virtual_losses">
-                <field name="VAR" id="smart_over2_var_max_virtual_losses">Maximum Virtual Hook losses</field>
-                <value name="VALUE">
-                  <block type="math_number" id="smart_over2_virtual_losses_default">
-                    <field name="NUM">2</field>
-                  </block>
-                </value>
-                <next>
-                  <block type="variables_set" id="smart_over2_set_virtual_hook">
-                    <field name="VAR" id="smart_over2_var_virtual_hook">Use Virtual Hook</field>
-                    <value name="VALUE">
-                      <block type="logic_boolean" id="smart_over2_virtual_hook_default">
-                        <field name="BOOL">TRUE</field>
-                      </block>
-                    </value>
-                    <next>
-                      <block type="variables_set" id="smart_over2_set_target_profit">
+              <block type="variables_set" id="smart_over2_set_target_profit">
                         <field name="VAR" id="smart_over2_var_target_profit">Target Profit</field>
                         <value name="VALUE">
                           <block type="math_number" id="smart_over2_target_profit_default">
@@ -118,21 +100,9 @@
                                         </value>
                                         <next>
                                           <block type="smart_over2_recovery_settings" id="smart_over2_recovery_settings">
-                                            <value name="USE_VIRTUAL_HOOK">
-                                              <block type="variables_get" id="smart_over2_settings_get_virtual_hook">
-                                                <field name="VAR" id="smart_over2_var_virtual_hook">Use Virtual Hook</field>
-                                              </block>
-                                            </value>
-                                            <value name="MAX_VIRTUAL_LOSSES">
-                                              <block type="variables_get" id="smart_over2_settings_get_max_virtual_losses">
-                                                <field name="VAR" id="smart_over2_var_max_virtual_losses">Maximum Virtual Hook losses</field>
-                                              </block>
-                                            </value>
+                                            <field name="USE_VIRTUAL_HOOK">TRUE</field>
+                                            <field name="MAX_VIRTUAL_LOSSES">2</field>
                                           </block>
-                                        </next>
-                                      </block>
-                                    </next>
-                                  </block>
                                 </next>
                               </block>
                             </next>

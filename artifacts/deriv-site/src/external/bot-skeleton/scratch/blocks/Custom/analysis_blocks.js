@@ -146,10 +146,16 @@ registerOutputBlock({
 window.Blockly.Blocks.smart_over2_recovery_settings = {
     init() {
         this.jsonInit({
-            message0: localize('Virtual Hook enabled %1 · after %2 consecutive losses'),
+            message0: localize('Virtual Hook %1 · real recovery after %2 consecutive losses'),
             args0: [
-                { type: 'input_value', name: 'USE_VIRTUAL_HOOK', check: 'Boolean' },
-                countInput('MAX_VIRTUAL_LOSSES', '2'),
+                { type: 'field_checkbox', name: 'USE_VIRTUAL_HOOK', checked: true },
+                {
+                    type: 'field_number',
+                    name: 'MAX_VIRTUAL_LOSSES',
+                    value: 2,
+                    min: 0,
+                    precision: 1,
+                },
             ],
             previousStatement: null,
             nextStatement: null,
@@ -169,9 +175,11 @@ window.Blockly.Blocks.smart_over2_recovery_settings = {
     },
 };
 
-window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_recovery_settings = block =>
-    `Bot.configureSmartOver2Recovery(${numberInput(block, 'USE_VIRTUAL_HOOK', 'true')}, ` +
-    `${numberInput(block, 'MAX_VIRTUAL_LOSSES', '2')});\n`;
+window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_recovery_settings = block => {
+    const useVirtualHook = block.getFieldValue('USE_VIRTUAL_HOOK') === 'TRUE';
+    const maxVirtualLosses = Number(block.getFieldValue('MAX_VIRTUAL_LOSSES'));
+    return `Bot.configureSmartOver2Recovery(${useVirtualHook}, ${Number.isFinite(maxVirtualLosses) ? maxVirtualLosses : 2});\n`;
+};
 
 registerOutputBlock({
     type: 'even_odd_percentage',
@@ -401,12 +409,7 @@ registerOutputBlock({
         countInput('TARGET_PROFIT', '0'),
         countInput('STOP_LOSS', '0'),
     ],
-    message7: '%1 %2',
-    args7: [
-        { type: 'input_value', name: 'USE_VIRTUAL_HOOK', check: 'Boolean' },
-        countInput('MAX_VIRTUAL_LOSSES', '2'),
-    ],
-    hiddenInputs: ['ANALYSIS_COUNT', 'USE_VIRTUAL_HOOK', 'MAX_VIRTUAL_LOSSES'],
+    hiddenInputs: ['ANALYSIS_COUNT'],
     inputsInline: false,
     output: 'Boolean',
     tooltip:
@@ -419,8 +422,7 @@ registerOutputBlock({
             `${numberInput(block, 'USE_MARTINGALE', 'true')}, ` +
             `${numberInput(block, 'OVER_PREDICTION', '2')}, ` +
             `${numberInput(block, 'RECOVERY_PREDICTION', '5')}, ` +
-            `${numberInput(block, 'USE_VIRTUAL_HOOK', 'undefined')}, ` +
-            `${numberInput(block, 'MAX_VIRTUAL_LOSSES', 'undefined')}, ` +
+            `undefined, undefined, ` +
             `${numberInput(block, 'TARGET_PROFIT', '0')}, ` +
             `${numberInput(block, 'STOP_LOSS', '0')}, ` +
             `${smartOver2RecoveryContractType(block)})`,

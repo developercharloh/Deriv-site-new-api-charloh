@@ -174,20 +174,17 @@ describe('Free Bots template catalog', () => {
         expect(document.querySelector('block[type="smart_over2_recovery_settings"]')).not.toBeNull();
         expect(
             document.querySelector(
-                'block[id="smart_over2_set_virtual_hook"] value[name="VALUE"] block[type="logic_boolean"] field[name="BOOL"]'
-            )?.textContent
+                'block[type="trade_definition"] statement[name="INITIALIZATION"] block[type="smart_over2_recovery_settings"]'
+            )
+        ).not.toBeNull();
+        expect(
+            document.querySelector('block[type="smart_over2_recovery_settings"] field[name="USE_VIRTUAL_HOOK"]')
+                ?.textContent
         ).toBe('TRUE');
         expect(
-            document.querySelector(
-                'block[id="smart_over2_set_max_virtual_losses"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]'
-            )?.textContent
+            document.querySelector('block[type="smart_over2_recovery_settings"] field[name="MAX_VIRTUAL_LOSSES"]')
+                ?.textContent
         ).toBe('2');
-        expect(
-            document.querySelector('block[type="smart_over2_recovery_settings"] value[name="USE_VIRTUAL_HOOK"] block[type="variables_get"] field[name="VAR"]')?.textContent
-        ).toBe('Use Virtual Hook');
-        expect(
-            document.querySelector('block[type="smart_over2_recovery_settings"] value[name="MAX_VIRTUAL_LOSSES"] block[type="variables_get"] field[name="VAR"]')?.textContent
-        ).toBe('Maximum Virtual Hook losses');
         const gateVariableNames = Array.from(
             document.querySelectorAll('block[type="smart_over2_recovery_gate"] field[name="VAR"]')
         ).map(field => field.textContent);
@@ -228,12 +225,17 @@ describe('Free Bots template catalog', () => {
         expect(v2Document.querySelector('block[type="smart_over2_recovery_settings"]')).not.toBeNull();
         expect(
             v2Document.querySelector(
-                'block[id="smart_over2_set_virtual_hook"] value[name="VALUE"] block[type="logic_boolean"] field[name="BOOL"]'
+                'block[type="trade_definition"] statement[name="INITIALIZATION"] block[type="smart_over2_recovery_settings"]'
+            )
+        ).not.toBeNull();
+        expect(
+            v2Document.querySelector(
+                'block[type="smart_over2_recovery_settings"] field[name="USE_VIRTUAL_HOOK"]'
             )?.textContent
         ).toBe('TRUE');
         expect(
             v2Document.querySelector(
-                'block[id="smart_over2_set_max_virtual_losses"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]'
+                'block[type="smart_over2_recovery_settings"] field[name="MAX_VIRTUAL_LOSSES"]'
             )?.textContent
         ).toBe('2');
         expect(
