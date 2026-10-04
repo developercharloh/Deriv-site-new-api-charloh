@@ -110,8 +110,6 @@ describe('Smart Over 2 Blockly entry gate', () => {
             'USE_MARTINGALE',
             'OVER_PREDICTION',
             'RECOVERY_PREDICTION',
-            'USE_VIRTUAL_HOOK',
-            'MAX_VIRTUAL_LOSSES',
             'TARGET_PROFIT',
             'STOP_LOSS',
         ];
@@ -129,7 +127,17 @@ describe('Smart Over 2 Blockly entry gate', () => {
         ).toBe('Martingale');
         const generatedGate = javascriptGenerator.blockToCode(gate);
         expect(Array.isArray(generatedGate) ? generatedGate[0] : generatedGate).toBe(
-            'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2", 1.2, true, 2, 5, false, 2, 0, 0)'
+            'Bot.checkSmartOver2Recovery(4, 100, "smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, "DIGITUNDER")'
+        );
+
+        const settings = workspace.newBlock('smart_over2_recovery_settings');
+        expect(javascriptGenerator.blockToCode(settings)).toBe('Bot.configureSmartOver2Recovery(true, 2);\n');
+
+        setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2-v2');
+        const v2Gate = workspace.newBlock('smart_over2_recovery_gate');
+        const generatedV2Gate = javascriptGenerator.blockToCode(v2Gate);
+        expect(Array.isArray(generatedV2Gate) ? generatedV2Gate[0] : generatedV2Gate).toContain(
+            '"smart-over-2", 1.2, true, 2, 5, undefined, undefined, 0, 0, "DIGITOVER"'
         );
 
         const purchase = workspace.newBlock('smart_over2_recovery_purchase');
@@ -206,20 +214,22 @@ describe('Smart Over 2 Blockly entry gate', () => {
             ['Stop Loss', 'stop_loss'],
             ['Use Martingale', 'use_martingale'],
             ['Over prediction (2)', 'over_prediction'],
-            ['Virtual Hook prediction (5)', 'recovery_prediction'],
+            ['Recovery prediction (5)', 'recovery_prediction'],
         ];
         variables.forEach(([name, id]) => {
             expect(xml).toContain(`>${name}</variable>`);
             expect(xml).toContain(`<field name="VAR" id="smart_over2_var_${id}">`);
         });
         expect(xml).toContain('<statement name="INITIALIZATION">');
-        expect(xml).toContain('<field name="BOOL">FALSE</field>');
         expect(xml).toContain('<field name="BOOL">TRUE</field>');
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_stake">');
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_over_prediction">');
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_recovery_prediction">');
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_use_martingale">');
-        expect(xml).toContain('<block type="variables_get" id="smart_over2_get_virtual_hook">');
+        expect(xml).toContain('<block type="smart_over2_recovery_settings" id="smart_over2_recovery_settings">');
+        expect(xml).toContain('<block type="variables_get" id="smart_over2_settings_get_virtual_hook">');
+        expect(xml).toContain('<block type="variables_get" id="smart_over2_settings_get_max_virtual_losses">');
+        expect(xml).not.toContain('id="smart_over2_get_virtual_hook"');
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_target_profit">');
         expect(xml).toContain('<block type="variables_get" id="smart_over2_get_stop_loss">');
     });

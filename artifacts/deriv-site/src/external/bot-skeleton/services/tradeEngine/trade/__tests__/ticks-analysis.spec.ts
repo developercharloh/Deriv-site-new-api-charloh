@@ -451,6 +451,84 @@ describe('Ticks last-digit analysis events', () => {
         expect(engine.getLastDigitList).not.toHaveBeenCalled();
     });
 
+    it('uses Over 4 for both V2 virtual simulation and real recovery after Run once settings', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const state = engine.getSmartOver2RecoveryState();
+        state.stage = 1;
+        state.virtualLosses = 1;
+        engine.configureSmartOver2Recovery(true, 2);
+        engine.latestTick = { epoch: 300, quote: '2591.300' };
+        engine.getLastDigit = jest.fn().mockResolvedValueOnce(5).mockResolvedValueOnce(4).mockResolvedValueOnce(4);
+        const check = () =>
+            engine.checkSmartOver2Recovery(
+                4,
+                100,
+                'smart-over-2',
+                1.2,
+                true,
+                2,
+                4,
+                undefined,
+                undefined,
+                0,
+                0,
+                'DIGITOVER'
+            );
+
+        await expect(check()).resolves.toBe(false);
+        expect(state.pendingVirtualTrade).toEqual(
+            expect.objectContaining({ contractType: 'DIGITOVER', prediction: 4, entryEpoch: 300 })
+        );
+
+        engine.latestTick = { epoch: 301, quote: '2591.301' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.virtualLosses).toBe(0);
+        expect(state.pendingVirtualTrade).toBeNull();
+        expect(state.recoveryRealMode).toBe(false);
+
+        engine.latestTick = { epoch: 302, quote: '2591.302' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.pendingVirtualTrade).toEqual(
+            expect.objectContaining({ contractType: 'DIGITOVER', prediction: 4, entryEpoch: 302 })
+        );
+
+        engine.latestTick = { epoch: 303, quote: '2591.303' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.virtualLosses).toBe(1);
+        engine.latestTick = { epoch: 304, quote: '2591.304' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.pendingVirtualTrade).toEqual(
+            expect.objectContaining({ contractType: 'DIGITOVER', prediction: 4, entryEpoch: 304 })
+        );
+
+        engine.latestTick = { epoch: 305, quote: '2591.305' };
+        await expect(check()).resolves.toBe(false);
+        expect(state.virtualLosses).toBe(2);
+        engine.latestTick = { epoch: 306, quote: '2591.306' };
+        await expect(check()).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 4 })
+        );
+        expect(state.recoveryRealMode).toBe(true);
+
+        const order = engine.beginSmartOver2RecoveryPurchase(state.pendingPurchase);
+        engine.completeSmartOver2RecoveryPurchase(order, { buy_price: 0.5, contract_id: 'v2-recovery' });
+        engine.lastSettledContract = {
+            contract_id: 'v2-recovery',
+            status: 'lost',
+            buy_price: 0.5,
+            sell_price: 0,
+            profit: -0.5,
+        };
+        expect(engine.completeSmartOver2Recovery('smart-over-2')).toBe(false);
+        engine.latestTick = { epoch: 307, quote: '2591.307' };
+        await expect(check()).resolves.toBe(true);
+        expect(state.pendingPurchase).toEqual(
+            expect.objectContaining({ stage: 1, contractType: 'DIGITOVER', prediction: 4 })
+        );
+    });
+
     it('keeps base stake with Martingale off and uses configured Under for real recovery', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

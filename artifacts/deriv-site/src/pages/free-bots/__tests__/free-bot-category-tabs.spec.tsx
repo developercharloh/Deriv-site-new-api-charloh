@@ -5,7 +5,7 @@ import type { FreeBotSection } from '../types';
 
 const tabs: FreeBotCategoryTab[] = [
     { id: 'smart-contract', label: 'Smart Contract Bots', count: 11 },
-    { id: 'premium', label: 'Premium Bots', count: 6 },
+    { id: 'premium', label: 'Premium Bots', count: 7 },
     { id: 'edging', label: 'Edging Bots', count: 0 },
 ];
 
@@ -35,9 +35,9 @@ describe('FreeBotCategoryTabs', () => {
     it('switches the visible panel when a category tab is clicked', () => {
         render(<CategoryTabsHarness />);
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Premium Bots, 6 bots' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Premium Bots, 7 bots' }));
 
-        expect(screen.getByRole('tab', { name: 'Premium Bots, 6 bots' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tab', { name: 'Premium Bots, 7 bots' })).toHaveAttribute('aria-selected', 'true');
         expect(screen.getByRole('tabpanel')).toHaveTextContent('Premium Bots list');
     });
 

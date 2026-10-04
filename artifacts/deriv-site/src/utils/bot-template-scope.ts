@@ -1,7 +1,14 @@
 const RISE_FALL_MASTER_BOT_SCOPE = 'rise-fall-master';
 const RISE_FALL_MASTER_BOT_IDENTITIES = new Set(['risefallmaster', 'risefallmasterbot']);
 const SMART_OVER_2_BOT_SCOPE = 'smart-over-2';
-const SMART_OVER_2_BOT_IDENTITIES = new Set(['smartover2', 'smartover2bot']);
+const SMART_OVER_2_BOT_V2_IDENTITIES = new Set(['smartover2v2', 'smartover2botv2']);
+const SMART_OVER_2_BOT_IDENTITIES = new Set([
+    'smartover2',
+    'smartover2bot',
+    'smartover2v1',
+    'smartover2botv1',
+    ...SMART_OVER_2_BOT_V2_IDENTITIES,
+]);
 
 const normalizeIdentity = (identity: unknown) =>
     String(identity ?? '')
@@ -17,6 +24,12 @@ export const getSmartOver2JournalScope = (identity: unknown) => {
     if (RISE_FALL_MASTER_BOT_IDENTITIES.has(normalizedIdentity)) return RISE_FALL_MASTER_BOT_SCOPE;
     if (SMART_OVER_2_BOT_IDENTITIES.has(normalizedIdentity)) return SMART_OVER_2_BOT_SCOPE;
     return null;
+};
+
+export const getSmartOver2RecoveryContractType = (identity: unknown) => {
+    const normalizedIdentity = normalizeIdentity(identity);
+    if (!SMART_OVER_2_BOT_IDENTITIES.has(normalizedIdentity)) return null;
+    return SMART_OVER_2_BOT_V2_IDENTITIES.has(normalizedIdentity) ? 'DIGITOVER' : 'DIGITUNDER';
 };
 
 const isSmartOver2AnalysisJournalEntry = (entry: unknown) => {
@@ -53,4 +66,6 @@ export const setWorkspaceBotTemplateIdentity = (workspace: unknown, identity: un
 
     (workspace as { __smartOver2JournalScope?: string | null }).__smartOver2JournalScope =
         getSmartOver2JournalScope(identity);
+    (workspace as { __smartOver2RecoveryContractType?: string | null }).__smartOver2RecoveryContractType =
+        getSmartOver2RecoveryContractType(identity);
 };

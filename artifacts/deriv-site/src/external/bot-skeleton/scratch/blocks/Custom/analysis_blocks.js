@@ -5,6 +5,8 @@ const generator = () => window.Blockly.JavaScript.javascriptGenerator;
 const numberInput = (block, name, fallback) =>
     generator().valueToCode(block, name, generator().ORDER_ATOMIC) || fallback;
 const smartOver2JournalScope = block => JSON.stringify(block.workspace?.__smartOver2JournalScope ?? null);
+const smartOver2RecoveryContractType = block =>
+    JSON.stringify(block.workspace?.__smartOver2RecoveryContractType ?? 'DIGITUNDER');
 const analysisColours = () => ({
     colour: window.Blockly.Colours.Base.colour,
     colourSecondary: window.Blockly.Colours.Base.colourSecondary,
@@ -140,6 +142,36 @@ registerOutputBlock({
         generator().ORDER_FUNCTION_CALL,
     ],
 });
+
+window.Blockly.Blocks.smart_over2_recovery_settings = {
+    init() {
+        this.jsonInit({
+            message0: localize('Virtual Hook enabled %1 · after %2 consecutive losses'),
+            args0: [
+                { type: 'input_value', name: 'USE_VIRTUAL_HOOK', check: 'Boolean' },
+                countInput('MAX_VIRTUAL_LOSSES', '2'),
+            ],
+            previousStatement: null,
+            nextStatement: null,
+            ...analysisColours(),
+            tooltip: localize('Set Virtual Hook options once at the start of the bot.'),
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Smart Over 2 Virtual Hook settings'),
+            description: localize('Sets whether Virtual Hook is enabled and the consecutive-loss limit.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.smart_over2_recovery_settings = block =>
+    `Bot.configureSmartOver2Recovery(${numberInput(block, 'USE_VIRTUAL_HOOK', 'true')}, ` +
+    `${numberInput(block, 'MAX_VIRTUAL_LOSSES', '2')});\n`;
 
 registerOutputBlock({
     type: 'even_odd_percentage',
@@ -362,21 +394,23 @@ registerOutputBlock({
     args3: [countInput('MARTINGALE', '1.2')],
     message4: localize('Use Martingale %1'),
     args4: [{ type: 'input_value', name: 'USE_MARTINGALE', check: 'Boolean' }],
-    message5: localize('Over prediction %1 · Virtual Hook prediction %2'),
+    message5: localize('Over prediction %1 · Recovery prediction %2'),
     args5: [countInput('OVER_PREDICTION', '2'), countInput('RECOVERY_PREDICTION', '5')],
-    message6: localize('Use Virtual Hook %1'),
-    args6: [{ type: 'input_value', name: 'USE_VIRTUAL_HOOK', check: 'Boolean' }],
-    message7: localize('Max virtual losses %1 · Target Profit %2 · Stop Loss %3'),
-    args7: [
-        countInput('MAX_VIRTUAL_LOSSES', '2'),
+    message6: localize('Target Profit %1 · Stop Loss %2'),
+    args6: [
         countInput('TARGET_PROFIT', '0'),
         countInput('STOP_LOSS', '0'),
     ],
-    hiddenInputs: ['ANALYSIS_COUNT'],
+    message7: '%1 %2',
+    args7: [
+        { type: 'input_value', name: 'USE_VIRTUAL_HOOK', check: 'Boolean' },
+        countInput('MAX_VIRTUAL_LOSSES', '2'),
+    ],
+    hiddenInputs: ['ANALYSIS_COUNT', 'USE_VIRTUAL_HOOK', 'MAX_VIRTUAL_LOSSES'],
     inputsInline: false,
     output: 'Boolean',
     tooltip:
-        'Normal entries use the configured Over prediction and entry rules. After a real Over loss, the Virtual Hook simulates Under using its linked prediction; a virtual win resets its consecutive-loss count but keeps the hook active. After the configured consecutive virtual losses, real Under recovery begins. Real Under losses continue real Under recovery with Martingale until a win, then normal Over entries resume. Martingale, Target Profit, and Stop Loss use the linked Run once at start settings.',
+        'Normal entries use the configured Over prediction and entry rules. After a real Over loss, Virtual Hook simulates the template recovery contract using its linked prediction. A virtual win resets the consecutive-loss count but keeps the hook active; after the configured number of consecutive virtual losses, real recovery begins. Real recovery losses continue with Martingale until a win, then normal condition-gated Over entries resume. Configure Virtual Hook settings in Run once at start.',
     meta: 'Smart Over 2 Recovery Gate',
     generatorCode: block => [
         `Bot.checkSmartOver2Recovery(${numberInput(block, 'COUNT', '4')}, ` +
@@ -385,10 +419,11 @@ registerOutputBlock({
             `${numberInput(block, 'USE_MARTINGALE', 'true')}, ` +
             `${numberInput(block, 'OVER_PREDICTION', '2')}, ` +
             `${numberInput(block, 'RECOVERY_PREDICTION', '5')}, ` +
-            `${numberInput(block, 'USE_VIRTUAL_HOOK', 'false')}, ` +
-            `${numberInput(block, 'MAX_VIRTUAL_LOSSES', '2')}, ` +
+            `${numberInput(block, 'USE_VIRTUAL_HOOK', 'undefined')}, ` +
+            `${numberInput(block, 'MAX_VIRTUAL_LOSSES', 'undefined')}, ` +
             `${numberInput(block, 'TARGET_PROFIT', '0')}, ` +
-            `${numberInput(block, 'STOP_LOSS', '0')})`,
+            `${numberInput(block, 'STOP_LOSS', '0')}, ` +
+            `${smartOver2RecoveryContractType(block)})`,
         generator().ORDER_FUNCTION_CALL,
     ],
 });
@@ -396,10 +431,10 @@ registerOutputBlock({
 window.Blockly.Blocks.smart_over2_recovery_purchase = {
     init() {
         this.jsonInit({
-            message0: localize('Smart Over 2: buy Over entry or Under recovery'),
+            message0: localize('Smart Over 2: buy normal entry or real recovery'),
             previousStatement: null,
             ...analysisColours(),
-            tooltip: localize('Buys the configured Over prediction for a normal entry, or the configured Under prediction for real recovery, using the current stake.'),
+            tooltip: localize('Buys the configured Over prediction for a normal entry, or the template recovery contract, using the current stake.'),
             category: window.Blockly.Categories.Tick_Analysis,
         });
         this.setNextStatement(false);

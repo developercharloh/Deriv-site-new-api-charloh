@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { shouldShowJournalEntryForBot } from '@/utils/bot-template-scope';
+import { getSmartOver2RecoveryContractType, shouldShowJournalEntryForBot } from '@/utils/bot-template-scope';
 
 const catalogPath = path.resolve(__dirname, '..', 'index.tsx');
 const publicBotsPath = path.resolve(__dirname, '../../../../public/bots');
@@ -125,6 +125,9 @@ describe('Free Bots template catalog', () => {
         expect(shouldShowJournalEntryForBot(riseFallRow, 'matches-signal')).toBe(false);
         expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'rise-fall-master')).toBe(true);
         expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'smart-over-2')).toBe(true);
+        expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'smart-over-2-v2')).toBe(true);
+        expect(getSmartOver2RecoveryContractType('smart-over-2')).toBe('DIGITUNDER');
+        expect(getSmartOver2RecoveryContractType('smart-over-2-v2')).toBe('DIGITOVER');
         expect(shouldShowJournalEntryForBot(previouslyMisattributedSmartOver2Row, 'smart-over-2')).toBe(true);
         expect(shouldShowJournalEntryForBot(legacySmartOver2Row, 'matches-signal')).toBe(false);
         expect(shouldShowJournalEntryForBot(legacyVolatilityScanRow, 'smart-over-2')).toBe(false);
@@ -168,22 +171,41 @@ describe('Free Bots template catalog', () => {
         ).toBe('Over prediction (2)');
         expect(document.querySelector('block[type="trade_definition"] statement[name="INITIALIZATION"]')).not.toBeNull();
         expect(document.querySelector('block[type="variables_set"] field[name="VAR"]')?.textContent).toBe('Stake');
+        expect(document.querySelector('block[type="smart_over2_recovery_settings"]')).not.toBeNull();
+        expect(
+            document.querySelector(
+                'block[id="smart_over2_set_virtual_hook"] value[name="VALUE"] block[type="logic_boolean"] field[name="BOOL"]'
+            )?.textContent
+        ).toBe('TRUE');
+        expect(
+            document.querySelector(
+                'block[id="smart_over2_set_max_virtual_losses"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]'
+            )?.textContent
+        ).toBe('2');
+        expect(
+            document.querySelector('block[type="smart_over2_recovery_settings"] value[name="USE_VIRTUAL_HOOK"] block[type="variables_get"] field[name="VAR"]')?.textContent
+        ).toBe('Use Virtual Hook');
+        expect(
+            document.querySelector('block[type="smart_over2_recovery_settings"] value[name="MAX_VIRTUAL_LOSSES"] block[type="variables_get"] field[name="VAR"]')?.textContent
+        ).toBe('Maximum Virtual Hook losses');
         const gateVariableNames = Array.from(
             document.querySelectorAll('block[type="smart_over2_recovery_gate"] field[name="VAR"]')
         ).map(field => field.textContent);
         [
             'Martingale factor',
-            'Maximum Virtual Hook losses',
-            'Use Virtual Hook',
             'Target Profit',
             'Stop Loss',
             'Use Martingale',
             'Over prediction (2)',
             'Recovery prediction (5)',
         ].forEach(variableName => expect(gateVariableNames).toContain(variableName));
+        expect(gateVariableNames).not.toContain('Maximum Virtual Hook losses');
+        expect(gateVariableNames).not.toContain('Use Virtual Hook');
+        expect(document.querySelector('block[type="smart_over2_recovery_gate"] value[name="USE_VIRTUAL_HOOK"]')).toBeNull();
+        expect(document.querySelector('block[type="smart_over2_recovery_gate"] value[name="MAX_VIRTUAL_LOSSES"]')).toBeNull();
     });
 
-    it('does not place the Smart Over 2 gate in other free-bot templates', () => {
+    it('includes separate V1 and V2 templates in the Premium Bots catalog', () => {
         const templatesWithGate = readCatalogXmlPaths().filter(xmlPath => {
             const templatePath = path.join(publicBotsPath, xmlPath.slice('/bots/'.length));
             const xml = fs.readFileSync(templatePath, 'utf8');
@@ -193,6 +215,44 @@ describe('Free Bots template catalog', () => {
             );
         });
 
-        expect(templatesWithGate).toEqual(['/bots/Smart_Over_2_Bot.xml']);
+        expect(templatesWithGate).toEqual(['/bots/Smart_Over_2_Bot.xml', '/bots/Smart_Over_2_Bot_V2.xml']);
+
+        const catalog = fs.readFileSync(catalogPath, 'utf8');
+        expect(catalog).toContain("name: 'Smart Over 2 Bot V1'");
+        expect(catalog).toContain("name: 'Smart Over 2 Bot V2'");
+        expect(catalog).toContain("id: 'smart-over-2-v2',\n        section: 'premium'");
+
+        const v2Xml = fs.readFileSync(path.join(publicBotsPath, 'Smart_Over_2_Bot_V2.xml'), 'utf8');
+        const v2Document = new DOMParser().parseFromString(v2Xml, 'application/xml');
+        expect(v2Document.querySelector('parsererror')).toBeNull();
+        expect(v2Document.querySelector('block[type="smart_over2_recovery_settings"]')).not.toBeNull();
+        expect(
+            v2Document.querySelector(
+                'block[id="smart_over2_set_virtual_hook"] value[name="VALUE"] block[type="logic_boolean"] field[name="BOOL"]'
+            )?.textContent
+        ).toBe('TRUE');
+        expect(
+            v2Document.querySelector(
+                'block[id="smart_over2_set_max_virtual_losses"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]'
+            )?.textContent
+        ).toBe('2');
+        expect(
+            v2Document.querySelector(
+                'block[type="smart_over2_recovery_gate"] value[name="COUNT"] shadow[type="math_number"] field[name="NUM"]'
+            )?.textContent
+        ).toBe('4');
+        expect(
+            v2Document.querySelector(
+                'block[type="trade_definition_tradeoptions"] value[name="PREDICTION"] block[type="variables_get"] field[name="VAR"]'
+            )?.textContent
+        ).toBe('Over prediction (2)');
+        expect(v2Document.querySelector('variable[id="smart_over2_var_recovery_prediction"]')?.textContent).toBe(
+            'Recovery prediction (4)'
+        );
+        expect(
+            v2Document.querySelector(
+                'block[type="smart_over2_recovery_gate"] value[name="RECOVERY_PREDICTION"] block[type="variables_get"] field[name="VAR"]'
+            )?.textContent
+        ).toBe('Recovery prediction (4)');
     });
 });

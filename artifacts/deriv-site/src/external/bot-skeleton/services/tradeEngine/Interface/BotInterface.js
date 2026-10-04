@@ -30,6 +30,7 @@ const getBotInterface = tradeEngine => {
         pause: (...args) => tradeEngine.pause(...args),
         resume: (...args) => tradeEngine.resume(...args),
         purchase: (contract_type, prediction) => tradeEngine.purchase(contract_type, prediction),
+        configureSmartOver2Recovery: (...args) => tradeEngine.configureSmartOver2Recovery(...args),
         checkSmartOver2Recovery: (...args) => tradeEngine.checkSmartOver2Recovery(...args),
         purchaseSmartOver2Recovery: (...args) => tradeEngine.purchaseSmartOver2Recovery(...args),
         completeSmartOver2Recovery: (...args) => tradeEngine.completeSmartOver2Recovery(...args),

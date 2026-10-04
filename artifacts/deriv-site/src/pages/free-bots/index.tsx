@@ -218,23 +218,49 @@ const BOTS: BotConfig[] = [
     {
         id: 'smart-over-2',
         section: 'premium',
-        name: 'Smart Over 2 Bot',
+        name: 'Smart Over 2 Bot V1',
         emoji: '🧠',
         description:
-            'Trades Digit Over 2 on Volatility 50 (1s) Index only when every digit in the editable last-X window is 3–7. Skips entries when the latest three digits are all 7–9 or all 0–2. After any loss, repeats Under 5 with an editable Martingale value until a win resets the stake and resumes condition-gated Over 2 entries. There is no automatic recovery stop.',
+            'Keeps the normal Over 2 last-X entry filter. After an Over 2 loss, Virtual Hook simulates Under 5; after the configured consecutive virtual losses, real Under 5 recovery continues with Martingale until a win returns to normal entries. Virtual Hook is enabled by default and its loss limit is adjustable in Run once at start.',
         market: 'Volatility 50 (1s) Index (1HZ50V)',
-        strategy: 'Over 2 Entry Gate · Under 5 Recovery · Adjustable Martingale',
+        strategy: 'Over 2 Entry Gate · Virtual Under 5 → Real Under 5 Recovery',
         params: [
             { label: 'Lookback', value: '4 digits (editable)' },
             { label: 'Entry Window', value: 'Every digit 3–7' },
             { label: 'Skip Rule', value: 'Last 3 all 7–9 or all 0–2' },
             { label: 'Normal Entry', value: 'Over 2 (condition-gated)' },
-            { label: 'Recovery', value: 'Under 5 until a win' },
+            { label: 'Virtual Hook', value: 'Enabled by default · Under 5' },
+            { label: 'Virtual loss limit', value: '2 consecutive (editable at start)' },
+            { label: 'Recovery', value: 'Real Under 5 until a win' },
             { label: 'Base Stake', value: '$0.50 (resets after any win)' },
             { label: 'Martingale', value: '1.2× (editable)' },
             { label: 'Duration', value: '1 Tick' },
         ],
         xmlPath: '/bots/Smart_Over_2_Bot.xml',
+        gradient: 'linear-gradient(135deg, #10202f 0%, #155e75 48%, #22c55e 100%)',
+    },
+    {
+        id: 'smart-over-2-v2',
+        section: 'premium',
+        name: 'Smart Over 2 Bot V2',
+        emoji: '🧠',
+        description:
+            'Uses the same condition-gated Over 2 last-X entry filter as V1. After an Over 2 loss, Virtual Hook simulates Over 4; after the configured consecutive virtual losses, real Over 4 recovery continues with Martingale until a win returns to normal entries. Virtual Hook is enabled by default and its loss limit is adjustable in Run once at start.',
+        market: 'Volatility 50 (1s) Index (1HZ50V)',
+        strategy: 'Over 2 Entry Gate · Virtual Over 4 → Real Over 4 Recovery',
+        params: [
+            { label: 'Lookback', value: '4 digits (editable)' },
+            { label: 'Entry Window', value: 'Every digit 3–7' },
+            { label: 'Skip Rule', value: 'Last 3 all 7–9 or all 0–2' },
+            { label: 'Normal Entry', value: 'Over 2 (condition-gated)' },
+            { label: 'Virtual Hook', value: 'Enabled by default · Over 4' },
+            { label: 'Virtual loss limit', value: '2 consecutive (editable at start)' },
+            { label: 'Recovery', value: 'Real Over 4 until a win' },
+            { label: 'Base Stake', value: '$0.50 (resets after any win)' },
+            { label: 'Martingale', value: '1.2× (editable)' },
+            { label: 'Duration', value: '1 Tick' },
+        ],
+        xmlPath: '/bots/Smart_Over_2_Bot_V2.xml',
         gradient: 'linear-gradient(135deg, #10202f 0%, #155e75 48%, #22c55e 100%)',
     },
     {
@@ -433,9 +459,10 @@ const FREE_BOT_SECTIONS: { id: FreeBotSection; title: string; emptyMessage?: str
 
 // Keep the existing catalog numbering stable even though Smart Contract is now the first tab.
 const BOTS_IN_ORDINAL_ORDER = [
-    ...BOTS.filter(bot => bot.section === 'premium'),
+    ...BOTS.filter(bot => bot.section === 'premium' && bot.id !== 'smart-over-2-v2'),
     ...BOTS.filter(bot => bot.section === 'smart-contract'),
     ...BOTS.filter(bot => bot.section === 'edging'),
+    ...BOTS.filter(bot => bot.id === 'smart-over-2-v2'),
 ];
 const BOT_ORDINALS = new Map(BOTS_IN_ORDINAL_ORDER.map((bot, index) => [bot.id, index + 1]));
 
@@ -448,6 +475,7 @@ const CARD_ART: Record<string, string> = {
     'over-under-signal': '/assets/free-bots/under-autobot.jpg',
     'over2-under7-reversal': '/assets/free-bots/hitnrun.jpg',
     'smart-over-2': '/assets/free-bots/concept-ai.jpg',
+    'smart-over-2-v2': '/assets/free-bots/concept-ai.jpg',
     'digit-pro-v1': '/assets/free-bots/digit-ticker.jpg',
     'over-destroyer': '/assets/free-bots/destroyer.jpg',
     'under-destroyer': '/assets/free-bots/mega-mind.jpg',
@@ -468,6 +496,7 @@ const CARD_CATEGORY: Record<string, string> = {
     'over-under-signal': 'OVER / UNDER SIGNAL',
     'over2-under7-reversal': 'OVER / UNDER',
     'smart-over-2': 'DIGIT OVER 2',
+    'smart-over-2-v2': 'DIGIT OVER 2',
     'digit-pro-v1': 'OVER / UNDER · EVEN / ODD',
     'over-destroyer': 'OVER / UNDER',
     'under-destroyer': 'OVER / UNDER',
@@ -488,6 +517,7 @@ const CARD_ACCENT: Record<string, string> = {
     'over-under-signal': '#d9274c',
     'over2-under7-reversal': '#eb741d',
     'smart-over-2': '#0f9f79',
+    'smart-over-2-v2': '#0f9f79',
     'digit-pro-v1': '#1766d5',
     'over-destroyer': '#b21c28',
     'under-destroyer': '#4939a3',
