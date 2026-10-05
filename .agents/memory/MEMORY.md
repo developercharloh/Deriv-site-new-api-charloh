@@ -61,3 +61,4 @@
 - [Edging pro must stay XML-based](edging-pro-xml-only.md) — keep it Blockly-based and refresh its Journal analysis on every new tick epoch, even if a broker tick ID repeats.
 - [Edging Pro Virtual Hook](edging-pro-virtual-hook.md) — both-leg losses qualify the hook; one paid pair is exactly two contracts, and repeated spot prices are expected.
 - [Edging Pro account-run locking](edging-pro-account-locking.md) — require an account-scoped Web Lock; missing account identity or lock support must block live trading.
+- [Over/Under signal fallback](deriv-over-under-signal-fallback.md) — after removing the AI bot, V1 uses the remaining signal template with standard same-direction recovery.
