@@ -32,7 +32,6 @@ export const BOT_XML_PATHS: Record<string, string> = {
     'even-odd-recovery':        '/bots/EVEN_ODD_RECOVERY_BOT.xml',
     'over-under-signal':        '/bots/OverUnder_Signal_Bot.xml',
     'elite-entry-scanner':      '/bots/Elite_Entry_Scanner_Bot.xml',
-    'over-under-ai-signals':    '/bots/Over_Under_AI_Signals_Bot.xml',
     'over-destroyer':           '/bots/Over_Destroyer_Bot.xml',
     'under-destroyer':          '/bots/Under_Destroyer_Bot.xml',
 };
@@ -45,8 +44,8 @@ export function destroyerBotIdFromDirection(direction: string): string {
 
 // Resolve which bot to use from a signal's market + direction
 export function botIdFromSignal(signal: Pick<BotSignal, 'market' | 'direction'>): string {
-    // Over/Under uses the dedicated Over Under AI Signals Bot — cross-direction recovery built in.
-    if (signal.market === 'over_under')      return 'over-under-ai-signals';
+    // Route Over/Under signals through the remaining public signal template.
+    if (signal.market === 'over_under')      return 'over-under-signal';
     if (signal.market === 'matches_differs') {
         return signal.direction.toUpperCase().startsWith('DIFFERS')
             ? 'differ-v2'
@@ -90,12 +89,12 @@ export function patchBotXml(
     // 0b. Patch PURCHASE_LIST blocks for cross-direction recovery.
     //     Primary purchase path   → contractType
     //     Recovery purchase paths → recoveryContractType
-    //     Block IDs sourced from: Elite_Entry_Scanner_Bot.xml, Over/Under AI Signals Bot,
-    //     and both Destroyer bots (Over_Destroyer_Bot.xml / Under_Destroyer_Bot.xml).
+    //     Block IDs sourced from: Elite_Entry_Scanner_Bot.xml and both Destroyer bots
+    //     (Over_Destroyer_Bot.xml / Under_Destroyer_Bot.xml).
     //     Destroyer bots share the same primary/recovery purchase block IDs.
     if (contractType || recoveryContractType) {
-        const primaryIds  = new Set([':Nx^]Pu__xj[_w$h8*VZ', 'ouai_primary_buy',  '4y{oJ}JR+rPE+*k/d7zV']);
-        const recoveryIds = new Set(['zOCam5W}Z-j~)}t9XOPF', 'BvzdHe]!O+GD=E;c7NS6', 'ouai_recovery_buy', 'JTxBKT[gw:s;+QK9bw,!']);
+        const primaryIds  = new Set([':Nx^]Pu__xj[_w$h8*VZ', '4y{oJ}JR+rPE+*k/d7zV']);
+        const recoveryIds = new Set(['zOCam5W}Z-j~)}t9XOPF', 'BvzdHe]!O+GD=E;c7NS6', 'JTxBKT[gw:s;+QK9bw,!']);
         const allPurchaseBlocks = doc.getElementsByTagName('block');
         for (let i = 0; i < allPurchaseBlocks.length; i++) {
             const bid = allPurchaseBlocks[i].getAttribute('id') ?? '';
@@ -383,23 +382,6 @@ export function getBotPatches(
                 { blockId: 'ou_mart_level_init',   numValue: martingaleLevel },
                 { blockId: 'ou_mart_init',         numValue: martingale },
                 { blockId: 'ou_ep_init',           numValue: entryPt },
-            ];
-        }
-
-        case 'over-under-ai-signals': {
-            // Over Under AI Signals Bot — cross-direction recovery
-            // Prediction 1 = primary barrier, Prediction 2 = recovery barrier (opposite direction)
-            const primaryBarrier  = parseDigitFrom(signal.direction);
-            const recoveryBarrier = signal.recoveryBarrier ?? primaryBarrier;
-            const entryPt         = parseDigitFrom(signal.entryPoint);
-            return [
-                { blockId: 'ouai_pred1_init', numValue: primaryBarrier  }, // Prediction 1
-                { blockId: 'ouai_pred2_init', numValue: recoveryBarrier }, // Prediction 2
-                { blockId: 'ouai_ep_init',    numValue: entryPt          }, // Entry Point
-                { blockId: 'ouai_stake_init', numValue: stake            }, // Stake
-                { blockId: 'ouai_tp_init',    numValue: takeProfit       }, // Take Profit
-                { blockId: 'ouai_sl_init',    numValue: stopLoss         }, // Stop Loss
-                { blockId: 'ouai_mart_init',  numValue: martingale       }, // Martingale
             ];
         }
 

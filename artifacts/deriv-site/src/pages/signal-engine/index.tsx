@@ -945,9 +945,7 @@ const SignalEngine = () => {
                 market:      sig.market,
                 savedAt:     now,
             };
-            // Over/Under: derive and save contractType + recoveryContractType so
-            // the Over Under AI Signals Bot patches the correct PURCHASE_LIST direction
-            // on both the primary and recovery purchase blocks.
+            // Over/Under: derive and save contract types for signal-aware Blockly templates.
             if (sig.market === 'over_under') {
                 const side = sig.direction.trim().toUpperCase().split(/\s+/)[0];
                 const ct   = side === 'UNDER' ? 'DIGITUNDER' : 'DIGITOVER';

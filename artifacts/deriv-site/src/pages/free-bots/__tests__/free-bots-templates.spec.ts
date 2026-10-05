@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getSmartOver2RecoveryContractType, shouldShowJournalEntryForBot } from '@/utils/bot-template-scope';
+import { BOT_XML_PATHS, botIdFromSignal } from '@/utils/bot-patch';
 
 const catalogPath = path.resolve(__dirname, '..', 'index.tsx');
 const publicBotsPath = path.resolve(__dirname, '../../../../public/bots');
@@ -69,6 +70,18 @@ describe('Free Bots template catalog', () => {
             expect(document.documentElement.localName).toBe('xml');
             expect(document.querySelectorAll('block').length).toBeGreaterThan(0);
         }
+    });
+
+    it('removes retired bots and routes V1 Over/Under signals to the remaining template', () => {
+        const catalog = fs.readFileSync(catalogPath, 'utf8');
+
+        expect(catalog).not.toContain("id: 'digit-pro-v1'");
+        expect(catalog).not.toContain("id: 'over-under-ai-signals'");
+        expect(fs.existsSync(path.join(publicBotsPath, 'Digit_Pro_V1.xml'))).toBe(false);
+        expect(fs.existsSync(path.join(publicBotsPath, 'Over_Under_AI_Signals_Bot.xml'))).toBe(false);
+        expect(BOT_XML_PATHS).not.toHaveProperty('over-under-ai-signals');
+        expect(botIdFromSignal({ market: 'over_under', direction: 'OVER 5' })).toBe('over-under-signal');
+        expect(BOT_XML_PATHS['over-under-signal']).toBe('/bots/OverUnder_Signal_Bot.xml');
     });
 
     it('keeps Blockly bot placement tied to custom blocks while retaining the Edging Bots section', () => {
