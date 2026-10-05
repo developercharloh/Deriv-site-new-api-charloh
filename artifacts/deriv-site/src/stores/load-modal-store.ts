@@ -18,6 +18,10 @@ import {
     updateXmlValues,
 } from '@/external/bot-skeleton/scratch/utils';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
+import {
+    acquireBlocklyXmlImportGuard,
+    BLOCKLY_XML_IMPORT_SETTLE_MS,
+} from '@/external/bot-skeleton/utils/blockly-xml-import-guard';
 import { TStores } from '@deriv/stores/types';
 import { localize } from '@deriv-com/translations';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
@@ -497,7 +501,7 @@ export default class LoadModalStore {
         const saved_dropdown_selections = captureDropdownSelections(convertedDom);
 
         const event_group = `dbot-load${Date.now()}`;
-        window.__DBOT_LOADING_XML = true;
+        const importGuard = acquireBlocklyXmlImportGuard();
         window.Blockly.Events.setGroup(event_group);
         let import_completed = false;
         try {
@@ -508,14 +512,12 @@ export default class LoadModalStore {
         } finally {
             window.Blockly.Events.setGroup(false);
             if (!import_completed) {
-                window.__DBOT_LOADING_XML = false;
+                importGuard.release();
             } else {
                 // Blockly can validate dynamic dropdowns after the synchronous
                 // import returns. Keep root-block lifecycle handlers paused
                 // until those callbacks have settled.
-                window.setTimeout(() => {
-                    window.__DBOT_LOADING_XML = false;
-                }, 1000);
+                importGuard.releaseAfter(BLOCKLY_XML_IMPORT_SETTLE_MS);
             }
         }
         derivWorkspace.current_strategy_id = strategy_id;

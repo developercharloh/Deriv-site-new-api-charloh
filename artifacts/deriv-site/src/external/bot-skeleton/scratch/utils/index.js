@@ -17,6 +17,10 @@ import DBotStore from '../dbot-store';
 import ApiHelpers from '../../services/api/api-helpers';
 import { getContractTypeOptions, saveAs } from '../shared';
 import { setWorkspaceBotTemplateIdentity } from '../../../../utils/bot-template-scope';
+import {
+    acquireBlocklyXmlImportGuard,
+    BLOCKLY_XML_IMPORT_SETTLE_MS,
+} from '../../utils/blockly-xml-import-guard';
 
 export const inject_workspace_options = {
     // Getter (not a literal) so the public-path prefix is read when the options are spread
@@ -472,7 +476,7 @@ export const load = async ({
 };
 
 export const loadBlocks = (xml, drop_event, event_group, workspace) => {
-    window.__DBOT_LOADING_XML = true;
+    const importGuard = acquireBlocklyXmlImportGuard();
     window.Blockly.Events.setGroup(event_group);
     let import_completed = false;
     try {
@@ -490,17 +494,15 @@ export const loadBlocks = (xml, drop_event, event_group, workspace) => {
     } finally {
         window.Blockly.Events.setGroup(false);
         if (!import_completed) {
-            window.__DBOT_LOADING_XML = false;
+            importGuard.release();
         } else {
-            window.setTimeout(() => {
-                window.__DBOT_LOADING_XML = false;
-            }, 1000);
+            importGuard.releaseAfter(BLOCKLY_XML_IMPORT_SETTLE_MS);
         }
     }
 };
 
 export const loadWorkspace = async (xml, event_group, workspace) => {
-    window.__DBOT_LOADING_XML = true;
+    const importGuard = acquireBlocklyXmlImportGuard();
     window.Blockly.Events.setGroup(event_group);
     let import_completed = false;
     try {
@@ -513,11 +515,9 @@ export const loadWorkspace = async (xml, event_group, workspace) => {
     } finally {
         window.Blockly.Events.setGroup(false);
         if (!import_completed) {
-            window.__DBOT_LOADING_XML = false;
+            importGuard.release();
         } else {
-            window.setTimeout(() => {
-                window.__DBOT_LOADING_XML = false;
-            }, 1000);
+            importGuard.releaseAfter(BLOCKLY_XML_IMPORT_SETTLE_MS);
         }
     }
 };

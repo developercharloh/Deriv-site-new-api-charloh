@@ -4,6 +4,10 @@ import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { DBot } from '@/external/bot-skeleton';
 import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
+import {
+    acquireBlocklyXmlImportGuard,
+    BLOCKLY_XML_IMPORT_SETTLE_MS,
+} from '@/external/bot-skeleton/utils/blockly-xml-import-guard';
 import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
 import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
@@ -977,7 +981,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             // root-block onchange handlers dispose incomplete-looking blocks
             // unless they can identify an in-progress `dbot-load` operation.
             const loadEventGroup = `dbot-load${Date.now()}`;
-            (window as any).__DBOT_LOADING_XML = true;
+            const importGuard = acquireBlocklyXmlImportGuard();
             let importCompleted = false;
             let importedTradeFields: ImportedTradeFields = {};
             Blockly.Events.setGroup(loadEventGroup);
@@ -1037,7 +1041,9 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             } finally {
                 Blockly.Events.setGroup(false);
                 if (!importCompleted) {
-                    (window as any).__DBOT_LOADING_XML = false;
+                    importGuard.release();
+                } else {
+                    importGuard.releaseAfter(BLOCKLY_XML_IMPORT_SETTLE_MS);
                 }
             }
             Blockly.derivWorkspace.cleanUp();
@@ -1063,7 +1069,6 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
              // Deriv's market/duration cascades can answer several seconds
              // after import, so one second is not enough for uploaded bots.
             window.setTimeout(() => {
-                (window as any).__DBOT_LOADING_XML = false;
                 // Async dropdown validation can recalculate Blockly metrics
                 // after the first reveal and restore the previous bottom
                 // scroll position. Reveal again after the settling window.

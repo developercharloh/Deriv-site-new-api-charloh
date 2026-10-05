@@ -6,6 +6,10 @@ import Interpreter from '../services/tradeEngine/utils/interpreter';
 import { compareXml, observer as globalObserver } from '../utils';
 import { getSavedWorkspaces, saveWorkspaceToRecent } from '../utils/local-storage';
 import { isDbotRTL } from '../utils/workspace';
+import {
+    acquireBlocklyXmlImportGuard,
+    BLOCKLY_XML_IMPORT_SETTLE_MS,
+} from '../utils/blockly-xml-import-guard';
 import main_xml from './xml/main.xml';
 import { forgetAccumulatorsProposalRequest } from './accumulators-proposal-handler';
 import { loadBlockly } from './blockly';
@@ -233,6 +237,7 @@ class DBot {
             ApiHelpers.setInstance(api_helpers_store);
             DBotStore.setInstance(store);
             const window_width = window.innerWidth;
+            let releaseWorkspaceLoadGuard = null;
             try {
                 let workspaceScale = config().workspaces.mainWorkspaceStartScale;
 
@@ -330,7 +335,8 @@ class DBot {
                 }
 
                 const event_group = `dbot-load${Date.now()}`;
-                window.__DBOT_LOADING_XML = true;
+                const workspaceLoadGuard = acquireBlocklyXmlImportGuard();
+                releaseWorkspaceLoadGuard = workspaceLoadGuard.release;
                 window.Blockly.Events.setGroup(event_group);
                 try {
                     window.Blockly.Xml.domToWorkspace(
@@ -361,18 +367,20 @@ class DBot {
                 window.dispatchEvent(new Event('resize'));
                 this.scheduleLoadedWorkspaceReveal(is_mobile);
                 window.setTimeout(() => {
-                    window.__DBOT_LOADING_XML = false;
+                    workspaceLoadGuard.release();
+                    releaseWorkspaceLoadGuard = null;
                     // Async dropdown validation can recalculate Blockly
                     // metrics after the first reveal and restore the previous
                     // bottom scroll position.
                     this.revealLoadedWorkspace(is_mobile);
-                }, 1000);
+                }, BLOCKLY_XML_IMPORT_SETTLE_MS);
                 window.addEventListener('dragover', DBot.handleDragOver);
                 window.addEventListener('drop', e => DBot.handleDropOver(e, handleFileChange));
                 // disable overflow
                 el_scratch_div.parentNode.style.overflow = 'hidden';
                 resolve();
             } catch (error) {
+                releaseWorkspaceLoadGuard?.();
                 // TODO: Handle error.
                 reject(error);
                 throw error;

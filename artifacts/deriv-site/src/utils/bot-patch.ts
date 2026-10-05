@@ -3,6 +3,10 @@
 // the same real XML files.
 
 import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
+import {
+    acquireBlocklyXmlImportGuard,
+    BLOCKLY_XML_IMPORT_SETTLE_MS,
+} from '@/external/bot-skeleton/utils/blockly-xml-import-guard';
 
 export interface BotSignal {
     symbol:           string;
@@ -570,7 +574,7 @@ export function loadPatchedBotIntoWorkspace(xmlText: string, workspace: any): vo
     }
 
     const eventGroup = `patched-bot-load-${Date.now()}`;
-    (window as any).__DBOT_LOADING_XML = true;
+    const importGuard = acquireBlocklyXmlImportGuard();
     Blockly.Events.setGroup(eventGroup);
     let imported = false;
     try {
@@ -582,11 +586,9 @@ export function loadPatchedBotIntoWorkspace(xmlText: string, workspace: any): vo
     } finally {
         Blockly.Events.setGroup(false);
         if (imported) {
-            window.setTimeout(() => {
-                (window as any).__DBOT_LOADING_XML = false;
-            }, 1000);
+            importGuard.releaseAfter(BLOCKLY_XML_IMPORT_SETTLE_MS);
         } else {
-            (window as any).__DBOT_LOADING_XML = false;
+            importGuard.release();
         }
     }
 }
