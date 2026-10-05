@@ -86,8 +86,17 @@ interface LivePair {
 
 const GLOBAL_ENGINE_KEY = '__DERIV_EDGING_PRO_ENGINE__';
 const RUN_LEASE_STORAGE_PREFIX = '__DERIV_EDGING_PRO_ACTIVE_RUN__:';
+const RUN_LOCK_NAME_PREFIX = 'deriv-edging-pro-active-run:';
 const RUN_LEASE_TTL_MS = 60_000;
 const RUN_LEASE_HEARTBEAT_MS = 10_000;
+
+type BrowserRunLockManager = {
+    request: (
+        name: string,
+        options: { mode: 'exclusive'; ifAvailable?: boolean },
+        callback: (lock: unknown | null) => Promise<void> | void
+    ) => Promise<void>;
+};
 
 const makeRunLeaseId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -107,6 +116,8 @@ export class EdgingProEngine {
     private paused = false;
     private stopRequested = false;
     private pendingQuotes = false;
+    private runLockPending = false;
+    private releaseBrowserRunLock: (() => void) | null = null;
     private tickSerial = 0;
     private digits: number[] = [];
     private pendingVirtualPair: VirtualPair | null = null;
@@ -142,7 +153,7 @@ export class EdgingProEngine {
     }
 
     start(): boolean {
-        if (this.running) return true;
+        if (this.running || this.runLockPending) return true;
         const active = getActiveEngine();
         if (active && active !== this) {
             this.writeLog('Edging pro Engine is already running in another window.', 'error');
@@ -168,6 +179,64 @@ export class EdgingProEngine {
             return false;
         }
 
+        const lockManager =
+            typeof navigator !== 'undefined'
+                ? (navigator as Navigator & { locks?: BrowserRunLockManager }).locks
+                : undefined;
+        if (lockManager && this.config.accountId) {
+            this.runLockPending = true;
+            const lockName = `${RUN_LOCK_NAME_PREFIX}${encodeURIComponent(this.config.accountId)}`;
+            void lockManager
+                .request(lockName, { mode: 'exclusive', ifAvailable: true }, async lock => {
+                    if (!this.runLockPending) return;
+                    if (!lock) {
+                        this.failToStart(
+                            'Edging pro is already active in another tab for this Deriv account. Stop that run before starting this one.'
+                        );
+                        return;
+                    }
+                    if (!this.acquireRunLease()) {
+                        this.failToStart(
+                            'Edging pro is already active in another tab for this Deriv account, or browser storage is unavailable. Stop the other run before starting this one.'
+                        );
+                        return;
+                    }
+
+                    this.runLockPending = false;
+                    this.activateRun();
+                    await new Promise<void>(resolve => {
+                        this.releaseBrowserRunLock = resolve;
+                    });
+                })
+                .catch(() => {
+                    // Some browser contexts expose the Locks API but reject it.
+                    // Fall back to the existing account lease in that case.
+                    if (!this.runLockPending) return;
+                    this.runLockPending = false;
+                    if (!this.acquireRunLease()) {
+                        this.failToStart(
+                            'Edging pro is already active in another tab for this Deriv account, or browser storage is unavailable. Stop the other run before starting this one.'
+                        );
+                        return;
+                    }
+                    this.activateRun();
+                });
+            return true;
+        }
+
+        if (!this.acquireRunLease()) {
+            this.writeLog(
+                'Edging pro is already active in another tab for this Deriv account, or browser storage is unavailable. Stop the other run before starting this one.',
+                'error',
+            );
+            this.setStatus('error');
+            return false;
+        }
+        this.activateRun();
+        return true;
+    }
+
+    private activateRun(): void {
         this.running = true;
         this.stopRequested = false;
         this.lastProcessedTickKey = null;
@@ -190,7 +259,14 @@ export class EdgingProEngine {
             `Started on ${this.config.symbol}. Last ${this.config.lastX} consecutive digits must each be 4 or 5.`,
             'system',
         );
-        return true;
+    }
+
+    private failToStart(message: string): void {
+        this.runLockPending = false;
+        this.running = false;
+        this.releaseRunLease();
+        this.writeLog(message, 'error');
+        this.setStatus('error');
     }
 
     pause(): void {
@@ -208,6 +284,12 @@ export class EdgingProEngine {
     }
 
     stop(): void {
+        if (this.runLockPending) {
+            this.runLockPending = false;
+            this.writeLog('Stopped before an account-wide run lock was acquired.', 'system');
+            this.setStatus('stopped');
+            return;
+        }
         if (!this.running && !this.stopRequested) {
             this.finishStop();
             return;
@@ -632,6 +714,9 @@ export class EdgingProEngine {
         if (getActiveEngine() === this) setActiveEngine(null);
         this.running = false;
         this.stopRequested = false;
+        const releaseBrowserRunLock = this.releaseBrowserRunLock;
+        this.releaseBrowserRunLock = null;
+        releaseBrowserRunLock?.();
         if (this.status !== 'error') this.setStatus('stopped');
     }
 
