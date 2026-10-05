@@ -408,19 +408,26 @@ export class EdgingProEngine {
                 'system',
             );
         }
-        if (profit !== 0) {
-            this.onVirtualSettlement({
-                outcome: profit > 0 ? 'win' : 'loss',
-                entryTickSerial: virtualPair.entryTickSerial,
-                market: this.config.symbol,
-                contractType: 'DIGITOVER',
-                prediction: this.config.overPrediction,
-                entryEpoch: virtualPair.entryEpoch,
-                settlementEpoch,
-                entrySpot: virtualPair.entrySpot,
-                exitSpot: settlementSpot,
-            });
-        }
+        const sharedSettlement = {
+            entryTickSerial: virtualPair.entryTickSerial,
+            market: this.config.symbol,
+            entryEpoch: virtualPair.entryEpoch,
+            settlementEpoch,
+            entrySpot: virtualPair.entrySpot,
+            exitSpot: settlementSpot,
+        };
+        this.onVirtualSettlement({
+            ...sharedSettlement,
+            outcome: overWon ? 'win' : 'loss',
+            contractType: 'DIGITOVER',
+            prediction: this.config.overPrediction,
+        });
+        this.onVirtualSettlement({
+            ...sharedSettlement,
+            outcome: underWon ? 'win' : 'loss',
+            contractType: 'DIGITUNDER',
+            prediction: this.config.underPrediction,
+        });
         this.emitStats();
         this.setStatus('scanning');
     }

@@ -134,23 +134,43 @@ describe('Edging pro DBot Builder run integration', () => {
         expect(runPanel.is_running).toBe(true);
         expect(ui.setAccountSwitcherDisabledMessage).toHaveBeenCalled();
 
-        engine.onVirtualSettlement({
-            outcome: 'loss',
+        const sharedSettlement = {
             entryTickSerial: 17,
             market: '1HZ50V',
-            contractType: 'DIGITOVER',
-            prediction: 5,
             entryEpoch: 100,
             settlementEpoch: 101,
             entrySpot: '1024.15',
             exitSpot: '1024.16',
+        };
+        engine.onVirtualSettlement({
+            ...sharedSettlement,
+            outcome: 'loss',
+            contractType: 'DIGITOVER',
+            prediction: 5,
         });
-        expect(transactions.pushVirtualHookTransaction).toHaveBeenCalledWith(
+        engine.onVirtualSettlement({
+            ...sharedSettlement,
+            outcome: 'win',
+            contractType: 'DIGITUNDER',
+            prediction: 4,
+        });
+        expect(transactions.pushVirtualHookTransaction).toHaveBeenNthCalledWith(1,
             expect.objectContaining({
                 journalScope: 'edging-pro',
-                virtualTradeId: `edging-pro:${runPanel.run_id}:17`,
+                virtualTradeId: `edging-pro:${runPanel.run_id}:17:DIGITOVER`,
                 outcome: 'loss',
                 contractType: 'DIGITOVER',
+                market: '1HZ50V',
+                entrySpot: '1024.15',
+                exitSpot: '1024.16',
+            })
+        );
+        expect(transactions.pushVirtualHookTransaction).toHaveBeenNthCalledWith(2,
+            expect.objectContaining({
+                journalScope: 'edging-pro',
+                virtualTradeId: `edging-pro:${runPanel.run_id}:17:DIGITUNDER`,
+                outcome: 'win',
+                contractType: 'DIGITUNDER',
                 market: '1HZ50V',
                 entrySpot: '1024.15',
                 exitSpot: '1024.16',

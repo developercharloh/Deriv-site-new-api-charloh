@@ -1084,7 +1084,7 @@ export default class RunPanelStore {
             this.root_store.transactions?.pushVirtualHookTransaction?.({
                 ...settlement,
                 journalScope: 'edging-pro',
-                virtualTradeId: `edging-pro:${this.run_id}:${settlement.entryTickSerial}`,
+                virtualTradeId: `edging-pro:${this.run_id}:${settlement.entryTickSerial}:${settlement.contractType}`,
             });
         };
         engine.onStatus = (status: EdgingProStatus) => {

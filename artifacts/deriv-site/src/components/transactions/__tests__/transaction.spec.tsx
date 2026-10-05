@@ -47,9 +47,9 @@ jest.mock('../../trade-type/trade-type-icon', () => ({
     TradeTypeIcon: () => null,
 }));
 
-const virtualContract = (outcome: 'win' | 'loss') =>
+const virtualContract = (outcome: 'win' | 'loss', contractType = 'DIGITUNDER') =>
     ({
-        contract_type: 'DIGITUNDER',
+        contract_type: contractType,
         underlying_symbol: 'R_25',
         display_name: 'Synthetic 25 Index',
         buy_price: 0,
@@ -74,5 +74,20 @@ describe('Transactions Virtual Hook rows', () => {
         render(<Transaction contract={virtualContract('loss')} />);
 
         expect(screen.getByText('Hook Lost')).toHaveClass('transactions__profit--loss');
+    });
+
+    it('shows both outcomes as separate rows for one virtual pair on the same spots', () => {
+        render(
+            <>
+                <Transaction contract={virtualContract('win', 'DIGITOVER')} />
+                <Transaction contract={virtualContract('loss', 'DIGITUNDER')} />
+            </>
+        );
+
+        expect(screen.getByText('Hook Won')).toHaveClass('transactions__profit--win');
+        expect(screen.getByText('Hook Lost')).toHaveClass('transactions__profit--loss');
+        expect(screen.getAllByText('0.00 USD')).toHaveLength(2);
+        expect(screen.getAllByText('2591.458')).toHaveLength(2);
+        expect(screen.getAllByText('2591.421')).toHaveLength(2);
     });
 });

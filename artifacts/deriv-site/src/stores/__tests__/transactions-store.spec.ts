@@ -84,4 +84,52 @@ describe('TransactionsStore Virtual Hook entries', () => {
         });
         store.disposeReactionsFn();
     });
+
+    it('keeps both legs of one Edging pro virtual pair as separate transactions', () => {
+        const { store } = createStore();
+        const shared = {
+            journalScope: 'edging-pro',
+            market: '1HZ50V',
+            entryEpoch: 301,
+            settlementEpoch: 302,
+            entrySpot: '185425.65',
+            exitSpot: '185418.96',
+        };
+
+        store.pushVirtualHookTransaction({
+            ...shared,
+            virtualTradeId: 'edging-pro:run-1:17:DIGITOVER',
+            outcome: 'win',
+            contractType: 'DIGITOVER',
+            prediction: 5,
+        });
+        store.pushVirtualHookTransaction({
+            ...shared,
+            virtualTradeId: 'edging-pro:run-1:17:DIGITUNDER',
+            outcome: 'loss',
+            contractType: 'DIGITUNDER',
+            prediction: 4,
+        });
+
+        expect(store.transactions).toHaveLength(2);
+        expect(store.transactions.map(transaction => transaction.data)).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    virtual_hook_id: 'edging-pro:run-1:17:DIGITOVER',
+                    virtual_hook_outcome: 'win',
+                    contract_type: 'DIGITOVER',
+                    entry_spot: shared.entrySpot,
+                    exit_spot: shared.exitSpot,
+                }),
+                expect.objectContaining({
+                    virtual_hook_id: 'edging-pro:run-1:17:DIGITUNDER',
+                    virtual_hook_outcome: 'loss',
+                    contract_type: 'DIGITUNDER',
+                    entry_spot: shared.entrySpot,
+                    exit_spot: shared.exitSpot,
+                }),
+            ])
+        );
+        store.disposeReactionsFn();
+    });
 });

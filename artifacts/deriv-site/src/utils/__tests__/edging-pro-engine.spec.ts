@@ -70,17 +70,17 @@ describe('EdgingProEngine Journal analysis', () => {
         expect(analyses[1].digits).toEqual([0, 4]);
     });
 
-    it('emits settled virtual wins and losses with tick identity and spots for Transactions', () => {
+    it('emits both virtual leg outcomes with shared spots, including zero-net pairs', () => {
         const engine = new EdgingProEngine(config);
         const settlements: any[] = [];
         engine.onVirtualSettlement = settlement => settlements.push(settlement);
 
         const internal = engine as any;
-        const pair = (entryTickSerial: number, entrySpot: string, entryEpoch: number) => ({
+        const pair = (entryTickSerial: number, entrySpot: string, entryEpoch: number, payout = 1.5) => ({
             entryTickSerial,
             quotes: {
-                over: { askPrice: 0.5, payout: 1.5 },
-                under: { askPrice: 0.5, payout: 1.5 },
+                over: { askPrice: 0.5, payout },
+                under: { askPrice: 0.5, payout },
             },
             digits: [4, 5, 4],
             entrySpot,
@@ -91,6 +91,8 @@ describe('EdgingProEngine Journal analysis', () => {
         internal.settleVirtualPair(6, '1024.16', 101);
         internal.pendingVirtualPair = pair(9, '1024.16', 101);
         internal.settleVirtualPair(4, '1024.17', 102);
+        internal.pendingVirtualPair = pair(10, '1024.17', 102, 1);
+        internal.settleVirtualPair(3, '1024.18', 103);
 
         expect(settlements).toEqual([
             expect.objectContaining({
@@ -106,11 +108,52 @@ describe('EdgingProEngine Journal analysis', () => {
             }),
             expect.objectContaining({
                 outcome: 'loss',
+                entryTickSerial: 8,
+                market: '1HZ50V',
+                contractType: 'DIGITUNDER',
+                prediction: 4,
+                entryEpoch: 100,
+                settlementEpoch: 101,
+                entrySpot: '1024.15',
+                exitSpot: '1024.16',
+            }),
+            expect.objectContaining({
+                outcome: 'loss',
                 entryTickSerial: 9,
+                market: '1HZ50V',
+                contractType: 'DIGITOVER',
+                prediction: 5,
                 entryEpoch: 101,
                 settlementEpoch: 102,
                 entrySpot: '1024.16',
                 exitSpot: '1024.17',
+            }),
+            expect.objectContaining({
+                outcome: 'loss',
+                entryTickSerial: 9,
+                market: '1HZ50V',
+                contractType: 'DIGITUNDER',
+                prediction: 4,
+                entryEpoch: 101,
+                settlementEpoch: 102,
+                entrySpot: '1024.16',
+                exitSpot: '1024.17',
+            }),
+            expect.objectContaining({
+                outcome: 'loss',
+                entryTickSerial: 10,
+                contractType: 'DIGITOVER',
+                prediction: 5,
+                entrySpot: '1024.17',
+                exitSpot: '1024.18',
+            }),
+            expect.objectContaining({
+                outcome: 'win',
+                entryTickSerial: 10,
+                contractType: 'DIGITUNDER',
+                prediction: 4,
+                entrySpot: '1024.17',
+                exitSpot: '1024.18',
             }),
         ]);
     });
