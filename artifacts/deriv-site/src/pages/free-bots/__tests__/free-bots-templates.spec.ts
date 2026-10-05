@@ -157,6 +157,37 @@ describe('Free Bots template catalog', () => {
         expect(apexXml).not.toMatch(/journal|v_msg|previous direction|indicator candles|model signal/i);
     });
 
+    it('uses Switch After for Apex AI virtual losses and gates only the Even/Odd route', () => {
+        const xml = fs.readFileSync(path.join(publicBotsPath, 'Apex_AI.xml'), 'utf8');
+        const document = new DOMParser().parseFromString(xml, 'application/xml');
+        const settings = document.querySelector('block[type="apex_ai_virtual_hook_settings"]');
+        const settingsVariable = settings?.querySelector('value[name="SWITCH_AFTER"] block[type="variables_get"] field[name="VAR"]');
+        const evenOddOption = Array.from(document.querySelectorAll('block[type="variables_is_option"]')).find(
+            block => block.querySelector('field[name="OPTION"]')?.textContent === 'Even Odd'
+        );
+        const evenOddBranch = evenOddOption?.parentElement?.parentElement;
+        const evenOddGate = evenOddBranch?.querySelector(
+            'statement[name="DO0"] > block[type="controls_if"] > value[name="IF0"] > block[type="apex_ai_virtual_hook_gate"]'
+        );
+        const overUnderOption = Array.from(document.querySelectorAll('block[type="variables_is_option"]')).find(
+            block => block.querySelector('field[name="OPTION"]')?.textContent === 'Over4/Under5'
+        );
+        const riseFallOption = Array.from(document.querySelectorAll('block[type="variables_is_option"]')).find(
+            block => block.querySelector('field[name="OPTION"]')?.textContent === 'Rise/Fall'
+        );
+        const overUnderBranch = overUnderOption?.parentElement?.parentElement?.querySelector(
+            'statement[name="DO1"]'
+        );
+        const riseFallBranch = riseFallOption?.parentElement?.parentElement?.querySelector(
+            'statement[name="DO2"]'
+        );
+
+        expect(settingsVariable?.textContent).toBe('Switch After ?');
+        expect(evenOddGate).not.toBeNull();
+        expect(overUnderBranch?.querySelector('block[type="apex_ai_virtual_hook_gate"]')).toBeNull();
+        expect(riseFallBranch?.querySelector('block[type="apex_ai_virtual_hook_gate"]')).toBeNull();
+    });
+
     it('keeps the Rise/Fall-specific journal signature only in its own Free Bot', () => {
         const templatesWithRiseFallJournal = readCatalogXmlPaths().filter(xmlPath => {
             const templatePath = path.join(publicBotsPath, xmlPath.slice('/bots/'.length));

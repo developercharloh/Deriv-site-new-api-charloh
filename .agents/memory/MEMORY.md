@@ -62,3 +62,4 @@
 - [Edging Pro Virtual Hook](edging-pro-virtual-hook.md) — both-leg losses qualify the hook; one paid pair is exactly two contracts, and repeated spot prices are expected.
 - [Edging Pro account-run locking](edging-pro-account-locking.md) — require an account-scoped Web Lock; missing account identity or lock support must block live trading.
 - [Over/Under signal fallback](deriv-over-under-signal-fallback.md) — after removing the AI bot, V1 uses the remaining signal template with standard same-direction recovery.
+- [Apex AI Virtual Hook](apex-ai-virtual-hook.md) — use Switch After X for both consecutive Even/Odd virtual losses and the live-trade block before switching sides.

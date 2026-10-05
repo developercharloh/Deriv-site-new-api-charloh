@@ -76,6 +76,93 @@ describe('Ticks last-digit analysis events', () => {
         emit.mockRestore();
     });
 
+    it('resets Apex AI virtual loss streaks on wins and unlocks live trades per side', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const emit = jest.spyOn(observer, 'emit');
+        engine.configureApexAIVirtualHook(2);
+        engine.tradeOptions = { symbol: '1HZ25V' };
+        engine.getLastDigit = jest
+            .fn()
+            .mockResolvedValueOnce(3)
+            .mockResolvedValueOnce(4)
+            .mockResolvedValueOnce(1)
+            .mockResolvedValueOnce(7)
+            .mockResolvedValueOnce(7);
+
+        const checkA = () => engine.checkApexAIVirtualHook('A');
+        engine.latestTick = { epoch: 100, quote: '2591.500' };
+        await expect(checkA()).resolves.toBe(false);
+        expect(engine.getApexAIVirtualHookState().pendingVirtualTrade).toEqual(
+            expect.objectContaining({ contractType: 'DIGITEVEN', entryEpoch: 100 })
+        );
+
+        engine.latestTick = { epoch: 101, quote: '2591.490' };
+        await expect(checkA()).resolves.toBe(false);
+        expect(engine.getApexAIVirtualHookState().virtualLosses).toBe(1);
+
+        engine.latestTick = { epoch: 102, quote: '2591.480' };
+        await expect(checkA()).resolves.toBe(false);
+        engine.latestTick = { epoch: 103, quote: '2591.470' };
+        await expect(checkA()).resolves.toBe(false);
+        expect(engine.getApexAIVirtualHookState().virtualLosses).toBe(0);
+
+        engine.latestTick = { epoch: 104, quote: '2591.460' };
+        await expect(checkA()).resolves.toBe(false);
+        engine.latestTick = { epoch: 105, quote: '2591.450' };
+        await expect(checkA()).resolves.toBe(false);
+        expect(engine.getApexAIVirtualHookState().virtualLosses).toBe(1);
+
+        engine.latestTick = { epoch: 106, quote: '2591.440' };
+        await expect(checkA()).resolves.toBe(false);
+        engine.latestTick = { epoch: 107, quote: '2591.430' };
+        await expect(checkA()).resolves.toBe(false);
+        expect(engine.getApexAIVirtualHookState().virtualLosses).toBe(2);
+        await expect(checkA()).resolves.toBe(false);
+
+        engine.latestTick = { epoch: 108, quote: '2591.420' };
+        await expect(checkA()).resolves.toBe(true);
+        engine.latestTick = { epoch: 109, quote: '2591.410' };
+        await expect(checkA()).resolves.toBe(true);
+
+        const checkB = () => engine.checkApexAIVirtualHook('B');
+        await expect(checkB()).resolves.toBe(false);
+        expect(engine.getApexAIVirtualHookState()).toMatchObject({
+            activeSide: 'B',
+            virtualLosses: 0,
+            pendingVirtualTrade: null,
+        });
+        engine.latestTick = { epoch: 110, quote: '2591.400' };
+        await expect(checkB()).resolves.toBe(false);
+        expect(engine.getApexAIVirtualHookState().pendingVirtualTrade).toEqual(
+            expect.objectContaining({ contractType: 'DIGITODD', entryEpoch: 110 })
+        );
+        engine.latestTick = { epoch: 111, quote: '2591.390' };
+        await expect(checkB()).resolves.toBe(false);
+        expect(engine.getApexAIVirtualHookState().virtualLosses).toBe(0);
+
+        expect(emit).toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({
+                journalScope: 'apex-ai',
+                event: 'virtual_settlement',
+                contractType: 'DIGITEVEN',
+                outcome: 'loss',
+                virtualLosses: 1,
+            })
+        );
+        expect(emit).toHaveBeenCalledWith(
+            'bot.smart_over2.recovery',
+            expect.objectContaining({
+                journalScope: 'apex-ai',
+                event: 'live_ready',
+                side: 'A',
+                maxVirtualLosses: 2,
+            })
+        );
+        emit.mockRestore();
+    });
+
     it('simulates Over 2 until the configured virtual losses, then queues only a live Over 2', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();

@@ -327,6 +327,51 @@ describe('Binary Matrix analysis observer integration', () => {
         );
     });
 
+    it('routes Apex AI virtual settlements to its Journal and account transaction list', () => {
+        const journal = {
+            pushMessage: jest.fn(),
+            updateSmartOver2AnalysisMessage: jest.fn(),
+            active_bot_template_id: 'Apex_AI.xml',
+        };
+        const transactions = { pushVirtualHookTransaction: jest.fn() };
+        const rootStore = { dbot: {}, journal, transactions };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+        runPanel.onMount();
+
+        observer.emit('bot.smart_over2.recovery', {
+            event: 'virtual_settlement',
+            journalScope: 'apex-ai',
+            outcome: 'loss',
+            contractType: 'DIGITEVEN',
+            virtualTradeId: 'apex-ai:A:101:DIGITEVEN',
+            market: '1HZ25V',
+            entryEpoch: 101,
+            settlementEpoch: 102,
+            entrySpot: '2591.500',
+            exitSpot: '2591.490',
+            message: '[Apex AI] Virtual Even settled LOSS on digit 3.',
+        });
+
+        expect(transactions.pushVirtualHookTransaction).toHaveBeenCalledWith(
+            expect.objectContaining({
+                event: 'virtual_settlement',
+                journalScope: 'apex-ai',
+                contractType: 'DIGITEVEN',
+                outcome: 'loss',
+            })
+        );
+        expect(journal.pushMessage).toHaveBeenCalledWith(
+            '[Apex AI] Virtual Even settled LOSS on digit 3.',
+            MessageTypes.NOTIFY,
+            'journal__text'
+        );
+    });
+
     it('shows V3 digits, range qualification, and Virtual Hook progress in the Journal status row', () => {
         const journal = {
             pushMessage: jest.fn(),

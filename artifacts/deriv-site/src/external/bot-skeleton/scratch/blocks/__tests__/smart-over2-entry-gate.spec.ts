@@ -57,6 +57,7 @@ describe('Smart Over 2 Blockly entry gate', () => {
 
         await import('blockly/blocks');
         await import('../Custom/analysis_blocks');
+        await import('../Custom/apex_ai_blocks');
         await import('../Binary/Trade Definition/trade_definition_market');
         await import('../Binary/Trade Definition/trade_definition_tradetype');
         await import('../Binary/Trade Definition/trade_definition_restartbuysell');
@@ -382,6 +383,40 @@ describe('Smart Over 2 Blockly entry gate', () => {
             expect(block.inputList).toHaveLength(rowCount);
             fieldNames.forEach(fieldName => expect(block.getField(fieldName)).not.toBeNull());
         });
+
+        workspace.dispose();
+    });
+
+    it('generates Apex AI virtual-hook configuration and gate from the bot variables', () => {
+        const workspace = new Blockly.Workspace();
+        javascriptGenerator.init(workspace);
+        const switchAfterId = 'apex_ai_switch_after';
+        const sideId = 'apex_ai_next_side';
+        workspace.createVariable('Switch After ?', '', switchAfterId);
+        workspace.createVariable('Next Tradetype', '', sideId);
+        const variableDatabase = new Blockly.Names('window');
+        variableDatabase.variableMap = workspace.getVariableMap();
+        (Blockly.JavaScript as any).variableDB_ = variableDatabase;
+
+        const switchAfterName = variableDatabase.getName(switchAfterId, Blockly.Variables.CATEGORY_NAME);
+        const sideName = variableDatabase.getName(sideId, Blockly.Variables.CATEGORY_NAME);
+
+        const settings = workspace.newBlock('apex_ai_virtual_hook_settings');
+        const switchAfterGetter = workspace.newBlock('variables_get');
+        switchAfterGetter.setFieldValue(switchAfterId, 'VAR');
+        settings.getInput('SWITCH_AFTER')?.connection?.connect(switchAfterGetter.outputConnection!);
+        expect(javascriptGenerator.blockToCode(settings)).toBe(
+            `Bot.configureApexAIVirtualHook(${switchAfterName});\n`
+        );
+
+        const gate = workspace.newBlock('apex_ai_virtual_hook_gate');
+        const sideGetter = workspace.newBlock('variables_get');
+        sideGetter.setFieldValue(sideId, 'VAR');
+        gate.getInput('SIDE')?.connection?.connect(sideGetter.outputConnection!);
+        expect(javascriptGenerator.blockToCode(gate)).toEqual([
+            `Bot.checkApexAIVirtualHook(${sideName}, "apex-ai")`,
+            javascriptGenerator.ORDER_FUNCTION_CALL,
+        ]);
 
         workspace.dispose();
     });

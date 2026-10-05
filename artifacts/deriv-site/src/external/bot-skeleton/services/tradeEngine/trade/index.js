@@ -177,6 +177,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         this.smartOver2RecoverySettings = null;
         this.smartOver2V3State = null;
         this.smartOver2V3Settings = null;
+        this.apexAIVirtualHookState = null;
         this.initArgs = args;
         this.options = options;
         this.startPromise = this.loginAndGetBalance(token);

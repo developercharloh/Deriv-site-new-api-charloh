@@ -417,6 +417,158 @@ export default Engine =>
                 return assessment.result;
             });
         }
+        getApexAIVirtualHookState() {
+            if (!this.apexAIVirtualHookState) {
+                this.apexAIVirtualHookState = {
+                    maxVirtualLosses: 3,
+                    virtualLosses: 0,
+                    activeSide: null,
+                    pendingVirtualTrade: null,
+                    lastSettlementEpoch: null,
+                    settlementInFlight: false,
+                    livePhaseSide: null,
+                };
+            }
+            return this.apexAIVirtualHookState;
+        }
+        configureApexAIVirtualHook(switchAfter = 3) {
+            const state = this.getApexAIVirtualHookState();
+            const requestedThreshold = Number(switchAfter);
+            state.maxVirtualLosses = Math.max(
+                1,
+                Math.ceil(Number.isFinite(requestedThreshold) ? requestedThreshold : 3)
+            );
+            state.virtualLosses = 0;
+            state.activeSide = null;
+            state.pendingVirtualTrade = null;
+            state.lastSettlementEpoch = null;
+            state.settlementInFlight = false;
+            state.livePhaseSide = null;
+            return state.maxVirtualLosses;
+        }
+        checkApexAIVirtualHook(side, journalScope = 'apex-ai') {
+            const state = this.getApexAIVirtualHookState();
+            const activeSide = String(side ?? '').trim().toUpperCase();
+            if (activeSide !== 'A' && activeSide !== 'B') return Promise.resolve(false);
+
+            const currentEpoch = this.getSmartOver2CurrentEpoch();
+            if (state.activeSide !== activeSide) {
+                const isFirstSide = state.activeSide === null;
+                state.activeSide = activeSide;
+                state.virtualLosses = 0;
+                state.pendingVirtualTrade = null;
+                state.livePhaseSide = null;
+                // The side changes after a real contract settles. Do not reuse
+                // that settlement tick as the first virtual contract's entry.
+                state.lastSettlementEpoch = isFirstSide ? null : currentEpoch;
+            }
+
+            if (state.pendingVirtualTrade) {
+                const pendingTrade = state.pendingVirtualTrade;
+                const entryEpoch = Number(pendingTrade.entryEpoch);
+                if (currentEpoch === null || currentEpoch <= entryEpoch || state.settlementInFlight) {
+                    return Promise.resolve(false);
+                }
+
+                state.settlementInFlight = true;
+                return Promise.resolve()
+                    .then(() => this.getLastDigit())
+                    .then(digitValue => {
+                        const digit = Number(digitValue);
+                        if (
+                            state.pendingVirtualTrade !== pendingTrade ||
+                            state.activeSide !== activeSide ||
+                            !Number.isInteger(digit) ||
+                            digit < 0 ||
+                            digit > 9
+                        ) {
+                            return false;
+                        }
+
+                        const isEven = digit % 2 === 0;
+                        const isWin = pendingTrade.side === 'A' ? isEven : !isEven;
+                        state.pendingVirtualTrade = null;
+                        state.virtualLosses = isWin ? 0 : state.virtualLosses + 1;
+                        state.lastSettlementEpoch = currentEpoch;
+
+                        this.emitSmartOver2RecoveryEvent(
+                            pendingTrade.journalScope || journalScope,
+                            'virtual_settlement',
+                            `[Apex AI] Virtual ${pendingTrade.side === 'A' ? 'Even' : 'Odd'} settled ` +
+                                `${isWin ? 'WIN' : 'LOSS'} on digit ${digit} · ` +
+                                `${state.virtualLosses}/${state.maxVirtualLosses} consecutive virtual losses.`,
+                            {
+                                outcome: isWin ? 'win' : 'loss',
+                                contractType: pendingTrade.contractType,
+                                virtualTradeId: pendingTrade.virtualTradeId,
+                                entryEpoch,
+                                settlementEpoch: currentEpoch,
+                                entrySpot: pendingTrade.entrySpot,
+                                exitSpot: this.getSmartOver2CurrentQuote(),
+                                digit,
+                                virtualLosses: state.virtualLosses,
+                                maxVirtualLosses: state.maxVirtualLosses,
+                            }
+                        );
+                        return false;
+                    })
+                    .finally(() => {
+                        state.settlementInFlight = false;
+                    });
+            }
+
+            if (currentEpoch === null) return Promise.resolve(false);
+            if (
+                state.lastSettlementEpoch !== null &&
+                currentEpoch <= Number(state.lastSettlementEpoch)
+            ) {
+                return Promise.resolve(false);
+            }
+
+            if (state.virtualLosses >= state.maxVirtualLosses) {
+                if (state.livePhaseSide !== activeSide) {
+                    state.livePhaseSide = activeSide;
+                    this.emitSmartOver2RecoveryEvent(
+                        journalScope,
+                        'live_ready',
+                        `[Apex AI] Side ${activeSide} passed ${state.maxVirtualLosses} consecutive virtual losses; ` +
+                            `live ${activeSide === 'A' ? 'Even' : 'Odd'} trades are enabled.`,
+                        {
+                            side: activeSide,
+                            virtualLosses: state.virtualLosses,
+                            maxVirtualLosses: state.maxVirtualLosses,
+                        }
+                    );
+                }
+                return Promise.resolve(true);
+            }
+
+            const contractType = activeSide === 'A' ? 'DIGITEVEN' : 'DIGITODD';
+            const virtualTradeId = ['apex-ai', activeSide, currentEpoch, contractType].join(':');
+            state.pendingVirtualTrade = {
+                side: activeSide,
+                contractType,
+                entryEpoch: currentEpoch,
+                entrySpot: this.getSmartOver2CurrentQuote(),
+                virtualTradeId,
+                journalScope,
+            };
+            this.emitSmartOver2RecoveryEvent(
+                journalScope,
+                'virtual_purchase',
+                `[Apex AI] Virtual ${activeSide === 'A' ? 'Even' : 'Odd'} started; waiting for the next tick.`,
+                {
+                    side: activeSide,
+                    contractType,
+                    virtualTradeId,
+                    entryEpoch: currentEpoch,
+                    entrySpot: state.pendingVirtualTrade.entrySpot,
+                    virtualLosses: state.virtualLosses,
+                    maxVirtualLosses: state.maxVirtualLosses,
+                }
+            );
+            return Promise.resolve(false);
+        }
         getSmartOver2V3State() {
             if (!this.smartOver2V3State) {
                 this.smartOver2V3State = {
