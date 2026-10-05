@@ -14,3 +14,9 @@ Deriv buys one proposal per `buy` request; its bulk-purchase endpoint buys the s
 **Why:** the public API exposes separate buys for the two contract types and does not document an atomic mixed-contract purchase.
 
 **How to apply:** send both buys back-to-back after both proposals are ready, but describe them as separate requests and never promise identical entry/exit ticks.
+
+One paid Edging Pro pair must produce exactly two accepted contract IDs: one Over 5 and one Under 4. Seeing the same entry price on both legs is normal; four distinct contract IDs means an extra pair was purchased.
+
+**Why:** the user clarified that one Over leg and one Under leg may share an entry price and settle one win/one loss, but the bot must not create four contracts.
+
+**How to apply:** diagnose count regressions by comparing accepted contract IDs and pair numbers, not by treating matching entry prices as duplicate trades.
