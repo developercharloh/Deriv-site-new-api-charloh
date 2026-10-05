@@ -60,3 +60,4 @@
 - [Smart Over 2 Turbo queue freshness](deriv-smart-over2-turbo-queue.md) — queued intent expires on market-tick change, not the 300 ms FAST scheduler slot; refresh staged plans and proposals after queueing.
 - [Edging pro must stay XML-based](edging-pro-xml-only.md) — keep it Blockly-based and refresh its Journal analysis on every new tick epoch, even if a broker tick ID repeats.
 - [Edging Pro Virtual Hook](edging-pro-virtual-hook.md) — count both-leg losses only; Over 5 + Under 4 are separate buys, so shared ticks are not guaranteed.
+- [Edging Pro account-run locking](edging-pro-account-locking.md) — hold an account-scoped Web Lock for the whole run; localStorage leases alone are racy under simultaneous starts.

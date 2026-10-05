@@ -170,14 +170,6 @@ export class EdgingProEngine {
             this.setStatus('error');
             return false;
         }
-        if (!this.acquireRunLease()) {
-            this.writeLog(
-                'Edging pro is already active in another tab for this Deriv account, or browser storage is unavailable. Stop the other run before starting this one.',
-                'error',
-            );
-            this.setStatus('error');
-            return false;
-        }
 
         const lockManager =
             typeof navigator !== 'undefined'

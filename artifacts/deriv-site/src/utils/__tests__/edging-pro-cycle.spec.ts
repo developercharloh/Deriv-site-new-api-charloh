@@ -214,6 +214,90 @@ describe('EdgingProEngine Virtual Hook cycle', () => {
         engine.stop();
     });
 
+    it('keeps the one-paid-pair limit after the Virtual Hook threshold while Last X stays MET', async () => {
+        const engine = new EdgingProEngine({ ...config, virtualLossThreshold: 2 });
+        expect(engine.start()).toBe(true);
+        const trader = mockTraderInstances[0];
+        const tick = (epoch: number, digit: number) =>
+            trader.onTick(`100.${String(epoch).padStart(2, '0')}`, digit, epoch, `tick-${epoch}`);
+
+        tick(100, 4);
+        tick(101, 5);
+        await flushPromises();
+        tick(102, 4); // First both-leg virtual loss.
+        tick(103, 5);
+        await flushPromises();
+        tick(104, 5); // Second both-leg virtual loss reaches the threshold.
+        tick(105, 4); // The one paid Over 5 + Under 4 pair.
+        await flushPromises();
+        expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(1);
+
+        trader.onPosition({ contractId: 'over-contract', isOpen: false, profit: -0.5 } as any);
+        trader.onPosition({ contractId: 'under-contract', isOpen: false, profit: -0.5 } as any);
+        tick(106, 5);
+        tick(107, 4);
+        await flushPromises();
+
+        expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(1);
+        expect(trader.quoteDigitPair).toHaveBeenCalledTimes(2);
+        engine.stop();
+    });
+
+    it('uses an account-wide browser lock to reject a second fresh runner', async () => {
+        const originalDescriptor = Object.getOwnPropertyDescriptor(navigator, 'locks');
+        let lockHeld = false;
+        const request = jest.fn(
+            async (
+                name: string,
+                _options: { mode: 'exclusive'; ifAvailable?: boolean },
+                callback: (lock: unknown | null) => Promise<void> | void
+            ) => {
+                await Promise.resolve();
+                if (lockHeld) return callback(null);
+                lockHeld = true;
+                try {
+                    return await callback({ name });
+                } finally {
+                    lockHeld = false;
+                }
+            }
+        );
+        Object.defineProperty(navigator, 'locks', {
+            configurable: true,
+            value: { request },
+        });
+
+        try {
+            const accountId = 'VRTC_SHARED_LOCK_TEST';
+            const first = new EdgingProEngine({ ...config, accountId });
+            expect(first.start()).toBe(true);
+            // Separate the active-engine globals and start before the first
+            // browser-lock callback runs, as two nearly simultaneous tabs can.
+            delete (globalThis as any).__DERIV_EDGING_PRO_ENGINE__;
+            const second = new EdgingProEngine({ ...config, accountId });
+            expect(second.start()).toBe(true);
+            await flushPromises();
+            expect(mockTraderInstances[0].start).toHaveBeenCalledTimes(1);
+            expect(mockTraderInstances[1].start).not.toHaveBeenCalled();
+
+            first.stop();
+            await flushPromises();
+            expect(lockHeld).toBe(false);
+
+            expect(second.start()).toBe(true);
+            await flushPromises();
+            expect(mockTraderInstances[1].start).toHaveBeenCalledTimes(1);
+            second.stop();
+            await flushPromises();
+        } finally {
+            if (originalDescriptor) {
+                Object.defineProperty(navigator, 'locks', originalDescriptor);
+            } else {
+                delete (navigator as any).locks;
+            }
+        }
+    });
+
     it('prevents a second tab from starting Edging pro for the same account', () => {
         const accountId = 'VRTC_TEST_ACCOUNT';
         const lockKey = `__DERIV_EDGING_PRO_ACTIVE_RUN__:${encodeURIComponent(accountId)}`;
