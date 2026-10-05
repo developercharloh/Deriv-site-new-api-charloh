@@ -18,6 +18,77 @@ type TElement = {
     [key: string]: TTransaction[];
 };
 
+const mergeStoredContractData = (first: TContractInfo, next: TContractInfo): TContractInfo => {
+    const first_is_completed = Boolean(first.is_completed || isEnded(first as ProposalOpenContract));
+    const next_is_completed = Boolean(next.is_completed || isEnded(next as ProposalOpenContract));
+    const preferred = next_is_completed && !first_is_completed ? next : first;
+    const fallback = preferred === first ? next : first;
+    const contract_id = preferred.contract_id ?? fallback.contract_id;
+    const buy_ids = [preferred.transaction_ids?.buy, fallback.transaction_ids?.buy].filter(
+        (buy_id): buy_id is NonNullable<typeof buy_id> => buy_id != null
+    );
+    const buy_id =
+        buy_ids.find(id => contract_id != null && String(id) !== String(contract_id)) ?? buy_ids[0];
+
+    return {
+        ...fallback,
+        ...preferred,
+        transaction_ids: {
+            ...fallback.transaction_ids,
+            ...preferred.transaction_ids,
+            ...(buy_id == null ? {} : { buy: buy_id }),
+        },
+        entry_spot: preferred.entry_spot ?? fallback.entry_spot ?? preferred.entry_tick ?? fallback.entry_tick,
+        exit_spot: preferred.exit_spot ?? fallback.exit_spot ?? preferred.exit_tick ?? fallback.exit_tick,
+        entry_tick: preferred.entry_spot ?? preferred.entry_tick ?? fallback.entry_spot ?? fallback.entry_tick,
+        exit_tick: preferred.exit_spot ?? preferred.exit_tick ?? fallback.exit_spot ?? fallback.exit_tick,
+        is_completed: first_is_completed || next_is_completed,
+    };
+};
+
+const deduplicateStoredContractRows = (elements: TElement): TElement => {
+    let changed = false;
+    const normalized: TElement = {};
+
+    Object.entries(elements).forEach(([account_id, transactions]) => {
+        const contract_indexes = new Map<string, number>();
+        const rows: TTransaction[] = [];
+
+        (Array.isArray(transactions) ? transactions : []).forEach(transaction => {
+            if (
+                transaction.type !== transaction_elements.CONTRACT ||
+                typeof transaction.data !== 'object' ||
+                !transaction.data ||
+                transaction.data.is_virtual_hook ||
+                transaction.data.contract_id == null
+            ) {
+                rows.push(transaction);
+                return;
+            }
+
+            const contract_id = String(transaction.data.contract_id);
+            const existing_index = contract_indexes.get(contract_id);
+            if (existing_index === undefined) {
+                contract_indexes.set(contract_id, rows.length);
+                rows.push(transaction);
+                return;
+            }
+
+            changed = true;
+            const existing = rows[existing_index];
+            if (typeof existing.data !== 'object' || !existing.data) return;
+            rows[existing_index] = {
+                ...existing,
+                data: mergeStoredContractData(existing.data, transaction.data),
+            };
+        });
+
+        normalized[account_id] = rows;
+    });
+
+    return changed ? normalized : elements;
+};
+
 export default class TransactionsStore {
     root_store: RootStore;
     core: TStores;
@@ -27,6 +98,11 @@ export default class TransactionsStore {
         this.root_store = root_store;
         this.core = core;
         this.is_transaction_details_modal_open = false;
+        const normalized_elements = deduplicateStoredContractRows(this.elements);
+        if (normalized_elements !== this.elements) {
+            this.elements = normalized_elements;
+            setStoredItemsByKey(this.TRANSACTION_CACHE, normalized_elements);
+        }
         this.disposeReactionsFn = this.registerReactions();
 
         makeObservable(this, {
@@ -218,10 +294,23 @@ export default class TransactionsStore {
         const existing: TTransaction[] = [...(this.elements[current_account] ?? [])];
         const same_contract_index = existing.findIndex(c => {
             if (typeof c.data === 'string') return false;
+            if (c.type !== transaction_elements.CONTRACT || !c.data) return false;
+
+            const existing_contract_id = c.data.contract_id;
+            const incoming_contract_id = data.contract_id;
+            if (existing_contract_id != null && incoming_contract_id != null) {
+                // Native updates and Deriv's account-level settlement feed can
+                // carry different buy transaction IDs for the same contract.
+                // Contract ID is stable across both sources, so prefer it.
+                return String(existing_contract_id) === String(incoming_contract_id);
+            }
+
+            const existing_buy_id = c.data.transaction_ids?.buy;
+            const incoming_buy_id = data.transaction_ids?.buy;
             return (
-                c.type === transaction_elements.CONTRACT &&
-                c.data?.transaction_ids &&
-                String(c.data.transaction_ids.buy) === String(data.transaction_ids?.buy)
+                existing_buy_id != null &&
+                incoming_buy_id != null &&
+                String(existing_buy_id) === String(incoming_buy_id)
             );
         });
         const previous_data =

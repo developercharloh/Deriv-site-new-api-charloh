@@ -129,6 +129,7 @@ export const getPayoutMultiplier = (proposal: DTProposal): number =>
 
 export interface DTPosition {
     contractId:   string;
+    buyTransactionId?: string | number | null;
     contractType: DTContractType;
     /** Snapshot of the barrier/prediction the contract was bought with —
      *  needed to highlight the winning-side digits for open digit contracts
@@ -1182,6 +1183,7 @@ export class DTraderEngine {
 
         const pos: DTPosition = {
             contractId,
+            buyTransactionId: buy.transaction_id ?? null,
             contractType: config.contractType,
             barrier:      config.barrier ?? null,
             symbol:       config.symbol,

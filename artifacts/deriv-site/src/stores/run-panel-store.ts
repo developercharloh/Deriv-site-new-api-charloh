@@ -936,7 +936,7 @@ export default class RunPanelStore {
 
         return {
             contract_id: contractId,
-            transaction_ids: { buy: contractId },
+            transaction_ids: { buy: position.buyTransactionId ?? contractId },
             contract_type: position.contractType,
             underlying_symbol: position.symbol,
             currency: this.core.client.currency || 'USD',
