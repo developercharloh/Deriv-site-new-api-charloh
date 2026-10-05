@@ -9,6 +9,9 @@ const PURCHASE_BLOCK_TYPES = [
 
 export const isPurchaseBlockType = blockType => PURCHASE_BLOCK_TYPES.includes(blockType);
 
+export const isMobileBlocklyViewport = (deviceIsMobile, viewportWidth) =>
+    Boolean(deviceIsMobile) || viewportWidth < 768;
+
 export const hasPurchaseBlock = blocks =>
     Array.isArray(blocks) && blocks.some(block => isPurchaseBlockType(block?.type));
 

@@ -100,6 +100,15 @@
                               <block type="procedures_callnoreturn" id="rjZcrbND)L}X`J6a2L}n">
                                 <mutation xmlns="http://www.w3.org/1999/xhtml" name="Fixed Variable"></mutation>
                                 <data>6BtBGGvdf-T-q25dG1;,</data>
+                                <next>
+                                  <block type="apex_ai_virtual_hook_settings" id="apex_ai_virtual_hook_settings">
+                                    <value name="SWITCH_AFTER">
+                                      <block type="variables_get" id="apex_ai_switch_after_for_hook">
+                                        <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Switch After ?</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
                               </block>
                             </next>
                           </block>
@@ -333,31 +342,44 @@
           </block>
         </value>
         <statement name="DO0">
-          <block type="controls_if" id="zf@-IY(AGLN5f*I0#|GN">
-            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+          <block type="controls_if" id="apex_ai_gate_even_odd_mode">
             <value name="IF0">
-              <block type="logic_compare" id="cIzo0UhYV/S;8u;w5_,l">
-                <field name="OP">EQ</field>
-                <value name="A">
-                  <block type="variables_get" id="2k/VJCgPDiZLnl]mzOi2">
+              <block type="apex_ai_virtual_hook_gate" id="apex_ai_virtual_hook_gate">
+                <value name="SIDE">
+                  <block type="variables_get" id="apex_ai_virtual_hook_side">
                     <field name="VAR" id="TpR#!@ZaN:g6gvsyAgHw">Next Tradetype</field>
-                  </block>
-                </value>
-                <value name="B">
-                  <block type="text" id="5ck[@:%U4XG[5aC-Y0/t">
-                    <field name="TEXT">A</field>
                   </block>
                 </value>
               </block>
             </value>
             <statement name="DO0">
-              <block type="apollo_purchase2" id="G?K*^*0_cXReJ4lNPE_a">
-                <field name="PURCHASE_LIST">DIGITEVEN</field>
-              </block>
-            </statement>
-            <statement name="ELSE">
-              <block type="apollo_purchase2" id="rL}5qwVyd#Xl`]%Mx_4d">
-                <field name="PURCHASE_LIST">DIGITODD</field>
+              <block type="controls_if" id="zf@-IY(AGLN5f*I0#|GN">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="cIzo0UhYV/S;8u;w5_,l">
+                    <field name="OP">EQ</field>
+                    <value name="A">
+                      <block type="variables_get" id="2k/VJCgPDiZLnl]mzOi2">
+                        <field name="VAR" id="TpR#!@ZaN:g6gvsyAgHw">Next Tradetype</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="text" id="5ck[@:%U4XG[5aC-Y0/t">
+                        <field name="TEXT">A</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="apollo_purchase2" id="G?K*^*0_cXReJ4lNPE_a">
+                    <field name="PURCHASE_LIST">DIGITEVEN</field>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="apollo_purchase2" id="rL}5qwVyd#Xl`]%Mx_4d">
+                    <field name="PURCHASE_LIST">DIGITODD</field>
+                  </block>
+                </statement>
               </block>
             </statement>
           </block>

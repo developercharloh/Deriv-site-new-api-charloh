@@ -524,4 +524,52 @@ describe('Rise/Fall Master Bot XML', () => {
 
         workspace.dispose();
     });
+
+    it('keeps every mandatory root when the real startup XML is imported', () => {
+        const xmlPath = path.resolve(__dirname, '../../xml/main.xml');
+        const xmlText = fs.readFileSync(xmlPath, 'utf8');
+        const workspace = new Blockly.Workspace();
+        const hadPreviousWorkspace = Object.prototype.hasOwnProperty.call(window.Blockly, 'derivWorkspace');
+        const previousWorkspace = window.Blockly.derivWorkspace;
+        const hadPreviousLoadingState = Object.prototype.hasOwnProperty.call(window, '__DBOT_LOADING_XML');
+        const previousLoadingState = (window as any).__DBOT_LOADING_XML;
+        const previousEventGroup = Blockly.Events.getGroup();
+        window.Blockly.derivWorkspace = workspace;
+        (window as any).__DBOT_LOADING_XML = true;
+        Blockly.Events.setGroup('dbot-load-startup-test');
+
+        try {
+            expect(() => Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xmlText), workspace)).not.toThrow();
+            expect(workspace.getTopBlocks(false).map(block => block.type).sort()).toEqual(
+                ['after_purchase', 'before_purchase', 'during_purchase', 'trade_definition'].sort()
+            );
+            expect(workspace.getAllBlocks(false).map(block => block.type)).toEqual(
+                expect.arrayContaining([
+                    'trade_definition_tradeoptions',
+                    'trade_definition_market',
+                    'trade_definition_tradetype',
+                    'trade_definition_contracttype',
+                    'trade_definition_candleinterval',
+                    'trade_definition_restartbuysell',
+                    'trade_definition_restartonerror',
+                    'before_purchase',
+                    'during_purchase',
+                    'after_purchase',
+                ])
+            );
+        } finally {
+            Blockly.Events.setGroup(previousEventGroup);
+            if (hadPreviousLoadingState) {
+                (window as any).__DBOT_LOADING_XML = previousLoadingState;
+            } else {
+                delete (window as any).__DBOT_LOADING_XML;
+            }
+            if (hadPreviousWorkspace) {
+                window.Blockly.derivWorkspace = previousWorkspace;
+            } else {
+                delete (window.Blockly as any).derivWorkspace;
+            }
+            workspace.dispose();
+        }
+    });
 });

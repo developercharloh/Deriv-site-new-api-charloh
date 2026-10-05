@@ -5,7 +5,7 @@ import ApiHelpers from '../services/api/api-helpers';
 import Interpreter from '../services/tradeEngine/utils/interpreter';
 import { compareXml, observer as globalObserver } from '../utils';
 import { getSavedWorkspaces, saveWorkspaceToRecent } from '../utils/local-storage';
-import { isDbotRTL } from '../utils/workspace';
+import { isDbotRTL, isMobileBlocklyViewport } from '../utils/workspace';
 import {
     acquireBlocklyXmlImportGuard,
     BLOCKLY_XML_IMPORT_SETTLE_MS,
@@ -33,7 +33,8 @@ class DBot {
     }
 
     revealLoadedWorkspace = (is_mobile = window.innerWidth < 768) => {
-        if (!is_mobile || !this.workspace) return;
+        const reveal_for_mobile = isMobileBlocklyViewport(is_mobile, window.innerWidth);
+        if (!reveal_for_mobile || !this.workspace) return;
 
         const reveal = () => {
             if (!this.workspace || !this.workspace.getTopBlocks(true).length) return;
@@ -53,7 +54,8 @@ class DBot {
     };
 
     scheduleLoadedWorkspaceReveal = (is_mobile = window.innerWidth < 768) => {
-        if (!is_mobile || !this.workspace) return;
+        const reveal_for_mobile = isMobileBlocklyViewport(is_mobile, window.innerWidth);
+        if (!reveal_for_mobile || !this.workspace) return;
 
         this.cancel_mobile_reveal?.();
         this.mobile_reveal_timers.forEach(timer => window.clearTimeout(timer));
@@ -80,7 +82,7 @@ class DBot {
 
         [0, 250, 750, 1500, 3000, 6000].forEach(delay => {
             const timer = window.setTimeout(() => {
-                if (!cancelled) this.revealLoadedWorkspace(true);
+                if (!cancelled) this.revealLoadedWorkspace(reveal_for_mobile);
             }, delay);
             this.mobile_reveal_timers.push(timer);
         });
@@ -237,12 +239,13 @@ class DBot {
             ApiHelpers.setInstance(api_helpers_store);
             DBotStore.setInstance(store);
             const window_width = window.innerWidth;
+            const is_mobile_view = isMobileBlocklyViewport(is_mobile, window_width);
             let releaseWorkspaceLoadGuard = null;
             try {
                 let workspaceScale = config().workspaces.mainWorkspaceStartScale;
 
                 const { handleFileChange } = DBotStore.instance;
-                if (window_width < 1640 && !is_mobile) {
+                if (window_width < 1640 && !is_mobile_view) {
                     const scratch_div_width = document.getElementById('scratch_div')?.offsetWidth;
                     if (scratch_div_width && window_width > 0) {
                         // Keep blocks readable at narrow desktop widths. Shrink only when the
@@ -263,7 +266,7 @@ class DBot {
                 this.workspace = window.Blockly.inject(el_scratch_div, {
                     media: `${window.__webpack_public_path__}assets/media/`,
                     renderer: 'zelos',
-                    trashcan: !is_mobile,
+                    trashcan: !isMobileBlocklyViewport(is_mobile, window_width),
                     zoom: { wheel: true, startScale: workspaceScale },
                     scrollbars: true,
                     theme: window.Blockly.Themes.zelos_renderer,
@@ -277,10 +280,20 @@ class DBot {
                 this.workspace.addChangeListener(event => updateDisabledBlocks(this.workspace, event));
                 this.workspace.addChangeListener(event => this.workspace.dispatchBlockEventEffects(event));
                 this.workspace.addChangeListener(event => {
-                    if (event.type === 'drag' && !event.isStart && !is_mobile) validateErrorOnBlockDelete();
+                    if (
+                        event.type === 'drag' &&
+                        !event.isStart &&
+                        !isMobileBlocklyViewport(is_mobile, window.innerWidth)
+                    ) {
+                        validateErrorOnBlockDelete();
+                    }
                     if (event.type == window.Blockly.Events.BLOCK_CHANGE) {
                         const block = this.workspace.getBlockById(event.blockId);
-                        if (is_mobile && block && event.element == 'collapsed') {
+                        if (
+                            isMobileBlocklyViewport(is_mobile, window.innerWidth) &&
+                            block &&
+                            event.element == 'collapsed'
+                        ) {
                             block.contextMenu = false;
                         }
                     }
@@ -361,18 +374,21 @@ class DBot {
                 const { save_modal } = DBotStore.instance;
 
                 save_modal.updateBotName(file_name);
-                this.workspace.cleanUp(0, is_mobile ? 60 : 56);
+                this.workspace.cleanUp(0, is_mobile_view ? 60 : 56);
                 this.workspace.clearUndo();
+                // Ensure the initial required roots are visible even if the
+                // previous workspace left Blockly translated below the viewport.
+                revealWorkspaceFromTop(this.workspace);
 
                 window.dispatchEvent(new Event('resize'));
-                this.scheduleLoadedWorkspaceReveal(is_mobile);
+                this.scheduleLoadedWorkspaceReveal(is_mobile_view);
                 window.setTimeout(() => {
                     workspaceLoadGuard.release();
                     releaseWorkspaceLoadGuard = null;
                     // Async dropdown validation can recalculate Blockly
                     // metrics after the first reveal and restore the previous
                     // bottom scroll position.
-                    this.revealLoadedWorkspace(is_mobile);
+                    this.revealLoadedWorkspace(isMobileBlocklyViewport(is_mobile, window.innerWidth));
                 }, BLOCKLY_XML_IMPORT_SETTLE_MS);
                 window.addEventListener('dragover', DBot.handleDragOver);
                 window.addEventListener('drop', e => DBot.handleDropOver(e, handleFileChange));
