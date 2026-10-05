@@ -1066,6 +1066,7 @@ export default class RunPanelStore {
         const engine = new EdgingProEngine({
             symbol: marketBlock?.getFieldValue?.('SYMBOL_LIST') || '1HZ50V',
             currency: this.core.client.currency || 'USD',
+            accountId: this.core.client.loginid || undefined,
             initialStake: fieldNumber('STAKE', 0.5),
             martingale: fieldNumber('MARTINGALE', 2),
             takeProfit: fieldNumber('TAKE_PROFIT', 10),

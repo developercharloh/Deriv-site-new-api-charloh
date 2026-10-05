@@ -127,6 +127,11 @@ describe('EdgingProEngine Virtual Hook cycle', () => {
 
         trader.onPosition({ contractId: 'over-contract', isOpen: false, profit: -0.5 } as any);
         trader.onPosition({ contractId: 'under-contract', isOpen: false, profit: -0.5 } as any);
+        trader.onTick('100.01', 5, 101, 'tick-101-replayed-with-new-id');
+        await flushPromises();
+
+        expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(1);
+
         trader.onTick('100.01', 5, 101, 'tick-101');
         await flushPromises();
 
@@ -139,5 +144,80 @@ describe('EdgingProEngine Virtual Hook cycle', () => {
         trader.onPosition({ contractId: 'over-contract', isOpen: false, profit: -0.5 } as any);
         trader.onPosition({ contractId: 'under-contract', isOpen: false, profit: -0.5 } as any);
         engine.stop();
+    });
+
+    it('requires consecutive virtual pairs where both legs lose before buying a real pair', async () => {
+        const engine = new EdgingProEngine({ ...config, virtualLossThreshold: 2 });
+        const stats: any[] = [];
+        const logs: string[] = [];
+        engine.onStats = value => stats.push(value);
+        engine.onLog = entry => logs.push(entry.message);
+        expect(engine.start()).toBe(true);
+        const trader = mockTraderInstances[0];
+        const tick = (epoch: number, digit: number) =>
+            trader.onTick(`100.${String(epoch).padStart(2, '0')}`, digit, epoch, `tick-${epoch}`);
+
+        tick(100, 4);
+        tick(101, 5);
+        await flushPromises();
+        tick(102, 3); // Under wins, Over loses; combined pair P/L is negative.
+        expect(stats[stats.length - 1].consecutiveVirtualLosses).toBe(0);
+        expect(logs).toEqual(expect.arrayContaining([
+            expect.stringContaining('Mixed virtual pair on digit 3'),
+            expect.stringContaining('net -$0.10'),
+        ]));
+        expect(trader.buyDigitPairNow).not.toHaveBeenCalled();
+
+        tick(103, 4);
+        tick(104, 5);
+        await flushPromises();
+        tick(105, 4); // Both legs lose.
+        expect(stats[stats.length - 1].consecutiveVirtualLosses).toBe(1);
+
+        tick(106, 4);
+        await flushPromises();
+        tick(107, 3); // A mixed result breaks the one-pair loss streak.
+        expect(stats[stats.length - 1].consecutiveVirtualLosses).toBe(0);
+        expect(trader.buyDigitPairNow).not.toHaveBeenCalled();
+
+        tick(108, 4);
+        tick(109, 5);
+        await flushPromises();
+        tick(110, 4);
+        expect(stats[stats.length - 1].consecutiveVirtualLosses).toBe(1);
+
+        tick(111, 4);
+        await flushPromises();
+        tick(112, 5);
+        expect(stats[stats.length - 1].consecutiveVirtualLosses).toBe(2);
+        expect(trader.buyDigitPairNow).not.toHaveBeenCalled();
+
+        tick(113, 4);
+        await flushPromises();
+        expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(1);
+        expect(trader.buyDigitPairNow.mock.calls[0][0]).toHaveLength(2);
+        expect(trader.buyDigitPairNow.mock.calls[0][0].map((leg: any) => leg.side)).toEqual([
+            'over',
+            'under',
+        ]);
+
+        trader.onPosition({ contractId: 'over-contract', isOpen: false, profit: -0.5 } as any);
+        trader.onPosition({ contractId: 'under-contract', isOpen: false, profit: -0.5 } as any);
+        engine.stop();
+    });
+
+    it('prevents a second tab from starting Edging pro for the same account', () => {
+        const accountId = 'VRTC_TEST_ACCOUNT';
+        const lockKey = `__DERIV_EDGING_PRO_ACTIVE_RUN__:${encodeURIComponent(accountId)}`;
+        localStorage.setItem(
+            lockKey,
+            JSON.stringify({ ownerId: 'another-tab', expiresAt: Date.now() + 60_000 }),
+        );
+
+        const engine = new EdgingProEngine({ ...config, accountId });
+        expect(engine.start()).toBe(false);
+        expect(mockTraderInstances[0].start).not.toHaveBeenCalled();
+
+        localStorage.removeItem(lockKey);
     });
 });

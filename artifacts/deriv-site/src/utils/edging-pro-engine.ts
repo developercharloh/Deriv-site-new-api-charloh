@@ -20,6 +20,7 @@ import {
 export interface EdgingProConfig {
     symbol: string;
     currency: string;
+    accountId?: string;
     initialStake: number;
     martingale: number;
     takeProfit: number;
@@ -84,6 +85,11 @@ interface LivePair {
 }
 
 const GLOBAL_ENGINE_KEY = '__DERIV_EDGING_PRO_ENGINE__';
+const RUN_LEASE_STORAGE_PREFIX = '__DERIV_EDGING_PRO_ACTIVE_RUN__:';
+const RUN_LEASE_TTL_MS = 60_000;
+const RUN_LEASE_HEARTBEAT_MS = 10_000;
+
+const makeRunLeaseId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const getActiveEngine = (): EdgingProEngine | null =>
     (globalThis as Record<string, unknown>)[GLOBAL_ENGINE_KEY] as EdgingProEngine | null;
@@ -113,6 +119,9 @@ export class EdgingProEngine {
     private latestSpot = '';
     private latestEpoch?: number;
     private lastProcessedTickKey: string | null = null;
+    private lastEntryEpochKey: string | null = null;
+    private runLeaseTimer: ReturnType<typeof setInterval> | null = null;
+    private readonly runLeaseId = makeRunLeaseId();
     private status: EdgingProStatus = 'idle';
     private lastAnalysis: EdgingProEntryAssessment;
 
@@ -149,11 +158,21 @@ export class EdgingProEngine {
             this.setStatus('error');
             return false;
         }
+        if (!this.acquireRunLease()) {
+            this.writeLog(
+                'Edging pro is already active in another tab for this Deriv account, or browser storage is unavailable. Stop the other run before starting this one.',
+                'error',
+            );
+            this.setStatus('error');
+            return false;
+        }
 
         this.running = true;
         this.stopRequested = false;
         this.lastProcessedTickKey = null;
+        this.lastEntryEpochKey = null;
         setActiveEngine(this);
+        this.startRunLeaseHeartbeat();
         this.setStatus('scanning');
         this.emitStats();
         this.trader.start({
@@ -230,6 +249,10 @@ export class EdgingProEngine {
 
     private handleTick(digit: number, spot = '', epoch?: number, tickId?: string): void {
         if (!this.running || this.status === 'error') return;
+        if (!this.refreshRunLease()) {
+            this.stopAfterRunLeaseLost();
+            return;
+        }
         // Treat the epoch as part of identity even when the broker supplies a
         // tick id: some feeds can reuse an id while advancing to new ticks.
         const tickKey = Number.isFinite(epoch)
@@ -239,6 +262,11 @@ export class EdgingProEngine {
               : null;
         if (tickKey !== null && tickKey === this.lastProcessedTickKey) return;
         if (tickKey !== null) this.lastProcessedTickKey = tickKey;
+        const entryEpochKey = Number.isFinite(epoch)
+            ? `${this.config.symbol}:${epoch}`
+            : tickKey;
+        const mayEnterOnEpoch = entryEpochKey === null || entryEpochKey !== this.lastEntryEpochKey;
+        if (entryEpochKey !== null) this.lastEntryEpochKey = entryEpochKey;
         this.tickSerial += 1;
         this.latestSpot = spot;
         this.latestEpoch = epoch;
@@ -258,6 +286,7 @@ export class EdgingProEngine {
             this.pendingQuotes ||
             this.pendingVirtualPair ||
             this.activeLivePair ||
+            !mayEnterOnEpoch ||
             this.lastAnalysis.status !== 'MET'
         ) {
             return;
@@ -359,18 +388,24 @@ export class EdgingProEngine {
             virtualPair.quotes.over,
             virtualPair.quotes.under,
         );
+        const overWon = settlementDigit > this.config.overPrediction;
+        const underWon = settlementDigit < this.config.underPrediction;
+        const bothLegsLost = !overWon && !underWon;
         this.pendingVirtualPair = null;
-        if (profit < 0) {
+        if (bothLegsLost) {
             this.consecutiveVirtualLosses += 1;
             this.writeLog(
-                `Virtual pair loss on digit ${settlementDigit} · ${this.signedMoney(profit)} · ${this.consecutiveVirtualLosses}/${this.config.virtualLossThreshold} consecutive losses.`,
+                `Both virtual legs lost on digit ${settlementDigit} · ${this.signedMoney(profit)} · ${this.consecutiveVirtualLosses}/${this.config.virtualLossThreshold} consecutive both-leg losses.`,
                 'loss',
             );
         } else {
             this.consecutiveVirtualLosses = 0;
+            const resultText = overWon
+                ? `Over ${this.config.overPrediction} won, Under ${this.config.underPrediction} lost`
+                : `Under ${this.config.underPrediction} won, Over ${this.config.overPrediction} lost`;
             this.writeLog(
-                `Virtual pair ${profit > 0 ? 'win' : 'break-even'} on digit ${settlementDigit} · ${this.signedMoney(profit)} · loss counter reset.`,
-                profit > 0 ? 'win' : 'system',
+                `Mixed virtual pair on digit ${settlementDigit} · ${resultText} · net ${this.signedMoney(profit)} · both-leg loss counter reset.`,
+                'system',
             );
         }
         if (profit !== 0) {
@@ -581,10 +616,99 @@ export class EdgingProEngine {
         this.pendingVirtualPair = null;
         this.trader.stop();
         releaseBotContractGate(this);
+        this.releaseRunLease();
         if (getActiveEngine() === this) setActiveEngine(null);
         this.running = false;
         this.stopRequested = false;
         if (this.status !== 'error') this.setStatus('stopped');
+    }
+
+    private getRunLeaseStorageKey(): string | null {
+        if (!this.config.accountId || typeof window === 'undefined') return null;
+        return `${RUN_LEASE_STORAGE_PREFIX}${encodeURIComponent(this.config.accountId)}`;
+    }
+
+    private acquireRunLease(): boolean {
+        const key = this.getRunLeaseStorageKey();
+        if (!key) return true;
+        try {
+            const now = Date.now();
+            const existing = JSON.parse(window.localStorage.getItem(key) || 'null') as
+                | { ownerId?: string; expiresAt?: number }
+                | null;
+            if (
+                existing?.ownerId !== this.runLeaseId &&
+                Number(existing?.expiresAt) > now
+            ) {
+                return false;
+            }
+            window.localStorage.setItem(
+                key,
+                JSON.stringify({ ownerId: this.runLeaseId, expiresAt: now + RUN_LEASE_TTL_MS }),
+            );
+            const confirmed = JSON.parse(window.localStorage.getItem(key) || 'null') as
+                | { ownerId?: string }
+                | null;
+            return confirmed?.ownerId === this.runLeaseId;
+        } catch {
+            return false;
+        }
+    }
+
+    private refreshRunLease(): boolean {
+        const key = this.getRunLeaseStorageKey();
+        if (!key) return true;
+        try {
+            const current = JSON.parse(window.localStorage.getItem(key) || 'null') as
+                | { ownerId?: string; expiresAt?: number }
+                | null;
+            if (current?.ownerId !== this.runLeaseId) return false;
+            const now = Date.now();
+            if (Number(current.expiresAt) - now > RUN_LEASE_TTL_MS / 2) return true;
+            window.localStorage.setItem(
+                key,
+                JSON.stringify({ ownerId: this.runLeaseId, expiresAt: now + RUN_LEASE_TTL_MS }),
+            );
+            const confirmed = JSON.parse(window.localStorage.getItem(key) || 'null') as
+                | { ownerId?: string }
+                | null;
+            return confirmed?.ownerId === this.runLeaseId;
+        } catch {
+            return false;
+        }
+    }
+
+    private startRunLeaseHeartbeat(): void {
+        if (!this.getRunLeaseStorageKey() || this.runLeaseTimer) return;
+        this.runLeaseTimer = setInterval(() => {
+            if (!this.refreshRunLease()) this.stopAfterRunLeaseLost();
+        }, RUN_LEASE_HEARTBEAT_MS);
+    }
+
+    private releaseRunLease(): void {
+        if (this.runLeaseTimer) {
+            clearInterval(this.runLeaseTimer);
+            this.runLeaseTimer = null;
+        }
+        const key = this.getRunLeaseStorageKey();
+        if (!key) return;
+        try {
+            const current = JSON.parse(window.localStorage.getItem(key) || 'null') as
+                | { ownerId?: string }
+                | null;
+            if (current?.ownerId === this.runLeaseId) window.localStorage.removeItem(key);
+        } catch {
+            // The lease expires automatically if browser storage is unavailable during shutdown.
+        }
+    }
+
+    private stopAfterRunLeaseLost(): void {
+        if (!this.running) return;
+        this.writeLog(
+            'Another Edging pro tab now owns this account. No new pairs will be submitted here.',
+            'error',
+        );
+        this.stop();
     }
 
     private setStatus(status: EdgingProStatus): void {

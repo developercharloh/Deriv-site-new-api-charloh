@@ -457,14 +457,14 @@ const BOTS: BotConfig[] = [
         name: 'Edging pro Engine',
         emoji: '⚔️',
         description:
-            'Opens paired one-tick Digit Over 5 and Digit Under 4 trades when each of the latest X digits is 4 or 5. Includes per-leg stake, Martingale, Take Profit, Stop Loss, and an optional Virtual Hook that waits for consecutive virtual pair losses.',
+            'Opens one Over 5 and one Under 4 contract per entry when each of the latest X digits is 4 or 5. Virtual Hook switches to real pairs only after X consecutive virtual pairs where both legs lose; any mixed or winning pair resets the streak.',
         market: 'Volatility 50 (1s) Index (1HZ50V)',
         strategy: 'Digit Over 5 + Digit Under 4 · Last X digits 4–5 · Virtual Hook',
         params: [
             { label: 'Stake', value: '$0.50 per leg' },
             { label: 'Predictions', value: 'Over 5 + Under 4' },
             { label: 'Last X', value: '4 digits (each 4 or 5)' },
-            { label: 'Virtual Hook', value: 'On · 2 consecutive losses' },
+            { label: 'Virtual Hook', value: 'On · 2 consecutive both-leg losses' },
             { label: 'Martingale', value: '2×' },
             { label: 'Take Profit / Stop Loss', value: '$10 / $30' },
             { label: 'Duration', value: '1 Tick' },
