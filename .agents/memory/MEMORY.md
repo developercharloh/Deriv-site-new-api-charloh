@@ -63,4 +63,4 @@
 - [Edging Pro account-run locking](edging-pro-account-locking.md) — require an account-scoped Web Lock; missing account identity or lock support must block live trading.
 - [Over/Under signal fallback](deriv-over-under-signal-fallback.md) — after removing the AI bot, V1 uses the remaining signal template with standard same-direction recovery.
 - [Apex AI Virtual Hook](apex-ai-virtual-hook.md) — use Switch After X for both consecutive Even/Odd virtual losses and the live-trade block before switching sides.
-- [Apex AI Builder visibility](deriv-apex-builder-visibility.md) — test the actual Apex_AI.xml loader and focus its trade_definition root; headless import alone does not verify signed-in visibility.
+- [Apex AI Builder visibility](deriv-apex-builder-visibility.md) — on mobile, normalize roots and scroll to origin; centering the tall trade root can move blocks out of view.

@@ -5,7 +5,7 @@ import * as BlocklyNamespace from 'blockly';
 import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
 import DBotStore from '../../dbot-store';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
-import { centerWorkspaceRoot } from '../../utils/workspace-reveal';
+import { centerWorkspaceRoot, revealWorkspaceFromTop } from '../../utils/workspace-reveal';
 
 jest.mock('../../utils', () => ({
     modifyContextMenu: jest.fn(),
@@ -634,6 +634,30 @@ describe('Blockly bot template imports', () => {
             (workspace as any).centerOnBlock = centerOnBlock;
             expect(centerWorkspaceRoot(workspace, 'trade_definition')).toBe(true);
             expect(centerOnBlock).toHaveBeenCalledWith(tradeDefinition?.id, true);
+
+            centerOnBlock.mockClear();
+            const originalViewportWidth = window.innerWidth;
+            const originalSvgResize = window.Blockly.svgResize;
+            const originalWidthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+            (window.Blockly as any).svgResize = jest.fn();
+            (workspace as any).scroll = jest.fn();
+            (workspace as any).scrollbar = { resize: jest.fn() };
+            try {
+                revealWorkspaceFromTop(workspace, 'trade_definition');
+                expect(centerOnBlock).not.toHaveBeenCalled();
+                expect((workspace as any).scroll).toHaveBeenCalledWith(0, 0);
+                expect(
+                    Math.min(...workspace.getTopBlocks(false).map(block => block.getRelativeToSurfaceXY().y))
+                ).toBe(24);
+            } finally {
+                Object.defineProperty(window, 'innerWidth', {
+                    configurable: true,
+                    value: originalViewportWidth,
+                    ...originalWidthDescriptor,
+                });
+                (window.Blockly as any).svgResize = originalSvgResize;
+            }
         } finally {
             consoleWarn.mockRestore();
             Blockly.Events.setGroup(previousEventGroup);

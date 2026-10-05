@@ -21,7 +21,8 @@ import {
     acquireBlocklyXmlImportGuard,
     BLOCKLY_XML_IMPORT_SETTLE_MS,
 } from '../../utils/blockly-xml-import-guard';
-import { centerWorkspaceRoot } from './workspace-reveal';
+import { revealWorkspaceFromTop } from './workspace-reveal';
+export { revealWorkspaceFromTop };
 
 export const inject_workspace_options = {
     // Getter (not a literal) so the public-path prefix is read when the options are spread
@@ -40,46 +41,6 @@ export const inject_workspace_options = {
 };
 
 const workspace_reveal_timers = new WeakMap();
-
-const normalizeMobileWorkspaceOrigin = workspace => {
-    const top_blocks = workspace?.getTopBlocks?.(true) ?? [];
-    if (!top_blocks.length || window.innerWidth >= 768) return;
-
-    const positions = top_blocks
-        .map(block => block.getRelativeToSurfaceXY?.())
-        .filter(position => position && Number.isFinite(position.x) && Number.isFinite(position.y));
-    if (!positions.length) return;
-
-    const min_x = Math.min(...positions.map(position => position.x));
-    const min_y = Math.min(...positions.map(position => position.y));
-    const target_x = 24;
-    const target_y = 24;
-    const delta_x = target_x - min_x;
-    const delta_y = target_y - min_y;
-
-    if (Math.abs(delta_x) < 1 && Math.abs(delta_y) < 1) return;
-    top_blocks.forEach(block => block.moveBy?.(delta_x, delta_y));
-};
-
-/**
- * Blockly can recalculate its metrics after an XML import when dynamic
- * dropdowns finish loading. On mobile that calculation may restore the old
- * bottom scroll position, making a freshly loaded bot look empty or partially
- * loaded. Keep the first roots at the top until the import has settled.
- */
-export const revealWorkspaceFromTop = (workspace, focus_root_type) => {
-    if (!workspace || !workspace.getTopBlocks?.(true).length) return;
-
-    normalizeMobileWorkspaceOrigin(workspace);
-    window.Blockly?.svgResize?.(workspace);
-    workspace.scrollbar?.resize?.();
-    // Scrollbar.set receives a handle ratio. It does not reliably reset the
-    // workspace translation after a resize, especially when the content is
-    // taller than the mobile viewport. Use Blockly's absolute scroll API so
-    // the loaded roots remain anchored at the visible origin.
-    workspace.scroll?.(0, 0);
-    if (focus_root_type) centerWorkspaceRoot(workspace, focus_root_type);
-};
 
 export const scheduleWorkspaceReveal = (workspace, focus_root_type) => {
     if (!workspace) return;
