@@ -230,10 +230,12 @@ export class EdgingProEngine {
 
     private handleTick(digit: number, spot = '', epoch?: number, tickId?: string): void {
         if (!this.running || this.status === 'error') return;
-        const tickKey = tickId
-            ? `${this.config.symbol}:id:${tickId}`
-            : Number.isFinite(epoch)
-              ? `${epoch}:${spot}`
+        // Treat the epoch as part of identity even when the broker supplies a
+        // tick id: some feeds can reuse an id while advancing to new ticks.
+        const tickKey = Number.isFinite(epoch)
+            ? `${this.config.symbol}:epoch:${epoch}:${tickId ?? spot}`
+            : tickId
+              ? `${this.config.symbol}:id:${tickId}`
               : null;
         if (tickKey !== null && tickKey === this.lastProcessedTickKey) return;
         if (tickKey !== null) this.lastProcessedTickKey = tickKey;

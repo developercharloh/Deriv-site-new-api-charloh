@@ -54,6 +54,22 @@ describe('EdgingProEngine Journal analysis', () => {
         );
     });
 
+    it('refreshes analysis on a newer epoch even if the broker reuses a tick id', () => {
+        const engine = new EdgingProEngine(config);
+        const analyses: Array<{ status: string; digits: number[] }> = [];
+        engine.onAnalysis = analysis => analyses.push(analysis);
+
+        const internal = engine as any;
+        internal.running = true;
+        internal.paused = true;
+        internal.handleTick(0, '1024.10', 100, 'reused-tick-id');
+        internal.handleTick(4, '1024.14', 101, 'reused-tick-id');
+        internal.handleTick(4, '1024.14', 101, 'reused-tick-id');
+
+        expect(analyses).toHaveLength(2);
+        expect(analyses[1].digits).toEqual([0, 4]);
+    });
+
     it('emits settled virtual wins and losses with tick identity and spots for Transactions', () => {
         const engine = new EdgingProEngine(config);
         const settlements: any[] = [];
