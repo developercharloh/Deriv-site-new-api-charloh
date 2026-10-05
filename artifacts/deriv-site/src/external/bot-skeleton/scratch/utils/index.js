@@ -21,6 +21,7 @@ import {
     acquireBlocklyXmlImportGuard,
     BLOCKLY_XML_IMPORT_SETTLE_MS,
 } from '../../utils/blockly-xml-import-guard';
+import { centerWorkspaceRoot } from './workspace-reveal';
 
 export const inject_workspace_options = {
     // Getter (not a literal) so the public-path prefix is read when the options are spread
@@ -66,7 +67,7 @@ const normalizeMobileWorkspaceOrigin = workspace => {
  * bottom scroll position, making a freshly loaded bot look empty or partially
  * loaded. Keep the first roots at the top until the import has settled.
  */
-export const revealWorkspaceFromTop = workspace => {
+export const revealWorkspaceFromTop = (workspace, focus_root_type) => {
     if (!workspace || !workspace.getTopBlocks?.(true).length) return;
 
     normalizeMobileWorkspaceOrigin(workspace);
@@ -77,16 +78,17 @@ export const revealWorkspaceFromTop = workspace => {
     // taller than the mobile viewport. Use Blockly's absolute scroll API so
     // the loaded roots remain anchored at the visible origin.
     workspace.scroll?.(0, 0);
+    if (focus_root_type) centerWorkspaceRoot(workspace, focus_root_type);
 };
 
-export const scheduleWorkspaceReveal = workspace => {
+export const scheduleWorkspaceReveal = (workspace, focus_root_type) => {
     if (!workspace) return;
 
     const previous_timers = workspace_reveal_timers.get(workspace);
     previous_timers?.forEach(timer => window.clearTimeout(timer));
 
     const reveal_timers = [0, 250, 750, 1500, 3000].map(delay =>
-        window.setTimeout(() => revealWorkspaceFromTop(workspace), delay)
+        window.setTimeout(() => revealWorkspaceFromTop(workspace, focus_root_type), delay)
     );
     workspace_reveal_timers.set(workspace, reveal_timers);
 };

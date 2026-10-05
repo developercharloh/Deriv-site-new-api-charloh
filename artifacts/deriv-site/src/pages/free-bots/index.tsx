@@ -1061,7 +1061,9 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                         `${loadedTopBlocks.length} root blocks, ${loadedBlocks.length} total blocks).`
                 );
             }
+            const focusRootType = bot.id === 'apex-ai' ? 'trade_definition' : undefined;
             DBot.scheduleLoadedWorkspaceReveal();
+            scheduleWorkspaceReveal(Blockly.derivWorkspace, focusRootType);
             // Blockly's option fields can finish validating asynchronously after
             // domToBlock returns. Keep the root-block lifecycle guard alive until
             // those callbacks have settled, otherwise Trade Parameters can dispose
@@ -1073,6 +1075,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                 // after the first reveal and restore the previous bottom
                 // scroll position. Reveal again after the settling window.
                 DBot.revealLoadedWorkspace();
+            scheduleWorkspaceReveal(Blockly.derivWorkspace, focusRootType);
              }, 6000);
 
             setStatus('loaded');
@@ -1087,10 +1090,10 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             // finish, so a late Blockly metrics refresh cannot leave the roots
             // scrolled below the mobile viewport.
             void postLoadReapplyFields(Blockly.derivWorkspace, importedTradeFields)
-                .then(() => scheduleWorkspaceReveal(Blockly.derivWorkspace))
+                .then(() => scheduleWorkspaceReveal(Blockly.derivWorkspace, focusRootType))
                 .catch(error => {
                     console.error('[Free Bots] Could not finish restoring bot dropdowns.', error);
-                    scheduleWorkspaceReveal(Blockly.derivWorkspace);
+                    scheduleWorkspaceReveal(Blockly.derivWorkspace, focusRootType);
                 });
         } catch (err: any) {
             setStatus('error');

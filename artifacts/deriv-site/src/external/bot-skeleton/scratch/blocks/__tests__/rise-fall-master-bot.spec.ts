@@ -5,6 +5,7 @@ import * as BlocklyNamespace from 'blockly';
 import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
 import DBotStore from '../../dbot-store';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
+import { centerWorkspaceRoot } from '../../utils/workspace-reveal';
 
 jest.mock('../../utils', () => ({
     modifyContextMenu: jest.fn(),
@@ -24,7 +25,7 @@ jest.mock('@deriv-com/translations', () => ({
     initializeI18n: () => undefined,
 }));
 
-describe('Rise/Fall Master Bot XML', () => {
+describe('Blockly bot template imports', () => {
     let Blockly: typeof BlocklyNamespace.default;
     let javascriptGenerator: typeof BlocklyJavaScriptNamespace.javascriptGenerator;
     const dependentFieldNames = [
@@ -558,6 +559,83 @@ describe('Rise/Fall Master Bot XML', () => {
                 ])
             );
         } finally {
+            Blockly.Events.setGroup(previousEventGroup);
+            if (hadPreviousLoadingState) {
+                (window as any).__DBOT_LOADING_XML = previousLoadingState;
+            } else {
+                delete (window as any).__DBOT_LOADING_XML;
+            }
+            if (hadPreviousWorkspace) {
+                window.Blockly.derivWorkspace = previousWorkspace;
+            } else {
+                delete (window.Blockly as any).derivWorkspace;
+            }
+            workspace.dispose();
+        }
+    });
+
+    it('imports ACCESS Bot #5 Apex AI from its catalog template with all required and strategy roots', () => {
+        const catalogPath = path.resolve(__dirname, '../../../../../../src/pages/free-bots/index.tsx');
+        const catalog = fs.readFileSync(catalogPath, 'utf8');
+        expect(catalog).toMatch(
+            /id:\s*'apex-ai',[\s\S]*?name:\s*'Apex AI Multi-Strategy Bot',[\s\S]*?xmlPath:\s*'\/bots\/Apex_AI\.xml'/
+        );
+
+        const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Apex_AI.xml');
+        const xmlText = fs.readFileSync(xmlPath, 'utf8');
+        const xml = Blockly.utils.xml.textToDom(xmlText);
+        const workspace = new Blockly.Workspace();
+        const hadPreviousWorkspace = Object.prototype.hasOwnProperty.call(window.Blockly, 'derivWorkspace');
+        const previousWorkspace = window.Blockly.derivWorkspace;
+        const hadPreviousLoadingState = Object.prototype.hasOwnProperty.call(window, '__DBOT_LOADING_XML');
+        const previousLoadingState = (window as any).__DBOT_LOADING_XML;
+        const previousEventGroup = Blockly.Events.getGroup();
+        const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        window.Blockly.derivWorkspace = workspace;
+        (window as any).__DBOT_LOADING_XML = true;
+        Blockly.Events.setGroup('dbot-load-apex-ai-test');
+
+        try {
+            const xmlChildren: Element[] = Array.from((xml as Element).children);
+            const variablesXml = xmlChildren.find(
+                node => node.localName === 'variables' || node.tagName?.toLowerCase() === 'variables'
+            );
+            if (variablesXml) Blockly.Xml.domToVariables(variablesXml, workspace);
+
+            const rootXmlBlocks = xmlChildren.filter(
+                (node: any) =>
+                    (node.localName === 'block' || node.tagName?.toLowerCase() === 'block') &&
+                    Boolean(node.getAttribute?.('type'))
+            );
+            expect(() =>
+                rootXmlBlocks.forEach(rootXmlBlock => Blockly.Xml.domToBlock(rootXmlBlock, workspace))
+            ).not.toThrow();
+
+            const topTypes = workspace.getTopBlocks(false).map(block => block.type);
+            expect(topTypes).toEqual(
+                expect.arrayContaining([
+                    'trade_definition',
+                    'before_purchase',
+                    'after_purchase',
+                    'procedures_defnoreturn',
+                ])
+            );
+            expect(workspace.getAllBlocks(false).map(block => block.type)).toEqual(
+                expect.arrayContaining([
+                    'apex_ai_virtual_hook_settings',
+                    'apex_ai_virtual_hook_gate',
+                    'apollo_purchase2',
+                    'procedures_callnoreturn',
+                ])
+            );
+
+            const tradeDefinition = workspace.getTopBlocks(false).find(block => block.type === 'trade_definition');
+            const centerOnBlock = jest.fn();
+            (workspace as any).centerOnBlock = centerOnBlock;
+            expect(centerWorkspaceRoot(workspace, 'trade_definition')).toBe(true);
+            expect(centerOnBlock).toHaveBeenCalledWith(tradeDefinition?.id, true);
+        } finally {
+            consoleWarn.mockRestore();
             Blockly.Events.setGroup(previousEventGroup);
             if (hadPreviousLoadingState) {
                 (window as any).__DBOT_LOADING_XML = previousLoadingState;
