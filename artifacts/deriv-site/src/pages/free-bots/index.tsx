@@ -13,6 +13,7 @@ import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type Bot
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig, FreeBotSection } from './types';
+import { isBotBuilderWorkspaceReady } from './workspace-readiness';
 import FreeBotCategoryTabs from './FreeBotCategoryTabs';
 import './free-bots.scss';
 
@@ -963,17 +964,27 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
 
             // Poll for Blockly.derivWorkspace (workspace mounts asynchronously)
             const waitForWs = async (): Promise<any> => {
-                for (let i = 0; i < 50; i++) {
+                for (let i = 0; i < 150; i++) {
                     const B = (window as any).Blockly;
                     const scratchDiv = document.getElementById('scratch_div');
-                    if (B?.derivWorkspace && scratchDiv?.querySelector('svg')) return B;
+                    const initializationError = store.blockly_store.initialization_error;
+                    if (initializationError) throw new Error(initializationError);
+                    if (
+                        isBotBuilderWorkspaceReady({
+                            workspace: B?.derivWorkspace,
+                            hasSvg: Boolean(scratchDiv?.querySelector('svg')),
+                            isLoading: store.blockly_store.is_loading,
+                        })
+                    ) {
+                        return B;
+                    }
                     await new Promise(r => setTimeout(r, 100));
                 }
                 return null;
             };
             const Blockly = await waitForWs();
             if (!Blockly?.derivWorkspace) {
-                throw new Error('Bot Builder workspace not ready — please open the Bot Builder tab once, then try again.');
+                throw new Error('Bot Builder workspace did not finish loading. Please try loading this bot again.');
             }
 
             // Keep the direct loader used by the working Binary Matrix path, but
