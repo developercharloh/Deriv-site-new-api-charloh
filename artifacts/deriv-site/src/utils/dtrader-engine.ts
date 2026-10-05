@@ -489,8 +489,10 @@ export class DTraderEngine {
 
     /**
      * Price both legs first, then submit both buys without waiting for either
-     * buy acknowledgement. The guard runs after proposals arrive and directly
-     * before either order is sent, so an expired entry signal cannot trade.
+     * buy acknowledgement. This is best-effort only: Deriv accepts each buy as
+     * an independent request, so their entry and settlement ticks may differ.
+     * The guard runs after proposals arrive and directly before either order is
+     * sent, so an expired entry signal cannot trade.
      */
     buyDigitPairNow(
         configs: DTDigitPairLegConfig[],

@@ -105,8 +105,11 @@ describe('Free Bots template catalog', () => {
         const xml = fs.readFileSync(path.join(publicBotsPath, 'Edging_Pro_Engine.xml'), 'utf8');
         const document = new DOMParser().parseFromString(xml, 'application/xml');
         const strategy = document.querySelector('block[type="edging_pro_strategy"]');
+        const catalogSource = fs.readFileSync(path.join(__dirname, '..', 'index.tsx'), 'utf8');
 
         expect(document.querySelector('parsererror')).toBeNull();
+        expect(catalogSource).toContain('buy request back-to-back on a 1-tick duration');
+        expect(catalogSource).toContain('they may not share an exact entry or exit tick');
         expect(document.querySelector('block[type="trade_definition_market"] field[name="SYMBOL_LIST"]')?.textContent).toBe(
             '1HZ50V'
         );

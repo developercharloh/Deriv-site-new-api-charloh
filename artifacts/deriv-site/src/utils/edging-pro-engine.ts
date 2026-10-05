@@ -445,7 +445,7 @@ export class EdgingProEngine {
         this.activeLivePair = pair;
         this.setStatus('buying');
         this.writeLog(
-            `Submitting paired real trades · Over ${this.config.overPrediction} + Under ${this.config.underPrediction} · $${this.currentStake.toFixed(2)} each ($${(this.currentStake * 2).toFixed(2)} total stake).`,
+            `Submitting best-effort pair · Over ${this.config.overPrediction} + Under ${this.config.underPrediction} · $${this.currentStake.toFixed(2)} each ($${(this.currentStake * 2).toFixed(2)} total stake) · buy requests sent back-to-back; Deriv may accept them on different ticks.`,
             'info',
         );
 

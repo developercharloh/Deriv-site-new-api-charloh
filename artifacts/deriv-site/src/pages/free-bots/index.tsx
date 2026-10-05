@@ -457,7 +457,7 @@ const BOTS: BotConfig[] = [
         name: 'Edging pro Engine',
         emoji: '⚔️',
         description:
-            'Opens one Over 5 and one Under 4 contract per entry when each of the latest X digits is 4 or 5. Virtual Hook switches to real pairs only after X consecutive virtual pairs where both legs lose; any mixed or winning pair resets the streak.',
+            'When each of the latest X digits is 4 or 5, sends one Over 5 and one Under 4 buy request back-to-back on a 1-tick duration. Deriv handles each request separately, so they may not share an exact entry or exit tick. Virtual Hook switches to real pairs only after the configured number of consecutive virtual pairs where both legs lose; any mixed or winning pair resets the streak.',
         market: 'Volatility 50 (1s) Index (1HZ50V)',
         strategy: 'Digit Over 5 + Digit Under 4 · Last X digits 4–5 · Virtual Hook',
         params: [

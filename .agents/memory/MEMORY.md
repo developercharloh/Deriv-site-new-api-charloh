@@ -59,4 +59,4 @@
 - [Alpha Scan fixture event order](alpha-scan-fixture-event-order.md) — simulated contracts must report open before settlement so recovery excludes the market actually traded.
 - [Smart Over 2 Turbo queue freshness](deriv-smart-over2-turbo-queue.md) — queued intent expires on market-tick change, not the 300 ms FAST scheduler slot; refresh staged plans and proposals after queueing.
 - [Edging pro must stay XML-based](edging-pro-xml-only.md) — keep it Blockly-based and refresh its Journal analysis on every new tick epoch, even if a broker tick ID repeats.
-- [Edging Pro Virtual Hook](edging-pro-virtual-hook.md) — count streaks only when both Over 5 and Under 4 lose; a mixed pair resets the streak.
+- [Edging Pro Virtual Hook](edging-pro-virtual-hook.md) — count both-leg losses only; Over 5 + Under 4 are separate buys, so shared ticks are not guaranteed.
