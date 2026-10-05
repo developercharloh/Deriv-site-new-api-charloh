@@ -44,6 +44,7 @@ import { EdgingProEngine, type EdgingProConfig } from '@/utils/edging-pro-engine
 const config: EdgingProConfig = {
     symbol: '1HZ50V',
     currency: 'USD',
+    accountId: 'VRTC_EDGING_PRO_TEST',
     initialStake: 0.5,
     martingale: 2,
     takeProfit: 10,
@@ -65,6 +66,15 @@ describe('EdgingProEngine Virtual Hook cycle', () => {
         mockTraderInstances.length = 0;
         delete (globalThis as any).__DERIV_EDGING_PRO_ENGINE__;
         delete (globalThis as any).__DERIV_AUTOMATED_CONTRACT_GATE__;
+        Object.defineProperty(navigator, 'locks', {
+            configurable: true,
+            value: {
+                request: (name: string, _options: unknown, callback: (lock: unknown | null) => Promise<void> | void) => {
+                    void callback({ name });
+                    return Promise.resolve();
+                },
+            },
+        });
     });
 
     afterEach(() => {
@@ -298,7 +308,46 @@ describe('EdgingProEngine Virtual Hook cycle', () => {
         }
     });
 
-    it('prevents a second tab from starting Edging pro for the same account', () => {
+    it('fails closed when the account ID or a reliable browser lock is unavailable', () => {
+        const withMissingAccount = new EdgingProEngine({ ...config, accountId: undefined });
+        expect(withMissingAccount.start()).toBe(false);
+        expect(mockTraderInstances[0].start).not.toHaveBeenCalled();
+
+        const originalDescriptor = Object.getOwnPropertyDescriptor(navigator, 'locks');
+        try {
+            delete (navigator as any).locks;
+            const withoutBrowserLock = new EdgingProEngine(config);
+            expect(withoutBrowserLock.start()).toBe(false);
+            expect(mockTraderInstances[1].start).not.toHaveBeenCalled();
+        } finally {
+            if (originalDescriptor) {
+                Object.defineProperty(navigator, 'locks', originalDescriptor);
+            }
+        }
+    });
+
+    it('does not fall back to the non-atomic lease when the browser lock request rejects', async () => {
+        const originalDescriptor = Object.getOwnPropertyDescriptor(navigator, 'locks');
+        try {
+            Object.defineProperty(navigator, 'locks', {
+                configurable: true,
+                value: {
+                    request: () => Promise.reject(new Error('lock request denied')),
+                },
+            });
+            const engine = new EdgingProEngine(config);
+            expect(engine.start()).toBe(true);
+            await flushPromises();
+            expect((engine as any).status).toBe('error');
+            expect(mockTraderInstances[0].start).not.toHaveBeenCalled();
+        } finally {
+            if (originalDescriptor) {
+                Object.defineProperty(navigator, 'locks', originalDescriptor);
+            }
+        }
+    });
+
+    it('prevents a second tab from starting Edging pro for the same account', async () => {
         const accountId = 'VRTC_TEST_ACCOUNT';
         const lockKey = `__DERIV_EDGING_PRO_ACTIVE_RUN__:${encodeURIComponent(accountId)}`;
         localStorage.setItem(
@@ -307,7 +356,9 @@ describe('EdgingProEngine Virtual Hook cycle', () => {
         );
 
         const engine = new EdgingProEngine({ ...config, accountId });
-        expect(engine.start()).toBe(false);
+        expect(engine.start()).toBe(true);
+        await flushPromises();
+        expect((engine as any).status).toBe('error');
         expect(mockTraderInstances[0].start).not.toHaveBeenCalled();
 
         localStorage.removeItem(lockKey);

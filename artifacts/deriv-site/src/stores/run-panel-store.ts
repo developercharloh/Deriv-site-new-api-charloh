@@ -17,6 +17,7 @@ import { EdgingProEngine, type EdgingProStatus } from '@/utils/edging-pro-engine
 import { readBlocklyNumberVariable } from '@/utils/binary-matrix-settings';
 import { getSmartOver2JournalScope, isRiseFallMasterBotIdentity } from '@/utils/bot-template-scope';
 import type { DTPosition } from '@/utils/dtrader-engine';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { Buy, ProposalOpenContract } from '@deriv/api-types';
 import { TStores } from '@deriv/stores/types';
 import { localize } from '@deriv-com/translations';
@@ -1066,7 +1067,7 @@ export default class RunPanelStore {
         const engine = new EdgingProEngine({
             symbol: marketBlock?.getFieldValue?.('SYMBOL_LIST') || '1HZ50V',
             currency: this.core.client.currency || 'USD',
-            accountId: this.core.client.loginid || undefined,
+            accountId: api_base.account_info?.loginid || this.core.client.loginid || undefined,
             initialStake: fieldNumber('STAKE', 0.5),
             martingale: fieldNumber('MARTINGALE', 2),
             takeProfit: fieldNumber('TAKE_PROFIT', 10),

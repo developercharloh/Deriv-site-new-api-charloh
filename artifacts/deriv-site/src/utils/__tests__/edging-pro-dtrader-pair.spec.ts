@@ -71,15 +71,22 @@ describe('DTraderEngine paired digit orders', () => {
         const proposals = sent.filter(payload => payload.proposal === 1);
         expect(proposals).toHaveLength(2);
 
-        proposals.forEach((request, index) => emit({
-            req_id: request.req_id,
+        const proposalMessage = (index: number) => ({
+            req_id: proposals[index].req_id,
             msg_type: 'proposal',
             proposal: {
                 id: `proposal-${index}`,
                 ask_price: '0.50',
                 payout: '0.90',
             },
-        }));
+        });
+        emit(proposalMessage(0));
+        const operationId = (engine as any).digitPairOperationCounter;
+        (engine as any).handleDigitPairResponse(
+            { ...proposalMessage(0), proposal: { id: 'duplicate-proposal', ask_price: '0.50', payout: '0.90' } },
+            { operationId, side: 'over', stage: 'proposal' },
+        );
+        emit(proposalMessage(1));
 
         const buys = sent.filter(payload => payload.buy);
         expect(buys).toHaveLength(2);

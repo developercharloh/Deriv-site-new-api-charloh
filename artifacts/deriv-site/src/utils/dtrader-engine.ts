@@ -113,6 +113,7 @@ interface PendingDigitPairOperation {
     id: number;
     mode: 'quote' | 'buy';
     legs: PendingDigitPairLeg[];
+    buyRequestsStarted: boolean;
     guard?: () => string | null;
     resolve: (result: DTDigitPairResult) => void;
 }
@@ -557,7 +558,14 @@ export class DTraderEngine {
         const operationId = ++this.digitPairOperationCounter;
         this.pairedOperationInFlight = true;
         return new Promise(resolve => {
-            const operation: PendingDigitPairOperation = { id: operationId, mode, legs, guard, resolve };
+            const operation: PendingDigitPairOperation = {
+                id: operationId,
+                mode,
+                legs,
+                buyRequestsStarted: false,
+                guard,
+                resolve,
+            };
             this.digitPairOperations.set(operationId, operation);
             legs.forEach(leg => {
                 const payload: Record<string, unknown> = {
@@ -601,6 +609,8 @@ export class DTraderEngine {
         const operation = this.digitPairOperations.get(context.operationId);
         const leg = operation?.legs.find(item => item.side === context.side);
         if (!operation || !leg) return;
+        const expectedStage = context.stage === 'proposal' ? 'awaiting-proposal' : 'awaiting-buy';
+        if (leg.stage !== expectedStage) return;
         leg.stage = 'done';
         leg.error = message;
         this.log(`Paired ${context.side} ${context.stage} failed: ${message}`, 'error');
@@ -612,6 +622,8 @@ export class DTraderEngine {
         const operation = this.digitPairOperations.get(context.operationId);
         const leg = operation?.legs.find(item => item.side === context.side);
         if (!operation || !leg) return;
+        const expectedStage = context.stage === 'proposal' ? 'awaiting-proposal' : 'awaiting-buy';
+        if (leg.stage !== expectedStage) return;
         if (msg.error) {
             this.handleDigitPairRequestFailure(
                 context,
@@ -653,6 +665,7 @@ export class DTraderEngine {
     }
 
     private finishDigitPairProposalsIfReady(operation: PendingDigitPairOperation): void {
+        if (operation.buyRequestsStarted) return;
         if (operation.legs.some(leg => leg.stage === 'awaiting-proposal')) return;
         const failedLegs = operation.legs.filter(leg => leg.error);
         if (failedLegs.length) {
@@ -679,8 +692,11 @@ export class DTraderEngine {
             return;
         }
 
+        operation.buyRequestsStarted = true;
         operation.legs.forEach(leg => {
             leg.stage = 'awaiting-buy';
+        });
+        operation.legs.forEach(leg => {
             this.sendDigitPairRequest(operation.id, leg.side, 'buy', {
                 buy: leg.proposal!.id,
                 price: leg.proposal!.askPrice,

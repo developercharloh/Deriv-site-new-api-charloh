@@ -108,7 +108,7 @@ describe('Edging pro DBot Builder run integration', () => {
         const runPanel = new RunPanelStore(
             { dbot, journal, summary_card: summaryCard, transactions } as any,
             {
-                client: { is_logged_in: true, currency: 'EUR' },
+                client: { is_logged_in: true, loginid: 'VRTC_EDGING_PRO_TEST', currency: 'EUR' },
                 common: { is_socket_opened: false },
                 ui,
             } as any
@@ -119,6 +119,7 @@ describe('Edging pro DBot Builder run integration', () => {
         expect(EdgingProEngine).toHaveBeenCalledWith({
             symbol: '1HZ50V',
             currency: 'EUR',
+            accountId: 'VRTC_EDGING_PRO_TEST',
             initialStake: 0.75,
             martingale: 1.8,
             takeProfit: 12,

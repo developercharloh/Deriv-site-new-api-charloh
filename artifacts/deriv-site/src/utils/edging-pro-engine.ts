@@ -77,6 +77,7 @@ export interface EdgingProVirtualSettlement {
 }
 
 interface LivePair {
+    pairNumber: number;
     buyComplete: boolean;
     acceptedIds: string[];
     positions: Map<string, DTPosition>;
@@ -123,6 +124,7 @@ export class EdgingProEngine {
     private pendingVirtualPair: VirtualPair | null = null;
     private activeLivePair: LivePair | null = null;
     private liveEntryUsedForQualification = false;
+    private paidPairSequence = 0;
     private currentStake: number;
     private totalProfit = 0;
     private wins = 0;
@@ -171,60 +173,58 @@ export class EdgingProEngine {
             return false;
         }
 
-        const lockManager =
-            typeof navigator !== 'undefined'
-                ? (navigator as Navigator & { locks?: BrowserRunLockManager }).locks
-                : undefined;
-        if (lockManager && this.config.accountId) {
-            this.runLockPending = true;
-            const lockName = `${RUN_LOCK_NAME_PREFIX}${encodeURIComponent(this.config.accountId)}`;
-            void lockManager
-                .request(lockName, { mode: 'exclusive', ifAvailable: true }, async lock => {
-                    if (!this.runLockPending) return;
-                    if (!lock) {
-                        this.failToStart(
-                            'Edging pro is already active in another tab for this Deriv account. Stop that run before starting this one.'
-                        );
-                        return;
-                    }
-                    if (!this.acquireRunLease()) {
-                        this.failToStart(
-                            'Edging pro is already active in another tab for this Deriv account, or browser storage is unavailable. Stop the other run before starting this one.'
-                        );
-                        return;
-                    }
-
-                    this.runLockPending = false;
-                    this.activateRun();
-                    await new Promise<void>(resolve => {
-                        this.releaseBrowserRunLock = resolve;
-                    });
-                })
-                .catch(() => {
-                    // Some browser contexts expose the Locks API but reject it.
-                    // Fall back to the existing account lease in that case.
-                    if (!this.runLockPending) return;
-                    this.runLockPending = false;
-                    if (!this.acquireRunLease()) {
-                        this.failToStart(
-                            'Edging pro is already active in another tab for this Deriv account, or browser storage is unavailable. Stop the other run before starting this one.'
-                        );
-                        return;
-                    }
-                    this.activateRun();
-                });
-            return true;
-        }
-
-        if (!this.acquireRunLease()) {
-            this.writeLog(
-                'Edging pro is already active in another tab for this Deriv account, or browser storage is unavailable. Stop the other run before starting this one.',
-                'error',
-            );
-            this.setStatus('error');
+        const accountId = this.config.accountId?.trim();
+        if (!accountId) {
+            this.failToStart('Cannot start safely because the active Deriv account ID is unavailable. No trades were sent.');
             return false;
         }
-        this.activateRun();
+
+        const lockManager =
+            typeof navigator !== 'undefined'
+                ? (navigator as unknown as { locks?: BrowserRunLockManager }).locks
+                : undefined;
+        if (!lockManager?.request) {
+            this.failToStart(
+                'This browser cannot enforce an account-wide run lock. Edging pro was not started to prevent duplicate trades.'
+            );
+            return false;
+        }
+
+        this.runLockPending = true;
+        const lockName = `${RUN_LOCK_NAME_PREFIX}${encodeURIComponent(accountId)}`;
+        let lockRequest: Promise<void>;
+        try {
+            lockRequest = lockManager.request(lockName, { mode: 'exclusive', ifAvailable: true }, async lock => {
+                if (!this.runLockPending) return;
+                if (!lock) {
+                    this.failToStart(
+                        'Edging pro is already active in another tab for this Deriv account. Stop that run before starting this one.'
+                    );
+                    return;
+                }
+                if (!this.acquireRunLease()) {
+                    this.failToStart(
+                        'Edging pro could not confirm its account lease. No trades were sent.'
+                    );
+                    return;
+                }
+
+                this.runLockPending = false;
+                this.writeLog(`Account-wide run lock acquired · runner ${this.runLeaseId.slice(-6)}.`, 'system');
+                this.activateRun();
+                await new Promise<void>(resolve => {
+                    this.releaseBrowserRunLock = resolve;
+                });
+            });
+        } catch {
+            this.failToStart('Could not acquire the account-wide run lock. No trades were sent.');
+            return false;
+        }
+        void lockRequest.catch(() => {
+            if (this.runLockPending) {
+                this.failToStart('Could not acquire the account-wide run lock. No trades were sent.');
+            }
+        });
         return true;
     }
 
@@ -521,7 +521,9 @@ export class EdgingProEngine {
             return;
         }
 
+        const pairNumber = ++this.paidPairSequence;
         const pair: LivePair = {
+            pairNumber,
             buyComplete: false,
             acceptedIds: [],
             positions: new Map(),
@@ -531,7 +533,7 @@ export class EdgingProEngine {
         this.activeLivePair = pair;
         this.setStatus('buying');
         this.writeLog(
-            `Submitting best-effort pair · Over ${this.config.overPrediction} + Under ${this.config.underPrediction} · $${this.currentStake.toFixed(2)} each ($${(this.currentStake * 2).toFixed(2)} total stake) · buy requests sent back-to-back; Deriv may accept them on different ticks.`,
+            `Submitting paid pair #${pairNumber} · runner ${this.runLeaseId.slice(-6)} · Over ${this.config.overPrediction} + Under ${this.config.underPrediction} · $${this.currentStake.toFixed(2)} each ($${(this.currentStake * 2).toFixed(2)} total stake) · buy requests sent back-to-back; Deriv may accept them on different ticks.`,
             'info',
         );
 
@@ -580,7 +582,7 @@ export class EdgingProEngine {
             );
         } else {
             this.writeLog(
-                `Both legs accepted · contracts ${pair.acceptedIds.map(id => `#${id}`).join(' + ')} · waiting for settlement.`,
+                `Both legs accepted for paid pair #${pair.pairNumber} · contracts ${pair.acceptedIds.map(id => `#${id}`).join(' + ')} · waiting for settlement.`,
                 'info',
             );
         }
@@ -713,8 +715,9 @@ export class EdgingProEngine {
     }
 
     private getRunLeaseStorageKey(): string | null {
-        if (!this.config.accountId || typeof window === 'undefined') return null;
-        return `${RUN_LEASE_STORAGE_PREFIX}${encodeURIComponent(this.config.accountId)}`;
+        const accountId = this.config.accountId?.trim();
+        if (!accountId || typeof window === 'undefined') return null;
+        return `${RUN_LEASE_STORAGE_PREFIX}${encodeURIComponent(accountId)}`;
     }
 
     private acquireRunLease(): boolean {
