@@ -104,7 +104,7 @@ describe('EdgingProEngine Virtual Hook cycle', () => {
         engine.stop();
     });
 
-    it('submits one Over 5 and one Under 4 buy for a tick, ignoring a replayed tick after settlement', async () => {
+    it('submits one Over 5 and one Under 4 pair per qualifying stretch, then rearms after it clears', async () => {
         const engine = new EdgingProEngine({ ...config, useVirtualHook: false });
         expect(engine.start()).toBe(true);
         const trader = mockTraderInstances[0];
@@ -137,8 +137,16 @@ describe('EdgingProEngine Virtual Hook cycle', () => {
 
         expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(1);
 
-        // A new tick may have the same displayed price; its distinct broker ID must still count.
+        // New epochs may keep the condition qualified, but must not repeat the paid pair.
         trader.onTick('100.01', 5, 102, 'tick-102');
+        trader.onTick('100.01', 5, 103, 'tick-103');
+        await flushPromises();
+        expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(1);
+
+        // The signal rearms only after Last X no longer qualifies.
+        trader.onTick('100.02', 2, 104, 'tick-104');
+        trader.onTick('100.01', 4, 105, 'tick-105');
+        trader.onTick('100.01', 5, 106, 'tick-106');
         await flushPromises();
         expect(trader.buyDigitPairNow).toHaveBeenCalledTimes(2);
         trader.onPosition({ contractId: 'over-contract', isOpen: false, profit: -0.5 } as any);

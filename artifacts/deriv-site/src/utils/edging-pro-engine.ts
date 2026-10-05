@@ -111,6 +111,7 @@ export class EdgingProEngine {
     private digits: number[] = [];
     private pendingVirtualPair: VirtualPair | null = null;
     private activeLivePair: LivePair | null = null;
+    private liveEntryUsedForQualification = false;
     private currentStake: number;
     private totalProfit = 0;
     private wins = 0;
@@ -171,6 +172,7 @@ export class EdgingProEngine {
         this.stopRequested = false;
         this.lastProcessedTickKey = null;
         this.lastEntryEpochKey = null;
+        this.liveEntryUsedForQualification = false;
         setActiveEngine(this);
         this.startRunLeaseHeartbeat();
         this.setStatus('scanning');
@@ -272,6 +274,7 @@ export class EdgingProEngine {
         this.latestEpoch = epoch;
         this.digits = [...this.digits, digit].slice(-this.config.lastX);
         this.lastAnalysis = assessEdgingProEntry(this.digits, this.config.lastX);
+        if (this.lastAnalysis.status !== 'MET') this.liveEntryUsedForQualification = false;
         const analysis: EdgingProAnalysis = { ...this.lastAnalysis, tickSerial: this.tickSerial };
         this.onAnalysis(analysis);
         this.publishAnalysis(analysis);
@@ -287,6 +290,7 @@ export class EdgingProEngine {
             this.pendingVirtualPair ||
             this.activeLivePair ||
             !mayEnterOnEpoch ||
+            this.liveEntryUsedForQualification ||
             this.lastAnalysis.status !== 'MET'
         ) {
             return;
@@ -299,6 +303,7 @@ export class EdgingProEngine {
             void this.beginVirtualPair(this.lastAnalysis);
             return;
         }
+        this.liveEntryUsedForQualification = true;
         void this.beginLivePair();
     }
 
