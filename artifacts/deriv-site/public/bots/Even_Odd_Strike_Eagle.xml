@@ -135,9 +135,9 @@
       </block>
     </statement>
   </block>
-  <block type="after_purchase" id="eose_after_purchase" collapsed="true" x="720" y="110">
+  <block type="after_purchase" id="eose_after_purchase" x="720" y="110">
     <statement name="AFTERPURCHASE_STACK">
-      <block type="math_change" id="eose_increment_count" collapsed="true">
+      <block type="math_change" id="eose_increment_count">
         <field name="VAR" id="?u5{A+e33uAt_EzsEHQ9">Side Trade Count</field>
         <value name="DELTA">
           <shadow type="math_number" id="eose_increment_one">
@@ -145,7 +145,7 @@
           </shadow>
         </value>
         <next>
-          <block type="controls_if" id="eose_switch_side_after_threshold" collapsed="true">
+          <block type="controls_if" id="eose_switch_side_after_threshold">
             <value name="IF0">
               <block type="logic_compare" id="eose_count_reaches_threshold">
                 <field name="OP">GTE</field>
@@ -212,7 +212,7 @@
               </block>
             </statement>
             <next>
-              <block type="controls_if" id="eose_martingale_after_settlement" collapsed="true">
+              <block type="controls_if" id="eose_martingale_after_settlement">
                 <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                 <value name="IF0">
                   <block type="contract_check_result" id="eose_contract_won">
@@ -322,7 +322,7 @@
       </block>
     </statement>
   </block>
-  <block type="before_purchase" id="eose_before_purchase" collapsed="true" deletable="false" x="0" y="1110">
+  <block type="before_purchase" id="eose_before_purchase" deletable="false" x="0" y="1110">
     <statement name="BEFOREPURCHASE_STACK">
       <block type="controls_if" id="eose_virtual_hook_gate">
         <value name="IF0">
@@ -367,11 +367,11 @@
       </block>
     </statement>
   </block>
-  <block type="procedures_defnoreturn" id="eose-fixed-variable-procedure" collapsed="true" x="0" y="1650">
+  <block type="procedures_defnoreturn" id="eose-fixed-variable-procedure" x="0" y="1650">
     <field name="NAME">Initialize Bot State</field>
     <comment pinned="false" h="80" w="160">Initialize side, base stake, and settled-contract counter.</comment>
     <statement name="STACK">
-      <block type="variables_set" id="eose_initialize_side" collapsed="true">
+      <block type="variables_set" id="eose_initialize_side">
         <field name="VAR" id="TpR#!@ZaN:g6gvsyAgHw">Active Side</field>
         <value name="VALUE">
           <block type="text" id="eose_initial_side_a">
@@ -379,7 +379,7 @@
           </block>
         </value>
         <next>
-          <block type="variables_set" id="eose_initialize_base_stake" collapsed="true">
+          <block type="variables_set" id="eose_initialize_base_stake">
             <field name="VAR" id="is-FMy]az2Q0g8j+I|5%">Initial Stake</field>
             <value name="VALUE">
               <block type="variables_get" id="eose_stake_as_base">
@@ -387,7 +387,7 @@
               </block>
             </value>
             <next>
-              <block type="variables_set" id="eose_initialize_counter" collapsed="true">
+              <block type="variables_set" id="eose_initialize_counter">
                 <field name="VAR" id="?u5{A+e33uAt_EzsEHQ9">Side Trade Count</field>
                 <value name="VALUE">
                   <block type="math_number" id="eose_initial_count">

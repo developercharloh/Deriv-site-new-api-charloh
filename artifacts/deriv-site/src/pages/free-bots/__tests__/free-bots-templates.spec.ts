@@ -162,6 +162,8 @@ describe('Free Bots template catalog', () => {
             0
         );
         expect(purchaseTypes).toEqual(['DIGITEVEN', 'DIGITODD']);
+        expect(document.querySelector('block[type="before_purchase"]')?.getAttribute('collapsed')).not.toBe('true');
+        expect(document.querySelector('block[type="after_purchase"]')?.getAttribute('collapsed')).not.toBe('true');
         expect(xml).not.toMatch(/DIGITOVER|DIGITUNDER|RISE|FALL|apex|multi.?strategy/i);
     });
 

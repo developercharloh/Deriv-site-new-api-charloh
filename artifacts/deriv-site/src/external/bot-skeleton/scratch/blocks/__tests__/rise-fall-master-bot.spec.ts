@@ -620,6 +620,10 @@ describe('Blockly bot template imports', () => {
                     'procedures_defnoreturn',
                 ])
             );
+            expect(workspace.getBlockById('eose_before_purchase')?.isCollapsed()).toBe(false);
+            expect(workspace.getBlockById('eose_after_purchase')?.isCollapsed()).toBe(false);
+            expect(workspace.getBlockById('eose_virtual_hook_gate')?.isCollapsed()).toBe(false);
+            expect(workspace.getBlockById('eose_martingale_after_settlement')?.isCollapsed()).toBe(false);
             expect(workspace.getAllBlocks(false).map(block => block.type)).toEqual(
                 expect.arrayContaining([
                     'even_odd_strike_eagle_virtual_hook_settings',
