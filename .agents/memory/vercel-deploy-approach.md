@@ -63,6 +63,12 @@ The deployment response's `aliasAssigned` flag can be false even when the produc
 
 **How to apply:** Verify each public alias over HTTPS and compare its HTML and relevant bundles to the local build; do not treat `aliasAssigned` alone as proof that aliases are stale.
 
+An immutable Vercel deployment URL may be blocked by project SSO even when the production custom domain is public and serves the new build.
+
+**Why:** The prebuilt deployment URL returned Vercel's SSO page to an unauthenticated request, while the configured `www` domain served the new HTML, feature bundle, and bot template byte-for-byte.
+
+**How to apply:** Verify the configured public domains and compare their served assets to local `dist`; do not interpret an SSO-protected build URL as a production-site failure.
+
 The current API may return the digest list at `error.missing` inside a 400 `missing_files` response rather than at the top level. Treat that response as the expected handshake and read both shapes.
 
 **Why:** The first prebuilt request intentionally asks Vercel which content-addressed files it does not already have; a parser that only checks top-level `missing` will mistake a normal handshake for a failed publish.
