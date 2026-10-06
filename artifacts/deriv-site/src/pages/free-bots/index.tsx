@@ -1014,6 +1014,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                 throw new Error('Bot Builder workspace did not finish loading. Please try loading this bot again.');
             }
 
+            let importedTradeFields: ImportedTradeFields = {};
             const loadEventGroup = `dbot-load${Date.now()}`;
             const dom = Blockly.utils.xml.textToDom(xmlText);
             const importedField = (name: string): string | undefined => {
