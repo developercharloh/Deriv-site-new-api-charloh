@@ -13,7 +13,7 @@ import './Binary/Tools/Time';
 import './Binary/Trade Definition';
 import './Custom/apollo_blocks';
 import './Custom/analysis_blocks';
-import './Custom/apex_ai_blocks';
+import './Custom/even_odd_strike_eagle_blocks';
 import './Custom/edging_pro_blocks';
 import './Custom/strategy_blocks';
 import './Custom/virtual_hook_blocks';

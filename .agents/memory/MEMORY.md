@@ -62,5 +62,5 @@
 - [Edging Pro Virtual Hook](edging-pro-virtual-hook.md) — both-leg losses qualify the hook; one paid pair is exactly two contracts, and repeated spot prices are expected.
 - [Edging Pro account-run locking](edging-pro-account-locking.md) — require an account-scoped Web Lock; missing account identity or lock support must block live trading.
 - [Over/Under signal fallback](deriv-over-under-signal-fallback.md) — after removing the AI bot, V1 uses the remaining signal template with standard same-direction recovery.
-- [Apex AI Virtual Hook](apex-ai-virtual-hook.md) — use Switch After X for both consecutive Even/Odd virtual losses and the live-trade block before switching sides.
-- [Apex AI Builder visibility](deriv-apex-builder-visibility.md) — on mobile, normalize roots and scroll to origin; centering the tall trade root can move blocks out of view.
+- [Even Odd Strike Eagle Virtual Hook](even-odd-strike-eagle-hook.md) — Switch After controls the per-side virtual-loss gate and the number of real contracts before the Even/Odd side changes.
+- [Even Odd Strike Eagle Builder visibility](deriv-even-odd-strike-eagle-builder.md) — verify the actual template import and mobile reveal; late dropdown hydration can affect required roots and scroll position.

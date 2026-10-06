@@ -327,11 +327,11 @@ describe('Binary Matrix analysis observer integration', () => {
         );
     });
 
-    it('routes Apex AI virtual settlements to its Journal and account transaction list', () => {
+    it('routes Even Odd Strike Eagle virtual settlements to its Journal and account transaction list', () => {
         const journal = {
             pushMessage: jest.fn(),
             updateSmartOver2AnalysisMessage: jest.fn(),
-            active_bot_template_id: 'Apex_AI.xml',
+            active_bot_template_id: 'Even_Odd_Strike_Eagle.xml',
         };
         const transactions = { pushVirtualHookTransaction: jest.fn() };
         const rootStore = { dbot: {}, journal, transactions };
@@ -345,28 +345,28 @@ describe('Binary Matrix analysis observer integration', () => {
 
         observer.emit('bot.smart_over2.recovery', {
             event: 'virtual_settlement',
-            journalScope: 'apex-ai',
+            journalScope: 'even-odd-strike-eagle',
             outcome: 'loss',
             contractType: 'DIGITEVEN',
-            virtualTradeId: 'apex-ai:A:101:DIGITEVEN',
+            virtualTradeId: 'even-odd-strike-eagle:A:101:DIGITEVEN',
             market: '1HZ25V',
             entryEpoch: 101,
             settlementEpoch: 102,
             entrySpot: '2591.500',
             exitSpot: '2591.490',
-            message: '[Apex AI] Virtual Even settled LOSS on digit 3.',
+            message: '[Even Odd Strike Eagle] Virtual Even settled LOSS on digit 3.',
         });
 
         expect(transactions.pushVirtualHookTransaction).toHaveBeenCalledWith(
             expect.objectContaining({
                 event: 'virtual_settlement',
-                journalScope: 'apex-ai',
+                journalScope: 'even-odd-strike-eagle',
                 contractType: 'DIGITEVEN',
                 outcome: 'loss',
             })
         );
         expect(journal.pushMessage).toHaveBeenCalledWith(
-            '[Apex AI] Virtual Even settled LOSS on digit 3.',
+            '[Even Odd Strike Eagle] Virtual Even settled LOSS on digit 3.',
             MessageTypes.NOTIFY,
             'journal__text'
         );

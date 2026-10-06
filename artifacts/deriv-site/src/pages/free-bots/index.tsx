@@ -436,25 +436,26 @@ const BOTS: BotConfig[] = [
         gradient: 'linear-gradient(135deg, #101628 0%, #244c52 46%, #4a164d 100%)',
     },
     {
-        id: 'apex-ai',
+        id: 'even-odd-strike-eagle',
         section: 'premium',
-        name: 'Apex AI Multi-Strategy Bot',
+        name: 'Even Odd Strike Eagle',
         emoji: '🦅',
         description:
-            'Multi-strategy bot for the Volatility 25 (1s) Index. Switches between Even/Odd, Over 4/Under 5, and Rise/Fall modes after every three trades, with 2× recovery, a $10 take-profit target, and a $50 stop-loss limit.',
+            'One-tick Even/Odd bot for the Volatility 25 (1s) Index. Qualifies each side with consecutive virtual losses, switches sides after the configured number of settled real contracts, resets stake after a win, and doubles it after a loss.',
         market: 'Volatility 25 (1s) Index (1HZ25V)',
-        strategy: 'Even / Odd · Over 4 / Under 5 · Rise / Fall · Scheduled Strategy Switch',
+        strategy: 'Even / Odd · Virtual Hook · Alternating Side Switch',
         params: [
             { label: 'Initial Stake', value: '$0.70' },
-            { label: 'Strategy Switch', value: 'Every 3 trades' },
+            { label: 'Switch After', value: '3 settled real contracts' },
+            { label: 'Virtual Hook', value: '3 consecutive losses per side' },
             { label: 'Martingale', value: '2×' },
             { label: 'Take Profit', value: '$10' },
             { label: 'Stop Loss', value: '$50' },
             { label: 'Duration', value: '1 Tick' },
         ],
-        xmlPath: '/bots/Apex_AI.xml',
-        gradient: 'linear-gradient(135deg, #07152e 0%, #123b72 45%, #06b6d4 100%)',
-        category: 'MULTI-STRATEGY AI',
+        xmlPath: '/bots/Even_Odd_Strike_Eagle.xml',
+        gradient: 'linear-gradient(135deg, #07152e 0%, #123b72 45%, #14b881 100%)',
+        category: 'EVEN / ODD',
     },
 ];
 
@@ -494,7 +495,7 @@ const CARD_ART: Record<string, string> = {
     'even-odd-manual': '/assets/free-bots/odd-myth.jpg',
     'over-under-manual': '/assets/free-bots/digit-switcher.jpg',
     'elite-entry-scanner': '/assets/free-bots/blueprint.jpg',
-    'apex-ai': '/assets/free-bots/blueprint.jpg',
+    'even-odd-strike-eagle': '/assets/free-bots/odd-myth.jpg',
 };
 
 const CARD_CATEGORY: Record<string, string> = {
@@ -514,7 +515,7 @@ const CARD_CATEGORY: Record<string, string> = {
     'even-odd-manual': 'EVEN / ODD',
     'over-under-manual': 'OVER / UNDER',
     'elite-entry-scanner': 'OVER / UNDER SCANNER',
-    'apex-ai': 'EVEN / ODD · OVER / UNDER · RISE / FALL',
+    'even-odd-strike-eagle': 'EVEN / ODD · VIRTUAL HOOK',
 };
 
 const CARD_ACCENT: Record<string, string> = {
@@ -534,7 +535,7 @@ const CARD_ACCENT: Record<string, string> = {
     'even-odd-manual': '#15955e',
     'over-under-manual': '#e6315b',
     'elite-entry-scanner': '#ed7439',
-    'apex-ai': '#06b6d4',
+    'even-odd-strike-eagle': '#15955e',
 };
 
 // ─── Engine selector dropdown ─────────────────────────────────────────────────
@@ -1097,7 +1098,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                         `${loadedTopBlocks.length} root blocks, ${loadedBlocks.length} total blocks).`
                 );
             }
-            const focusRootType = bot.id === 'apex-ai' ? 'trade_definition' : undefined;
+            const focusRootType = bot.id === 'even-odd-strike-eagle' ? 'trade_definition' : undefined;
             DBot.scheduleLoadedWorkspaceReveal();
             scheduleWorkspaceReveal(Blockly.derivWorkspace, focusRootType);
             // Blockly's option fields can finish validating asynchronously after

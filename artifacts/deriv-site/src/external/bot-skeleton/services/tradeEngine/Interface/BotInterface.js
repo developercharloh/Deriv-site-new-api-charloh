@@ -36,8 +36,10 @@ const getBotInterface = tradeEngine => {
         completeSmartOver2Recovery: (...args) => tradeEngine.completeSmartOver2Recovery(...args),
         configureSmartOver2V3: (...args) => tradeEngine.configureSmartOver2V3(...args),
         checkSmartOver2V3Entry: (...args) => tradeEngine.checkSmartOver2V3Entry(...args),
-        configureApexAIVirtualHook: (...args) => tradeEngine.configureApexAIVirtualHook(...args),
-        checkApexAIVirtualHook: (...args) => tradeEngine.checkApexAIVirtualHook(...args),
+        configureEvenOddStrikeEagleVirtualHook: (...args) =>
+            tradeEngine.configureEvenOddStrikeEagleVirtualHook(...args),
+        checkEvenOddStrikeEagleVirtualHook: (...args) =>
+            tradeEngine.checkEvenOddStrikeEagleVirtualHook(...args),
         purchaseSmartOver2V3: (...args) => tradeEngine.purchaseSmartOver2V3(...args),
         completeSmartOver2V3Settlement: (...args) => tradeEngine.completeSmartOver2V3Settlement(...args),
         getAskPrice: contract_type => Number(getProposal(contract_type, tradeEngine).ask_price),

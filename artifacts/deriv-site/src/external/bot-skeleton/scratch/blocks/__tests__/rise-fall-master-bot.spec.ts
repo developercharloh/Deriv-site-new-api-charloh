@@ -574,14 +574,14 @@ describe('Blockly bot template imports', () => {
         }
     });
 
-    it('imports ACCESS Bot #5 Apex AI from its catalog template with all required and strategy roots', () => {
+    it('imports Bot #5 Even Odd Strike Eagle with its required Even/Odd strategy roots', () => {
         const catalogPath = path.resolve(__dirname, '../../../../../../src/pages/free-bots/index.tsx');
         const catalog = fs.readFileSync(catalogPath, 'utf8');
         expect(catalog).toMatch(
-            /id:\s*'apex-ai',[\s\S]*?name:\s*'Apex AI Multi-Strategy Bot',[\s\S]*?xmlPath:\s*'\/bots\/Apex_AI\.xml'/
+            /id:\s*'even-odd-strike-eagle',[\s\S]*?name:\s*'Even Odd Strike Eagle',[\s\S]*?xmlPath:\s*'\/bots\/Even_Odd_Strike_Eagle\.xml'/
         );
 
-        const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Apex_AI.xml');
+        const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Even_Odd_Strike_Eagle.xml');
         const xmlText = fs.readFileSync(xmlPath, 'utf8');
         const xml = Blockly.utils.xml.textToDom(xmlText);
         const workspace = new Blockly.Workspace();
@@ -593,7 +593,7 @@ describe('Blockly bot template imports', () => {
         const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
         window.Blockly.derivWorkspace = workspace;
         (window as any).__DBOT_LOADING_XML = true;
-        Blockly.Events.setGroup('dbot-load-apex-ai-test');
+            Blockly.Events.setGroup('dbot-load-strike-eagle-test');
 
         try {
             const xmlChildren: Element[] = Array.from((xml as Element).children);
@@ -622,8 +622,8 @@ describe('Blockly bot template imports', () => {
             );
             expect(workspace.getAllBlocks(false).map(block => block.type)).toEqual(
                 expect.arrayContaining([
-                    'apex_ai_virtual_hook_settings',
-                    'apex_ai_virtual_hook_gate',
+                    'even_odd_strike_eagle_virtual_hook_settings',
+                    'even_odd_strike_eagle_virtual_hook_gate',
                     'apollo_purchase2',
                     'procedures_callnoreturn',
                 ])

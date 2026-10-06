@@ -417,9 +417,9 @@ export default Engine =>
                 return assessment.result;
             });
         }
-        getApexAIVirtualHookState() {
-            if (!this.apexAIVirtualHookState) {
-                this.apexAIVirtualHookState = {
+        getEvenOddStrikeEagleVirtualHookState() {
+            if (!this.evenOddStrikeEagleVirtualHookState) {
+                this.evenOddStrikeEagleVirtualHookState = {
                     maxVirtualLosses: 3,
                     virtualLosses: 0,
                     activeSide: null,
@@ -429,10 +429,10 @@ export default Engine =>
                     livePhaseSide: null,
                 };
             }
-            return this.apexAIVirtualHookState;
+            return this.evenOddStrikeEagleVirtualHookState;
         }
-        configureApexAIVirtualHook(switchAfter = 3) {
-            const state = this.getApexAIVirtualHookState();
+        configureEvenOddStrikeEagleVirtualHook(switchAfter = 3) {
+            const state = this.getEvenOddStrikeEagleVirtualHookState();
             const requestedThreshold = Number(switchAfter);
             state.maxVirtualLosses = Math.max(
                 1,
@@ -446,8 +446,8 @@ export default Engine =>
             state.livePhaseSide = null;
             return state.maxVirtualLosses;
         }
-        checkApexAIVirtualHook(side, journalScope = 'apex-ai') {
-            const state = this.getApexAIVirtualHookState();
+        checkEvenOddStrikeEagleVirtualHook(side, journalScope = 'even-odd-strike-eagle') {
+            const state = this.getEvenOddStrikeEagleVirtualHookState();
             const activeSide = String(side ?? '').trim().toUpperCase();
             if (activeSide !== 'A' && activeSide !== 'B') return Promise.resolve(false);
 
@@ -494,7 +494,7 @@ export default Engine =>
                         this.emitSmartOver2RecoveryEvent(
                             pendingTrade.journalScope || journalScope,
                             'virtual_settlement',
-                            `[Apex AI] Virtual ${pendingTrade.side === 'A' ? 'Even' : 'Odd'} settled ` +
+                            `[Even Odd Strike Eagle] Virtual ${pendingTrade.side === 'A' ? 'Even' : 'Odd'} settled ` +
                                 `${isWin ? 'WIN' : 'LOSS'} on digit ${digit} · ` +
                                 `${state.virtualLosses}/${state.maxVirtualLosses} consecutive virtual losses.`,
                             {
@@ -531,7 +531,7 @@ export default Engine =>
                     this.emitSmartOver2RecoveryEvent(
                         journalScope,
                         'live_ready',
-                        `[Apex AI] Side ${activeSide} passed ${state.maxVirtualLosses} consecutive virtual losses; ` +
+                        `[Even Odd Strike Eagle] Side ${activeSide} passed ${state.maxVirtualLosses} consecutive virtual losses; ` +
                             `live ${activeSide === 'A' ? 'Even' : 'Odd'} trades are enabled.`,
                         {
                             side: activeSide,
@@ -544,7 +544,7 @@ export default Engine =>
             }
 
             const contractType = activeSide === 'A' ? 'DIGITEVEN' : 'DIGITODD';
-            const virtualTradeId = ['apex-ai', activeSide, currentEpoch, contractType].join(':');
+            const virtualTradeId = ['even-odd-strike-eagle', activeSide, currentEpoch, contractType].join(':');
             state.pendingVirtualTrade = {
                 side: activeSide,
                 contractType,
@@ -556,7 +556,7 @@ export default Engine =>
             this.emitSmartOver2RecoveryEvent(
                 journalScope,
                 'virtual_purchase',
-                `[Apex AI] Virtual ${activeSide === 'A' ? 'Even' : 'Odd'} started; waiting for the next tick.`,
+                `[Even Odd Strike Eagle] Virtual ${activeSide === 'A' ? 'Even' : 'Odd'} started; waiting for the next tick.`,
                 {
                     side: activeSide,
                     contractType,

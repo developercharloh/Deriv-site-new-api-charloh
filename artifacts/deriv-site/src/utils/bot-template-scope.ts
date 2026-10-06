@@ -1,8 +1,11 @@
 const RISE_FALL_MASTER_BOT_SCOPE = 'rise-fall-master';
 const RISE_FALL_MASTER_BOT_IDENTITIES = new Set(['risefallmaster', 'risefallmasterbot']);
 const SMART_OVER_2_BOT_SCOPE = 'smart-over-2';
-const APEX_AI_BOT_SCOPE = 'apex-ai';
-const APEX_AI_BOT_IDENTITIES = new Set(['apexai', 'apexaimultistrategy', 'apexaimultistrategybot']);
+const EVEN_ODD_STRIKE_EAGLE_BOT_SCOPE = 'even-odd-strike-eagle';
+const EVEN_ODD_STRIKE_EAGLE_BOT_IDENTITIES = new Set([
+    'evenoddstrikeeagle',
+    'evenoddstrikeeaglebot',
+]);
 const SMART_OVER_2_BOT_V2_IDENTITIES = new Set(['smartover2v2', 'smartover2botv2']);
 const SMART_OVER_2_BOT_V3_IDENTITIES = new Set(['smartover2v3', 'smartover2botv3']);
 const SMART_OVER_2_BOT_IDENTITIES = new Set([
@@ -27,7 +30,9 @@ export const isRiseFallMasterBotIdentity = (identity: unknown) =>
 export const getSmartOver2JournalScope = (identity: unknown) => {
     const normalizedIdentity = normalizeIdentity(identity);
     if (RISE_FALL_MASTER_BOT_IDENTITIES.has(normalizedIdentity)) return RISE_FALL_MASTER_BOT_SCOPE;
-    if (APEX_AI_BOT_IDENTITIES.has(normalizedIdentity)) return APEX_AI_BOT_SCOPE;
+    if (EVEN_ODD_STRIKE_EAGLE_BOT_IDENTITIES.has(normalizedIdentity)) {
+        return EVEN_ODD_STRIKE_EAGLE_BOT_SCOPE;
+    }
     if (SMART_OVER_2_BOT_IDENTITIES.has(normalizedIdentity)) return SMART_OVER_2_BOT_SCOPE;
     return null;
 };

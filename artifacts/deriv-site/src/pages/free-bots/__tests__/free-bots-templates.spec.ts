@@ -151,41 +151,46 @@ describe('Free Bots template catalog', () => {
         expect(document.querySelectorAll('block[type="edging_pro_purchase_condition"]')).toHaveLength(1);
     });
 
-    it('keeps Rise/Fall journal variables out of the Apex AI template', () => {
-        const apexXml = fs.readFileSync(path.join(publicBotsPath, 'Apex_AI.xml'), 'utf8');
+    it('keeps Even Odd Strike Eagle limited to its Even/Odd strategy', () => {
+        const xml = fs.readFileSync(path.join(publicBotsPath, 'Even_Odd_Strike_Eagle.xml'), 'utf8');
+        const document = new DOMParser().parseFromString(xml, 'application/xml');
+        const purchaseTypes = Array.from(document.querySelectorAll('block[type="apollo_purchase2"]')).map(
+            block => block.querySelector('field[name="PURCHASE_LIST"]')?.textContent?.trim()
+        );
 
-        expect(apexXml).not.toMatch(/journal|v_msg|previous direction|indicator candles|model signal/i);
+        expect(document.querySelectorAll('block[type="variables_is_option"], block[type="variables_set_option"]')).toHaveLength(
+            0
+        );
+        expect(purchaseTypes).toEqual(['DIGITEVEN', 'DIGITODD']);
+        expect(xml).not.toMatch(/DIGITOVER|DIGITUNDER|RISE|FALL|apex|multi.?strategy/i);
     });
 
-    it('uses Switch After for Apex AI virtual losses and gates only the Even/Odd route', () => {
-        const xml = fs.readFileSync(path.join(publicBotsPath, 'Apex_AI.xml'), 'utf8');
+    it('uses Switch After for virtual-loss qualification and gates the active Even/Odd side', () => {
+        const xml = fs.readFileSync(path.join(publicBotsPath, 'Even_Odd_Strike_Eagle.xml'), 'utf8');
         const document = new DOMParser().parseFromString(xml, 'application/xml');
-        const settings = document.querySelector('block[type="apex_ai_virtual_hook_settings"]');
+        const settings = document.querySelector('block[type="even_odd_strike_eagle_virtual_hook_settings"]');
         const settingsVariable = settings?.querySelector('value[name="SWITCH_AFTER"] block[type="variables_get"] field[name="VAR"]');
-        const evenOddOption = Array.from(document.querySelectorAll('block[type="variables_is_option"]')).find(
-            block => block.querySelector('field[name="OPTION"]')?.textContent === 'Even Odd'
+        const gate = document.querySelector(
+            'block[type="before_purchase"] > statement[name="BEFOREPURCHASE_STACK"] > ' +
+                'block[type="controls_if"] > value[name="IF0"] > ' +
+                'block[type="even_odd_strike_eagle_virtual_hook_gate"]'
         );
-        const evenOddBranch = evenOddOption?.parentElement?.parentElement;
-        const evenOddGate = evenOddBranch?.querySelector(
-            'statement[name="DO0"] > block[type="controls_if"] > value[name="IF0"] > block[type="apex_ai_virtual_hook_gate"]'
+        const activeSide = gate?.querySelector('value[name="SIDE"] block[type="variables_get"] field[name="VAR"]');
+        const realTradeSwitchComparison = document.querySelector(
+            'block[id="eose_count_reaches_threshold"]'
         );
-        const overUnderOption = Array.from(document.querySelectorAll('block[type="variables_is_option"]')).find(
-            block => block.querySelector('field[name="OPTION"]')?.textContent === 'Over4/Under5'
+        const tradeCountVariable = realTradeSwitchComparison?.querySelector(
+            'value[name="A"] block[type="variables_get"] field[name="VAR"]'
         );
-        const riseFallOption = Array.from(document.querySelectorAll('block[type="variables_is_option"]')).find(
-            block => block.querySelector('field[name="OPTION"]')?.textContent === 'Rise/Fall'
-        );
-        const overUnderBranch = overUnderOption?.parentElement?.parentElement?.querySelector(
-            'statement[name="DO1"]'
-        );
-        const riseFallBranch = riseFallOption?.parentElement?.parentElement?.querySelector(
-            'statement[name="DO2"]'
+        const switchAfterVariable = realTradeSwitchComparison?.querySelector(
+            'value[name="B"] block[type="variables_get"] field[name="VAR"]'
         );
 
-        expect(settingsVariable?.textContent).toBe('Switch After ?');
-        expect(evenOddGate).not.toBeNull();
-        expect(overUnderBranch?.querySelector('block[type="apex_ai_virtual_hook_gate"]')).toBeNull();
-        expect(riseFallBranch?.querySelector('block[type="apex_ai_virtual_hook_gate"]')).toBeNull();
+        expect(settingsVariable?.textContent).toBe('Switch After');
+        expect(activeSide?.textContent).toBe('Active Side');
+        expect(gate).not.toBeNull();
+        expect(tradeCountVariable?.textContent).toBe('Side Trade Count');
+        expect(switchAfterVariable?.textContent).toBe('Switch After');
     });
 
     it('keeps the Rise/Fall-specific journal signature only in its own Free Bot', () => {
