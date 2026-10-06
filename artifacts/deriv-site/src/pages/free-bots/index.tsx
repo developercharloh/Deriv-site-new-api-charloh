@@ -3,11 +3,12 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { DBot } from '@/external/bot-skeleton';
-import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
+import { loadWorkspace, scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
 import {
     acquireBlocklyXmlImportGuard,
     BLOCKLY_XML_IMPORT_SETTLE_MS,
 } from '@/external/bot-skeleton/utils/blockly-xml-import-guard';
+import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
 import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
 import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
@@ -1013,77 +1014,88 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                 throw new Error('Bot Builder workspace did not finish loading. Please try loading this bot again.');
             }
 
-            // Keep the direct loader used by the working Binary Matrix path, but
-            // use the same load event group as the normal DBot importer. Several
-            // root-block onchange handlers dispose incomplete-looking blocks
-            // unless they can identify an in-progress `dbot-load` operation.
             const loadEventGroup = `dbot-load${Date.now()}`;
-            const importGuard = acquireBlocklyXmlImportGuard();
-            let importCompleted = false;
-            let importedTradeFields: ImportedTradeFields = {};
-            Blockly.Events.setGroup(loadEventGroup);
-            try {
-                await Blockly.derivWorkspace.asyncClear();
-                setWorkspaceBotTemplateIdentity(Blockly.derivWorkspace, bot.id);
-                const dom = Blockly.utils.xml.textToDom(xmlText);
-                const importedField = (name: string): string | undefined => {
-                    const value = dom.querySelector?.(`field[name="${name}"]`)?.textContent?.trim();
-                    return value || undefined;
-                };
-                importedTradeFields = {
-                    market: importedField('MARKET_LIST'),
-                    submarket: importedField('SUBMARKET_LIST'),
-                    symbol: importedField('SYMBOL_LIST'),
-                    tradeTypeCategory: importedField('TRADETYPECAT_LIST'),
-                    tradeType: importedField('TRADETYPE_LIST'),
-                    contractType: importedField('TYPE_LIST'),
-                    durationType: importedField('DURATIONTYPE_LIST'),
-                    purchaseTypes: Array.from(dom.querySelectorAll('field[name="PURCHASE_LIST"]') as NodeListOf<Element>)
-                        .map(field => field.textContent?.trim())
-                        .filter((value): value is string => Boolean(value)),
-                };
-                // Blockly.Xml.domToVariables expects the <variables> element,
-                // not the <xml> root (whose blocks would be misread as variables).
-                const variablesXml = Array.from(dom.children).find(
-                    (node: any) => node.localName === 'variables' || node.tagName?.toLowerCase() === 'variables'
-                );
-                if (variablesXml) Blockly.Xml.domToVariables(variablesXml, Blockly.derivWorkspace);
-                 // Some browser XML DOM implementations expose the Blockly
-                 // namespace inconsistently through localName/tagName. Root
-                 // Blockly elements all carry a type attribute, while the
-                 // variables container does not; use that stable marker so
-                 // uploaded XML keeps every root block.
-                 const rootXmlBlocks = Array.from(dom.children).filter(
-                     (node: any) =>
-                         (node.localName === 'block' || node.tagName?.toLowerCase() === 'block') &&
-                         Boolean(node.getAttribute?.('type'))
-                 );
-                const mandatoryRootTypes = ['trade_definition', 'before_purchase', 'after_purchase'];
-                const rootTypes = new Set(rootXmlBlocks.map((node: any) => node.getAttribute('type')));
-                const missingRootTypes = mandatoryRootTypes.filter(type => !rootTypes.has(type));
-                if (missingRootTypes.length > 0) {
-                    throw new Error(
-                        `Bot XML is missing mandatory root block(s): ${missingRootTypes.join(', ')}.`
-                    );
-                }
+            const dom = Blockly.utils.xml.textToDom(xmlText);
+            const importedField = (name: string): string | undefined => {
+                const value = dom.querySelector?.(`field[name="${name}"]`)?.textContent?.trim();
+                return value || undefined;
+            };
+            importedTradeFields = {
+                market: importedField('MARKET_LIST'),
+                submarket: importedField('SUBMARKET_LIST'),
+                symbol: importedField('SYMBOL_LIST'),
+                tradeTypeCategory: importedField('TRADETYPECAT_LIST'),
+                tradeType: importedField('TRADETYPE_LIST'),
+                contractType: importedField('TYPE_LIST'),
+                durationType: importedField('DURATIONTYPE_LIST'),
+                purchaseTypes: Array.from(dom.querySelectorAll('field[name="PURCHASE_LIST"]') as NodeListOf<Element>)
+                    .map(field => field.textContent?.trim())
+                    .filter((value): value is string => Boolean(value)),
+            };
 
-                // Do not assume every bot has exactly three roots. Valid DBot
-                // strategies can also contain during_purchase, tick_analysis,
-                // variables, and procedure roots. Binary Matrix happens to
-                // have three, which previously hid this loader restriction.
-                rootXmlBlocks.forEach((rootXmlBlock: any) => {
-                    Blockly.Xml.domToBlock(rootXmlBlock, Blockly.derivWorkspace);
-                });
-                importCompleted = true;
-            } finally {
-                Blockly.Events.setGroup(false);
-                if (!importCompleted) {
-                    importGuard.release();
-                } else {
-                    importGuard.releaseAfter(BLOCKLY_XML_IMPORT_SETTLE_MS);
-                }
+            const rootXmlBlocks = Array.from(dom.children).filter(
+                (node: any) =>
+                    (node.localName === 'block' || node.tagName?.toLowerCase() === 'block') &&
+                    Boolean(node.getAttribute?.('type'))
+            );
+            const mandatoryRootTypes = ['trade_definition', 'before_purchase', 'after_purchase'];
+            const rootTypes = new Set(rootXmlBlocks.map((node: any) => node.getAttribute('type')));
+            const missingRootTypes = mandatoryRootTypes.filter(type => !rootTypes.has(type));
+            if (missingRootTypes.length > 0) {
+                throw new Error(`Bot XML is missing mandatory root block(s): ${missingRootTypes.join(', ')}.`);
             }
-            Blockly.derivWorkspace.cleanUp();
+
+            const xmlBlockTypes = new Set(
+                Array.from(dom.querySelectorAll('block'))
+                    .map((node: any) => node.getAttribute?.('type'))
+                    .filter((type): type is string => Boolean(type))
+            );
+            const requiredEagleTypes =
+                bot.id === 'even-odd-strike-eagle'
+                    ? [
+                          'trade_definition_tradeoptions',
+                          'even_odd_strike_eagle_virtual_hook_gate',
+                          'apollo_purchase2',
+                      ]
+                    : [];
+            const missingEagleTypes = requiredEagleTypes.filter(type => !xmlBlockTypes.has(type));
+            if (missingEagleTypes.length > 0) {
+                throw new Error(
+                    `Even Odd Strike Eagle XML is missing required block(s): ${missingEagleTypes.join(', ')}.`
+                );
+            }
+
+            setWorkspaceBotTemplateIdentity(Blockly.derivWorkspace, bot.id);
+            if (bot.id === 'even-odd-strike-eagle') {
+                // Use Blockly's full workspace importer for this template so all
+                // roots, variables, and nested Purchase blocks load as one guarded
+                // operation instead of being added root-by-root.
+                await loadWorkspace(dom, loadEventGroup, Blockly.derivWorkspace);
+            } else {
+                // Preserve the direct importer used by the other catalog bots.
+                const importGuard = acquireBlocklyXmlImportGuard();
+                let importCompleted = false;
+                Blockly.Events.setGroup(loadEventGroup);
+                try {
+                    await Blockly.derivWorkspace.asyncClear();
+                    const variablesXml = Array.from(dom.children).find(
+                        (node: any) => node.localName === 'variables' || node.tagName?.toLowerCase() === 'variables'
+                    );
+                    if (variablesXml) Blockly.Xml.domToVariables(variablesXml, Blockly.derivWorkspace);
+                    rootXmlBlocks.forEach((rootXmlBlock: any) => {
+                        Blockly.Xml.domToBlock(rootXmlBlock, Blockly.derivWorkspace);
+                    });
+                    importCompleted = true;
+                } finally {
+                    Blockly.Events.setGroup(false);
+                    if (!importCompleted) {
+                        importGuard.release();
+                    } else {
+                        importGuard.releaseAfter(BLOCKLY_XML_IMPORT_SETTLE_MS);
+                    }
+                }
+                Blockly.derivWorkspace.cleanUp();
+            }
             Blockly.derivWorkspace.clearUndo();
 
             const loadedBlocks = Blockly.derivWorkspace.getAllBlocks(true);
@@ -1092,9 +1104,13 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             const missingLoadedTypes = ['trade_definition', 'before_purchase', 'after_purchase'].filter(
                 type => !loadedTopTypes.has(type)
             );
-            if (missingLoadedTypes.length > 0 || loadedBlocks.length === 0) {
+            const missingLoadedEagleTypes = requiredEagleTypes.filter(
+                type => !loadedBlocks.some((block: any) => block.type === type)
+            );
+            const incompleteTypes = [...missingLoadedTypes, ...missingLoadedEagleTypes];
+            if (incompleteTypes.length > 0 || loadedBlocks.length === 0) {
                 throw new Error(
-                    `Bot XML loaded incompletely (missing ${missingLoadedTypes.join(', ') || 'all blocks'}; ` +
+                    `Bot XML loaded incompletely (missing ${incompleteTypes.join(', ') || 'all blocks'}; ` +
                         `${loadedTopBlocks.length} root blocks, ${loadedBlocks.length} total blocks).`
                 );
             }
@@ -1133,7 +1149,9 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                 });
         } catch (err: any) {
             setStatus('error');
-            setErrorMsg(err?.message || 'Failed to load bot.');
+            const message = err?.message || 'Failed to load bot.';
+            setErrorMsg(message);
+            globalObserver.emit('ui.log.error', `Could not load ${bot.name}: ${message}`);
         }
     };
 

@@ -585,6 +585,8 @@ describe('Blockly bot template imports', () => {
         const xmlText = fs.readFileSync(xmlPath, 'utf8');
         const xml = Blockly.utils.xml.textToDom(xmlText);
         const workspace = new Blockly.Workspace();
+        (workspace as any).setResizesEnabled = jest.fn();
+        (workspace as any).resizeContents = jest.fn();
         const hadPreviousWorkspace = Object.prototype.hasOwnProperty.call(window.Blockly, 'derivWorkspace');
         const previousWorkspace = window.Blockly.derivWorkspace;
         const hadPreviousLoadingState = Object.prototype.hasOwnProperty.call(window, '__DBOT_LOADING_XML');
@@ -593,23 +595,10 @@ describe('Blockly bot template imports', () => {
         const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
         window.Blockly.derivWorkspace = workspace;
         (window as any).__DBOT_LOADING_XML = true;
-            Blockly.Events.setGroup('dbot-load-strike-eagle-test');
+        Blockly.Events.setGroup('dbot-load-strike-eagle-test');
 
         try {
-            const xmlChildren: Element[] = Array.from((xml as Element).children);
-            const variablesXml = xmlChildren.find(
-                node => node.localName === 'variables' || node.tagName?.toLowerCase() === 'variables'
-            );
-            if (variablesXml) Blockly.Xml.domToVariables(variablesXml, workspace);
-
-            const rootXmlBlocks = xmlChildren.filter(
-                (node: any) =>
-                    (node.localName === 'block' || node.tagName?.toLowerCase() === 'block') &&
-                    Boolean(node.getAttribute?.('type'))
-            );
-            expect(() =>
-                rootXmlBlocks.forEach(rootXmlBlock => Blockly.Xml.domToBlock(rootXmlBlock, workspace))
-            ).not.toThrow();
+            expect(() => Blockly.Xml.clearWorkspaceAndLoadFromXml(xml, workspace)).not.toThrow();
 
             const topTypes = workspace.getTopBlocks(false).map(block => block.type);
             expect(topTypes).toEqual(
