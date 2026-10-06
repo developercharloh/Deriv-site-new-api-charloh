@@ -24,7 +24,9 @@ window.Blockly.Blocks.even_odd_strike_eagle_virtual_hook_settings = {
                 'Simulate one-tick Even or Odd outcomes until this many consecutive losses, then trade that side live for the same number of settled contracts.'
             ),
         });
-        modifyContextMenu(this);
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
     },
 };
 
@@ -47,7 +49,9 @@ window.Blockly.Blocks.even_odd_strike_eagle_virtual_hook_gate = {
                 'Returns true only after the selected Even or Odd side has reached the configured consecutive virtual-loss threshold.'
             ),
         });
-        modifyContextMenu(this);
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
     },
 };
 

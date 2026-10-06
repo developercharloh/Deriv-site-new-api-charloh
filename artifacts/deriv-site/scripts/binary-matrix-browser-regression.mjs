@@ -15,6 +15,7 @@ const projectDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const xmlPath = join(projectDir, 'public', 'bots', 'Binary_Matrix_AI.xml');
 const freeBotXmlPath = join(projectDir, 'public', 'bots', 'Over2_Under7_Reversal.xml');
 const riseFallBotXmlPath = join(projectDir, 'public', 'bots', 'Rise_Fall_Master_Bot.xml');
+const strikeEagleXmlPath = join(projectDir, 'public', 'bots', 'Even_Odd_Strike_Eagle.xml');
 const overDestroyerXmlPath = join(projectDir, 'public', 'bots', 'Over_Destroyer_Bot.xml');
 const underDestroyerXmlPath = join(projectDir, 'public', 'bots', 'Under_Destroyer_Bot.xml');
 const chromiumPath = process.env.CHROMIUM_PATH || 'chromium';
@@ -1855,6 +1856,7 @@ const run = async () => {
     const xml = await readFile(xmlPath, 'utf8');
     const freeBotXml = await readFile(freeBotXmlPath, 'utf8');
     const riseFallBotXml = await readFile(riseFallBotXmlPath, 'utf8');
+    const strikeEagleXml = await readFile(strikeEagleXmlPath, 'utf8');
     if ((xml.match(/<block\b/g) || []).length < 3) throw new Error(`Binary Matrix XML is unexpectedly small: ${xmlPath}`);
     if (
         (freeBotXml.match(/<block\b/g) || []).length < 3 ||
@@ -1873,6 +1875,15 @@ const run = async () => {
         if (!riseFallBotXml.includes(expectedField)) {
             throw new Error(`Rise/Fall XML is missing ${expectedField}: ${riseFallBotXmlPath}`);
         }
+    }
+    if (
+        !strikeEagleXml.includes('type="trade_definition"') ||
+        !strikeEagleXml.includes('type="before_purchase"') ||
+        !strikeEagleXml.includes('type="after_purchase"') ||
+        !strikeEagleXml.includes('type="even_odd_strike_eagle_virtual_hook_gate"') ||
+        !strikeEagleXml.includes('type="apollo_purchase2"')
+    ) {
+        throw new Error(`Even Odd Strike Eagle XML is missing required roots or strategy blocks: ${strikeEagleXmlPath}`);
     }
 
     const debugPort = await getFreePort();
@@ -1965,7 +1976,130 @@ const run = async () => {
             'Free Bots loader',
             90_000
         );
-        await assertMobileFreeBotsLayout(cdp);
+        if (process.env.STRIKE_EAGLE_ONLY === '1') {
+            await evaluate(
+                cdp,
+                `(() => {
+                    const premium = Array.from(document.querySelectorAll('button')).find(button =>
+                        button.textContent.includes('Premium Bots')
+                    );
+                    if (!premium) throw new Error('Could not find the Premium Bots category.');
+                    premium.click();
+                    return true;
+                })()`
+            );
+            await waitFor(
+                cdp,
+                `Array.from(document.querySelectorAll('.free-bots__card')).some(card =>
+                    (card.querySelector('.free-bots__card-name')?.textContent || '').includes('Even Odd Strike Eagle')
+                )`,
+                'Even Odd Strike Eagle premium card'
+            );
+        } else {
+            await assertMobileFreeBotsLayout(cdp);
+        }
+        if (process.env.STRIKE_EAGLE_ONLY === '1') {
+            await seedEmptySavedWorkspace(cdp);
+            await clickButtonInCard(cdp, 'Even Odd Strike Eagle', 'Load bot');
+            await waitFor(
+                cdp,
+                `document.querySelector('.dc-tabs__item#id-bot-builder')?.classList.contains('dc-tabs__active') || false`,
+                'Even Odd Strike Eagle Bot Builder navigation'
+            );
+            const skipGuide = await evaluate(
+                cdp,
+                `Array.from(document.querySelectorAll('button')).some(
+                    button => button.getClientRects().length > 0 && button.textContent.trim() === 'Skip'
+                )`
+            );
+            if (skipGuide) await clickButtonContaining(cdp, 'Skip');
+            await dismissSocialPopup(cdp);
+            await waitFor(
+                cdp,
+                `(() => {
+                    const workspace = window.Blockly?.derivWorkspace;
+                    const roots = workspace?.getTopBlocks?.(true) || [];
+                    const blocks = workspace?.getAllBlocks?.(true) || [];
+                    return ['trade_definition', 'before_purchase', 'after_purchase', 'procedures_defnoreturn']
+                        .every(type => roots.some(block => block.type === type)) &&
+                        blocks.some(block => block.type === 'even_odd_strike_eagle_virtual_hook_gate') &&
+                        blocks.filter(block => block.type === 'apollo_purchase2').length === 2;
+                })()`,
+                'Even Odd Strike Eagle rendered roots and strategy blocks',
+                30_000
+            );
+            // Match the delayed dropdown and lifecycle checks used by the other
+            // mobile Builder regressions before validating the final workspace.
+            await sleep(6_800);
+
+            const result = await evaluate(
+                cdp,
+                `(() => {
+                    const workspace = window.Blockly?.derivWorkspace;
+                    const roots = workspace?.getTopBlocks?.(true) || [];
+                    const blocks = workspace?.getAllBlocks?.(true) || [];
+                    const allBlockTypes = (workspace?.getAllBlocks?.(true) || [])
+                        .reduce((counts, block) => {
+                            counts[block.type] = (counts[block.type] || 0) + 1;
+                            return counts;
+                        }, {});
+                    const state = window.__binaryMatrixInterpreterTest;
+                    return {
+                        roots: roots.map(block => block.type),
+                        allBlockTypes,
+                        renderedRootCount: roots.filter(block =>
+                            block.svgGroup_?.isConnected && block.svgGroup_.querySelector('path')
+                        ).length,
+                        totalBlockCount: blocks.length,
+                        buyRequests: state?.buyRequests || [],
+                        journal: document.querySelector('[data-testid="dt_mock_journal"]')?.innerText || '',
+                        browserErrors: window.__binaryMatrixBrowserErrors || [],
+                    };
+                })()`
+            );
+            const mobileLayout = await workspaceSnapshot(cdp);
+            const rootXPositions = mobileLayout?.roots.map(root => root.x) || [];
+            const singleColumnLayout =
+                rootXPositions.length === 4 &&
+                Math.max(...rootXPositions) - Math.min(...rootXPositions) <= 1;
+            const startsAtWorkspaceOrigin =
+                Math.abs(mobileLayout?.scrollX || 0) <= 1 &&
+                Math.abs(mobileLayout?.scrollY || 0) <= 1;
+            for (const type of [
+                'even_odd_strike_eagle_virtual_hook_settings',
+                'even_odd_strike_eagle_virtual_hook_gate',
+                'apollo_purchase2',
+                'trade_definition_tradeoptions',
+            ]) {
+                if (!result.allBlockTypes?.[type]) {
+                    throw new Error(`Even Odd Strike Eagle is missing ${type}: ${JSON.stringify(result)}`);
+                }
+            }
+            const expectedXmlBlockCount = (strikeEagleXml.match(/<block\b/g) || []).length;
+            if (
+                result.roots.length !== 4 ||
+                result.renderedRootCount !== result.roots.length ||
+                result.totalBlockCount < expectedXmlBlockCount ||
+                !singleColumnLayout ||
+                !startsAtWorkspaceOrigin
+            ) {
+                throw new Error(
+                    `Even Odd Strike Eagle workspace rendered incompletely on mobile ` +
+                        `(expected at least ${expectedXmlBlockCount} blocks with visible mobile roots): ` +
+                        `${JSON.stringify({ result, mobileLayout })}`
+                );
+            }
+            if (result.buyRequests.length > 0) {
+                throw new Error(`Even Odd Strike Eagle bought before Run was pressed: ${JSON.stringify(result)}`);
+            }
+            if (/Could not load Even Odd Strike Eagle|mandatory and cannot be/i.test(result.journal)) {
+                throw new Error(`Even Odd Strike Eagle reported load errors: ${JSON.stringify(result)}`);
+            }
+            console.log(
+                `✓ Even Odd Strike Eagle loads all required roots and strategy blocks on mobile without buying`
+            );
+            return;
+        }
         await seedEmptySavedWorkspace(cdp);
         await clickButtonInCard(cdp, 'Rise / Fall Master Bot', 'Load bot');
         await waitFor(cdp, `location.hash === '#bot_builder'`, 'Rise/Fall Bot Builder navigation');

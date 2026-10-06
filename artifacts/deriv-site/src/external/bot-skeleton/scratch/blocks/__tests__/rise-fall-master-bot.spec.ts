@@ -4,6 +4,7 @@ import path from 'path';
 import * as BlocklyNamespace from 'blockly';
 import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
 import DBotStore from '../../dbot-store';
+import { modifyContextMenu } from '../../utils';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import { centerWorkspaceRoot, revealWorkspaceFromTop } from '../../utils/workspace-reveal';
 
@@ -746,6 +747,27 @@ describe('Blockly bot template imports', () => {
             } else {
                 delete (window.Blockly as any).derivWorkspace;
             }
+            workspace.dispose();
+        }
+    });
+
+    it('adds Even Odd Strike Eagle context-menu items only when Blockly supplies a menu array', () => {
+        const modifyContextMenuMock = modifyContextMenu as jest.Mock;
+        modifyContextMenuMock.mockClear();
+        const workspace = new Blockly.Workspace();
+        try {
+            const settingsBlock = workspace.newBlock('even_odd_strike_eagle_virtual_hook_settings') as any;
+            const gateBlock = workspace.newBlock('even_odd_strike_eagle_virtual_hook_gate') as any;
+
+            expect(modifyContextMenuMock).not.toHaveBeenCalled();
+
+            const settingsMenu: any[] = [];
+            const gateMenu: any[] = [];
+            expect(() => settingsBlock.customContextMenu(settingsMenu)).not.toThrow();
+            expect(() => gateBlock.customContextMenu(gateMenu)).not.toThrow();
+            expect(modifyContextMenuMock).toHaveBeenNthCalledWith(1, settingsMenu);
+            expect(modifyContextMenuMock).toHaveBeenNthCalledWith(2, gateMenu);
+        } finally {
             workspace.dispose();
         }
     });

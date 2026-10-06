@@ -1152,6 +1152,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             setStatus('error');
             const message = err?.message || 'Failed to load bot.';
             setErrorMsg(message);
+            console.error(`[Free Bots] Could not load ${bot.name}.`, err);
             globalObserver.emit('ui.log.error', `Could not load ${bot.name}: ${message}`);
         }
     };
