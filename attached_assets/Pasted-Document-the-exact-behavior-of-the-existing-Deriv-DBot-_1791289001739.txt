@@ -1,0 +1,146 @@
+Document the exact behavior of the existing Deriv DBot template now named “Even Odd Strike Eagle” (Bot #5). Treat the specification below as the source of truth. Do not invent indicators, AI predictions, entry filters, market predictions, or automatic strategy rotation.
+
+BOT SETUP
+- Bot name: Even Odd Strike Eagle.
+- Market: Synthetic Indices → Random Index → Volatility 25 (1s), symbol 1HZ25V.
+- The bot is configured for one-tick contracts.
+- Only the Even/Odd strategy is available.
+- Default selected mode: Even/Odd.
+- Default initial stake: $0.70.
+- Default “Switch After” threshold: 3.
+- Default Martingale multiplier: 2×.
+- Take-profit threshold: +$10 total profit.
+- Stop-loss threshold: −$50 total profit.
+- The displayed candle interval is 60; contract duration is still 1 tick.
+
+STRATEGY
+- The bot uses ONLY Even/Odd.
+- There are two sides:
+  - Side A = Digit Even.
+  - Side B = Digit Odd.
+- Side A is used first when the bot starts.
+- The bot does NOT automatically rotate between different strategies because no other strategies exist.
+- The bot only switches between Even and Odd according to the configured “Switch After” rule.
+
+SIDE SWITCHING
+- “Switch After” controls how many REAL contracts settle before the bot changes from the current side to the opposite side.
+- With the default value of 3:
+  - Start with Even.
+  - After 3 settled real contracts, switch to Odd.
+  - After 3 settled real contracts on Odd, switch back to Even.
+  - Continue alternating in this manner.
+- After switching sides, the real-trade counter resets to zero.
+- The counter advances ONLY after real contracts settle.
+- Virtual contracts do NOT advance the real-trade counter.
+- The side switch does not mean the bot has predicted that the next digit will be Even or Odd.
+
+EVEN/ODD VIRTUAL HOOK
+- The Virtual Hook applies to the Even/Odd strategy.
+- Before allowing real contracts for the active side, the bot simulates one-tick Even/Odd outcomes using incoming market ticks.
+- These are VIRTUAL observations only. They are not broker purchases.
+- Virtual observations:
+  - Do not use the real stake.
+  - Do not change the Martingale stake.
+  - Do not count as real trades.
+  - Do not increase or decrease the real-trade counter.
+  - Do not directly trigger the total-profit stop conditions.
+- A virtual Even wins when the observed last digit is even.
+- A virtual Odd wins when the observed last digit is odd.
+- A virtual loss increments the consecutive virtual-loss count for the active side.
+- A virtual win resets the consecutive virtual-loss count for that side to zero.
+- The bot allows real contracts for the active side only after the configured number of consecutive virtual losses has been reached.
+- With the default threshold, the active side must experience three consecutive virtual losses before it qualifies for real trading.
+- After the side changes from Even to Odd, or Odd to Even, the new side must qualify separately.
+- The virtual-loss count starts over for the new side.
+- Once the active side passes the virtual-loss threshold, the bot can place real contracts for that side until the normal “Switch After” rule causes the A/B switch.
+- Virtual activity must be treated and logged as virtual events, not as real trades.
+
+REAL TRADE RULES
+- Real purchases use the current “Stake” variable.
+- Contract duration is one tick.
+- The selected contract type is determined by the active side:
+  - Even = Digit Even.
+  - Odd = Digit Odd.
+- After each real contract settles:
+  - If the contract wins, reset Stake to the Initial Stake.
+  - If the contract loses, multiply the current Stake by the Martingale multiplier.
+- Default Initial Stake = $0.70.
+- Default Martingale multiplier = 2×.
+- Example loss progression:
+  - $0.70
+  - $1.40
+  - $2.80
+  - $5.60
+  - $11.20
+  - etc.
+- The Martingale progression can increase risk rapidly.
+- Martingale does NOT guarantee recovery, profit, or winning trades.
+- After settlement, increment the real-trade counter.
+- When the real-trade counter reaches the configured “Switch After” value, switch the active side:
+  - Even → Odd
+  - Odd → Even
+- After switching, reset the real-trade counter to zero.
+
+TRADE LOOP
+- The bot starts with the Even side.
+- The active side must first satisfy the Virtual Hook qualification.
+- Once qualified, the bot can place real one-tick contracts.
+- Real contracts settle normally.
+- The stake is reset after a win or multiplied after a loss.
+- The real-trade counter increments after every settled real contract.
+- When the counter reaches “Switch After,” the bot changes to the opposite side.
+- The new side must qualify through its own virtual-loss sequence before real trading resumes.
+- The process continues until a stop condition is reached.
+
+STOP CONDITIONS
+- After each real contract settles, check total profit.
+- If total profit is at or above +$10:
+  - Print: “Take Profit Achieved”
+  - Do not start another real trade.
+- If total profit is at or below −$50:
+  - Print: “Sorry!!! Stop Loss Hit”
+  - Do not start another real trade.
+- If neither threshold has been reached:
+  - Continue the trade-again loop.
+- These are bot logic thresholds only.
+- They are NOT guarantees against broker limits, execution differences, slippage, contract losses, or other trading risks.
+
+IMPORTANT ACCURACY NOTES
+- Despite the previous template name containing “AI,” Even Odd Strike Eagle uses deterministic Blockly-style rules described above.
+- It does NOT use a machine-learning model.
+- It does NOT use AI to predict the next digit.
+- It does NOT analyze market direction.
+- It does NOT automatically select between multiple strategies.
+- There is ONLY one strategy: Even/Odd.
+- The only switching behavior is between:
+  - Digit Even.
+  - Digit Odd.
+- The bot's Virtual Hook is a qualification mechanism based on consecutive virtual losses; it should not be described as an AI prediction system.
+- Virtual trades must never be presented as real trades.
+- Do not claim that the bot is guaranteed to be profitable.
+- Do not claim that Martingale eliminates risk.
+- Do not claim that three virtual losses guarantee the next digit will win.
+- Do not add indicators, technical analysis, prediction algorithms, AI/ML models, signals, or entry filters that are not explicitly specified above.
+
+FINAL SUMMARY
+Even Odd Strike Eagle is a deterministic one-tick Even/Odd Deriv DBot strategy.
+
+Default flow:
+
+1. Start on EVEN.
+2. Observe virtual Even/Odd outcomes.
+3. Wait until the active side records 3 consecutive virtual losses.
+4. Qualify the active side for real trading.
+5. Place one-tick real Even contracts.
+6. After settlement:
+   - Win → reset stake to $0.70.
+   - Loss → multiply stake by 2×.
+7. Count the settled real contract.
+8. After 3 settled real contracts, switch EVEN → ODD.
+9. Reset the real-trade counter.
+10. Qualify ODD separately through its virtual-loss requirement.
+11. Place real Odd contracts once qualified.
+12. After 3 settled real Odd contracts, switch ODD → EVEN.
+13. Continue alternating Even/Odd until:
+   - Total profit reaches +$10 → Take Profit Achieved.
+   - Total profit reaches −$50 → Stop Loss Hit.
