@@ -13,7 +13,7 @@ window.Blockly.Blocks.even_odd_strike_eagle_virtual_hook_settings = {
         this.jsonInit({
             message0: localize('Even Odd Strike Eagle · Virtual Hook'),
             message1: localize(
-                'Use Switch After %1 for consecutive virtual losses and real trades per side'
+                'Use %1 for consecutive virtual losses and winning real trades before switching sides'
             ),
             args1: [{ type: 'input_value', name: 'SWITCH_AFTER', check: 'Number' }],
             previousStatement: null,
@@ -21,7 +21,7 @@ window.Blockly.Blocks.even_odd_strike_eagle_virtual_hook_settings = {
             inputsInline: false,
             ...colours(),
             tooltip: localize(
-                'Simulate one-tick Even or Odd outcomes until this many consecutive losses, then trade that side live for the same number of settled contracts.'
+                'Wait for this many consecutive virtual losses on the active side, then keep trading that side live until this many real trades win. Live losses do not count toward the win target. After the target wins, switch sides and restart the Virtual Hook.'
             ),
         });
     },

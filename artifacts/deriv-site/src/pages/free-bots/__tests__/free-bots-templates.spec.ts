@@ -167,17 +167,28 @@ describe('Free Bots template catalog', () => {
         expect(xml).not.toMatch(/DIGITOVER|DIGITUNDER|RISE|FALL|apex|multi.?strategy/i);
     });
 
-    it('uses Switch After for virtual-loss qualification and gates the active Even/Odd side', () => {
+    it('uses one Run once threshold for virtual losses and winning trades before switching sides', () => {
         const xml = fs.readFileSync(path.join(publicBotsPath, 'Even_Odd_Strike_Eagle.xml'), 'utf8');
         const document = new DOMParser().parseFromString(xml, 'application/xml');
         const settings = document.querySelector('block[type="even_odd_strike_eagle_virtual_hook_settings"]');
         const settingsVariable = settings?.querySelector('value[name="SWITCH_AFTER"] block[type="variables_get"] field[name="VAR"]');
+        const startValue = document.querySelector(
+            'block[id="eose_set_switch_after"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]'
+        );
         const gate = document.querySelector(
             'block[type="before_purchase"] > statement[name="BEFOREPURCHASE_STACK"] > ' +
                 'block[type="controls_if"] > value[name="IF0"] > ' +
                 'block[type="even_odd_strike_eagle_virtual_hook_gate"]'
         );
         const activeSide = gate?.querySelector('value[name="SIDE"] block[type="variables_get"] field[name="VAR"]');
+        const countWins = document.querySelector('block[id="eose_count_winning_trade"]');
+        const countWinsResult = countWins?.querySelector(
+            'value[name="IF0"] block[type="contract_check_result"] field[name="CHECK_RESULT"]'
+        );
+        const winOnlyCounter = countWins?.querySelector(
+            'statement[name="DO0"] > block[id="eose_increment_count"]'
+        );
+        const switchAfterWins = countWins?.querySelector('block[id="eose_switch_side_after_threshold"]');
         const realTradeSwitchComparison = document.querySelector(
             'block[id="eose_count_reaches_threshold"]'
         );
@@ -188,11 +199,15 @@ describe('Free Bots template catalog', () => {
             'value[name="B"] block[type="variables_get"] field[name="VAR"]'
         );
 
-        expect(settingsVariable?.textContent).toBe('Switch After');
+        expect(startValue?.textContent).toBe('3');
+        expect(settingsVariable?.textContent).toBe('Virtual Losses / Wins');
         expect(activeSide?.textContent).toBe('Active Side');
         expect(gate).not.toBeNull();
+        expect(countWinsResult?.textContent).toBe('win');
+        expect(winOnlyCounter).not.toBeNull();
+        expect(switchAfterWins).not.toBeNull();
         expect(tradeCountVariable?.textContent).toBe('Side Trade Count');
-        expect(switchAfterVariable?.textContent).toBe('Switch After');
+        expect(switchAfterVariable?.textContent).toBe('Virtual Losses / Wins');
     });
 
     it('keeps the Rise/Fall-specific journal signature only in its own Free Bot', () => {

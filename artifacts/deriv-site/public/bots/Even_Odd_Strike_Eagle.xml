@@ -4,7 +4,7 @@
     <variable id="TpR#!@ZaN:g6gvsyAgHw">Active Side</variable>
     <variable id="L@/b)sz/N}%09a72BPX;">Stake</variable>
     <variable id="is-FMy]az2Q0g8j+I|5%">Initial Stake</variable>
-    <variable id="7,SJ1X:],Df1`ez~zNxv">Switch After</variable>
+    <variable id="7,SJ1X:],Df1`ez~zNxv">Virtual Losses / Wins</variable>
     <variable id="c5=hz$~!=]^.)CA:21Zd">Martingale</variable>
     <variable id="|Ag{[(Qw/K$g1v=k)zNh">Take Profit</variable>
     <variable id="2]oO6`(1|9(H8I5QalfU">Stop Loss</variable>
@@ -60,7 +60,7 @@
         </value>
         <next>
           <block type="variables_set" id="eose_set_switch_after">
-            <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Switch After</field>
+            <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Virtual Losses / Wins</field>
             <value name="VALUE">
               <block type="math_number" id="eose_switch_after_value">
                 <field name="NUM">3</field>
@@ -98,7 +98,7 @@
                               <block type="even_odd_strike_eagle_virtual_hook_settings" id="eose_virtual_hook_settings">
                                 <value name="SWITCH_AFTER">
                                   <block type="variables_get" id="eose_hook_threshold">
-                                    <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Switch After</field>
+                                    <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Virtual Losses / Wins</field>
                                   </block>
                                 </value>
                               </block>
@@ -137,15 +137,22 @@
   </block>
   <block type="after_purchase" id="eose_after_purchase" x="720" y="110">
     <statement name="AFTERPURCHASE_STACK">
-      <block type="math_change" id="eose_increment_count">
-        <field name="VAR" id="?u5{A+e33uAt_EzsEHQ9">Side Trade Count</field>
-        <value name="DELTA">
-          <shadow type="math_number" id="eose_increment_one">
-            <field name="NUM">1</field>
-          </shadow>
+      <block type="controls_if" id="eose_count_winning_trade">
+        <value name="IF0">
+          <block type="contract_check_result" id="eose_count_only_wins">
+            <field name="CHECK_RESULT">win</field>
+          </block>
         </value>
-        <next>
-          <block type="controls_if" id="eose_switch_side_after_threshold">
+        <statement name="DO0">
+          <block type="math_change" id="eose_increment_count">
+            <field name="VAR" id="?u5{A+e33uAt_EzsEHQ9">Side Trade Count</field>
+            <value name="DELTA">
+              <shadow type="math_number" id="eose_increment_one">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <next>
+              <block type="controls_if" id="eose_switch_side_after_threshold">
             <value name="IF0">
               <block type="logic_compare" id="eose_count_reaches_threshold">
                 <field name="OP">GTE</field>
@@ -156,7 +163,7 @@
                 </value>
                 <value name="B">
                   <block type="variables_get" id="eose_switch_after_for_count">
-                    <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Switch After</field>
+                <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Virtual Losses / Wins</field>
                   </block>
                 </value>
               </block>
@@ -211,8 +218,12 @@
                 </next>
               </block>
             </statement>
-            <next>
-              <block type="controls_if" id="eose_martingale_after_settlement">
+          </block>
+        </next>
+      </block>
+    </statement>
+    <next>
+      <block type="controls_if" id="eose_martingale_after_settlement">
                 <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                 <value name="IF0">
                   <block type="contract_check_result" id="eose_contract_won">
@@ -318,8 +329,6 @@
               </block>
             </next>
           </block>
-        </next>
-      </block>
     </statement>
   </block>
   <block type="before_purchase" id="eose_before_purchase" deletable="false" x="0" y="1110">
