@@ -136,7 +136,7 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
             this.updateAmountLimits();
         }
 
-        const is_load_event = /^dbot-load/.test(event.group);
+        const is_load_event = /^dbot-(?:load|post-load)/.test(event.group || '');
 
         if (event.type === window.Blockly.Events.BLOCK_CREATE && event.ids.includes(this.id)) {
             if (is_load_event) {

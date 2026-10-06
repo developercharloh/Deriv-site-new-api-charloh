@@ -639,11 +639,25 @@ describe('Blockly bot template imports', () => {
             const tradeType = allBlocks.find(block => block.type === 'trade_definition_tradetype');
             const tradeDefinition = allBlocks.find(block => block.type === 'trade_definition') as any;
             const beforePurchase = allBlocks.find(block => block.type === 'before_purchase') as any;
+            const contractType = allBlocks.find(
+                block => block.type === 'trade_definition_contracttype'
+            ) as any;
             expect(tradeOptions).toBeDefined();
             expect(tradeType).toBeDefined();
             expect(tradeDefinition).toBeDefined();
             expect(beforePurchase).toBeDefined();
+            expect(contractType).toBeDefined();
             (window as any).__DBOT_LOADING_XML = false;
+            const contractTypeField = contractType.getField('TYPE_LIST');
+            const initialContractType = contractTypeField.getValue();
+            const originalUpdateContractTypeOptions = contractTypeField.updateOptions;
+            const updateContractTypeOptions = jest.fn();
+            contractTypeField.updateOptions = updateContractTypeOptions;
+            const originalIsDragging = (workspace as any).isDragging;
+            (workspace as any).isDragging = () => false;
+            const enforceContractTypeLimitations = jest
+                .spyOn(contractType, 'enforceLimitations')
+                .mockImplementation(() => undefined);
             const getTradeOptions = jest.spyOn(tradeDefinition, 'getBlocksInStatement');
             const isBeforePurchaseCollapsed = jest
                 .spyOn(beforePurchase, 'isCollapsed')
@@ -658,6 +672,14 @@ describe('Blockly bot template imports', () => {
                     name: 'TRADETYPE_LIST',
                     group: 'dbot-post-load',
                 };
+                contractType.onchange({ ...postLoadChange, newValue: 'evenodd' });
+                expect(updateContractTypeOptions).toHaveBeenCalledWith(
+                    expect.any(Array),
+                    expect.objectContaining({
+                        event_group: 'dbot-post-load',
+                        default_value: initialContractType,
+                    })
+                );
                 tradeDefinition.onchange(postLoadChange);
                 beforePurchase.onchange(postLoadChange);
                 tradeOptions.onchange(postLoadChange);
@@ -673,6 +695,17 @@ describe('Blockly bot template imports', () => {
                     ])
                 );
             } finally {
+                if (originalUpdateContractTypeOptions) {
+                    contractTypeField.updateOptions = originalUpdateContractTypeOptions;
+                } else {
+                    delete contractTypeField.updateOptions;
+                }
+                if (originalIsDragging) {
+                    (workspace as any).isDragging = originalIsDragging;
+                } else {
+                    delete (workspace as any).isDragging;
+                }
+                enforceContractTypeLimitations.mockRestore();
                 getTradeOptions.mockRestore();
                 isBeforePurchaseCollapsed.mockRestore();
                 updateDurationInput.mockRestore();

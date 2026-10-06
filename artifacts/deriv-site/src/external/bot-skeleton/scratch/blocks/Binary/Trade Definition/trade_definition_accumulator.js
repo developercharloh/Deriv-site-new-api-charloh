@@ -131,7 +131,7 @@ window.Blockly.Blocks.trade_definition_accumulator = {
         this.selected_trade_type = trade_type_block.getFieldValue('TRADETYPE_LIST');
         this.selected_growth_rate = this.getFieldValue('GROWTHRATE_LIST');
 
-        const is_load_event = /^dbot-load/.test(event.group);
+        const is_load_event = /^dbot-(?:load|post-load)/.test(event.group || '');
 
         if (event.type === window.Blockly.Events.BLOCK_CREATE && event.ids.includes(this.id)) {
             setCurrency(this);
