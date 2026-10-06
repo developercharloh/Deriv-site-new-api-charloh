@@ -629,7 +629,56 @@ describe('Blockly bot template imports', () => {
                 ])
             );
 
-            const tradeDefinition = workspace.getTopBlocks(false).find(block => block.type === 'trade_definition');
+            // Free Bots restores API-backed dropdowns after the XML guard
+            // releases. Those updates use dbot-post-load so lifecycle handlers
+            // must leave the mandatory trade options block intact.
+            const allBlocks = workspace.getAllBlocks(false);
+            const tradeOptions = allBlocks.find(
+                block => block.type === 'trade_definition_tradeoptions'
+            ) as any;
+            const tradeType = allBlocks.find(block => block.type === 'trade_definition_tradetype');
+            const tradeDefinition = allBlocks.find(block => block.type === 'trade_definition') as any;
+            const beforePurchase = allBlocks.find(block => block.type === 'before_purchase') as any;
+            expect(tradeOptions).toBeDefined();
+            expect(tradeType).toBeDefined();
+            expect(tradeDefinition).toBeDefined();
+            expect(beforePurchase).toBeDefined();
+            (window as any).__DBOT_LOADING_XML = false;
+            const getTradeOptions = jest.spyOn(tradeDefinition, 'getBlocksInStatement');
+            const isBeforePurchaseCollapsed = jest
+                .spyOn(beforePurchase, 'isCollapsed')
+                .mockReturnValue(false);
+            const updateDurationInput = jest
+                .spyOn(tradeOptions, 'updateDurationInput')
+                .mockImplementation(() => undefined);
+            try {
+                const postLoadChange = {
+                    type: Blockly.Events.BLOCK_CHANGE,
+                    blockId: tradeType?.id,
+                    name: 'TRADETYPE_LIST',
+                    group: 'dbot-post-load',
+                };
+                tradeDefinition.onchange(postLoadChange);
+                beforePurchase.onchange(postLoadChange);
+                tradeOptions.onchange(postLoadChange);
+                expect(getTradeOptions).not.toHaveBeenCalled();
+                expect(isBeforePurchaseCollapsed).not.toHaveBeenCalled();
+                expect(updateDurationInput).not.toHaveBeenCalled();
+                expect(workspace.getAllBlocks(false).map(block => block.type)).toEqual(
+                    expect.arrayContaining([
+                        'trade_definition',
+                        'trade_definition_tradeoptions',
+                        'before_purchase',
+                        'apollo_purchase2',
+                    ])
+                );
+            } finally {
+                getTradeOptions.mockRestore();
+                isBeforePurchaseCollapsed.mockRestore();
+                updateDurationInput.mockRestore();
+                (window as any).__DBOT_LOADING_XML = true;
+            }
+
             const centerOnBlock = jest.fn();
             (workspace as any).centerOnBlock = centerOnBlock;
             expect(centerWorkspaceRoot(workspace, 'trade_definition')).toBe(true);

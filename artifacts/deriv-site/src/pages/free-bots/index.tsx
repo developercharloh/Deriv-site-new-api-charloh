@@ -761,6 +761,21 @@ type ImportedTradeFields = {
     purchaseTypes?: string[];
 };
 
+const POST_LOAD_EVENT_GROUP = 'dbot-post-load';
+
+function withPostLoadBlocklyEventGroup<T>(callback: () => T): T {
+    const events = (window as any).Blockly?.Events;
+    if (!events) return callback();
+
+    const previousGroup = events.getGroup();
+    events.setGroup(POST_LOAD_EVENT_GROUP);
+    try {
+        return callback();
+    } finally {
+        events.setGroup(previousGroup);
+    }
+}
+
 async function postLoadReapplyFields(
     ws: any,
     desired: ImportedTradeFields
@@ -802,7 +817,7 @@ async function postLoadReapplyFields(
             type: (window as any).Blockly.Events.BLOCK_CHANGE,
             blockId,
             name,
-            group: 'dbot-post-load',
+            group: POST_LOAD_EVENT_GROUP,
         });
     };
 
@@ -827,7 +842,7 @@ async function postLoadReapplyFields(
             marketBlock.getField(fieldName)?.updateOptions?.(options, {
                 default_value: defaultValue,
                 should_pretend_empty: true,
-                event_group: 'free-bot-restore',
+                event_group: POST_LOAD_EVENT_GROUP,
             });
         };
         updateField('MARKET_LIST', activeSymbols.getMarketDropdownOptions(), desired.market);
@@ -848,11 +863,15 @@ async function postLoadReapplyFields(
         // suppresses the automatic event because the value did not change.
         triggerCascade(tradeTypeBlock, 'SYMBOL_LIST', marketBlock.id);
         if (await waitForOption(tradeTypeBlock, 'TRADETYPECAT_LIST', desired.tradeTypeCategory)) {
-            tradeTypeBlock.setFieldValue(desired.tradeTypeCategory, 'TRADETYPECAT_LIST');
+            withPostLoadBlocklyEventGroup(() =>
+                tradeTypeBlock.setFieldValue(desired.tradeTypeCategory, 'TRADETYPECAT_LIST')
+            );
             triggerCascade(tradeTypeBlock, 'TRADETYPECAT_LIST', tradeTypeBlock.id);
         }
         if (await waitForOption(tradeTypeBlock, 'TRADETYPE_LIST', desired.tradeType)) {
-            tradeTypeBlock.setFieldValue(desired.tradeType, 'TRADETYPE_LIST');
+            withPostLoadBlocklyEventGroup(() =>
+                tradeTypeBlock.setFieldValue(desired.tradeType, 'TRADETYPE_LIST')
+            );
             triggerCascade(tradeTypeBlock, 'TRADETYPE_LIST', tradeTypeBlock.id);
         }
     }
@@ -861,27 +880,33 @@ async function postLoadReapplyFields(
     // saved value before rebuilding purchase options so non-callput families
     // (for example digits and accumulators) do not fall back to callput.
     if (contractTypeBlock && (await waitForOption(contractTypeBlock, 'TYPE_LIST', desired.contractType))) {
-        contractTypeBlock.setFieldValue(desired.contractType, 'TYPE_LIST');
+        withPostLoadBlocklyEventGroup(() =>
+            contractTypeBlock.setFieldValue(desired.contractType, 'TYPE_LIST')
+        );
         triggerCascade(contractTypeBlock, 'TYPE_LIST', contractTypeBlock.id);
     }
 
     // Helper: apply all the critical field values
-    const applyFields = () => {
-        if (desired.durationType && optionsContain(getDurBlock(), 'DURATIONTYPE_LIST', desired.durationType)) {
-            getDurBlock()?.setFieldValue(desired.durationType, 'DURATIONTYPE_LIST');
-        }
-
-        // Re-trigger populatePurchaseList first so each dropdown is built from
-        // the restored contract family, then restore its corresponding XML
-        // value. Do not assume the blocks are CALL/PUT purchases.
-        getPurchaseBlocks().forEach((purchaseBlock, index) => {
-            const purchaseType = desired.purchaseTypes?.[index];
-            purchaseBlock.populatePurchaseList?.({ group: 'reapply' });
-            if (optionsContain(purchaseBlock, 'PURCHASE_LIST', purchaseType)) {
-                purchaseBlock.setFieldValue(purchaseType, 'PURCHASE_LIST');
+    const applyFields = () =>
+        withPostLoadBlocklyEventGroup(() => {
+            if (
+                desired.durationType &&
+                optionsContain(getDurBlock(), 'DURATIONTYPE_LIST', desired.durationType)
+            ) {
+                getDurBlock()?.setFieldValue(desired.durationType, 'DURATIONTYPE_LIST');
             }
+
+            // Re-trigger populatePurchaseList first so each dropdown is built from
+            // the restored contract family, then restore its corresponding XML
+            // value. Do not assume the blocks are CALL/PUT purchases.
+            getPurchaseBlocks().forEach((purchaseBlock, index) => {
+                const purchaseType = desired.purchaseTypes?.[index];
+                purchaseBlock.populatePurchaseList?.({ group: POST_LOAD_EVENT_GROUP });
+                if (optionsContain(purchaseBlock, 'PURCHASE_LIST', purchaseType)) {
+                    purchaseBlock.setFieldValue(purchaseType, 'PURCHASE_LIST');
+                }
+            });
         });
-    };
 
     // Wait for Deriv API to populate DURATIONTYPE_LIST (up to 15 s).
     // Nudge updateDurationInput on each poll in case the API is ready but hasn't

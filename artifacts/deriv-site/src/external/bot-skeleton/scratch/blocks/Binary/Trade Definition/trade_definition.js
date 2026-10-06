@@ -121,7 +121,7 @@ window.Blockly.Blocks.trade_definition = {
         modifyContextMenu(menu);
     },
     onchange(event) {
-        if (window.__DBOT_LOADING_XML || /^dbot-load/.test(event.group)) {
+        if (window.__DBOT_LOADING_XML || /^dbot-(?:load|post-load)/.test(event.group || '')) {
             return;
         }
 
