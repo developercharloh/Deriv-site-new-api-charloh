@@ -9,11 +9,11 @@ The loader rehydrates API-backed dropdowns after XML import. Keep post-load even
 
 For Blockly custom blocks, call `modifyContextMenu(menu)` only from `customContextMenu(menu)`, not from `init()` with `this`. SVG block initialization during XML import does not pass a menu array; using the block instance as one aborts the import. Headless imports do not exercise this lifecycle.
 
-Strike Eagle uses one editable Run once value for both thresholds: wait for X consecutive virtual losses, then keep trading the active Even/Odd side until X live wins have settled. Live losses do not count toward X or return to the Virtual Hook; after X wins, switch sides and begin a fresh virtual-loss streak. Repeat until take profit, stop loss, or manual stop.
+Strike Eagle has separate editable Run once values: `Consecutive VH Losses` gates live entry after X consecutive virtual losses, while `Switch After` counts live wins before changing sides. Live losses neither count toward the win target nor return the bot to virtual trades; changing sides starts a fresh virtual-loss streak.
 
-**Why:** The user explicitly specified that one startup value must control both the virtual-loss threshold and the number of live wins before switching sides.
+**Why:** The user clarified that the virtual-loss gate and live-win side-switch target must be independently configurable.
 
-**How to apply:** Preserve the single Run once setting; only live wins advance the side-switch counter, and changing sides restarts virtual qualification.
+**How to apply:** Keep both settings in Run once; wire the Virtual Hook setup to `Consecutive VH Losses`, compare the win-only side counter to `Switch After`, and restart virtual qualification after each side change.
 
 **Why:** The signed-in mobile report still showed missing-root preflight errors after scroll fixes; the prior per-root import test did not verify the production whole-workspace path. A headless template-import test cannot prove that the authenticated mobile UI renders correctly.
 

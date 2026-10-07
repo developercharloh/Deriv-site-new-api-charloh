@@ -167,12 +167,17 @@ describe('Free Bots template catalog', () => {
         expect(xml).not.toMatch(/DIGITOVER|DIGITUNDER|RISE|FALL|apex|multi.?strategy/i);
     });
 
-    it('uses one Run once threshold for virtual losses and winning trades before switching sides', () => {
+    it('uses separate Run once thresholds for virtual losses and live wins before switching sides', () => {
         const xml = fs.readFileSync(path.join(publicBotsPath, 'Even_Odd_Strike_Eagle.xml'), 'utf8');
         const document = new DOMParser().parseFromString(xml, 'application/xml');
         const settings = document.querySelector('block[type="even_odd_strike_eagle_virtual_hook_settings"]');
-        const settingsVariable = settings?.querySelector('value[name="SWITCH_AFTER"] block[type="variables_get"] field[name="VAR"]');
-        const startValue = document.querySelector(
+        const settingsVariable = settings?.querySelector(
+            'value[name="LOSS_THRESHOLD"] block[type="variables_get"] field[name="VAR"]'
+        );
+        const vhLossStartValue = document.querySelector(
+            'block[id="eose_set_vh_losses"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]'
+        );
+        const switchAfterStartValue = document.querySelector(
             'block[id="eose_set_switch_after"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]'
         );
         const gate = document.querySelector(
@@ -199,15 +204,19 @@ describe('Free Bots template catalog', () => {
             'value[name="B"] block[type="variables_get"] field[name="VAR"]'
         );
 
-        expect(startValue?.textContent).toBe('3');
-        expect(settingsVariable?.textContent).toBe('Virtual Losses / Wins');
+        expect(vhLossStartValue?.textContent).toBe('3');
+        expect(switchAfterStartValue?.textContent).toBe('3');
+        expect(settingsVariable?.textContent).toBe('Consecutive VH Losses');
         expect(activeSide?.textContent).toBe('Active Side');
         expect(gate).not.toBeNull();
         expect(countWinsResult?.textContent).toBe('win');
         expect(winOnlyCounter).not.toBeNull();
         expect(switchAfterWins).not.toBeNull();
         expect(tradeCountVariable?.textContent).toBe('Side Trade Count');
-        expect(switchAfterVariable?.textContent).toBe('Virtual Losses / Wins');
+        expect(switchAfterVariable?.textContent).toBe('Switch After');
+        expect(Array.from(document.querySelectorAll('variable')).map(variable => variable.textContent)).not.toContain(
+            'Virtual Losses / Wins'
+        );
     });
 
     it('keeps the Rise/Fall-specific journal signature only in its own Free Bot', () => {

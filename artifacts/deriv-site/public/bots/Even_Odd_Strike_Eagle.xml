@@ -4,7 +4,8 @@
     <variable id="TpR#!@ZaN:g6gvsyAgHw">Active Side</variable>
     <variable id="L@/b)sz/N}%09a72BPX;">Stake</variable>
     <variable id="is-FMy]az2Q0g8j+I|5%">Initial Stake</variable>
-    <variable id="7,SJ1X:],Df1`ez~zNxv">Virtual Losses / Wins</variable>
+    <variable id="7,SJ1X:],Df1`ez~zNxv">Switch After</variable>
+    <variable id="eoseConsecutiveVHLosses">Consecutive VH Losses</variable>
     <variable id="c5=hz$~!=]^.)CA:21Zd">Martingale</variable>
     <variable id="|Ag{[(Qw/K$g1v=k)zNh">Take Profit</variable>
     <variable id="2]oO6`(1|9(H8I5QalfU">Stop Loss</variable>
@@ -59,48 +60,58 @@
           </block>
         </value>
         <next>
-          <block type="variables_set" id="eose_set_switch_after">
-            <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Virtual Losses / Wins</field>
+          <block type="variables_set" id="eose_set_vh_losses">
+            <field name="VAR" id="eoseConsecutiveVHLosses">Consecutive VH Losses</field>
             <value name="VALUE">
-              <block type="math_number" id="eose_switch_after_value">
+              <block type="math_number" id="eose_vh_losses_value">
                 <field name="NUM">3</field>
               </block>
             </value>
             <next>
-              <block type="variables_set" id="eose_set_martingale">
-                <field name="VAR" id="c5=hz$~!=]^.)CA:21Zd">Martingale</field>
+              <block type="variables_set" id="eose_set_switch_after">
+                <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Switch After</field>
                 <value name="VALUE">
-                  <block type="math_number" id="eose_martingale_value">
-                    <field name="NUM">2</field>
+                  <block type="math_number" id="eose_switch_after_value">
+                    <field name="NUM">3</field>
                   </block>
                 </value>
                 <next>
-                  <block type="variables_set" id="eose_set_take_profit">
-                    <field name="VAR" id="|Ag{[(Qw/K$g1v=k)zNh">Take Profit</field>
+                  <block type="variables_set" id="eose_set_martingale">
+                    <field name="VAR" id="c5=hz$~!=]^.)CA:21Zd">Martingale</field>
                     <value name="VALUE">
-                      <block type="math_number" id="eose_take_profit_value">
-                        <field name="NUM">10</field>
+                      <block type="math_number" id="eose_martingale_value">
+                        <field name="NUM">2</field>
                       </block>
                     </value>
                     <next>
-                      <block type="variables_set" id="eose_set_stop_loss">
-                        <field name="VAR" id="2]oO6`(1|9(H8I5QalfU">Stop Loss</field>
+                      <block type="variables_set" id="eose_set_take_profit">
+                        <field name="VAR" id="|Ag{[(Qw/K$g1v=k)zNh">Take Profit</field>
                         <value name="VALUE">
-                          <block type="math_number" id="eose_stop_loss_value">
-                            <field name="NUM">50</field>
+                          <block type="math_number" id="eose_take_profit_value">
+                            <field name="NUM">10</field>
                           </block>
                         </value>
                         <next>
-                          <block type="procedures_callnoreturn" id="eose_initialize_variables">
-                            <mutation xmlns="http://www.w3.org/1999/xhtml" name="Initialize Bot State"></mutation>
-                            <data>eose-fixed-variable-procedure</data>
+                          <block type="variables_set" id="eose_set_stop_loss">
+                            <field name="VAR" id="2]oO6`(1|9(H8I5QalfU">Stop Loss</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="eose_stop_loss_value">
+                                <field name="NUM">50</field>
+                              </block>
+                            </value>
                             <next>
-                              <block type="even_odd_strike_eagle_virtual_hook_settings" id="eose_virtual_hook_settings">
-                                <value name="SWITCH_AFTER">
-                                  <block type="variables_get" id="eose_hook_threshold">
-                                    <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Virtual Losses / Wins</field>
+                              <block type="procedures_callnoreturn" id="eose_initialize_variables">
+                                <mutation xmlns="http://www.w3.org/1999/xhtml" name="Initialize Bot State"></mutation>
+                                <data>eose-fixed-variable-procedure</data>
+                                <next>
+                                  <block type="even_odd_strike_eagle_virtual_hook_settings" id="eose_virtual_hook_settings">
+                                    <value name="LOSS_THRESHOLD">
+                                      <block type="variables_get" id="eose_hook_threshold">
+                                        <field name="VAR" id="eoseConsecutiveVHLosses">Consecutive VH Losses</field>
+                                      </block>
+                                    </value>
                                   </block>
-                                </value>
+                                </next>
                               </block>
                             </next>
                           </block>
@@ -163,7 +174,7 @@
                 </value>
                 <value name="B">
                   <block type="variables_get" id="eose_switch_after_for_count">
-                <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Virtual Losses / Wins</field>
+                <field name="VAR" id="7,SJ1X:],Df1`ez~zNxv">Switch After</field>
                   </block>
                 </value>
               </block>

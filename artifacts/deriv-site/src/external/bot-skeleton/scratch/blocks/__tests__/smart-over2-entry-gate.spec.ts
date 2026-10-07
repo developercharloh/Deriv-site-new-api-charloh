@@ -390,23 +390,23 @@ describe('Smart Over 2 Blockly entry gate', () => {
     it('generates Even Odd Strike Eagle virtual-hook configuration and gate from the bot variables', () => {
         const workspace = new Blockly.Workspace();
         javascriptGenerator.init(workspace);
-        const switchAfterId = 'strike_eagle_switch_after';
+        const lossThresholdId = 'strike_eagle_vh_losses';
         const sideId = 'strike_eagle_active_side';
-        workspace.createVariable('Switch After', '', switchAfterId);
+        workspace.createVariable('Consecutive VH Losses', '', lossThresholdId);
         workspace.createVariable('Active Side', '', sideId);
         const variableDatabase = new Blockly.Names('window');
         variableDatabase.variableMap = workspace.getVariableMap();
         (Blockly.JavaScript as any).variableDB_ = variableDatabase;
 
-        const switchAfterName = variableDatabase.getName(switchAfterId, Blockly.Variables.CATEGORY_NAME);
+        const lossThresholdName = variableDatabase.getName(lossThresholdId, Blockly.Variables.CATEGORY_NAME);
         const sideName = variableDatabase.getName(sideId, Blockly.Variables.CATEGORY_NAME);
 
         const settings = workspace.newBlock('even_odd_strike_eagle_virtual_hook_settings');
-        const switchAfterGetter = workspace.newBlock('variables_get');
-        switchAfterGetter.setFieldValue(switchAfterId, 'VAR');
-        settings.getInput('SWITCH_AFTER')?.connection?.connect(switchAfterGetter.outputConnection!);
+        const lossThresholdGetter = workspace.newBlock('variables_get');
+        lossThresholdGetter.setFieldValue(lossThresholdId, 'VAR');
+        settings.getInput('LOSS_THRESHOLD')?.connection?.connect(lossThresholdGetter.outputConnection!);
         expect(javascriptGenerator.blockToCode(settings)).toBe(
-            `Bot.configureEvenOddStrikeEagleVirtualHook(${switchAfterName});\n`
+            `Bot.configureEvenOddStrikeEagleVirtualHook(${lossThresholdName});\n`
         );
 
         const gate = workspace.newBlock('even_odd_strike_eagle_virtual_hook_gate');

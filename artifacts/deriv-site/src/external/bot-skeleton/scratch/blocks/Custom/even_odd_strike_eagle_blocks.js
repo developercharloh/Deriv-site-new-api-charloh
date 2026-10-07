@@ -13,15 +13,15 @@ window.Blockly.Blocks.even_odd_strike_eagle_virtual_hook_settings = {
         this.jsonInit({
             message0: localize('Even Odd Strike Eagle · Virtual Hook'),
             message1: localize(
-                'Use %1 for consecutive virtual losses and winning real trades before switching sides'
+                'Enable live trading after %1 consecutive virtual losses'
             ),
-            args1: [{ type: 'input_value', name: 'SWITCH_AFTER', check: 'Number' }],
+            args1: [{ type: 'input_value', name: 'LOSS_THRESHOLD', check: 'Number' }],
             previousStatement: null,
             nextStatement: null,
             inputsInline: false,
             ...colours(),
             tooltip: localize(
-                'Wait for this many consecutive virtual losses on the active side, then keep trading that side live until this many real trades win. Live losses do not count toward the win target. After the target wins, switch sides and restart the Virtual Hook.'
+                'Qualify the active Even/Odd side with this many consecutive Virtual Hook losses. Live trading then continues on that side. The separate Switch After setting controls how many real wins trigger a side change.'
             ),
         });
     },
@@ -33,8 +33,8 @@ window.Blockly.Blocks.even_odd_strike_eagle_virtual_hook_settings = {
 window.Blockly.JavaScript.javascriptGenerator.forBlock.even_odd_strike_eagle_virtual_hook_settings =
     block => {
         const js = generator();
-        const switchAfter = js.valueToCode(block, 'SWITCH_AFTER', js.ORDER_ATOMIC) || '3';
-        return `Bot.configureEvenOddStrikeEagleVirtualHook(${switchAfter});\n`;
+        const lossThreshold = js.valueToCode(block, 'LOSS_THRESHOLD', js.ORDER_ATOMIC) || '3';
+        return `Bot.configureEvenOddStrikeEagleVirtualHook(${lossThreshold});\n`;
     };
 
 window.Blockly.Blocks.even_odd_strike_eagle_virtual_hook_gate = {

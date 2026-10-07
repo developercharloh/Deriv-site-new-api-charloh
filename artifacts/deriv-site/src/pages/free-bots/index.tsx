@@ -442,13 +442,13 @@ const BOTS: BotConfig[] = [
         name: 'Even Odd Strike Eagle',
         emoji: '🦅',
         description:
-            'One-tick Even/Odd bot for the Volatility 25 (1s) Index. Qualifies each side with consecutive virtual losses, switches sides after the configured number of settled real contracts, resets stake after a win, and doubles it after a loss.',
+            'One-tick Even/Odd bot for the Volatility 25 (1s) Index. Qualifies each side with consecutive Virtual Hook losses, then stays live on that side until Switch After real wins. Live losses do not count toward the switch target; stake resets after a win and doubles after a loss.',
         market: 'Volatility 25 (1s) Index (1HZ25V)',
         strategy: 'Even / Odd · Virtual Hook · Alternating Side Switch',
         params: [
             { label: 'Initial Stake', value: '$0.70' },
-            { label: 'Switch After', value: '3 settled real contracts' },
-            { label: 'Virtual Hook', value: '3 consecutive losses per side' },
+            { label: 'Consecutive VH Losses', value: '3 consecutive losses per side' },
+            { label: 'Switch After', value: '3 real wins per side' },
             { label: 'Martingale', value: '2×' },
             { label: 'Take Profit', value: '$10' },
             { label: 'Stop Loss', value: '$50' },
