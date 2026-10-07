@@ -751,6 +751,80 @@ describe('Blockly bot template imports', () => {
         }
     });
 
+    it('imports Las ET unchanged and generates its legacy purchase from the live trade prediction', () => {
+        const sourceXmlPath = path.resolve(
+            __dirname,
+            '../../../../../../../../attached_assets/Las_ET__1791375686580.xml'
+        );
+        const publicXmlPath = path.resolve(__dirname, '../../../../../../public/bots/Las_ET.xml');
+        const sourceXml = fs.readFileSync(sourceXmlPath);
+        const publicXml = fs.readFileSync(publicXmlPath);
+        expect(publicXml).toEqual(sourceXml);
+
+        const catalogPath = path.resolve(__dirname, '../../../../../../src/pages/free-bots/index.tsx');
+        const catalog = fs.readFileSync(catalogPath, 'utf8');
+        expect(catalog).toMatch(
+            /id:\s*'las-et',[\s\S]*?section:\s*'premium',[\s\S]*?name:\s*'Las ET',[\s\S]*?xmlPath:\s*'\/bots\/Las_ET\.xml'/
+        );
+
+        const workspace = new Blockly.Workspace();
+        (workspace as any).setResizesEnabled = jest.fn();
+        (workspace as any).resizeContents = jest.fn();
+        const hadPreviousWorkspace = Object.prototype.hasOwnProperty.call(window.Blockly, 'derivWorkspace');
+        const previousWorkspace = window.Blockly.derivWorkspace;
+        const hadPreviousLoadingState = Object.prototype.hasOwnProperty.call(window, '__DBOT_LOADING_XML');
+        const previousLoadingState = (window as any).__DBOT_LOADING_XML;
+        const previousEventGroup = Blockly.Events.getGroup();
+        window.Blockly.derivWorkspace = workspace;
+        (window as any).__DBOT_LOADING_XML = true;
+        Blockly.Events.setGroup('dbot-load-las-et-test');
+
+        try {
+            const xml = Blockly.utils.xml.textToDom(publicXml.toString('utf8'));
+            const importDom = xml.cloneNode(true) as Document;
+            Array.from(importDom.getElementsByTagName('field'))
+                .filter(field => dependentFieldNames.includes(field.getAttribute('name') ?? '') && field.getAttribute('name') !== 'PURCHASE_LIST')
+                .forEach(field => field.parentNode?.removeChild(field));
+            expect(() => Blockly.Xml.clearWorkspaceAndLoadFromXml(importDom, workspace)).not.toThrow();
+
+            const allBlocks = workspace.getAllBlocks(false);
+            const purchaseBlock = allBlocks.find(block => block.type === 'apollo_purchase');
+            const tradeOptionsBlock = allBlocks.find(block => block.type === 'trade_definition_tradeoptions');
+            expect(purchaseBlock?.getFieldValue('PURCHASE_LIST')).toBe('DIGITUNDER');
+            expect(tradeOptionsBlock).toBeDefined();
+
+            javascriptGenerator.init(workspace);
+            let purchaseCode = '';
+            let predictionCode = '';
+            try {
+                predictionCode = javascriptGenerator.valueToCode(
+                    tradeOptionsBlock!,
+                    'PREDICTION',
+                    javascriptGenerator.ORDER_ATOMIC
+                );
+                purchaseCode = javascriptGenerator.blockToCode(purchaseBlock!) as string;
+            } finally {
+                javascriptGenerator.finish('');
+            }
+
+            expect(predictionCode).toBeTruthy();
+            expect(purchaseCode).toBe(`Bot.purchase('DIGITUNDER', ${predictionCode});\n`);
+        } finally {
+            Blockly.Events.setGroup(previousEventGroup);
+            if (hadPreviousLoadingState) {
+                (window as any).__DBOT_LOADING_XML = previousLoadingState;
+            } else {
+                delete (window as any).__DBOT_LOADING_XML;
+            }
+            if (hadPreviousWorkspace) {
+                window.Blockly.derivWorkspace = previousWorkspace;
+            } else {
+                delete (window.Blockly as any).derivWorkspace;
+            }
+            workspace.dispose();
+        }
+    });
+
     it('adds Even Odd Strike Eagle context-menu items only when Blockly supplies a menu array', () => {
         const modifyContextMenuMock = modifyContextMenu as jest.Mock;
         modifyContextMenuMock.mockClear();

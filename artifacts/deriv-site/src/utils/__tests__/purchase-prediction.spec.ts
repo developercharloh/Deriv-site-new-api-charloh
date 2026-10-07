@@ -31,6 +31,16 @@ describe('generated purchase prediction forwarding', () => {
         });
     });
 
+    it('uses a legacy purchase block’s live barrier instead of the startup prediction', () => {
+        const options = getPurchaseTradeOptions({ ...baseTradeOptions, prediction: 8 }, 6, 'DIGITUNDER');
+        const request = tradeOptionToBuy('DIGITUNDER', options);
+
+        expect(request.parameters).toMatchObject({
+            contract_type: 'DIGITUNDER',
+            barrier: 6,
+        });
+    });
+
     it('does not add a prediction to Even or Odd purchases', () => {
         const options = getPurchaseTradeOptions({ ...baseTradeOptions, prediction: 5 }, 5, 'DIGITODD');
 

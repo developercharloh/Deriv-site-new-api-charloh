@@ -458,6 +458,27 @@ const BOTS: BotConfig[] = [
         gradient: 'linear-gradient(135deg, #07152e 0%, #123b72 45%, #14b881 100%)',
         category: 'EVEN / ODD',
     },
+    {
+        id: 'las-et',
+        section: 'premium',
+        name: 'Las ET',
+        emoji: '🎯',
+        description:
+            'Runs one-tick DIGITUNDER contracts on Volatility 25 (1s). The barrier starts at 8, changes to 6 after a loss, and returns to 8 after a win. The $0.55 entry resets after a win and increases from the second consecutive loss using a 0.8× loss adjustment. The supplied XML sets a $5 profit target and a $1,000 stop-loss.',
+        market: 'Volatility 25 (1s) Index (1HZ25V)',
+        strategy: 'Digit Under · Dynamic Barrier · Loss Recovery',
+        params: [
+            { label: 'Initial Stake', value: '$0.55' },
+            { label: 'Barrier', value: '8 after a win · 6 after a loss' },
+            { label: 'Loss Adjustment', value: 'After 2+ consecutive losses · 0.8× loss' },
+            { label: 'Take Profit', value: '$5' },
+            { label: 'Stop Loss', value: '$1,000' },
+            { label: 'Duration', value: '1 Tick' },
+        ],
+        xmlPath: '/bots/Las_ET.xml',
+        gradient: 'linear-gradient(135deg, #231044 0%, #762a66 48%, #f59e0b 100%)',
+        category: 'DIGIT UNDER',
+    },
 ];
 
 const FREE_BOT_SECTIONS: { id: FreeBotSection; title: string; emptyMessage?: string }[] = [
@@ -497,6 +518,7 @@ const CARD_ART: Record<string, string> = {
     'over-under-manual': '/assets/free-bots/digit-switcher.jpg',
     'elite-entry-scanner': '/assets/free-bots/blueprint.jpg',
     'even-odd-strike-eagle': '/assets/free-bots/odd-myth.jpg',
+    'las-et': '/assets/free-bots/under-autobot.jpg',
 };
 
 const CARD_CATEGORY: Record<string, string> = {
@@ -517,6 +539,7 @@ const CARD_CATEGORY: Record<string, string> = {
     'over-under-manual': 'OVER / UNDER',
     'elite-entry-scanner': 'OVER / UNDER SCANNER',
     'even-odd-strike-eagle': 'EVEN / ODD · VIRTUAL HOOK',
+    'las-et': 'DIGIT UNDER',
 };
 
 const CARD_ACCENT: Record<string, string> = {

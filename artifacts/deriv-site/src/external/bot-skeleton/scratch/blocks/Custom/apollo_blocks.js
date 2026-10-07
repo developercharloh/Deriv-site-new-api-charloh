@@ -291,3 +291,66 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.apollo_purchase2 = block 
         : 'undefined';
     return `Bot.purchase('${purchaseType}', ${prediction});\n`;
 };
+
+// Legacy templates serialize this purchase block without a PREDICTION input.
+// Read the current trade-definition expression so strategies that change their
+// barrier after settlement keep using the live value rather than the startup one.
+window.Blockly.Blocks.apollo_purchase = {
+    init() {
+        this.jsonInit(this.definition());
+        this.setNextStatement(false);
+    },
+    definition() {
+        return {
+            message0: localize('Purchase %1'),
+            args0: [
+                {
+                    type: 'field_dropdown',
+                    name: 'PURCHASE_LIST',
+                    options: [
+                        [localize('Even'), 'DIGITEVEN'],
+                        [localize('Odd'), 'DIGITODD'],
+                        [localize('Over'), 'DIGITOVER'],
+                        [localize('Under'), 'DIGITUNDER'],
+                    ],
+                },
+            ],
+            previousStatement: null,
+            colour: window.Blockly.Colours.Special1.colour,
+            colourSecondary: window.Blockly.Colours.Special1.colourSecondary,
+            colourTertiary: window.Blockly.Colours.Special1.colourTertiary,
+            tooltip: localize('Buys the selected digit contract using the current prediction from Trade parameters.'),
+            category: window.Blockly.Categories.Before_Purchase,
+        };
+    },
+    meta() {
+        return {
+            display_name: localize('Legacy digit purchase'),
+            description: localize('Uses the current Trade parameters prediction when purchasing a digit contract.'),
+            key_words: localize('buy'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.apollo_purchase = block => {
+    const purchaseType = block.getFieldValue('PURCHASE_LIST') || 'DIGITUNDER';
+    const workspace = block.workspace;
+    const tradeDefinition =
+        workspace?.getTradeDefinitionBlock?.() ??
+        workspace?.getAllBlocks?.(true)?.find(candidate => candidate.type === 'trade_definition');
+    const tradeOptions = tradeDefinition
+        ? workspace?.getAllBlocks?.(false)?.find(
+              candidate =>
+                  ['trade_definition_tradeoptions', 'trade_definition_tradeoptions_payout'].includes(candidate.type) &&
+                  candidate.getRootBlock?.() === tradeDefinition
+          )
+        : undefined;
+    const prediction =
+        tradeOptions?.getInput?.('PREDICTION') &&
+        generator().valueToCode(tradeOptions, 'PREDICTION', generator().ORDER_ATOMIC);
+
+    return `Bot.purchase('${purchaseType}', ${prediction || 'undefined'});\n`;
+};

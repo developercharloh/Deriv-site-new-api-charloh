@@ -1168,6 +1168,9 @@ export const ToolboxItems = () =>
                         </Shadow>
                     </Value>
                 </Block>
+                <Block type='apollo_purchase'>
+                    <Field name='PURCHASE_LIST'>DIGITUNDER</Field>
+                </Block>
                 <Block type='read_details' />
                 <Block type='last_digit' />
             </Category>

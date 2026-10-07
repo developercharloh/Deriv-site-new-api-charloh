@@ -11,6 +11,10 @@ describe('bot builder toolbox structure', () => {
         path.resolve(__dirname, '../../../../external/bot-skeleton/scratch/blocks/Custom/analysis_blocks.js'),
         'utf8'
     );
+    const apolloBlocksSource = fs.readFileSync(
+        path.resolve(__dirname, '../../../../external/bot-skeleton/scratch/blocks/Custom/apollo_blocks.js'),
+        'utf8'
+    );
     const edgingBlocksSource = fs.readFileSync(
         path.resolve(__dirname, '../../../../external/bot-skeleton/scratch/blocks/Custom/edging_pro_blocks.js'),
         'utf8'
@@ -37,6 +41,15 @@ describe('bot builder toolbox structure', () => {
         expect(toolboxSource).toContain("type='apollo_purchase2'");
         expect(toolboxSource).toContain("type='multiplier_take_profit'");
         expect(toolboxSource).toContain("type='multiplier_stop_loss'");
+    });
+
+    it('registers and exposes the legacy Apollo purchase block', () => {
+        const binaryToolsSection = toolboxSource.match(/<Category id='binarytools'[\s\S]*?<\/Category>/)?.[0];
+
+        expect(binaryToolsSection).toContain("type='apollo_purchase'");
+        expect(apolloBlocksSource).toContain('window.Blockly.Blocks.apollo_purchase =');
+        expect(apolloBlocksSource).toContain('javascriptGenerator.forBlock.apollo_purchase');
+        expect(apolloBlocksSource).toContain("getAllBlocks?.(false)");
     });
 
     it('shows the Edging pro entry rule in the Purchase conditions menu', () => {
