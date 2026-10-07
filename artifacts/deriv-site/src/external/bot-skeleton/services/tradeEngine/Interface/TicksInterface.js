@@ -12,6 +12,10 @@ const getTicksInterface = tradeEngine => {
         getLastDigitList: (...args) => tradeEngine.getLastDigitList(...args),
         checkLastDigitsCondition: (...args) => tradeEngine.checkLastDigitsCondition(...args),
         checkSmartOver2Entry: (...args) => tradeEngine.checkSmartOver2Entry(...args),
+        // This Promise<boolean> gate must use the tick interface so the interpreter
+        // wraps it as an async function before Blockly evaluates its condition.
+        checkEvenOddStrikeEagleVirtualHook: (...args) =>
+            tradeEngine.checkEvenOddStrikeEagleVirtualHook(...args),
         getMostFrequentDigit: (...args) => tradeEngine.getMostFrequentDigit(...args),
         getDigitPercentage: (...args) => tradeEngine.getDigitPercentage(...args),
         getParityPercentage: (...args) => tradeEngine.getParityPercentage(...args),
