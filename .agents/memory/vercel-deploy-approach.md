@@ -28,10 +28,18 @@ npx vercel@latest deploy --prebuilt --prod --yes --token=$VERCEL_TOKEN
 
 ## Key facts
 - Vercel project name: `traderharlo`, org: `team_BQWnsBcAsW4szAjxsE8X2my1`
-- Git integration: **DISCONNECTED** intentionally (prevents permission errors)
+- A main-branch push triggered a Vercel production build on 2026-10-08; the previous note that Git integration was disconnected may be stale.
 - Custom domain: `mrcharlohfx.site` → `www.mrcharlohfx.site`
 - The root `package.json` preinstall was removed from GitHub repo to allow npm
 - `scripts/push-to-github.sh` stages all changes and force-pushes `main`; avoid it for routine publishing
+
+## Git-triggered build failure (2026-10-08)
+
+A Vercel production build cloned the pushed `main` commit, then failed because its configured build command ran `npm install --legacy-peer-deps` in the pnpm monorepo. npm rejects the workspace's `catalog:` protocol.
+
+**Why:** The latest Vercel deployment for the pushed commit ended in `ERROR`; older production deployments remain `READY`.
+
+**How to apply:** Do not assume the old Git-disconnected status is current. Until Vercel's build settings use a compatible pnpm/workspace build, use the prebuilt Vercel artifact flow or correct the project build settings.
 
 **Why:** Vercel's monorepo detection overrides any `installCommand`/`buildCommand` settings when `pnpm-workspace.yaml` is present. The only reliable approach is to bypass Vercel's build system entirely using prebuilt output.
 
