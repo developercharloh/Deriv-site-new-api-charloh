@@ -1,4 +1,4 @@
-- [Vercel deployment via CLI prebuilt](vercel-deploy-approach.md) — a recent main push triggered Vercel, but its legacy npm build fails on pnpm `catalog:` dependencies; prebuilt remains reliable
+- [Vercel deployment via CLI prebuilt](vercel-deploy-approach.md) — root-level Vercel settings now use pnpm; the failed npm build needs a fresh Git deployment to retry
 - [Deriv-site Tabs id stripping](deriv-site-tabs-scroll.md) — custom Tabs component drops the wrapper div's `id`, so id-based mobile scroll/height CSS silently no-ops.
 - [Smart Over 2 startup controls](smart-over2-startup-controls.md) — preserve V1/V2 defaults and V3's configurable Last-X gate, Over prediction, and Virtual Hook.
 - [Deriv-site AI orb testing quirks](deriv-site-ai-orb-testing.md) — floating orb has a perpetual bounce animation that breaks Playwright's normal click; live bot runs always hit a login gate unrelated to the feature under test.

@@ -35,11 +35,11 @@ npx vercel@latest deploy --prebuilt --prod --yes --token=$VERCEL_TOKEN
 
 ## Git-triggered build failure (2026-10-08)
 
-A Vercel production build cloned the pushed `main` commit, then failed because its configured build command ran `npm install --legacy-peer-deps` in the pnpm monorepo. npm rejects the workspace's `catalog:` protocol.
+A Vercel production build cloned the pushed `main` commit, then failed because its project-level build command ran `npm install --legacy-peer-deps` in the pnpm monorepo. npm rejects the workspace's `catalog:` protocol. Those dashboard settings overrode the nested `artifacts/deriv-site/vercel.json`.
 
-**Why:** The latest Vercel deployment for the pushed commit ended in `ERROR`; older production deployments remain `READY`.
+**Why:** The latest Vercel deployment for the pushed commit ended in `ERROR`; changing project build settings does not retry an existing failed deployment.
 
-**How to apply:** Do not assume the old Git-disconnected status is current. Until Vercel's build settings use a compatible pnpm/workspace build, use the prebuilt Vercel artifact flow or correct the project build settings.
+**How to apply:** The current Vercel project settings run `pnpm install --frozen-lockfile` and `pnpm --filter @workspace/deriv-site run build`, with output in `artifacts/deriv-site/dist`. Trigger a fresh Git deployment after changing those settings; do not expect the failed deployment to retry.
 
 **Why:** Vercel's monorepo detection overrides any `installCommand`/`buildCommand` settings when `pnpm-workspace.yaml` is present. The only reliable approach is to bypass Vercel's build system entirely using prebuilt output.
 
