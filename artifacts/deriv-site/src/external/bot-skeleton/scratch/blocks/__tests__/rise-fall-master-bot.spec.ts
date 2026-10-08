@@ -187,7 +187,7 @@ describe('Blockly bot template imports', () => {
             });
     };
 
-    it('imports Smart Over 2 and generates the gated Digit Over 2 purchase', () => {
+    it('imports Smart Over 2 and generates the gated recovery purchase', () => {
         const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Smart_Over_2_Bot.xml');
         const xmlText = fs.readFileSync(xmlPath, 'utf8');
         const sourceDom = Blockly.utils.xml.textToDom(xmlText);
@@ -217,22 +217,24 @@ describe('Blockly bot template imports', () => {
         setDropdownOptions(tradeTypeBlock, 'TRADETYPE_LIST', [['Over/Under', 'overunder']], 'overunder');
         setDropdownOptions(contractTypeBlock, 'TYPE_LIST', [['Both', 'both']], 'both');
         setDropdownOptions(durationBlock, 'DURATIONTYPE_LIST', [['Ticks', 't']], 't');
-        setDropdownOptions(purchaseBlock, 'PURCHASE_LIST', [['Digit Over', 'DIGITOVER']], 'DIGITOVER');
 
-        const gate = workspace.getBlockById('smart_over2_entry_gate');
+        const gate = workspace.getBlockById('smart_over2_recovery_gate');
         expect(gate).toBeDefined();
-        expect(gate?.getInputTargetBlock('COUNT')?.getFieldValue('NUM')).toBe(4);
-        expect(gate?.toString()).toContain('0–2');
+        expect(gate?.getInputTargetBlock('COUNT')).toBeNull();
+        expect(Number(gate?.getInputTargetBlock('ANALYSIS_COUNT')?.getFieldValue('NUM'))).toBe(100);
+        const settingsBlock = workspace.getBlockById('smart_over2_recovery_settings');
+        expect(settingsBlock?.getFieldValue('ENTRY_DIGIT_COUNT')).toBe(4);
+        expect(settingsBlock?.getFieldValue('USE_VIRTUAL_HOOK')).toBe('TRUE');
 
-        setWorkspaceBotTemplateIdentity(workspace, 'rise-fall-master');
+        setWorkspaceBotTemplateIdentity(workspace, 'smart-over-2');
         javascriptGenerator.init(workspace);
         (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
         const generated = javascriptGenerator.blockToCode(
             workspace.getBlockById('smart_over2_before_purchase') as any
         );
 
-        expect(String(generated)).toContain('Bot.checkSmartOver2Entry(4, "rise-fall-master")');
-        expect(String(generated)).toContain("Bot.purchase('DIGITOVER', 2)");
+        expect(String(generated)).toContain('Bot.checkSmartOver2Recovery(undefined, 100, "smart-over-2",');
+        expect(String(generated)).toContain('Bot.purchaseSmartOver2Recovery("smart-over-2")');
         expect(String(generated)).not.toContain('DIGITUNDER');
 
         const previousStore = (DBotStore as any).singleton;
@@ -794,6 +796,7 @@ describe('Blockly bot template imports', () => {
             expect(tradeOptionsBlock).toBeDefined();
 
             javascriptGenerator.init(workspace);
+            (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
             let purchaseCode = '';
             let predictionCode = '';
             try {
