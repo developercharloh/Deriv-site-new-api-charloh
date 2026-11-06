@@ -1,6 +1,6 @@
 import React from 'react';
 import classNames from 'classnames';
-import { Icon } from '@/utils/tmp/dummy';
+import { Icon } from '@/utils/icon-placeholder';
 import { TItem } from '../types/common.types';
 
 type TArrayRenderer = {

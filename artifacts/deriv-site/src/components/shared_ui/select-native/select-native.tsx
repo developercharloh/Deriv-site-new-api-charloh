@@ -1,6 +1,6 @@
 import React from 'react';
 import classNames from 'classnames';
-import { Icon } from '@/utils/tmp/dummy';
+import { Icon } from '@/utils/icon-placeholder';
 import { LabelPairedChevronDownLgRegularIcon } from '@deriv/quill-icons/LabelPaired';
 import Field from '../field/field';
 import Text from '../text';

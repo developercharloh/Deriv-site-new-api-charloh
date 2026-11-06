@@ -1,7 +1,7 @@
 import React from 'react';
 import classNames from 'classnames';
 import { useHover } from '@/hooks/useHover';
-import { Icon } from '@/utils/tmp/dummy';
+import { Icon } from '@/utils/icon-placeholder';
 import { LabelPairedCircleInfoCaptionRegularIcon } from '@deriv/quill-icons/LabelPaired';
 
 type TTooltip = {

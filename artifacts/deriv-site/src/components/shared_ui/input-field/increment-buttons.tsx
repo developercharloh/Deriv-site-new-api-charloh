@@ -1,7 +1,7 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
 import React from 'react';
 import classNames from 'classnames';
-import { Icon } from '@/utils/tmp/dummy';
+import { Icon } from '@/utils/icon-placeholder';
 import Button from '../button';
 
 export type TButtonType = 'button' | 'submit' | 'reset';

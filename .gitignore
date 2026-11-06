@@ -3,7 +3,6 @@
 # compiled output
 dist
 tmp
-!**/utils/tmp/dummy.tsx
 out-tsc
 *.tsbuildinfo
 .expo
