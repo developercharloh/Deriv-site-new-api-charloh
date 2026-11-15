@@ -128,7 +128,10 @@ describe('Free Bots template catalog', () => {
 
         expect(document.querySelector('parsererror')).toBeNull();
         expect(document.querySelector('field[name="TYPE_LIST"]')?.textContent).toBe('DIGITMATCH');
-        expect(strategy?.querySelector('field[name="DIGITS"]')?.textContent).toBe('1,2,3,4');
+        expect(strategy?.querySelector('field[name="DIGIT_COUNT"]')?.textContent).toBe('4');
+        expect(['1', '2', '3', '4'].map(index =>
+            strategy?.querySelector(`field[name="DIGIT_${index}"]`)?.textContent
+        )).toEqual(['4', '5', '9', '7']);
         expect(strategy?.querySelector('field[name="STAKE"]')?.textContent).toBe('0.5');
         expect(strategy?.querySelector('field[name="MARTINGALE"]')?.textContent).toBe('2');
         expect(strategy?.querySelector('field[name="TAKE_PROFIT"]')?.textContent).toBe('10');

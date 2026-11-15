@@ -1198,7 +1198,14 @@ export default class RunPanelStore {
             const value = Number(strategyBlock.getFieldValue(name));
             return Number.isFinite(value) ? value : fallback;
         };
-        const digitsText = String(strategyBlock.getFieldValue('DIGITS') ?? '');
+        const digitCount = Number(strategyBlock.getFieldValue('DIGIT_COUNT'));
+        if (!Number.isInteger(digitCount) || digitCount < 1 || digitCount > 10) {
+            this.onMatchesKingJournalLog({ message: 'Choose between 1 and 10 digits to match.', type: 'error' });
+            return false;
+        }
+        const digitsText = Array.from({ length: digitCount }, (_, index) =>
+            String(strategyBlock.getFieldValue(`DIGIT_${index + 1}`) ?? '')
+        ).join(',');
         let digits: number[];
         try {
             digits = parseMatchesKingDigits(digitsText);

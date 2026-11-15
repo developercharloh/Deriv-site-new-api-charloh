@@ -446,7 +446,7 @@ const BOTS: BotConfig[] = [
         market: 'Volatility 75 (1s) Index (1HZ75V)',
         strategy: 'Digit Matches batch · Virtual Hook · Combined P/L stops',
         params: [
-            { label: 'Digits', value: 'Choose any digits from 0–9' },
+            { label: 'Digit settings', value: 'Choose 1–10 digits; one box per digit' },
             { label: 'Stake', value: '$0.50 per digit' },
             { label: 'Virtual Hook', value: '2 consecutive all-loss batches' },
             { label: 'Martingale', value: '2× after all-loss batches' },

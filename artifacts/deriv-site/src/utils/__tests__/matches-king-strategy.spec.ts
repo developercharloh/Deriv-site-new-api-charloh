@@ -1,4 +1,5 @@
 import {
+    getMatchesKingVirtualDigitOutcomes,
     getMatchesKingBatchCost,
     matchesKingVirtualBatchWon,
     parseMatchesKingDigits,
@@ -6,9 +7,10 @@ import {
 } from '../matches-king-strategy';
 
 describe('Matches King batch rules', () => {
-    it('parses unique selected digits and rejects invalid values', () => {
-        expect(parseMatchesKingDigits('1, 2 3,1')).toEqual([1, 2, 3]);
+    it('parses selected digits and rejects invalid or repeated values', () => {
+        expect(parseMatchesKingDigits('4, 5, 9, 7')).toEqual([4, 5, 9, 7]);
         expect(() => parseMatchesKingDigits('1,10')).toThrow('digits from 0 to 9');
+        expect(() => parseMatchesKingDigits('4,4')).toThrow('each digit only once');
     });
 
     it('applies one configured stake to each selected digit', () => {
@@ -42,5 +44,14 @@ describe('Matches King batch rules', () => {
     it('treats the virtual batch as a win if any selected digit matches', () => {
         expect(matchesKingVirtualBatchWon(3, [1, 3, 8])).toBe(true);
         expect(matchesKingVirtualBatchWon(4, [1, 3, 8])).toBe(false);
+    });
+
+    it('marks only the matching digit as a virtual win', () => {
+        expect(getMatchesKingVirtualDigitOutcomes(7, [4, 5, 9, 7])).toEqual([
+            { prediction: 4, outcome: 'loss' },
+            { prediction: 5, outcome: 'loss' },
+            { prediction: 9, outcome: 'loss' },
+            { prediction: 7, outcome: 'win' },
+        ]);
     });
 });

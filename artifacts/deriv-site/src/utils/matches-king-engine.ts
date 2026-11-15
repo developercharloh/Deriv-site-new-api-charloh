@@ -8,6 +8,7 @@ import {
     type DTStatus,
 } from './dtrader-engine';
 import {
+    getMatchesKingVirtualDigitOutcomes,
     getMatchesKingBatchCost,
     matchesKingVirtualBatchWon,
     settleMatchesKingBatch,
@@ -215,9 +216,9 @@ export class MatchesKingEngine {
         if (!batch) return;
         this.virtualBatch = null;
         const batchWon = matchesKingVirtualBatchWon(digit, this.config.digits);
-        for (const prediction of this.config.digits) {
+        for (const { prediction, outcome } of getMatchesKingVirtualDigitOutcomes(digit, this.config.digits)) {
             this.onVirtualSettlement({
-                outcome: prediction === digit ? 'win' : 'loss',
+                outcome,
                 market: this.config.symbol,
                 contractType: 'DIGITMATCH',
                 prediction,

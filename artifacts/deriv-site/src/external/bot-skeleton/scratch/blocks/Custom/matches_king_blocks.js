@@ -3,21 +3,16 @@ import { modifyContextMenu } from '../../utils';
 
 window.Blockly.Blocks.matches_king_strategy = {
     init() {
+        const countOptions = Array.from({ length: 10 }, (_, index) => {
+            const count = String(index + 1);
+            return [count, count];
+        });
+        const digitDefaults = [4, 5, 9, 7, 0, 1, 2, 3, 6, 8];
         this.jsonInit({
-            message0: localize('Matches King · digits %1 · stake per digit %2'),
+            message0: localize('Matches King · number of digits %1 · stake per digit %2'),
             args0: [
-                { type: 'field_input', name: 'DIGITS', text: '1,2,3,4' },
+                { type: 'field_dropdown', name: 'DIGIT_COUNT', options: countOptions, value: '4' },
                 { type: 'field_number', name: 'STAKE', value: 0.5, min: 0.35, precision: 0.01 },
-            ],
-            message1: localize('Martingale %1× · Take Profit %2 · Stop Loss %3'),
-            args1: [
-                { type: 'field_number', name: 'MARTINGALE', value: 2, min: 1, precision: 0.1 },
-                { type: 'field_number', name: 'TAKE_PROFIT', value: 10, min: 0.01, precision: 0.01 },
-                { type: 'field_number', name: 'STOP_LOSS', value: 30, min: 0.01, precision: 0.01 },
-            ],
-            message2: localize('Virtual Hook · buy after %1 consecutive all-loss batches'),
-            args2: [
-                { type: 'field_number', name: 'VIRTUAL_LOSS_THRESHOLD', value: 2, min: 1, max: 100, precision: 1 },
             ],
             previousStatement: null,
             nextStatement: null,
@@ -25,11 +20,49 @@ window.Blockly.Blocks.matches_king_strategy = {
             colourSecondary: window.Blockly.Colours.Special1.colourSecondary,
             colourTertiary: window.Blockly.Colours.Special1.colourTertiary,
             tooltip: localize(
-                'The stake is applied separately to every selected digit. Three digits at $30 each cost $90 per batch. Any winning contract resets the per-digit stake; only an all-loss batch advances Martingale.'
+                'Choose how many digits to match, then enter one prediction in each Digit box. The stake applies to each contract; any winning contract resets stake, and Martingale advances only after an all-loss batch.'
             ),
             category: window.Blockly.Categories.Tick_Analysis,
         });
+        this.getField('DIGIT_COUNT').setValidator(function (value) {
+            this.getSourceBlock()?.updateDigitInputVisibility_(Number(value));
+            return value;
+        });
+
+        for (let index = 0; index < 10; index += 1) {
+            const digitNumber = index + 1;
+            this.appendDummyInput(`DIGIT_INPUT_${digitNumber}`)
+                .appendField(localize(`Digit ${digitNumber}`))
+                .appendField(
+                    new window.Blockly.FieldNumber(digitDefaults[index], 0, 9, 1),
+                    `DIGIT_${digitNumber}`
+                );
+        }
+
+        this.appendDummyInput('MATCHES_KING_RECOVERY')
+            .appendField(localize('Martingale'))
+            .appendField(new window.Blockly.FieldNumber(2, 1, 1000, 0.1), 'MARTINGALE')
+            .appendField(localize('Take Profit'))
+            .appendField(new window.Blockly.FieldNumber(10, 0.01, 1000000, 0.01), 'TAKE_PROFIT')
+            .appendField(localize('Stop Loss'))
+            .appendField(new window.Blockly.FieldNumber(30, 0.01, 1000000, 0.01), 'STOP_LOSS');
+
+        this.appendDummyInput('MATCHES_KING_VIRTUAL_HOOK')
+            .appendField(localize('Virtual Hook · buy after'))
+            .appendField(
+                new window.Blockly.FieldNumber(2, 1, 100, 1),
+                'VIRTUAL_LOSS_THRESHOLD'
+            )
+            .appendField(localize('consecutive all-loss batches'));
+
         this.setInputsInline(false);
+        this.updateDigitInputVisibility_(4);
+    },
+    updateDigitInputVisibility_(count) {
+        const visibleCount = Math.max(1, Math.min(10, Math.floor(Number(count) || 1)));
+        for (let digitNumber = 1; digitNumber <= 10; digitNumber += 1) {
+            this.getInput(`DIGIT_INPUT_${digitNumber}`)?.setVisible(digitNumber <= visibleCount);
+        }
     },
     meta() {
         return {

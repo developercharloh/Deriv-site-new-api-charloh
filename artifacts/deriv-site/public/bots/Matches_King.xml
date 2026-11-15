@@ -35,7 +35,11 @@
     </statement>
     <statement name="INITIALIZATION">
       <block type="matches_king_strategy" id="matches_king_strategy">
-        <field name="DIGITS">1,2,3,4</field>
+        <field name="DIGIT_COUNT">4</field>
+        <field name="DIGIT_1">4</field>
+        <field name="DIGIT_2">5</field>
+        <field name="DIGIT_3">9</field>
+        <field name="DIGIT_4">7</field>
         <field name="STAKE">0.5</field>
         <field name="MARTINGALE">2</field>
         <field name="TAKE_PROFIT">10</field>

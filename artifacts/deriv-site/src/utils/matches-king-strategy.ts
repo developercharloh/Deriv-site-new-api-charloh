@@ -9,8 +9,11 @@ export const parseMatchesKingDigits = (input: string): number[] => {
     if (!tokens.length || tokens.some(token => !/^[0-9]$/.test(token))) {
         throw new Error('Enter one or more digits from 0 to 9, separated by commas or spaces.');
     }
-    const digits = [...new Set(tokens.map(Number))];
-    if (digits.length > 10) throw new Error('Select no more than 10 unique digits.');
+    const digits = tokens.map(Number);
+    if (new Set(digits).size !== digits.length) {
+        throw new Error('Enter each digit only once.');
+    }
+    if (digits.length > 10) throw new Error('Select no more than 10 digits.');
     return digits;
 };
 
@@ -41,3 +44,12 @@ export const settleMatchesKingBatch = (
 
 export const matchesKingVirtualBatchWon = (settlementDigit: number, selectedDigits: number[]): boolean =>
     selectedDigits.includes(settlementDigit);
+
+export const getMatchesKingVirtualDigitOutcomes = (
+    settlementDigit: number,
+    selectedDigits: number[]
+): { prediction: number; outcome: 'win' | 'loss' }[] =>
+    selectedDigits.map(prediction => ({
+        prediction,
+        outcome: prediction === settlementDigit ? 'win' : 'loss',
+    }));
