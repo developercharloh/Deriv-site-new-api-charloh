@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { observer } from 'mobx-react-lite';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
+import { useApiBase } from '@/hooks/useApiBase';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { AnalysisApiClient, subscribeToAnalysisFeed } from './ai-analysis-feed';
 import {
     DERIV_CONTINUOUS_VOLATILITIES,
     DERIV_STANDARD_VOLATILITIES,
@@ -61,7 +64,6 @@ const ANALYSIS_TYPES = [
 ];
 
 const TICK_WINDOWS = [100, 500, 1000, 5000];
-const DERIV_WS     = 'wss://ws.derivws.com/websockets/v3?app_id=1089';
 const SPARKLINE_N  = 60;
 const PATTERN_MAX  = 30;
 
@@ -303,9 +305,11 @@ const ConfidenceGauge: React.FC<{ pct: number; strength: string }> = ({ pct, str
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
-const AiAnalysisTool: React.FC = () => {
-    const { dashboard } = useStore();
+const AiAnalysisTool: React.FC = observer(() => {
+    const { dashboard, client } = useStore();
     const { setActiveTab } = dashboard;
+    const { connectionStatus } = useApiBase();
+    const accountId = client?.loginid ?? '';
 
     const [sym,          setSym]          = useState('1HZ25V');
     const [analysisType, setAnalysisType] = useState<AnalysisType>('even_odd');
@@ -318,12 +322,12 @@ const AiAnalysisTool: React.FC = () => {
     const [prevPrice,    setPrevPrice]    = useState<number | null>(null);
     const [sparkPrices,  setSparkPrices]  = useState<number[]>([]);
     const [connected,    setConnected]    = useState<'connecting' | 'live' | 'error'>('connecting');
+    const [connectionError, setConnectionError] = useState('');
+    const [retry, setRetry] = useState(0);
     const [patternStream, setPatternStream] = useState<{ label: string; win: boolean; neutral?: boolean }[]>([]);
     const [currentDigit, setCurrentDigit] = useState<number | null>(null);
     const [arrowKey,     setArrowKey]     = useState(0); // increments on each tick to retrigger animation
 
-    const wsRef   = useRef<WebSocket | null>(null);
-    const subRef  = useRef<number | null>(null); // subscription id
     const pricesRef = useRef<number[]>([]);
     const pipRef    = useRef(2);
 
@@ -349,136 +353,71 @@ const AiAnalysisTool: React.FC = () => {
         }).reverse().slice(0, 20);
     }, []); // no deps — barrier is always passed in explicitly
 
-    // ── WebSocket — persistent connection with heartbeat + auto-reconnect ────
+    // Only the site owns the socket, heartbeat, authorization and reconnect.
     useEffect(() => {
-        // Full reset when market or window changes
         setConnected('connecting');
+        setConnectionError('');
         setPrices([]);
         pricesRef.current = [];
+        pipRef.current = 2;
+        setPipSize(2);
         setLivePrice(null);
         setPrevPrice(null);
         setSparkPrices([]);
         setPatternStream([]);
         setCurrentDigit(null);
 
-        let destroyed   = false;
-        let heartbeat:  ReturnType<typeof setInterval>  | null = null;
-        let retryTimer: ReturnType<typeof setTimeout>   | null = null;
-        let retryDelay  = 1500; // starts at 1.5 s, backs off up to 30 s
-
-        const connect = () => {
-            if (destroyed) return;
-            setConnected('connecting');
-
-            const ws = new WebSocket(DERIV_WS);
-            wsRef.current  = ws;
-            subRef.current = null;
-            let historyLoaded = false;
-
-            ws.onopen = () => {
-                retryDelay = 1500; // reset back-off on successful open
-
-                // ── Heartbeat: ping every 25 s so Deriv never idles us out ──
-                if (heartbeat) clearInterval(heartbeat);
-                heartbeat = setInterval(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ ping: 1 }));
-                    }
-                }, 25_000);
-
-                // History first, then subscribe
-                ws.send(JSON.stringify({
-                    ticks_history: sym,
-                    end:           'latest',
-                    count:         Math.max(tickWindow, 200),
-                    style:         'ticks',
-                    req_id:        1,
-                }));
-                ws.send(JSON.stringify({ ticks: sym, subscribe: 1, req_id: 2 }));
-            };
-
-            ws.onmessage = (ev) => {
-                let msg: any;
-                try { msg = JSON.parse(ev.data); } catch { return; }
-
-                // Ignore pong / unrelated messages
-                if (msg.msg_type === 'ping') return;
-
-                if (msg.msg_type === 'history' && msg.req_id === 1) {
-                    const raw: number[] = (msg.history?.prices ?? []).map((x: any) =>
-                        typeof x === 'string' ? parseFloat(x) : x).filter(Number.isFinite);
-                    const pip = msg.pip_size ?? 2;
-                    pipRef.current = pip;
-                    setPipSize(pip);
-                    const trimmed = raw.slice(-tickWindow);
-                    pricesRef.current = trimmed;
-                    setPrices([...trimmed]);
-                    setPatternStream(buildPattern(trimmed, pip, analysisTypeRef.current, overBarrierRef.current));
-                    if (raw.length > 0) {
-                        const lastP = raw[raw.length - 1];
-                        setLivePrice(lastP);
-                        setSparkPrices(raw.slice(-SPARKLINE_N));
-                        setCurrentDigit(lastDigitOf(lastP, pip));
-                        setArrowKey(k => k + 1);
-                    }
-                    historyLoaded = true;
-                    setConnected('live');
-                }
-
-                if (msg.msg_type === 'tick' && msg.req_id === 2) {
-                    if (msg.subscription?.id) subRef.current = msg.subscription.id;
-                    const tick = parseFloat(msg.tick?.quote);
-                    if (!Number.isFinite(tick)) return;
-                    if (!historyLoaded) setConnected('live');
-
-                    setLivePrice(prev => { setPrevPrice(prev); return tick; });
-                    setSparkPrices(prev => [...prev.slice(-(SPARKLINE_N - 1)), tick]);
-                    setCurrentDigit(lastDigitOf(tick, pipRef.current));
-                    setArrowKey(k => k + 1);
-
-                    const updated = [...pricesRef.current.slice(-(tickWindow - 1)), tick];
-                    pricesRef.current = updated;
-                    setPrices([...updated]);
-                    setPatternStream(buildPattern(updated, pipRef.current, analysisTypeRef.current, overBarrierRef.current));
-                }
-
-                if (msg.error) { console.warn('[AAT] Deriv WS error:', msg.error.message); }
-            };
-
-            ws.onerror = () => { /* onclose will fire right after — handled there */ };
-
-            ws.onclose = () => {
-                if (destroyed) return;
-                if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
-                // Only reconnect if this is still the current socket
-                if (wsRef.current === ws) {
-                    wsRef.current = null;
-                    setConnected('connecting');
-                    retryTimer = setTimeout(() => {
-                        retryDelay = Math.min(retryDelay * 1.5, 30_000); // back-off cap 30 s
-                        connect();
-                    }, retryDelay);
-                }
-            };
-        };
-
-        connect();
-
-        return () => {
-            destroyed = true;
-            if (heartbeat)  clearInterval(heartbeat);
-            if (retryTimer) clearTimeout(retryTimer);
-            const ws = wsRef.current;
-            wsRef.current = null;
-            if (ws) {
-                if (subRef.current !== null) {
-                    try { ws.send(JSON.stringify({ forget: subRef.current })); } catch { /* */ }
-                }
-                try { ws.close(); } catch { /* */ }
+        const api = api_base.api as unknown as AnalysisApiClient | null;
+        const timer = window.setTimeout(() => {
+            setConnected('error');
+            setConnectionError('No live data arrived from the site connection. Check your connection and retry.');
+        }, 12_000);
+        if (connectionStatus !== 'opened' || !api) {
+            if (connectionStatus === 'closed') {
+                window.clearTimeout(timer);
+                setConnected('error');
+                setConnectionError('The site connection was interrupted. Analysis will resume when it reconnects.');
             }
+            return () => window.clearTimeout(timer);
+        }
+        const cleanup = subscribeToAnalysisFeed({
+            api,
+            symbol: sym,
+            count: Math.max(tickWindow, 200),
+            onHistory: (raw, pip) => {
+                pipRef.current = pip;
+                setPipSize(pip);
+                const trimmed = raw.slice(-tickWindow);
+                pricesRef.current = trimmed;
+                setPrices([...trimmed]);
+                setPatternStream(buildPattern(trimmed, pip, analysisTypeRef.current, overBarrierRef.current));
+                const last = raw[raw.length - 1];
+                setLivePrice(last);
+                setSparkPrices(raw.slice(-SPARKLINE_N));
+                setCurrentDigit(lastDigitOf(last, pip));
+                setArrowKey(key => key + 1);
+            },
+            onTick: tick => {
+                setLivePrice(previous => { setPrevPrice(previous); return tick; });
+                setSparkPrices(previous => [...previous.slice(-(SPARKLINE_N - 1)), tick]);
+                setCurrentDigit(lastDigitOf(tick, pipRef.current));
+                setArrowKey(key => key + 1);
+                const updated = [...pricesRef.current.slice(-(tickWindow - 1)), tick];
+                pricesRef.current = updated;
+                setPrices(updated);
+                setPatternStream(buildPattern(updated, pipRef.current, analysisTypeRef.current, overBarrierRef.current));
+            },
+            onStatus: (status, message) => {
+                window.clearTimeout(timer);
+                setConnected(status);
+                setConnectionError(message ?? '');
+            },
+        });
+        return () => {
+            window.clearTimeout(timer);
+            cleanup();
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sym, tickWindow]);
+    }, [sym, tickWindow, connectionStatus, accountId, retry, buildPattern]);
 
     // Rebuild pattern stream when analysis type changes (no reconnect needed)
     useEffect(() => {
@@ -529,6 +468,13 @@ const AiAnalysisTool: React.FC = () => {
                     {connected === 'live' ? 'Live' : connected === 'connecting' ? 'Connecting' : 'Error'}
                 </div>
             </div>
+
+            {connectionError && (
+                <div className='aat__connection-error' role='status'>
+                    {connectionError}{' '}
+                    <button type='button' onClick={() => setRetry(value => value + 1)}>Retry analysis</button>
+                </div>
+            )}
 
             {/* ── 3 Dropdowns ────────────────────────────────────────────── */}
             <div className='aat__droprows'>
@@ -713,6 +659,6 @@ const AiAnalysisTool: React.FC = () => {
             </div>
         </div>
     );
-};
+});
 
 export default AiAnalysisTool;

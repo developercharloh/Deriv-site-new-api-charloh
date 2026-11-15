@@ -51,6 +51,23 @@
 }
 
 // ─── Header ───────────────────────────────────────────────────────────────────
+.aat__connection-error {
+    padding: 10px;
+    color: #ffadba;
+    border: 1px solid #a33d50;
+    border-radius: 8px;
+    font-size: 12px;
+
+    button {
+        color: #fff;
+        background: #36345e;
+        border: 1px solid #7470ac;
+        border-radius: 4px;
+        padding: 5px 8px;
+        cursor: pointer;
+    }
+}
+
 .aat__hd {
     display:         flex;
     align-items:     center;

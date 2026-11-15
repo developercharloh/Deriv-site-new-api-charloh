@@ -1,12 +1,10 @@
-export type AnalysisFeedStatus = 'live' | 'error';
-
 export type DerivAnalysisMessage = {
     msg_type?: string;
     req_id?: number;
     error?: { message?: string };
     history?: { prices?: Array<string | number> };
     pip_size?: number;
-    tick?: { quote?: string | number };
+    tick?: { quote?: string | number; pip_size?: number; symbol?: string };
     subscription?: { id?: string | number };
 };
 
@@ -23,174 +21,108 @@ type FeedOptions = {
     count: number;
     onHistory: (prices: number[], pipSize: number) => void;
     onTick: (price: number) => void;
-    onStatus: (status: AnalysisFeedStatus, message?: string) => void;
+    onStatus: (status: 'live' | 'error', message?: string) => void;
 };
 
-let nextRequestId = Date.now() * 100;
+// Separate from the client's small sequential request IDs and valid as a 32-bit integer.
+let nextRequestId = 1_000_000_000;
 
 const toMessage = (raw: unknown): DerivAnalysisMessage => {
     if (!raw || typeof raw !== 'object') return {};
     const envelope = raw as { data?: unknown };
-    const message = envelope.data && typeof envelope.data === 'object' ? envelope.data : raw;
-    return message as DerivAnalysisMessage;
+    return (envelope.data && typeof envelope.data === 'object' ? envelope.data : raw) as DerivAnalysisMessage;
 };
 
-const messageText = (message: DerivAnalysisMessage) =>
-    message.error?.message || 'The site connection could not load market data.';
-
-const pricesFromHistory = (message: DerivAnalysisMessage): number[] =>
-    (message.history?.prices ?? [])
-        .map(price => (typeof price === 'string' ? Number.parseFloat(price) : price))
-        .filter((price): price is number => typeof price === 'number' && Number.isFinite(price));
-
+/**
+ * One history+ticks subscription, owned by this page. Never closes the shared
+ * socket or uses forget_all, which would interrupt other site consumers.
+ */
 export const subscribeToAnalysisFeed = ({
-    api,
-    symbol,
-    count,
-    onHistory,
-    onTick,
-    onStatus,
+    api, symbol, count, onHistory, onTick, onStatus,
 }: FeedOptions): (() => void) => {
-    const historyRequestId = ++nextRequestId;
-    const ticksRequestId = ++nextRequestId;
+    const requestId = ++nextRequestId;
     let active = true;
     let historyReceived = false;
-    let tickSubscriptionId: number | string | undefined;
+    let subscriptionId: string | number | undefined;
     let messageSubscription: { unsubscribe: () => void } | undefined;
+    const forgottenIds = new Set<string | number>();
 
-    const reportError = (message: DerivAnalysisMessage) => {
-        if (active) onStatus('error', messageText(message));
-    };
-
-    const rememberTickSubscription = (message: DerivAnalysisMessage) => {
-        if (message.subscription?.id !== undefined) {
-            tickSubscriptionId = message.subscription.id;
-            if (!active) forgetTickSubscription();
-        }
-    };
-
-    const forgetTickSubscription = () => {
-        if (tickSubscriptionId === undefined) return;
-        const subscriptionId = tickSubscriptionId;
-        tickSubscriptionId = undefined;
+    const forget = (id: string | number) => {
+        if (forgottenIds.has(id)) return;
+        forgottenIds.add(id);
         try {
-            const result = api.send({ forget: subscriptionId });
-            if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
-                void Promise.resolve(result).catch(() => undefined);
-            }
+            void Promise.resolve(api.send({ forget: id })).catch(() => undefined);
         } catch {
-            // The shared connection may already be closing.
+            // A closed shared socket cannot receive a forget request.
         }
     };
-
-    const handleHistory = (message: DerivAnalysisMessage) => {
-        if (message.error) {
-            reportError(message);
+    const fail = (message: string) => {
+        if (active) onStatus('error', message);
+    };
+    const handle = (message: DerivAnalysisMessage) => {
+        if (message.subscription?.id !== undefined) subscriptionId = message.subscription.id;
+        if (!active) {
+            // send() can resolve after unmount/market change, before we knew the ID.
+            if (subscriptionId !== undefined) forget(subscriptionId);
             return;
         }
-        if (!message.history || historyReceived) return;
-
-        historyReceived = true;
-        onHistory(pricesFromHistory(message), message.pip_size ?? 2);
-        if (active) onStatus('live');
-    };
-
-    const handleMessage = (raw: unknown) => {
-        const message = toMessage(raw);
-
-        if (message.req_id === historyRequestId || message.msg_type === 'history') {
-            if (message.req_id === undefined || message.req_id === historyRequestId) {
-                handleHistory(message);
-            }
+        if (message.error) {
+            fail(message.error.message || 'The site connection could not load market data.');
+            return;
         }
-
-        if (message.req_id === ticksRequestId || message.subscription?.id === tickSubscriptionId) {
-            rememberTickSubscription(message);
-            if (message.error) {
-                reportError(message);
+        if (message.history && !historyReceived) {
+            const prices = (message.history.prices ?? [])
+                .map(price => typeof price === 'string' ? Number(price) : price)
+                .filter(Number.isFinite);
+            if (!prices.length) {
+                fail('No price history is available for this market. Select another market or retry.');
                 return;
             }
-            if (message.msg_type === 'tick') {
-                const price = Number(message.tick?.quote);
-                if (Number.isFinite(price) && active) {
-                    onTick(price);
-                    onStatus('live');
-                }
+            historyReceived = true;
+            const pip = message.pip_size;
+            onHistory(prices, typeof pip === 'number' && pip >= 0 && pip <= 20 ? pip : 2);
+            // History alone is not proof of a live tick listener.
+        }
+        if (message.msg_type === 'tick' && historyReceived && message.tick?.quote !== undefined) {
+            if (message.tick.symbol && message.tick.symbol !== symbol) return;
+            const price = Number(message.tick.quote);
+            if (Number.isFinite(price)) {
+                onTick(price);
+                onStatus('live');
             }
         }
     };
-
     try {
-        messageSubscription = api.onMessage().subscribe(handleMessage);
-    } catch (error) {
-        onStatus(
-            'error',
-            error instanceof Error ? error.message : 'Could not listen to the site market-data connection.',
-        );
-        return () => undefined;
-    }
-
-    const sendRequest = (request: Record<string, unknown>, requestKind: 'history' | 'ticks') => {
-        try {
-            const result = api.send(request);
-            if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
-                void Promise.resolve(result)
-                    .then(response => {
-                        const message = toMessage(response);
-                        if (message.error) {
-                            reportError(message);
-                            return;
-                        }
-                        if (requestKind === 'history') {
-                            handleHistory(message);
-                        } else {
-                            rememberTickSubscription(message);
-                        }
-                    })
-                    .catch(error => {
-                        if (active) {
-                            onStatus(
-                                'error',
-                                error instanceof Error
-                                    ? error.message
-                                    : 'The site connection could not load market data.',
-                            );
-                        }
-                    });
+        messageSubscription = api.onMessage().subscribe(raw => {
+            const message = toMessage(raw);
+            if (message.req_id === requestId ||
+                (subscriptionId !== undefined && message.subscription?.id === subscriptionId)) {
+                handle(message);
             }
-        } catch (error) {
-            if (active) {
-                onStatus(
-                    'error',
-                    error instanceof Error ? error.message : 'The site connection could not load market data.',
-                );
-            }
-        }
-    };
-
-    sendRequest(
-        {
+        });
+        const result = api.send({
             ticks_history: symbol,
             end: 'latest',
             count,
             style: 'ticks',
-            subscribe: 0,
-            req_id: historyRequestId,
-        },
-        'history',
-    );
-    sendRequest(
-        {
-            ticks: symbol,
             subscribe: 1,
-            req_id: ticksRequestId,
-        },
-        'ticks',
-    );
-
+            req_id: requestId,
+        });
+        void Promise.resolve(result).then(response => {
+            // The initial response also appears on onMessage; history is applied
+            // once. Still inspect this promise so a late subscription is released.
+            const message = toMessage(response);
+            if (message.history || message.error || message.subscription) handle(message);
+        }).catch(error => {
+            const detail = error?.error?.message ?? error?.message;
+            fail(typeof detail === 'string' ? detail : 'The site connection could not load market data.');
+        });
+    } catch (error) {
+        fail(error instanceof Error ? error.message : 'Could not listen to the site market-data connection.');
+    }
     return () => {
         active = false;
         messageSubscription?.unsubscribe();
-        forgetTickSubscription();
+        if (subscriptionId !== undefined) forget(subscriptionId);
     };
 };
