@@ -37,6 +37,11 @@ describe('custom strategy Blockly blocks', () => {
         javascriptGenerator = BlocklyJavaScriptNamespace.javascriptGenerator;
 
         Blockly.Colours = {
+            Special1: {
+                colour: '#4c97ff',
+                colourSecondary: '#3373cc',
+                colourTertiary: '#2855a6',
+            },
             Base: {
                 colour: '#4c97ff',
                 colourSecondary: '#3373cc',
@@ -45,6 +50,7 @@ describe('custom strategy Blockly blocks', () => {
         };
         Blockly.Categories = {
             Indicators: 'Indicators',
+            Tick_Analysis: 'Tick Analysis',
             Before_Purchase: 'Before Purchase',
         };
         Blockly.JavaScript = {
@@ -54,6 +60,36 @@ describe('custom strategy Blockly blocks', () => {
         window.Blockly = Blockly;
 
         await import('../Custom/strategy_blocks');
+        await import('../Custom/matches_king_blocks');
+    });
+
+    it('defaults Matches King to Use Virtual Hook true, including older saved blocks', () => {
+        const workspace = new Blockly.Workspace();
+        try {
+            Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(
+                '<xml><block type="matches_king_strategy"><field name="DIGIT_COUNT">4</field></block></xml>'
+            ), workspace);
+            const block = workspace.getAllBlocks(false)[0];
+            expect(block.getFieldValue('USE_VIRTUAL_HOOK')).toBe('TRUE');
+            expect(block.getFieldValue('DIGIT_COUNT')).toBe('4');
+            expect(block.getFieldValue('DIGIT_4')).toBe(7);
+        } finally {
+            workspace.dispose();
+        }
+    });
+
+    it('preserves Matches King false when saving and reopening its Blockly settings', () => {
+        const workspace = new Blockly.Workspace();
+        const restored = new Blockly.Workspace();
+        try {
+            const block = workspace.newBlock('matches_king_strategy');
+            block.setFieldValue('FALSE', 'USE_VIRTUAL_HOOK');
+            Blockly.Xml.domToWorkspace(Blockly.Xml.workspaceToDom(workspace), restored);
+            expect(restored.getAllBlocks(false)[0].getFieldValue('USE_VIRTUAL_HOOK')).toBe('FALSE');
+        } finally {
+            workspace.dispose();
+            restored.dispose();
+        }
     });
 
     it('registers and generates code for every new strategy block', () => {

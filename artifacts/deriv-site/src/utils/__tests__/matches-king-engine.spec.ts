@@ -33,6 +33,7 @@ jest.mock('@/utils/dtrader-engine', () => ({
 }));
 
 import { MatchesKingEngine, type MatchesKingConfig } from '@/utils/matches-king-engine';
+import { tryAcquireBotContractGate } from '@/utils/bot-contract-gate';
 
 const config: MatchesKingConfig = {
     symbol: '1HZ75V',
@@ -160,5 +161,97 @@ describe('MatchesKingEngine stop lifecycle', () => {
         trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
         expect(statuses[statuses.length - 1]).toBe('stopped');
         expect(trader.stop).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('Matches King Use Virtual Hook setting', () => {
+    beforeEach(() => {
+        mockTraderInstances.length = 0;
+        mockBuyBatchPromise = null;
+        (tryAcquireBotContractGate as jest.Mock).mockReturnValue(true);
+    });
+
+    it.each([true, undefined])('keeps the virtual-loss gate enabled when Use Virtual Hook is %s', async useVirtualHook => {
+        const engine = new MatchesKingEngine({ ...config, useVirtualHook });
+        const trader = mockTraderInstances[0];
+        const virtualSettlement = jest.fn();
+        engine.onVirtualSettlement = virtualSettlement;
+        (engine as any).running = true;
+        trader.onTick('100.01', 1, 1);
+        expect(trader.buyDigitBatchNow).not.toHaveBeenCalled();
+        trader.onTick('100.02', 2, 2);
+        expect(virtualSettlement).toHaveBeenCalledTimes(1);
+        expect(trader.buyDigitBatchNow).not.toHaveBeenCalled();
+        trader.onTick('100.03', 3, 3);
+        await flushPromises();
+        expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(1);
+        engine.stop();
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
+    });
+
+    it('buys immediately without virtual trades when false and keeps Martingale/reset behavior', async () => {
+        const engine = new MatchesKingEngine({ ...config, useVirtualHook: false });
+        const trader = mockTraderInstances[0];
+        const virtualSettlement = jest.fn();
+        engine.onVirtualSettlement = virtualSettlement;
+        (engine as any).running = true;
+        trader.onTick('100.01', 1, 1);
+        await flushPromises();
+        expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(1);
+        expect(trader.buyDigitBatchNow.mock.calls[0][0][0].config.stake).toBe(0.5);
+        trader.onTick('100.02', 2, 2);
+        expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(1); // still open
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
+        trader.onTick('100.03', 3, 3);
+        await flushPromises();
+        expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(2);
+        expect(trader.buyDigitBatchNow.mock.calls[1][0][0].config.stake).toBe(1);
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: 2 });
+        trader.onTick('100.04', 4, 4);
+        await flushPromises();
+        expect(trader.buyDigitBatchNow.mock.calls[2][0][0].config.stake).toBe(0.5);
+        expect(virtualSettlement).not.toHaveBeenCalled();
+        engine.stop();
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
+    });
+
+    it('still enforces pause, Stop and the live contract gate with the hook disabled', async () => {
+        const engine = new MatchesKingEngine({ ...config, useVirtualHook: false });
+        const trader = mockTraderInstances[0];
+        (engine as any).running = true;
+        engine.pause();
+        trader.onTick('100.01', 1, 1);
+        expect(trader.buyDigitBatchNow).not.toHaveBeenCalled();
+        engine.resume();
+        (tryAcquireBotContractGate as jest.Mock).mockReturnValue(false);
+        trader.onTick('100.02', 2, 2);
+        expect(trader.buyDigitBatchNow).not.toHaveBeenCalled();
+        engine.stop();
+        (tryAcquireBotContractGate as jest.Mock).mockReturnValue(true);
+        trader.onTick('100.03', 3, 3);
+        await flushPromises();
+        expect(trader.buyDigitBatchNow).not.toHaveBeenCalled();
+    });
+
+    it.each([{ profit: -0.5, stopLoss: 0.5, takeProfit: 10 }, { profit: 2, stopLoss: 30, takeProfit: 2 }])(
+        'keeps risk stops active without the hook for profit $profit',
+        async ({ profit, stopLoss, takeProfit }) => {
+            const engine = new MatchesKingEngine({ ...config, useVirtualHook: false, stopLoss, takeProfit });
+            const trader = mockTraderInstances[0];
+            (engine as any).running = true;
+            trader.onTick('100.01', 1, 1);
+            await flushPromises();
+            trader.onPosition({ contractId: 'contract-7', isOpen: false, profit });
+            trader.onTick('100.02', 2, 2);
+            expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(1);
+            expect(trader.stop).toHaveBeenCalled();
+        }
+    );
+
+    it('ignores the unused threshold only when the hook is explicitly disabled', () => {
+        const direct = new MatchesKingEngine({ ...config, useVirtualHook: false, virtualLossThreshold: NaN });
+        const legacy = new MatchesKingEngine({ ...config, virtualLossThreshold: NaN });
+        expect((direct as any).isConfigValid()).toBe(true);
+        expect((legacy as any).isConfigValid()).toBe(false);
     });
 });

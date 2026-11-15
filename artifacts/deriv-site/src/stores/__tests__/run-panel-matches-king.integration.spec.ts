@@ -15,6 +15,7 @@ describe('Matches King Stop with real contract tracking', () => {
     let sent: any[];
     let lockHeld: boolean;
     let unsubscribe: jest.Mock;
+    let fields: Record<string, string>;
 
     beforeEach(() => {
         jest.useFakeTimers();
@@ -40,7 +41,7 @@ describe('Matches King Stop with real contract tracking', () => {
                 },
             }),
         };
-        const fields: Record<string, string> = {
+        fields = {
             DIGIT_COUNT: '2', DIGIT_1: '4', DIGIT_2: '7', STAKE: '0.5',
             MARTINGALE: '2', TAKE_PROFIT: '100', STOP_LOSS: '100', VIRTUAL_LOSS_THRESHOLD: '1',
         };
@@ -93,6 +94,30 @@ describe('Matches King Stop with real contract tracking', () => {
             },
         });
     };
+
+    it.each(['TRUE', 'FALSE', undefined])('reads Use Virtual Hook=%s from Blockly and routes real entries correctly', async value => {
+        panel.native_matches_king_engine?.stop();
+        await Promise.resolve();
+        if (value === undefined) delete fields.USE_VIRTUAL_HOOK;
+        else fields.USE_VIRTUAL_HOOK = value;
+        sent = [];
+        expect(panel.startNativeMatchesKingBot()).toBe(true);
+        tick(1);
+        expect(sent.filter(request => request.proposal === 1)).toHaveLength(value === 'FALSE' ? 2 : 0);
+        if (value !== 'FALSE') {
+            tick(2);
+            tick(3);
+            expect(sent.filter(request => request.proposal === 1)).toHaveLength(2);
+        }
+        panel.onStopBotClick();
+        // Resolve the outstanding proposals with rejection, so no live buy is
+        // accepted and the stopping engine can release its resources.
+        sent.filter(request => request.proposal === 1).forEach(request => listener?.({
+            data: { req_id: request.req_id, error: { message: 'Stopped test proposal' } },
+        }));
+        await Promise.resolve();
+        await Promise.resolve();
+    });
 
     it.each(['scanning', 'paused'])('stops via the visible control while %s and releases the lock', async mode => {
         if (mode === 'paused') panel.onPauseButtonClick();

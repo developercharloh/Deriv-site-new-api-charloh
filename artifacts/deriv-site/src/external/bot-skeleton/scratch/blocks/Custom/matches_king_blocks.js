@@ -47,6 +47,16 @@ window.Blockly.Blocks.matches_king_strategy = {
             .appendField(localize('Stop Loss'))
             .appendField(new window.Blockly.FieldNumber(30, 0.01, 1000000, 0.01), 'STOP_LOSS');
 
+        this.appendDummyInput('MATCHES_KING_USE_VIRTUAL_HOOK')
+            .appendField(localize('Use Virtual Hook'))
+            .appendField(
+                new window.Blockly.FieldDropdown([
+                    [localize('true'), 'TRUE'],
+                    [localize('false'), 'FALSE'],
+                ]),
+                'USE_VIRTUAL_HOOK'
+            );
+
         this.appendDummyInput('MATCHES_KING_VIRTUAL_HOOK')
             .appendField(localize('Virtual Hook · buy after'))
             .appendField(

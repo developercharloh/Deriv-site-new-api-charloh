@@ -44,6 +44,7 @@
         <field name="MARTINGALE">2</field>
         <field name="TAKE_PROFIT">10</field>
         <field name="STOP_LOSS">30</field>
+        <field name="USE_VIRTUAL_HOOK">TRUE</field>
         <field name="VIRTUAL_LOSS_THRESHOLD">2</field>
       </block>
     </statement>

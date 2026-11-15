@@ -23,6 +23,7 @@ export interface MatchesKingConfig {
     martingale: number;
     takeProfit: number;
     stopLoss: number;
+    useVirtualHook?: boolean;
     virtualLossThreshold: number;
 }
 
@@ -179,8 +180,9 @@ export class MatchesKingEngine {
             this.config.takeProfit > 0 &&
             Number.isFinite(this.config.stopLoss) &&
             this.config.stopLoss > 0 &&
-            Number.isInteger(this.config.virtualLossThreshold) &&
-            this.config.virtualLossThreshold >= 1
+            (this.config.useVirtualHook === false ||
+                (Number.isInteger(this.config.virtualLossThreshold) &&
+                    this.config.virtualLossThreshold >= 1))
         );
     }
 
@@ -205,7 +207,7 @@ export class MatchesKingEngine {
             entryKey === this.lastEntryEpoch
         ) return;
         this.lastEntryEpoch = entryKey;
-        if (this.virtualLosses < this.config.virtualLossThreshold) {
+        if (this.config.useVirtualHook !== false && this.virtualLosses < this.config.virtualLossThreshold) {
             this.virtualBatch = { entrySerial: this.tickSerial, entryEpoch: epoch, entrySpot: spot };
             this.setStatus('virtual');
             this.log(

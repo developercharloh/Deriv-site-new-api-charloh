@@ -1234,6 +1234,7 @@ export default class RunPanelStore {
             martingale: fieldNumber('MARTINGALE', 2),
             takeProfit: fieldNumber('TAKE_PROFIT', 10),
             stopLoss: fieldNumber('STOP_LOSS', 30),
+            useVirtualHook: strategyBlock.getFieldValue('USE_VIRTUAL_HOOK') !== 'FALSE',
             virtualLossThreshold: Math.floor(fieldNumber('VIRTUAL_LOSS_THRESHOLD', 2)),
         });
         this.native_matches_king_engine = engine;
