@@ -1790,7 +1790,8 @@
 // tabs (LDP Tool, Free Bots, AI Analysis) need their own scroll context so
 // users can reach all content on mobile.
 @include mobile-or-tablet-screen {
-    .main__container:has(#id-free-bots) {
+    .main__container:has(#id-free-bots),
+    .main__container:has(#id-ai-analysis) {
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -1829,8 +1830,23 @@
         }
     }
 
+    .main__container:has(#id-ai-analysis) {
+        .dc-tabs {
+            display: flex;
+            flex: 1 1 auto;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .dc-tabs__content {
+            flex: 1 1 auto;
+            height: auto;
+            min-height: 0;
+        }
+    }
+
     #id-free-bots,
-    #id-ai-analysis,
     #id-d-circles,
     #id-advanced-dtrader {
         height: 100%;
@@ -1849,6 +1865,31 @@
             flex: 1 1 auto;
             width: 100%;
             min-height: 0;
+        }
+    }
+
+    #id-ai-analysis {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        box-sizing: border-box;
+        height: auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding-bottom: calc(72px + env(safe-area-inset-bottom));
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
+        touch-action: pan-y;
+
+        > .aat {
+            flex: 0 0 auto;
+            width: 100%;
+            height: auto;
+            min-height: 0;
+            overflow: visible;
+            padding-bottom: 6px;
+            touch-action: auto;
         }
     }
 

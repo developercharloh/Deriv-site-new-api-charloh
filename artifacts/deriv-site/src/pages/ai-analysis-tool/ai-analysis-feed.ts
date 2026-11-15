@@ -3,8 +3,8 @@ export type DerivAnalysisMessage = {
     req_id?: number;
     error?: { message?: string };
     history?: { prices?: Array<string | number> };
-    pip_size?: number;
-    tick?: { quote?: string | number; pip_size?: number; symbol?: string };
+    pip_size?: number | string;
+    tick?: { quote?: string | number; pip_size?: number | string; symbol?: string };
     subscription?: { id?: string | number };
 };
 
@@ -20,12 +20,20 @@ type FeedOptions = {
     symbol: string;
     count: number;
     onHistory: (prices: number[], pipSize: number) => void;
-    onTick: (price: number) => void;
+    onTick: (price: number, pipSize?: number) => void;
     onStatus: (status: 'live' | 'error', message?: string) => void;
 };
 
 // Separate from the client's small sequential request IDs and valid as a 32-bit integer.
 let nextRequestId = 1_000_000_000;
+
+const parsePipSize = (value: unknown): number | undefined => {
+    if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+        return undefined;
+    }
+    const pipSize = Number(value);
+    return Number.isInteger(pipSize) && pipSize >= 0 && pipSize <= 20 ? pipSize : undefined;
+};
 
 const toMessage = (raw: unknown): DerivAnalysisMessage => {
     if (!raw || typeof raw !== 'object') return {};
@@ -79,15 +87,14 @@ export const subscribeToAnalysisFeed = ({
                 return;
             }
             historyReceived = true;
-            const pip = message.pip_size;
-            onHistory(prices, typeof pip === 'number' && pip >= 0 && pip <= 20 ? pip : 2);
+            onHistory(prices, parsePipSize(message.pip_size) ?? 2);
             // History alone is not proof of a live tick listener.
         }
         if (message.msg_type === 'tick' && historyReceived && message.tick?.quote !== undefined) {
             if (message.tick.symbol && message.tick.symbol !== symbol) return;
             const price = Number(message.tick.quote);
             if (Number.isFinite(price)) {
-                onTick(price);
+                onTick(price, parsePipSize(message.tick.pip_size ?? message.pip_size));
                 onStatus('live');
             }
         }

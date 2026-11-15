@@ -34,8 +34,8 @@ describe('the shared Analysis feed', () => {
         f.emit({ msg_type: 'history', history: { prices: ['100.123', 100.244, 'invalid'] }, pip_size: 3 });
         expect(f.onHistory).toHaveBeenCalledWith([100.123, 100.244], 3);
         expect(f.onStatus).not.toHaveBeenCalledWith('live');
-        f.emit({ msg_type: 'tick', tick: { quote: '100.377' }, subscription: { id: 'own' } });
-        expect(f.onTick).toHaveBeenCalledWith(100.377);
+        f.emit({ msg_type: 'tick', tick: { quote: '100.377', pip_size: '3' }, subscription: { id: 'own' } });
+        expect(f.onTick).toHaveBeenCalledWith(100.377, 3);
         expect(f.onStatus).toHaveBeenLastCalledWith('live');
         cleanup();
     });
@@ -78,7 +78,7 @@ describe('the shared Analysis feed', () => {
         const cleanup = f.start();
         f.emit({ msg_type: 'history', history: { prices: [123.45] }, subscription: { id: 'own' } });
         f.emit({ msg_type: 'tick', tick: { quote: 123.46 }, subscription: { id: 'own' } }, false);
-        expect(f.onTick).toHaveBeenCalledWith(123.46);
+        expect(f.onTick).toHaveBeenCalledWith(123.46, undefined);
         cleanup();
         cleanup();
         expect(f.unsubscribe).toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe('the shared Analysis feed', () => {
         expect(first.send.mock.calls[0][0].req_id).not.toBe(second.send.mock.calls[0][0].req_id);
         second.emit({ msg_type: 'history', history: { prices: [5] } });
         second.emit({ msg_type: 'tick', tick: { quote: 6 } });
-        expect(second.onTick).toHaveBeenCalledWith(6);
+        expect(second.onTick).toHaveBeenCalledWith(6, undefined);
         expect(first.onTick).not.toHaveBeenCalled();
         cleanupSecond();
     });

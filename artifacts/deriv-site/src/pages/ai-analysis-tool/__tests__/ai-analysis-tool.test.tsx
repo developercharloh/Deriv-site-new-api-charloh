@@ -29,9 +29,15 @@ const createApi = () => {
         const request = requests[requests.length - 1][0];
         act(() => listeners.forEach(listener => listener({ data: { req_id: request.req_id, ...message } })));
     };
-    const load = (id: string) => {
-        emit({ msg_type: 'history', history: { prices: [100.01, 100.02] }, pip_size: 2, subscription: { id } });
-        emit({ msg_type: 'tick', tick: { quote: 100.03 }, subscription: { id } });
+    const load = (
+        id: string,
+        prices: Array<string | number> = [100.01, 100.02],
+        historyPipSize = 2,
+        tickQuote: string | number = 100.03,
+        tickPipSize = historyPipSize
+    ) => {
+        emit({ msg_type: 'history', history: { prices }, pip_size: historyPipSize, subscription: { id } });
+        emit({ msg_type: 'tick', tick: { quote: tickQuote, pip_size: tickPipSize }, subscription: { id } });
     };
     return { api, send, emit, load, listeners };
 };
@@ -57,21 +63,35 @@ describe('AI Analysis site-session lifecycle', () => {
 
     afterEach(() => { jest.useRealTimers(); });
 
-    it('shows shared history and ticks, reloads the market/window, and releases streams on exit', () => {
+    it('uses selected market precision and tick window for live analysis, then releases streams on exit', () => {
         const view = render(<AiAnalysisTool />);
-        site.load('market-one');
+        const makePrices = (count: number, decimals: number) =>
+            Array.from({ length: count }, (_, index) => `100.${String(index % 10).padStart(decimals, '0')}`);
+        site.load('market-one', makePrices(1000, 2), 2, '100.03', 2);
         expect(screen.getByText('Streaming')).toBeInTheDocument();
         expect(screen.getByText('100.03')).toBeInTheDocument();
+        expect(screen.getByText('(Last 1,000 Ticks)')).toBeInTheDocument();
+        expect(view.container.querySelectorAll('.aat__pattern-block')).toHaveLength(20);
         const selectors = screen.getAllByRole('combobox');
+        fireEvent.change(selectors[1], { target: { value: 'matches_differs' } });
+        expect(Array.from(view.container.querySelectorAll('.aat__pattern-block')).some(
+            pattern => ['M', 'D'].includes(pattern.textContent ?? '')
+        )).toBe(true);
         fireEvent.change(selectors[0], { target: { value: 'JD10' } });
         expect(site.send).toHaveBeenCalledWith({ forget: 'market-one' });
         expect(site.send).toHaveBeenLastCalledWith(expect.objectContaining({ ticks_history: 'JD10' }));
         expect(screen.queryByText('100.03')).not.toBeInTheDocument();
-        site.load('market-two');
+        site.load('market-two', makePrices(200, 3), 2, '100.457', 3);
+        expect(screen.getByText('100.457')).toBeInTheDocument();
+        expect(screen.getByText('(Last 201 Ticks)')).toBeInTheDocument();
+        expect(view.container.querySelector('.aat__dist-cell--active .aat__dist-digit')).toHaveTextContent('7');
         fireEvent.change(selectors[2], { target: { value: '500' } });
         expect(site.send).toHaveBeenCalledWith({ forget: 'market-two' });
         expect(site.send).toHaveBeenLastCalledWith(expect.objectContaining({ ticks_history: 'JD10', count: 500 }));
-        site.load('window-two');
+        site.load('window-two', makePrices(500, 3), 3, '100.456', 3);
+        expect(screen.getByText('100.456')).toBeInTheDocument();
+        expect(screen.getByText('(Last 500 Ticks)')).toBeInTheDocument();
+        expect(view.container.querySelector('.aat__dist-cell--active .aat__dist-digit')).toHaveTextContent('6');
         view.unmount();
         expect(site.send).toHaveBeenLastCalledWith({ forget: 'window-two' });
         expect(site.listeners.size).toBe(0);
@@ -137,5 +157,29 @@ describe('AI Analysis site-session lifecycle', () => {
         expect(screen.getByText('Streaming')).toBeInTheDocument();
         expect(screen.queryByRole('status')).not.toBeInTheDocument();
         view.unmount();
+    });
+
+    it('stops labeling a stalled feed as live and recovers when ticks resume', () => {
+        const view = render(<AiAnalysisTool />);
+        site.load('stalled-stream');
+        expect(screen.getByText('100.03')).toBeInTheDocument();
+        expect(screen.getByText('Streaming')).toBeInTheDocument();
+
+        act(() => jest.advanceTimersByTime(12_000));
+        expect(screen.getByRole('status')).toHaveTextContent('Live ticks stopped arriving');
+        expect(screen.getByText('Offline')).toBeInTheDocument();
+        expect(view.container.querySelector('.aat__price-val')).toHaveTextContent('—');
+        expect(view.container.querySelectorAll('.aat__pattern-block')).toHaveLength(0);
+
+        site.emit({
+            msg_type: 'tick',
+            tick: { quote: '100.04', pip_size: 2 },
+            subscription: { id: 'stalled-stream' },
+        });
+        expect(screen.getByText('Streaming')).toBeInTheDocument();
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
+        expect(screen.getByText('100.04')).toBeInTheDocument();
+        view.unmount();
+        expect(jest.getTimerCount()).toBe(0);
     });
 });

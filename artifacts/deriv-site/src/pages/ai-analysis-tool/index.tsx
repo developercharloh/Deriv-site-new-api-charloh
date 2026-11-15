@@ -330,6 +330,7 @@ const AiAnalysisTool: React.FC = observer(() => {
 
     const pricesRef = useRef<number[]>([]);
     const pipRef    = useRef(2);
+    const livePriceRef = useRef<number | null>(null);
 
     // Refs so the WS closure always reads the LATEST values even without reconnecting
     const analysisTypeRef = useRef<AnalysisType>(analysisType);
@@ -360,6 +361,7 @@ const AiAnalysisTool: React.FC = observer(() => {
         setPrices([]);
         pricesRef.current = [];
         pipRef.current = 2;
+        livePriceRef.current = null;
         setPipSize(2);
         setLivePrice(null);
         setPrevPrice(null);
@@ -368,6 +370,7 @@ const AiAnalysisTool: React.FC = observer(() => {
         setCurrentDigit(null);
 
         const api = api_base.api as unknown as AnalysisApiClient | null;
+        let freshnessTimer: number | undefined;
         const timer = window.setTimeout(() => {
             setConnected('error');
             setConnectionError('No live data arrived from the site connection. Check your connection and retry.');
@@ -392,13 +395,20 @@ const AiAnalysisTool: React.FC = observer(() => {
                 setPrices([...trimmed]);
                 setPatternStream(buildPattern(trimmed, pip, analysisTypeRef.current, overBarrierRef.current));
                 const last = raw[raw.length - 1];
+                livePriceRef.current = last;
                 setLivePrice(last);
                 setSparkPrices(raw.slice(-SPARKLINE_N));
                 setCurrentDigit(lastDigitOf(last, pip));
                 setArrowKey(key => key + 1);
             },
-            onTick: tick => {
-                setLivePrice(previous => { setPrevPrice(previous); return tick; });
+            onTick: (tick, tickPipSize) => {
+                if (tickPipSize !== undefined && tickPipSize !== pipRef.current) {
+                    pipRef.current = tickPipSize;
+                    setPipSize(tickPipSize);
+                }
+                setPrevPrice(livePriceRef.current);
+                livePriceRef.current = tick;
+                setLivePrice(tick);
                 setSparkPrices(previous => [...previous.slice(-(SPARKLINE_N - 1)), tick]);
                 setCurrentDigit(lastDigitOf(tick, pipRef.current));
                 setArrowKey(key => key + 1);
@@ -408,13 +418,36 @@ const AiAnalysisTool: React.FC = observer(() => {
                 setPatternStream(buildPattern(updated, pipRef.current, analysisTypeRef.current, overBarrierRef.current));
             },
             onStatus: (status, message) => {
-                window.clearTimeout(timer);
                 setConnected(status);
                 setConnectionError(message ?? '');
+                if (status === 'live') {
+                    window.clearTimeout(timer);
+                    window.clearTimeout(freshnessTimer);
+                    freshnessTimer = window.setTimeout(() => {
+                        setConnected('error');
+                        setConnectionError('Live ticks stopped arriving. Check the site connection and retry analysis.');
+                        livePriceRef.current = null;
+                        setLivePrice(null);
+                        setPrevPrice(null);
+                        setSparkPrices([]);
+                        setPatternStream([]);
+                        setCurrentDigit(null);
+                    }, 12_000);
+                } else {
+                    window.clearTimeout(timer);
+                    window.clearTimeout(freshnessTimer);
+                    livePriceRef.current = null;
+                    setLivePrice(null);
+                    setPrevPrice(null);
+                    setSparkPrices([]);
+                    setPatternStream([]);
+                    setCurrentDigit(null);
+                }
             },
         });
         return () => {
             window.clearTimeout(timer);
+            window.clearTimeout(freshnessTimer);
             cleanup();
         };
     }, [sym, tickWindow, connectionStatus, accountId, retry, buildPattern]);
