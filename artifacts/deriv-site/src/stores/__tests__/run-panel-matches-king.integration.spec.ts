@@ -109,8 +109,8 @@ describe('Matches King Stop with real contract tracking', () => {
         else fields.USE_VIRTUAL_HOOK = value;
         sent = [];
         expect(panel.startNativeMatchesKingBot()).toBe(true);
-        tick(1);
         const previousVirtualEvents = pushVirtualHookTransaction.mock.calls.length;
+        tick(1);
         expect(sent.filter(request => request.proposal === 1)).toHaveLength(value === 'FALSE' ? 2 : 0);
         if (value !== 'FALSE') {
             tick(2);
@@ -118,6 +118,9 @@ describe('Matches King Stop with real contract tracking', () => {
             expect(sent.filter(request => request.proposal === 1)).toHaveLength(2);
             expect(pushVirtualHookTransaction.mock.calls.length).toBeGreaterThan(previousVirtualEvents);
         } else {
+            tick(2);
+            tick(3);
+            expect(sent.filter(request => request.proposal === 1)).toHaveLength(2);
             expect(pushVirtualHookTransaction).toHaveBeenCalledTimes(previousVirtualEvents);
         }
         expect(pushJournalMessage.mock.calls.some(([message]) =>

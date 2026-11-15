@@ -89,15 +89,17 @@ describe('custom strategy Blockly blocks', () => {
         const restored = new Blockly.Workspace();
         try {
             const block = workspace.newBlock('matches_king_strategy');
+            block.setFieldValue('6', 'VIRTUAL_LOSS_THRESHOLD');
             block.setFieldValue('FALSE', 'USE_VIRTUAL_HOOK');
             expect(block.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(false);
             Blockly.Xml.domToWorkspace(Blockly.Xml.workspaceToDom(workspace), restored);
             const restoredBlock = restored.getAllBlocks(false)[0];
             expect(restoredBlock.getFieldValue('USE_VIRTUAL_HOOK')).toBe('FALSE');
-            expect(restoredBlock.getFieldValue('VIRTUAL_LOSS_THRESHOLD')).toBe(2);
+            expect(restoredBlock.getFieldValue('VIRTUAL_LOSS_THRESHOLD')).toBe(6);
             expect(restoredBlock.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(false);
             restoredBlock.setFieldValue('TRUE', 'USE_VIRTUAL_HOOK');
             expect(restoredBlock.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(true);
+            expect(restoredBlock.getFieldValue('VIRTUAL_LOSS_THRESHOLD')).toBe(6);
         } finally {
             workspace.dispose();
             restored.dispose();
