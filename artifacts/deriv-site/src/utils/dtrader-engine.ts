@@ -19,6 +19,7 @@
 
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { markBotTick } from './bot-contract-gate';
+import { getDerivRateLimitBackoffMs, isDerivRateLimitError } from './deriv-rate-limit';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -234,6 +235,11 @@ export class DTraderEngine {
     private positions:     Map<string, DTPosition> = new Map();
     private posSubIds:     Map<string, string> = new Map(); // contractId → POC sub id
     private posSubIdSet:   Set<string>           = new Set(); // reverse lookup, O(1) per WS msg
+    private posPendingContracts = new Set<string>();
+    private posRequestContracts = new Map<number, string>();
+    private posRetryCounts = new Map<string, number>();
+    private posRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    private posRetrySequence = 0;
     private settledIds:    Set<string>           = new Set(); // ignore further POC updates after settle
 
     // Debounce for proposal refresh
@@ -362,6 +368,11 @@ export class DTraderEngine {
         this.posSubIds.forEach(id => this.rawSend({ forget: id }));
         this.posSubIds.clear();
         this.posSubIdSet.clear();
+        this.posRetryTimers.forEach(timer => clearTimeout(timer));
+        this.posRetryTimers.clear();
+        this.posPendingContracts.clear();
+        this.posRequestContracts.clear();
+        this.posRetryCounts.clear();
         this.settledIds.clear();
         this.manuallySold.clear();
         this.msgSub?.unsubscribe();
@@ -990,10 +1001,16 @@ export class DTraderEngine {
             this.handleDigitPairResponse(msg, pairRequest);
             return;
         }
+        if (isMyReq && reqId !== undefined) this.myReqIds.delete(reqId);
 
         if (msg.error) {
             const m = msg.error.message ?? 'Unknown error';
             this.log(`API error [${msg.msg_type}]: ${m}`, 'error');
+            if (msg.msg_type === 'proposal_open_contract' && reqId !== undefined) {
+                const contractId = this.posRequestContracts.get(reqId);
+                this.posRequestContracts.delete(reqId);
+                if (contractId) this.handlePositionSubscriptionFailure(contractId, m);
+            }
             if (
                 msg.msg_type === 'history'
                 && /already subscribed/i.test(m)
@@ -1032,6 +1049,18 @@ export class DTraderEngine {
             }
             if (msg.msg_type === 'sell') this.emitBuyError(`Sell failed: ${m}`);
             return;
+        }
+
+        if (msg.msg_type === 'proposal_open_contract') {
+            const contractId = String(
+                msg.proposal_open_contract?.contract_id ??
+                    (reqId === undefined ? '' : this.posRequestContracts.get(reqId) ?? '')
+            );
+            if (reqId !== undefined) this.posRequestContracts.delete(reqId);
+            if (contractId) {
+                this.posPendingContracts.delete(contractId);
+                this.clearPositionSubscriptionRetry(contractId);
+            }
         }
 
         switch (msg.msg_type) {
@@ -1244,7 +1273,7 @@ export class DTraderEngine {
         // Subscribe to settlement
         // Keep string keys locally, but Deriv's request schema requires an
         // integer. Sending our map key makes tracking fail after a valid buy.
-        this.send({ proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 1 });
+        this.subscribePosition(contractId);
 
         // CRITICAL: the proposal id we just used is now invalidated on Deriv's
         // side. If the user taps BUY again before the proposal subscription
@@ -1395,6 +1424,8 @@ export class DTraderEngine {
                 this.posSubIds.delete(contractId);
                 this.posSubIdSet.delete(sid);
             }
+            this.posPendingContracts.delete(contractId);
+            this.clearPositionSubscriptionRetry(contractId);
             this.settledIds.add(contractId);
             this.positions.delete(contractId);
         }
@@ -1413,6 +1444,54 @@ export class DTraderEngine {
         } catch (error) {
             console.warn('[DTraderEngine] Could not refresh the account balance.', error);
         }
+    }
+
+    private subscribePosition(contractId: string): void {
+        if (
+            !api_base.api ||
+            !api_base.is_authorized ||
+            !this.positions.has(contractId) ||
+            this.posSubIds.has(contractId) ||
+            this.posPendingContracts.has(contractId)
+        ) {
+            return;
+        }
+        this.posPendingContracts.add(contractId);
+        const reqId = this.send({
+            proposal_open_contract: 1,
+            contract_id: Number(contractId),
+            subscribe: 1,
+        });
+        this.posRequestContracts.set(reqId, contractId);
+    }
+
+    private handlePositionSubscriptionFailure(contractId: string, message: string): void {
+        this.posPendingContracts.delete(contractId);
+        if (!isDerivRateLimitError(message) || !this.positions.has(contractId)) return;
+
+        const attempt = (this.posRetryCounts.get(contractId) ?? 0) + 1;
+        this.posRetryCounts.set(contractId, attempt);
+        const staggerMs = (this.posRetrySequence++ % 10) * 200;
+        const delayMs = Math.min(getDerivRateLimitBackoffMs(attempt) + staggerMs, 30_000);
+        const previousTimer = this.posRetryTimers.get(contractId);
+        if (previousTimer) clearTimeout(previousTimer);
+        this.posRetryTimers.delete(contractId);
+        this.log(
+            `Deriv rate-limited tracking for #${contractId}; retrying contract updates in ${Math.ceil(delayMs / 1_000)}s.`,
+            'system'
+        );
+        const timer = setTimeout(() => {
+            this.posRetryTimers.delete(contractId);
+            this.subscribePosition(contractId);
+        }, delayMs);
+        this.posRetryTimers.set(contractId, timer);
+    }
+
+    private clearPositionSubscriptionRetry(contractId: string): void {
+        const timer = this.posRetryTimers.get(contractId);
+        if (timer) clearTimeout(timer);
+        this.posRetryTimers.delete(contractId);
+        this.posRetryCounts.delete(contractId);
     }
 
     // ── Internal: WS helpers ──────────────────────────────────────────────────

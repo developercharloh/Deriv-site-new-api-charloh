@@ -238,7 +238,7 @@ describe('DTraderEngine Alpha Scan execution path', () => {
             },
         });
 
-        expect(harness.positions.at(-1)).toMatchObject({
+        expect(harness.positions[harness.positions.length - 1]).toMatchObject({
             contractId: '987654',
             stake: 10,
             payout: 19.5,
@@ -269,6 +269,73 @@ describe('DTraderEngine Alpha Scan execution path', () => {
             message: "Couldn't price your trade: Contract unavailable",
         });
         expect(harness.sent.some(payload => payload.buy)).toBe(false);
+        harness.engine.stop();
+    });
+
+    it('retries rate-limited open-contract subscriptions with increasing cooldowns', () => {
+        const harness = makeHarness(baseConfig);
+        harness.engine.placeBuyNow(baseConfig);
+        const proposal = harness.latest(payload => payload.proposal === 1);
+        harness.emit({
+            msg_type: 'proposal',
+            req_id: proposal.req_id,
+            proposal: { id: 'poc-retry-proposal', ask_price: 10, payout: 19 },
+        });
+
+        const buy = harness.latest(payload => payload.buy === 'poc-retry-proposal');
+        harness.emit({
+            msg_type: 'buy',
+            req_id: buy.req_id,
+            buy: { contract_id: 123456, buy_price: 10, payout: 19 },
+        });
+        const initialPocRequest = harness.latest(payload => payload.proposal_open_contract === 1);
+
+        harness.emit({
+            msg_type: 'proposal_open_contract',
+            req_id: initialPocRequest.req_id,
+            error: {
+                code: 'RateLimit',
+                message: 'You have reached the rate limit for proposal_open_contract.',
+            },
+        });
+        expect(harness.sent.filter(payload => payload.proposal_open_contract === 1)).toHaveLength(1);
+
+        jest.advanceTimersByTime(999);
+        expect(harness.sent.filter(payload => payload.proposal_open_contract === 1)).toHaveLength(1);
+        jest.advanceTimersByTime(1);
+        const firstRetry = harness.latest(payload => payload.proposal_open_contract === 1);
+        expect(firstRetry.req_id).not.toBe(initialPocRequest.req_id);
+        harness.emit({
+            msg_type: 'proposal_open_contract',
+            req_id: firstRetry.req_id,
+            error: {
+                code: 'RateLimit',
+                message: 'You have reached the rate limit for proposal_open_contract.',
+            },
+        });
+
+        jest.advanceTimersByTime(2_199);
+        expect(harness.sent.filter(payload => payload.proposal_open_contract === 1)).toHaveLength(2);
+        jest.advanceTimersByTime(1);
+        const secondRetry = harness.latest(payload => payload.proposal_open_contract === 1);
+        expect(secondRetry.req_id).not.toBe(firstRetry.req_id);
+
+        harness.emit({
+            msg_type: 'proposal_open_contract',
+            req_id: secondRetry.req_id,
+            subscription: { id: 'poc-retry-subscription' },
+            proposal_open_contract: {
+                contract_id: 123456,
+                status: 'lost',
+                is_sold: 1,
+                profit: -10,
+            },
+        });
+        expect(harness.positions.at(-1)).toMatchObject({
+            contractId: '123456',
+            isOpen: false,
+            profit: -10,
+        });
         harness.engine.stop();
     });
 

@@ -19,10 +19,16 @@ jest.mock('@/utils/dtrader-engine', () => ({
             onLog: (_log: unknown) => {},
             start: jest.fn(),
             stop: jest.fn(),
-            buyDigitBatchNow: jest.fn(() =>
+            buyDigitBatchNow: jest.fn((configs: any[]) =>
                 mockBuyBatchPromise ??
                 Promise.resolve({
-                    accepted: [{ side: '7', contractId: 'contract-7', buyPrice: 0.5, payout: 0.9, stake: 0.5 }],
+                    accepted: configs.map(({ side, config }) => ({
+                        side,
+                        contractId: `contract-${side}`,
+                        buyPrice: config.stake,
+                        payout: 0.9,
+                        stake: config.stake,
+                    })),
                     failed: [],
                 })
             ),
@@ -160,6 +166,169 @@ describe('MatchesKingEngine stop lifecycle', () => {
 
         trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
         expect(statuses[statuses.length - 1]).toBe('stopped');
+        expect(trader.stop).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('MatchesKingEngine rate-limit recovery', () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+        mockTraderInstances.length = 0;
+        mockBuyBatchPromise = null;
+        (tryAcquireBotContractGate as jest.Mock).mockReturnValue(true);
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it('keeps running after a rate-limited batch and retries on a fresh tick after cooldown', async () => {
+        mockBuyBatchPromise = Promise.resolve({
+            accepted: [],
+            failed: [{ side: '7', message: 'You have reached the rate limit for buy.' }],
+        });
+        const engine = new MatchesKingEngine({ ...config, useVirtualHook: false });
+        const trader = mockTraderInstances[0];
+        const statuses: string[] = [];
+        engine.onStatus = status => statuses.push(status);
+        (engine as any).running = true;
+
+        trader.onTick('100.01', 1, 1);
+        await flushPromises();
+
+        expect((engine as any).running).toBe(true);
+        expect(statuses[statuses.length - 1]).toBe('waiting');
+        expect(trader.stop).not.toHaveBeenCalled();
+
+        mockBuyBatchPromise = null;
+        trader.onTick('100.02', 2, 2);
+        await flushPromises();
+        expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(1);
+
+        jest.advanceTimersByTime(1_000);
+        expect(statuses[statuses.length - 1]).toBe('scanning');
+
+        trader.onTick('100.03', 3, 3);
+        await flushPromises();
+        expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(2);
+        expect((engine as any).liveBatch.acceptedIds).toEqual(['contract-7']);
+
+        engine.stop();
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
+        expect(statuses[statuses.length - 1]).toBe('stopped');
+    });
+
+    it('honors Stop when a rate-limited purchase is still in flight', async () => {
+        let resolveBuy!: (value: any) => void;
+        mockBuyBatchPromise = new Promise(resolve => {
+            resolveBuy = resolve;
+        });
+        const engine = new MatchesKingEngine({ ...config, useVirtualHook: false });
+        const trader = mockTraderInstances[0];
+        const statuses: string[] = [];
+        engine.onStatus = status => statuses.push(status);
+        (engine as any).running = true;
+        (engine as any).latestEpoch = 1;
+
+        const buying = (engine as any).buyLiveBatch(1);
+        await flushPromises();
+        engine.stop();
+        resolveBuy({
+            accepted: [],
+            failed: [{ side: '7', message: 'You have reached the rate limit for buy.' }],
+        });
+        await buying;
+
+        expect((engine as any).running).toBe(false);
+        expect((engine as any).rateLimitTimer).toBeNull();
+        expect(statuses[statuses.length - 1]).toBe('stopped');
+        expect(trader.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the run alive through repeated rate limits with a capped cooldown', async () => {
+        const engine = new MatchesKingEngine({ ...config, useVirtualHook: false });
+        const trader = mockTraderInstances[0];
+        (engine as any).running = true;
+        const expectedDelays = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000];
+
+        for (let index = 0; index < expectedDelays.length; index += 1) {
+            mockBuyBatchPromise = Promise.resolve({
+                accepted: [],
+                failed: [{ side: '7', message: 'You have reached the rate limit for buy.' }],
+            });
+            trader.onTick(`100.0${index}`, index, index + 1);
+            await flushPromises();
+
+            expect((engine as any).running).toBe(true);
+            expect((engine as any).rateLimitUntil - Date.now()).toBe(expectedDelays[index]);
+            jest.advanceTimersByTime(expectedDelays[index]);
+        }
+
+        engine.stop();
+        expect((engine as any).running).toBe(false);
+        expect(trader.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it('tracks an accepted partial batch and continues instead of resending or stopping', async () => {
+        mockBuyBatchPromise = Promise.resolve({
+            accepted: [{ side: '7', contractId: 'contract-7', buyPrice: 0.5, payout: 0.9, stake: 0.5 }],
+            failed: [{ side: '8', message: 'You have reached the rate limit for buy.' }],
+        });
+        const engine = new MatchesKingEngine({
+            ...config,
+            digits: [7, 8],
+            useVirtualHook: false,
+        });
+        const trader = mockTraderInstances[0];
+        const statuses: string[] = [];
+        engine.onStatus = status => statuses.push(status);
+        (engine as any).running = true;
+
+        trader.onTick('100.01', 1, 1);
+        await flushPromises();
+        expect((engine as any).running).toBe(true);
+        expect((engine as any).liveBatch.acceptedIds).toEqual(['contract-7']);
+
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
+        expect((engine as any).running).toBe(true);
+        expect((engine as any).liveBatch).toBeNull();
+        expect(statuses[statuses.length - 1]).toBe('waiting');
+
+        jest.advanceTimersByTime(1_000);
+        mockBuyBatchPromise = null;
+        trader.onTick('100.02', 2, 2);
+        await flushPromises();
+        expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(2);
+        expect((engine as any).liveBatch.acceptedIds).toEqual(['contract-7', 'contract-8']);
+
+        engine.stop();
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
+        trader.onPosition({ contractId: 'contract-8', isOpen: false, profit: -0.5 });
+        expect(statuses[statuses.length - 1]).toBe('stopped');
+    });
+
+    it('still honors Stop Loss after a rate-limited partial batch settles', async () => {
+        mockBuyBatchPromise = Promise.resolve({
+            accepted: [{ side: '7', contractId: 'contract-7', buyPrice: 0.5, payout: 0.9, stake: 0.5 }],
+            failed: [{ side: '8', message: 'You have reached the rate limit for buy.' }],
+        });
+        const engine = new MatchesKingEngine({
+            ...config,
+            digits: [7, 8],
+            stopLoss: 0.5,
+            useVirtualHook: false,
+        });
+        const trader = mockTraderInstances[0];
+        const alerts: Array<{ kind: string; profit: number }> = [];
+        engine.onAlert = (kind, profit) => alerts.push({ kind, profit });
+        (engine as any).running = true;
+
+        trader.onTick('100.01', 1, 1);
+        await flushPromises();
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
+
+        expect((engine as any).running).toBe(false);
+        expect(alerts).toEqual([{ kind: 'sl', profit: -0.5 }]);
         expect(trader.stop).toHaveBeenCalledTimes(1);
     });
 });

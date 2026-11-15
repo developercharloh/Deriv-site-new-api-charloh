@@ -1,5 +1,6 @@
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { releaseBotContractGate, tryAcquireBotContractGate } from './bot-contract-gate';
+import { getDerivRateLimitBackoffMs, isDerivRateLimitError } from './deriv-rate-limit';
 import {
     DTraderEngine,
     type DTDigitPairResult,
@@ -40,6 +41,7 @@ interface LiveBatch {
     positions: Map<string, DTPosition>;
     buyComplete: boolean;
     partial: boolean;
+    rateLimited: boolean;
 }
 
 type LockManager = {
@@ -67,6 +69,9 @@ export class MatchesKingEngine {
     private currentStake: number;
     private totalProfit = 0;
     private virtualLosses = 0;
+    private rateLimitAttempts = 0;
+    private rateLimitUntil = 0;
+    private rateLimitTimer: ReturnType<typeof setTimeout> | null = null;
 
     onLog: (log: DTLog) => void = () => {};
     onStatus: (status: MatchesKingStatus) => void = () => {};
@@ -113,6 +118,8 @@ export class MatchesKingEngine {
                 this.lockPending = false;
                 this.running = true;
                 this.stopping = false;
+                this.rateLimitAttempts = 0;
+                this.rateLimitUntil = 0;
                 this.setStatus('scanning');
                 this.trader.start({
                     symbol: this.config.symbol,
@@ -149,10 +156,16 @@ export class MatchesKingEngine {
     resume(): void {
         if (!this.running || !this.paused) return;
         this.paused = false;
-        this.setStatus(this.liveBatch ? 'waiting' : 'scanning');
+        this.setStatus(
+            this.liveBatch || Date.now() < this.rateLimitUntil ? 'waiting' : 'scanning'
+        );
     }
 
     stop(): void {
+        if (this.rateLimitTimer) {
+            clearTimeout(this.rateLimitTimer);
+            this.rateLimitTimer = null;
+        }
         if (this.lockPending) {
             this.lockPending = false;
             this.paused = false;
@@ -202,6 +215,10 @@ export class MatchesKingEngine {
 
         if (this.virtualBatch && this.tickSerial > this.virtualBatch.entrySerial) {
             this.settleVirtualBatch(digit, spot, epoch);
+            return;
+        }
+        if (Date.now() < this.rateLimitUntil) {
+            this.setStatus('waiting');
             return;
         }
         const entryKey = Number.isFinite(epoch) ? String(epoch) : key;
@@ -267,7 +284,13 @@ export class MatchesKingEngine {
             this.log('Entry skipped because another bot owns the live contract gate.');
             return;
         }
-        const batch: LiveBatch = { acceptedIds: [], positions: new Map(), buyComplete: false, partial: false };
+        const batch: LiveBatch = {
+            acceptedIds: [],
+            positions: new Map(),
+            buyComplete: false,
+            partial: false,
+            rateLimited: false,
+        };
         this.liveBatch = batch;
         this.setStatus('buying');
         const configs = this.config.digits.map(digit => ({
@@ -294,19 +317,32 @@ export class MatchesKingEngine {
         batch.buyComplete = true;
         batch.acceptedIds = result.accepted.map(item => item.contractId);
         batch.partial = batch.acceptedIds.length > 0 && batch.acceptedIds.length < this.config.digits.length;
+        batch.rateLimited =
+            result.failed.length > 0 && result.failed.every(item => isDerivRateLimitError(item.message));
         if (!batch.acceptedIds.length) {
             this.liveBatch = null;
             releaseBotContractGate(this);
             const errors = result.failed.map(item => `${item.side}: ${item.message}`).join(' · ');
             this.log(errors || 'No digit contracts were accepted.', 'error');
+            if (batch.rateLimited && this.running && !this.stopping) {
+                this.applyRateLimitCooldown('buy');
+                return;
+            }
             this.running = false;
             this.finishStop();
             return;
         }
+        if (!result.failed.length) this.rateLimitAttempts = 0;
+        const continuingAfterRateLimit = batch.rateLimited && this.running && !this.stopping;
+        if (continuingAfterRateLimit) this.applyRateLimitCooldown('buy');
         if (batch.partial) {
             this.log(
-                `Only ${batch.acceptedIds.length}/${this.config.digits.length} contracts were accepted. Tracking them, then stopping to prevent a duplicate batch.`,
-                'error'
+                continuingAfterRateLimit
+                    ? `Deriv rate-limited part of the batch: ${batch.acceptedIds.length}/${this.config.digits.length} contracts were accepted. Tracking accepted contracts; the run will continue after cooldown without resending them.`
+                    : batch.rateLimited && this.stopping
+                      ? `Deriv rate-limited part of the batch after Stop was pressed. Tracking only accepted contracts, then finishing the requested Stop.`
+                    : `Only ${batch.acceptedIds.length}/${this.config.digits.length} contracts were accepted. Tracking them, then stopping to prevent a duplicate batch.`,
+                continuingAfterRateLimit || (batch.rateLimited && this.stopping) ? 'system' : 'error'
             );
         }
         this.setStatus(this.stopping ? 'stopping' : 'waiting');
@@ -346,25 +382,34 @@ export class MatchesKingEngine {
         } else {
             this.log(`Batch had no winning contract; stake unchanged. Batch P/L ${this.money(batchProfit)}.`);
         }
-        if (batch.partial) {
+        if (batch.partial && !batch.rateLimited) {
             this.running = false;
             this.stopping = true;
             this.setStatus('error');
             this.log('Stopped after a partial batch. Review the Journal before restarting.', 'error');
-        } else if (this.totalProfit >= this.config.takeProfit) {
-            this.onAlert('tp', this.totalProfit);
-            this.running = false;
-            this.stopping = true;
-            this.setStatus('stopped');
-            this.log(`Take Profit reached at ${this.money(this.totalProfit)}.`);
-        } else if (this.totalProfit <= -this.config.stopLoss) {
-            this.onAlert('sl', this.totalProfit);
-            this.running = false;
-            this.stopping = true;
-            this.setStatus('stopped');
-            this.log(`Stop Loss reached at ${this.money(this.totalProfit)}.`, 'loss');
-        } else if (this.running && !this.paused) {
-            this.setStatus('scanning');
+        } else {
+            if (batch.partial && batch.rateLimited && this.stopping) {
+                this.log('Accepted contracts have settled; finishing the Stop you requested.');
+            } else if (batch.partial && batch.rateLimited) {
+                this.log(
+                    `Settled the ${batch.acceptedIds.length} accepted contract(s). Matches King remains active and will resume on a fresh tick after cooldown.`
+                );
+            }
+            if (this.totalProfit >= this.config.takeProfit) {
+                this.onAlert('tp', this.totalProfit);
+                this.running = false;
+                this.stopping = true;
+                this.setStatus('stopped');
+                this.log(`Take Profit reached at ${this.money(this.totalProfit)}.`);
+            } else if (this.totalProfit <= -this.config.stopLoss) {
+                this.onAlert('sl', this.totalProfit);
+                this.running = false;
+                this.stopping = true;
+                this.setStatus('stopped');
+                this.log(`Stop Loss reached at ${this.money(this.totalProfit)}.`, 'loss');
+            } else if (this.running && !this.paused) {
+                this.setStatus(Date.now() < this.rateLimitUntil ? 'waiting' : 'scanning');
+            }
         }
         if (this.stopping) this.finishStop();
     }
@@ -381,6 +426,10 @@ export class MatchesKingEngine {
 
     private finishStop(): void {
         if (this.liveBatch) return;
+        if (this.rateLimitTimer) {
+            clearTimeout(this.rateLimitTimer);
+            this.rateLimitTimer = null;
+        }
         this.trader.stop();
         releaseBotContractGate(this);
         this.running = false;
@@ -388,6 +437,23 @@ export class MatchesKingEngine {
         this.releaseLock?.();
         this.releaseLock = null;
         this.setStatus('stopped');
+    }
+
+    private applyRateLimitCooldown(context: string): void {
+        this.rateLimitAttempts += 1;
+        const delayMs = getDerivRateLimitBackoffMs(this.rateLimitAttempts);
+        this.rateLimitUntil = Math.max(this.rateLimitUntil, Date.now() + delayMs);
+        if (this.rateLimitTimer) clearTimeout(this.rateLimitTimer);
+        const waitMs = Math.max(0, this.rateLimitUntil - Date.now());
+        this.log(
+            `Deriv rate limit on ${context}. Keeping the run active; new entries are paused for ${Math.ceil(waitMs / 1_000)}s and will resume on a fresh tick.`,
+            'error'
+        );
+        if (!this.paused) this.setStatus('waiting');
+        this.rateLimitTimer = setTimeout(() => {
+            this.rateLimitTimer = null;
+            if (this.running && !this.paused && !this.liveBatch) this.setStatus('scanning');
+        }, waitMs);
     }
 
     private fail(message: string): false {
