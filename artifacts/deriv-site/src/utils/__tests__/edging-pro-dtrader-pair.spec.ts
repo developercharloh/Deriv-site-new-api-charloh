@@ -29,7 +29,7 @@ const makeHarness = () => {
     mockApiBase.is_authorized = true;
     const engine = new DTraderEngine();
     const positions: Array<Record<string, any>> = [];
-    engine.onPosition = position => positions.push(position);
+    engine.onPosition = position => positions.push({ ...position });
     const base: DTConfig = {
         symbol: '1HZ50V',
         contractType: 'DIGITOVER',
@@ -107,6 +107,25 @@ describe('DTraderEngine paired digit orders', () => {
         expect(result.accepted.map(item => item.side)).toEqual(['over', 'under']);
         expect(result.accepted.map(item => item.contractId)).toEqual(['100', '101']);
         expect(positions.map(position => position.contractType)).toEqual(['DIGITOVER', 'DIGITUNDER']);
+        const tracking = sent.filter(payload => payload.proposal_open_contract === 1);
+        expect(tracking.map(payload => payload.contract_id)).toEqual([100, 101]);
+        tracking.forEach(request => {
+            expect(typeof request.contract_id).toBe('number');
+            emit({
+                req_id: request.req_id,
+                msg_type: 'proposal_open_contract',
+                subscription: { id: `poc-${request.contract_id}` },
+                proposal_open_contract: {
+                    contract_id: request.contract_id,
+                    is_sold: 1,
+                    status: 'lost',
+                    profit: -0.5,
+                    entry_tick: 100.5,
+                    exit_tick: 100.6,
+                },
+            });
+        });
+        expect(positions.filter(position => !position.isOpen)).toHaveLength(2);
         engine.stop();
     });
 

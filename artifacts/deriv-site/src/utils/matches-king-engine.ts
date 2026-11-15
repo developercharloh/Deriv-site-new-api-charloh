@@ -26,7 +26,7 @@ export interface MatchesKingConfig {
     virtualLossThreshold: number;
 }
 
-export type MatchesKingStatus = 'scanning' | 'virtual' | 'buying' | 'waiting' | 'paused' | 'stopped' | 'error';
+export type MatchesKingStatus = 'scanning' | 'virtual' | 'buying' | 'waiting' | 'stopping' | 'paused' | 'stopped' | 'error';
 
 interface VirtualBatch {
     entrySerial: number;
@@ -149,6 +149,7 @@ export class MatchesKingEngine {
     stop(): void {
         if (this.lockPending) {
             this.lockPending = false;
+            this.paused = false;
             this.setStatus('stopped');
             return;
         }
@@ -156,8 +157,12 @@ export class MatchesKingEngine {
         this.paused = false;
         this.stopping = true;
         this.virtualBatch = null;
-        if (!this.liveBatch) this.finishStop();
-        else this.setStatus('waiting');
+        if (!this.liveBatch) {
+            this.finishStop();
+            return;
+        }
+        this.finishLiveBatchIfSettled(this.liveBatch);
+        if (this.liveBatch) this.setStatus('stopping');
     }
 
     private isConfigValid(): boolean {
@@ -297,7 +302,7 @@ export class MatchesKingEngine {
                 'error'
             );
         }
-        this.setStatus('waiting');
+        this.setStatus(this.stopping ? 'stopping' : 'waiting');
         for (const item of result.failed) this.log(`Digit ${item.side} was rejected: ${item.message}`, 'error');
         this.finishLiveBatchIfSettled(batch);
     }

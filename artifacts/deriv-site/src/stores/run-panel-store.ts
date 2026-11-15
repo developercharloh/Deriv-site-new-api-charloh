@@ -128,6 +128,7 @@ export default class RunPanelStore {
              last_digits_analysis: observable,
              parity_analysis: observable,
              is_paused: observable,
+            is_native_bot_stopping: observable,
              native_bot_stop_handler: observable,
              native_bot_pause_handler: observable,
             SetpurchaseInProgress: action,
@@ -198,6 +199,7 @@ export default class RunPanelStore {
     show_bot_stop_message = false;
     is_contract_buying_in_progress = false;
     is_paused = false;
+    is_native_bot_stopping = false;
     native_bot_stop_handler: (() => void) | null = null;
     native_bot_pause_handler: ((paused: boolean) => void) | null = null;
     native_apollo_engine: BinaryMatrixEngine | null = null;
@@ -220,6 +222,11 @@ export default class RunPanelStore {
     }
 
     get is_stop_button_disabled() {
+        // Matches King can cancel unsent legs while buys are being priced.
+        // The standard purchase-stage guard otherwise prevents Stop clicks.
+        if (this.native_matches_king_engine && this.native_bot_stop_handler) {
+            return this.is_native_bot_stopping;
+        }
         if (this.is_contract_buying_in_progress) {
             return false;
         }
@@ -371,6 +378,7 @@ export default class RunPanelStore {
     };
 
     onPauseButtonClick = () => {
+        if (this.is_native_bot_stopping) return;
         const nextPaused = !this.is_paused;
         if (this.native_bot_pause_handler) {
             this.native_bot_pause_handler(nextPaused);
@@ -921,6 +929,7 @@ export default class RunPanelStore {
         this.native_bot_stop_handler = stop_handler;
         this.native_bot_pause_handler = pause_handler ?? null;
         this.is_paused = false;
+        this.is_native_bot_stopping = false;
         this.run_id = `native-${Date.now()}`;
         this.setIsRunning(true);
         this.setHasOpenContract(false);
@@ -940,6 +949,7 @@ export default class RunPanelStore {
         this.native_bot_stop_handler = null;
         this.native_bot_pause_handler = null;
         this.is_paused = false;
+        this.is_native_bot_stopping = false;
         this.setHasOpenContract(false);
         this.setContractStage(contract_stages.NOT_RUNNING);
         this.setIsRunning(false);
@@ -1242,6 +1252,12 @@ export default class RunPanelStore {
                 this.native_matches_king_engine = null;
                 this.unregisterNativeBot();
                 this.unregisterBotListeners();
+                return;
+            }
+            if (status === 'stopping') {
+                this.is_native_bot_stopping = true;
+                this.is_paused = false;
+                this.updateNativeBot(contract_stages.IS_STOPPING, true);
                 return;
             }
             const stage =

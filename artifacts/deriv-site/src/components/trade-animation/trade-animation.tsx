@@ -37,6 +37,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
     const {
         contract_stage,
         is_paused,
+        is_native_bot_stopping,
         is_stop_button_visible,
         is_stop_button_disabled,
         onPauseButtonClick,
@@ -138,8 +139,8 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
             return {
                 id: 'db-animation__pause-button',
                 class: 'animation__pause-button',
-                text: <Localize i18n_default_text={is_paused ? 'Resume' : 'Pause'} />,
-                icon: is_paused ? <LabelPairedPlayLgFillIcon fill='#fff' /> : undefined,
+                text: <Localize i18n_default_text={is_native_bot_stopping ? 'Stopping…' : is_paused ? 'Resume' : 'Pause'} />,
+                icon: is_paused && !is_native_bot_stopping ? <LabelPairedPlayLgFillIcon fill='#fff' /> : undefined,
             };
         }
         return {
@@ -148,7 +149,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
             text: <Localize i18n_default_text='Run' />,
             icon: <LabelPairedPlayLgFillIcon fill='#fff' />,
         };
-    }, [is_paused, is_stop_button_visible]);
+    }, [is_native_bot_stopping, is_paused, is_stop_button_visible]);
     const show_overlay = should_show_overlay && is_contract_completed;
     const changeExecutionSpeed = (speed: BotExecutionSpeed) => {
         setExecutionSpeed(speed);
@@ -252,7 +253,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                     <Button
                         is_disabled={
                             (is_stop_button_visible
-                                ? is_stop_button_disabled
+                                ? is_stop_button_disabled || is_native_bot_stopping
                                 : is_disabled && !is_unavailable_for_payment_agent) || contract_stage === 3
                         }
                         className={button_props.class}
@@ -281,7 +282,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                         id='db-animation__stop-button'
                         className='animation__hard-stop-button'
                         icon={<LabelPairedSquareLgFillIcon fill='#fff' />}
-                        is_disabled={is_stop_button_disabled}
+                        is_disabled={is_stop_button_disabled || is_native_bot_stopping}
                         onClick={onStopBotClick}
                         has_effect
                         primary

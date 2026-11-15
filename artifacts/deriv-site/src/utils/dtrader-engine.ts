@@ -1242,7 +1242,9 @@ export class DTraderEngine {
         this.log(`✅ Bought #${contractId}  stake $${buyPrice.toFixed(2)}  payout $${payout.toFixed(2)}`, 'info');
 
         // Subscribe to settlement
-        this.send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
+        // Keep string keys locally, but Deriv's request schema requires an
+        // integer. Sending our map key makes tracking fail after a valid buy.
+        this.send({ proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 1 });
 
         // CRITICAL: the proposal id we just used is now invalidated on Deriv's
         // side. If the user taps BUY again before the proposal subscription
