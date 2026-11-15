@@ -11,7 +11,7 @@ window.Blockly.Blocks.matches_king_strategy = {
         this.jsonInit({
             message0: localize('Matches King · number of digits %1 · stake per digit %2'),
             args0: [
-                { type: 'field_dropdown', name: 'DIGIT_COUNT', options: countOptions, value: '4' },
+                { type: 'field_dropdown', name: 'DIGIT_COUNT', options: countOptions },
                 { type: 'field_number', name: 'STAKE', value: 0.5, min: 0.35, precision: 0.01 },
             ],
             previousStatement: null,
@@ -56,6 +56,7 @@ window.Blockly.Blocks.matches_king_strategy = {
             .appendField(localize('consecutive all-loss batches'));
 
         this.setInputsInline(false);
+        this.setFieldValue('4', 'DIGIT_COUNT');
         this.updateDigitInputVisibility_(4);
     },
     updateDigitInputVisibility_(count) {

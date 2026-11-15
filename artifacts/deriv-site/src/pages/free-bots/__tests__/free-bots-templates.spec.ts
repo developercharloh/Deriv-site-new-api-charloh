@@ -125,6 +125,13 @@ describe('Free Bots template catalog', () => {
         const xml = fs.readFileSync(path.join(publicBotsPath, 'Matches_King.xml'), 'utf8');
         const document = new DOMParser().parseFromString(xml, 'application/xml');
         const strategy = document.querySelector('block[type="matches_king_strategy"]');
+        const blockSource = fs.readFileSync(
+            path.join(
+                __dirname,
+                '../../../external/bot-skeleton/scratch/blocks/Custom/matches_king_blocks.js'
+            ),
+            'utf8'
+        );
 
         expect(document.querySelector('parsererror')).toBeNull();
         expect(document.querySelector('field[name="TYPE_LIST"]')?.textContent).toBe('DIGITMATCH');
@@ -145,6 +152,9 @@ describe('Free Bots template catalog', () => {
                 'statement[name="BEFOREPURCHASE_STACK"] > block[type="matches_king_purchase_condition"]'
             )
         ).not.toBeNull();
+        expect(blockSource).toContain("name: 'DIGIT_COUNT'");
+        expect(blockSource).toContain('`DIGIT_${digitNumber}`');
+        expect(blockSource).toContain('setVisible(digitNumber <= visibleCount)');
     });
 
     it('ships Edging pro as an XML-configured paired-digit strategy', () => {
