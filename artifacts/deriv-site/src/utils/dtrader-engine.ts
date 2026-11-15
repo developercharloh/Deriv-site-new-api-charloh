@@ -66,7 +66,7 @@ export interface DTProposal {
 
 export type DTBuyGuard = (proposal: DTProposal) => string | null;
 
-export type DTDigitPairSide = 'over' | 'under';
+export type DTDigitPairSide = string;
 
 export interface DTDigitPairLegConfig {
     side: DTDigitPairSide;
@@ -489,6 +489,10 @@ export class DTraderEngine {
         return this.beginDigitPairOperation('quote', configs);
     }
 
+    quoteDigitBatch(configs: DTDigitPairLegConfig[]): Promise<DTDigitPairResult> {
+        return this.beginDigitPairOperation('quote', configs, undefined, false);
+    }
+
     /**
      * Price both legs first, then submit both buys without waiting for either
      * buy acknowledgement. This is best-effort only: Deriv accepts each buy as
@@ -503,19 +507,25 @@ export class DTraderEngine {
         return this.beginDigitPairOperation('buy', configs, guard);
     }
 
+    buyDigitBatchNow(
+        configs: DTDigitPairLegConfig[],
+        guard?: () => string | null
+    ): Promise<DTDigitPairResult> {
+        return this.beginDigitPairOperation('buy', configs, guard, false);
+    }
+
     private beginDigitPairOperation(
         mode: 'quote' | 'buy',
         configs: DTDigitPairLegConfig[],
-        guard?: () => string | null
+        guard?: () => string | null,
+        pairOnly = true
     ): Promise<DTDigitPairResult> {
         const fail = (message: string): Promise<DTDigitPairResult> =>
             Promise.resolve({
                 quotes: [],
                 accepted: [],
-                failed: [
-                    { side: 'over', message },
-                    { side: 'under', message },
-                ],
+                failed: (pairOnly ? ['over', 'under'] : configs.map(item => item.side))
+                    .map(side => ({ side, message })),
             });
         if (!this.cfg) return fail('The Deriv trader is not started.');
         if (!api_base.api || !api_base.is_authorized) return fail('Log in to Deriv before using the paired runner.');
@@ -523,12 +533,21 @@ export class DTraderEngine {
             return fail('Another purchase or paired pricing request is already in progress.');
         }
         if (
-            configs.length !== 2 ||
-            new Set(configs.map(item => item.side)).size !== 2 ||
-            !configs.some(item => item.side === 'over') ||
-            !configs.some(item => item.side === 'under')
+            pairOnly &&
+            (configs.length !== 2 ||
+                new Set(configs.map(item => item.side)).size !== 2 ||
+                !configs.some(item => item.side === 'over') ||
+                !configs.some(item => item.side === 'under'))
         ) {
             return fail('A paired order must contain exactly one Over leg and one Under leg.');
+        }
+        if (
+            !pairOnly &&
+            (configs.length < 1 ||
+                configs.length > 10 ||
+                new Set(configs.map(item => item.side)).size !== configs.length)
+        ) {
+            return fail('A digit batch must contain 1–10 uniquely identified contracts.');
         }
 
         let legs: PendingDigitPairLeg[];
@@ -536,8 +555,15 @@ export class DTraderEngine {
             legs = configs.map(({ side, config }) => {
                 const resolved = { ...this.cfg!, ...config };
                 const expectedType = side === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
-                if (resolved.contractType !== expectedType) {
-                    throw new Error(`The ${side} leg must use ${expectedType}.`);
+                if (
+                    (pairOnly && resolved.contractType !== expectedType) ||
+                    (!pairOnly && resolved.contractType !== 'DIGITMATCH')
+                ) {
+                    throw new Error(
+                        pairOnly
+                            ? `The ${side} leg must use ${expectedType}.`
+                            : 'Every digit batch contract must use Digit Matches.'
+                    );
                 }
                 if (
                     resolved.symbol !== this.cfg!.symbol ||
@@ -549,6 +575,9 @@ export class DTraderEngine {
                     resolved.barrier === ''
                 ) {
                     throw new Error('Both digit legs need the active market, a one-tick duration, a positive stake, and a barrier.');
+                }
+                if (!pairOnly && (!Number.isInteger(Number(resolved.barrier)) || Number(resolved.barrier) < 0 || Number(resolved.barrier) > 9)) {
+                    throw new Error('Every Digit Matches prediction must be a whole digit from 0 to 9.');
                 }
                 return { side, config: resolved, stage: 'awaiting-proposal' };
             });

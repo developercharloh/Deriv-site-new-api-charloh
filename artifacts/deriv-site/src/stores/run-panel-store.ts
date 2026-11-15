@@ -14,6 +14,8 @@ import { helpers } from '@/utils/store-helpers';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
 import { BinaryMatrixEngine, type BinaryMatrixConfig, type BinaryMatrixStatus } from '@/utils/binary-matrix-engine';
 import { EdgingProEngine, type EdgingProStatus } from '@/utils/edging-pro-engine';
+import { MatchesKingEngine, type MatchesKingStatus } from '@/utils/matches-king-engine';
+import { parseMatchesKingDigits } from '@/utils/matches-king-strategy';
 import { readBlocklyNumberVariable } from '@/utils/binary-matrix-settings';
 import { getSmartOver2JournalScope, isRiseFallMasterBotIdentity } from '@/utils/bot-template-scope';
 import type { DTPosition } from '@/utils/dtrader-engine';
@@ -173,6 +175,7 @@ export default class RunPanelStore {
              unregisterNativeBot: action,
              startNativeApolloBot: action,
              startNativeEdgingProBot: action,
+            startNativeMatchesKingBot: action,
              onEdgingProJournalLog: action.bound,
         });
 
@@ -199,6 +202,7 @@ export default class RunPanelStore {
     native_bot_pause_handler: ((paused: boolean) => void) | null = null;
     native_apollo_engine: BinaryMatrixEngine | null = null;
     native_edging_pro_engine: EdgingProEngine | null = null;
+    native_matches_king_engine: MatchesKingEngine | null = null;
     last_digits_analysis: TLastDigitsAnalysis | null = null;
     parity_analysis: TParityAnalysis | null = null;
 
@@ -285,6 +289,26 @@ export default class RunPanelStore {
         if (is_ios || isSafari()) this.preloadAudio();
 
         this.registerBotListeners();
+
+        const hasMatchesKingStrategyBlock = window.Blockly?.derivWorkspace
+            ?.getAllBlocks?.(true)
+            ?.some((block: any) => block.type === 'matches_king_strategy');
+        if (hasMatchesKingStrategyBlock) {
+            ui?.setAccountSwitcherDisabledMessage(
+                localize(
+                    'Account switching is disabled while your bot is running. Please stop your bot before switching accounts.'
+                )
+            );
+            runInAction(() => {
+                summary_card.clear();
+                this.clearLastDigitsAnalysis();
+                this.toggleDrawer(true);
+            });
+            const started = this.startNativeMatchesKingBot();
+            if (!started) this.unregisterBotListeners();
+            this.setShowBotStopMessage(false);
+            return;
+        }
 
         const hasEdgingProStrategyBlock = window.Blockly?.derivWorkspace
             ?.getAllBlocks?.(true)
@@ -1136,6 +1160,121 @@ export default class RunPanelStore {
             entry.type === 'error' ? MessageTypes.ERROR : MessageTypes.NOTIFY,
             'journal__text',
             { botTemplateId: 'edging-pro-engine' }
+        );
+    };
+
+    startNativeMatchesKingBot = () => {
+        const workspace = window.Blockly?.derivWorkspace;
+        const blocks = workspace?.getAllBlocks?.(true) ?? [];
+        const strategyBlock = blocks.find((block: any) => block.type === 'matches_king_strategy');
+        if (!strategyBlock) return false;
+        if (this.native_matches_king_engine) return true;
+
+        const isInStatement = (rootType: string, inputName: string, target: any) => {
+            const root = blocks.find((block: any) => block.type === rootType);
+            let current = root?.getInputTargetBlock?.(inputName);
+            while (current) {
+                if (current === target) return true;
+                current = current.getNextBlock?.();
+            }
+            return false;
+        };
+        const purchaseConditionBlock = blocks.find(
+            (block: any) => block.type === 'matches_king_purchase_condition'
+        );
+        if (
+            !isInStatement('trade_definition', 'INITIALIZATION', strategyBlock) ||
+            !isInStatement('before_purchase', 'BEFOREPURCHASE_STACK', purchaseConditionBlock)
+        ) {
+            this.onMatchesKingJournalLog({
+                message:
+                    'Connect Matches King settings in Run once at start and its condition in Purchase conditions before running.',
+                type: 'error',
+            });
+            return false;
+        }
+
+        const fieldNumber = (name: string, fallback: number) => {
+            const value = Number(strategyBlock.getFieldValue(name));
+            return Number.isFinite(value) ? value : fallback;
+        };
+        const digitsText = String(strategyBlock.getFieldValue('DIGITS') ?? '');
+        let digits: number[];
+        try {
+            digits = parseMatchesKingDigits(digitsText);
+        } catch (error: any) {
+            this.onMatchesKingJournalLog({ message: error?.message || 'Choose one or more digits from 0 to 9.', type: 'error' });
+            return false;
+        }
+        const marketBlock = blocks.find((block: any) => block.type === 'trade_definition_market');
+        this.run_id = `run-${Date.now()}`;
+        const engine = new MatchesKingEngine({
+            symbol: marketBlock?.getFieldValue?.('SYMBOL_LIST') || '1HZ75V',
+            currency: this.core.client.currency || 'USD',
+            accountId: api_base.account_info?.loginid || this.core.client.loginid || undefined,
+            digits,
+            stake: fieldNumber('STAKE', 0.5),
+            martingale: fieldNumber('MARTINGALE', 2),
+            takeProfit: fieldNumber('TAKE_PROFIT', 10),
+            stopLoss: fieldNumber('STOP_LOSS', 30),
+            virtualLossThreshold: Math.floor(fieldNumber('VIRTUAL_LOSS_THRESHOLD', 2)),
+        });
+        this.native_matches_king_engine = engine;
+
+        engine.onLog = entry => this.onMatchesKingJournalLog(entry);
+        engine.onVirtualSettlement = settlement => {
+            this.root_store.transactions?.pushVirtualHookTransaction?.({
+                ...settlement,
+                journalScope: 'matches-king',
+                virtualTradeId: `matches-king:${this.run_id}:${settlement.tickSerial}:${settlement.prediction}`,
+            });
+        };
+        engine.onStatus = (status: MatchesKingStatus) => {
+            if (status === 'stopped' || status === 'error') {
+                if (this.native_matches_king_engine !== engine) return;
+                this.native_matches_king_engine = null;
+                this.unregisterNativeBot();
+                this.unregisterBotListeners();
+                return;
+            }
+            const stage =
+                status === 'buying'
+                    ? contract_stages.PURCHASE_SENT
+                    : status === 'waiting'
+                      ? contract_stages.PURCHASE_RECEIVED
+                      : status === 'scanning' || status === 'virtual'
+                        ? contract_stages.RUNNING
+                        : contract_stages.STARTING;
+            this.updateNativeBot(stage, status === 'waiting');
+        };
+        engine.onPosition = position => {
+            this.root_store.transactions.onBotContractEvent(
+                this.nativePositionToContractInfo(position) as unknown as Parameters<
+                    typeof this.root_store.transactions.onBotContractEvent
+                >[0]
+            );
+        };
+
+        if (!engine.start()) {
+            if (this.native_matches_king_engine === engine) this.native_matches_king_engine = null;
+            return false;
+        }
+        this.registerNativeBot(
+            () => engine.stop(),
+            paused => (paused ? engine.pause() : engine.resume())
+        );
+        this.updateNativeBot(contract_stages.RUNNING, false);
+        return true;
+    };
+
+    onMatchesKingJournalLog = (entry: { message?: string; type?: string }) => {
+        const message = String(entry?.message || '');
+        if (!message) return;
+        this.root_store.journal.pushMessage(
+            `[Matches King] ${message}`,
+            entry.type === 'error' ? MessageTypes.ERROR : MessageTypes.NOTIFY,
+            'journal__text',
+            { botTemplateId: 'matches-king' }
         );
     };
 

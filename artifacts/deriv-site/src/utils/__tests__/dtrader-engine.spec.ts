@@ -127,6 +127,59 @@ describe('DTraderEngine Alpha Scan execution path', () => {
         harness.engine.stop();
     });
 
+    it('quotes and buys every unique Digit Matches leg once at the configured per-digit stake', async () => {
+        const harness = makeHarness(baseConfig);
+        const configs = [1, 4, 8].map(digit => ({
+            side: String(digit),
+            config: {
+                symbol: 'R_100',
+                currency: 'USD',
+                contractType: 'DIGITMATCH' as const,
+                barrier: String(digit),
+                durationValue: 1,
+                durationUnit: 't' as const,
+                stake: 30,
+            },
+        }));
+
+        const resultPromise = harness.engine.buyDigitBatchNow(configs);
+        const proposals = harness.sent.filter(
+            payload => payload.proposal === 1 && payload.contract_type === 'DIGITMATCH' && ['1', '4', '8'].includes(payload.barrier)
+        );
+        expect(proposals).toHaveLength(3);
+        expect(proposals.map(payload => payload.barrier).sort()).toEqual(['1', '4', '8']);
+        expect(proposals.every(payload => payload.amount === 30)).toBe(true);
+
+        proposals.forEach((payload, index) => {
+            harness.emit({
+                msg_type: 'proposal',
+                req_id: payload.req_id,
+                proposal: { id: `matches-proposal-${index}`, ask_price: 30, payout: 300 },
+            });
+        });
+        const buys = harness.sent.filter(payload => payload.buy && String(payload.buy).startsWith('matches-proposal-'));
+        expect(buys).toHaveLength(3);
+        buys.forEach((payload, index) => {
+            harness.emit({
+                msg_type: 'buy',
+                req_id: payload.req_id,
+                buy: {
+                    contract_id: 9000 + index,
+                    transaction_id: 8000 + index,
+                    buy_price: 30,
+                    payout: 300,
+                },
+            });
+        });
+
+        const result = await resultPromise;
+        expect(result.accepted).toHaveLength(3);
+        expect(result.failed).toHaveLength(0);
+        expect(result.accepted.map(item => item.side).sort()).toEqual(['1', '4', '8']);
+        expect(result.accepted.every(item => item.stake === 30)).toBe(true);
+        harness.engine.stop();
+    });
+
     it('settles a one-tick buy and emits the final stake, payout, and profit', () => {
         const harness = makeHarness(baseConfig);
         const feedback: string[] = [];

@@ -437,6 +437,27 @@ const BOTS: BotConfig[] = [
         gradient: 'linear-gradient(135deg, #101628 0%, #244c52 46%, #4a164d 100%)',
     },
     {
+        id: 'matches-king',
+        section: 'matches-lab',
+        name: 'Matches King',
+        emoji: '👑',
+        description:
+            'Buys one 1-tick Digit Matches contract for each selected digit. The configured stake applies to each contract, so three digits at $30 each cost $90 per batch. After the Virtual Hook threshold, every selected digit is bought once; any winning contract resets the per-digit stake, while an all-loss batch advances Martingale. Take Profit and Stop Loss use combined settled P/L.',
+        market: 'Volatility 75 (1s) Index (1HZ75V)',
+        strategy: 'Digit Matches batch · Virtual Hook · Combined P/L stops',
+        params: [
+            { label: 'Digits', value: 'Choose any digits from 0–9' },
+            { label: 'Stake', value: '$0.50 per digit' },
+            { label: 'Virtual Hook', value: '2 consecutive all-loss batches' },
+            { label: 'Martingale', value: '2× after all-loss batches' },
+            { label: 'Take Profit / Stop Loss', value: '$10 / $30 combined P/L' },
+            { label: 'Duration', value: '1 Tick' },
+        ],
+        xmlPath: '/bots/Matches_King.xml',
+        gradient: 'linear-gradient(135deg, #241044 0%, #713a9a 48%, #d39a31 100%)',
+        category: 'DIGIT MATCH',
+    },
+    {
         id: 'even-odd-strike-eagle',
         section: 'premium',
         name: 'Even Odd Strike Eagle',
@@ -485,6 +506,7 @@ const FREE_BOT_SECTIONS: { id: FreeBotSection; title: string; emptyMessage?: str
     { id: 'smart-contract', title: 'Smart Contract Bots' },
     { id: 'premium', title: 'Premium Bots' },
     { id: 'edging', title: 'Edging Bots', emptyMessage: 'No bots added here yet.' },
+    { id: 'matches-lab', title: 'Matches Lab', emptyMessage: 'No bots added here yet.' },
 ];
 
 // Keep the existing catalog numbering stable even though Smart Contract is now the first tab.
@@ -494,6 +516,7 @@ const BOTS_IN_ORDINAL_ORDER = [
     ),
     ...BOTS.filter(bot => bot.section === 'smart-contract'),
     ...BOTS.filter(bot => bot.section === 'edging'),
+    ...BOTS.filter(bot => bot.section === 'matches-lab'),
     ...BOTS.filter(bot => bot.id === 'smart-over-2-v2'),
     ...BOTS.filter(bot => bot.id === 'smart-over-2-v3'),
 ];
@@ -501,6 +524,7 @@ const BOT_ORDINALS = new Map(BOTS_IN_ORDINAL_ORDER.map((bot, index) => [bot.id, 
 
 const CARD_ART: Record<string, string> = {
     'edging-pro-engine': '/assets/free-bots/mega-mind.jpg',
+    'matches-king': '/assets/free-bots/super-bot.jpg',
     'binary-matrix-ai': '/assets/free-bots/mega-mind.jpg',
     'rise-fall-master': '/assets/free-bots/hitnrun.jpg',
     'matches-signal': '/assets/free-bots/super-bot.jpg',
@@ -970,6 +994,8 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
 
     const signal = useSignal(bot.signalKey);
     const isEdgingProBot = bot.id === 'edging-pro-engine';
+    const isMatchesKingBot = bot.id === 'matches-king';
+    const isNativeRunnerBot = isEdgingProBot || isMatchesKingBot;
 
     const loadBot = async () => {
         if (!store) return;
@@ -992,7 +1018,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
                 throw new Error('This bot file is empty and cannot be loaded.');
             }
 
-            if (engineMode === 'v2' && !isEdgingProBot) {
+            if (engineMode === 'v2' && !isNativeRunnerBot) {
                 // Fix #2 & #5: V2 path — parse config, persist, fire autostart.
                 // Do NOT load into Blockly — that arms DBot's engine and causes V1 to fire.
                 const v2Cfg    = parseXmlV2Config(xmlText);
@@ -1180,7 +1206,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
         }
     };
 
-    const isV2Mode = engineMode === 'v2' && !isEdgingProBot;
+    const isV2Mode = engineMode === 'v2' && !isNativeRunnerBot;
 
     return (
         <>

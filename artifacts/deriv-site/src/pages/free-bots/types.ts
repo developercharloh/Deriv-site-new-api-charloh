@@ -1,4 +1,4 @@
-export type FreeBotSection = 'premium' | 'smart-contract' | 'edging';
+export type FreeBotSection = 'premium' | 'smart-contract' | 'edging' | 'matches-lab';
 
 export type BotConfig = {
     id:          string;

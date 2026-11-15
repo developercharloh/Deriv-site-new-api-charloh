@@ -102,6 +102,9 @@ describe('Free Bots template catalog', () => {
             if (entry.id === 'edging-pro-engine') {
                 expect(entry.section).toBe('edging');
                 expect(usesCustomBlock).toBe(true);
+            } else if (entry.id === 'matches-king') {
+                expect(entry.section).toBe('matches-lab');
+                expect(usesCustomBlock).toBe(true);
             } else {
                 expect(entry.section).toBe(usesCustomBlock ? 'premium' : 'smart-contract');
             }
@@ -111,7 +114,34 @@ describe('Free Bots template catalog', () => {
         expect(catalogSource).toMatch(
             /id: 'edging-pro-engine',\s*section: 'edging',[\s\S]*?xmlPath: '\/bots\/Edging_Pro_Engine\.xml'/
         );
+        expect(catalogSource).toMatch(
+            /id: 'matches-king',\s*section: 'matches-lab',[\s\S]*?xmlPath: '\/bots\/Matches_King\.xml'/
+        );
+        expect(catalogSource).toContain("title: 'Matches Lab'");
         expect(catalogSource).not.toContain('EdgingProRunnerModal');
+    });
+
+    it('ships Matches King with one per-digit stake and the requested batch controls', () => {
+        const xml = fs.readFileSync(path.join(publicBotsPath, 'Matches_King.xml'), 'utf8');
+        const document = new DOMParser().parseFromString(xml, 'application/xml');
+        const strategy = document.querySelector('block[type="matches_king_strategy"]');
+
+        expect(document.querySelector('parsererror')).toBeNull();
+        expect(document.querySelector('field[name="TYPE_LIST"]')?.textContent).toBe('DIGITMATCH');
+        expect(strategy?.querySelector('field[name="DIGITS"]')?.textContent).toBe('1,2,3,4');
+        expect(strategy?.querySelector('field[name="STAKE"]')?.textContent).toBe('0.5');
+        expect(strategy?.querySelector('field[name="MARTINGALE"]')?.textContent).toBe('2');
+        expect(strategy?.querySelector('field[name="TAKE_PROFIT"]')?.textContent).toBe('10');
+        expect(strategy?.querySelector('field[name="STOP_LOSS"]')?.textContent).toBe('30');
+        expect(strategy?.querySelector('field[name="VIRTUAL_LOSS_THRESHOLD"]')?.textContent).toBe('2');
+        expect(
+            document.querySelector('statement[name="INITIALIZATION"] > block[type="matches_king_strategy"]')
+        ).not.toBeNull();
+        expect(
+            document.querySelector(
+                'statement[name="BEFOREPURCHASE_STACK"] > block[type="matches_king_purchase_condition"]'
+            )
+        ).not.toBeNull();
     });
 
     it('ships Edging pro as an XML-configured paired-digit strategy', () => {
