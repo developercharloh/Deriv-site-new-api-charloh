@@ -65,3 +65,4 @@
 - [Even Odd Strike Eagle Virtual Hook](even-odd-strike-eagle-hook.md) — Switch After controls the per-side virtual-loss gate and the number of real contracts before the Even/Odd side changes.
 - [Even Odd Strike Eagle Builder visibility](deriv-even-odd-strike-eagle-builder.md) — verify the actual template import and mobile reveal; late dropdown hydration can affect required roots and scroll position.
 - [Matches King digit selection](matches-king-digit-selection.md) — keep a digit-count selector with one prediction box per selected Digit Match leg; a match wins only its own leg.
+- [AI Analysis shared connection](ai-analysis-shared-connection.md) — the Analysis Tool should reuse the site's active Deriv session instead of opening a separate socket.
