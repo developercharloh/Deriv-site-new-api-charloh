@@ -14,3 +14,9 @@ Matches King must offer “Use Virtual Hook” as true/false, default true. Fals
 **Why:** The user explicitly requested an optional hook, not a permanently required virtual-loss gate.
 
 **How to apply:** Preserve true for older saved bots without an explicit choice; bypass only the virtual gate when false, not risk limits or Stop.
+
+The consecutive-all-loss Virtual Hook controls must disappear when Use Virtual Hook is false and reappear when true.
+
+**Why:** The user explicitly requested conditional visibility after finding the always-visible threshold confusing.
+
+**How to apply:** Keep visibility aligned with the choice on edits and when reopening/importing saved bots, without losing the threshold value.
