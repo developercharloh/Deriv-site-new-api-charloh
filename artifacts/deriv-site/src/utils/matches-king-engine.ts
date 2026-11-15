@@ -126,6 +126,11 @@ export class MatchesKingEngine {
                 this.log(
                     `Started on ${this.config.symbol}. ${this.config.digits.length} digit contracts at $${this.currentStake.toFixed(2)} each; batch stake $${getMatchesKingBatchCost(this.currentStake, this.config.digits.length).toFixed(2)}.`
                 );
+                this.log(
+                    this.config.useVirtualHook === false
+                        ? 'Virtual Hook: OFF for this run; selected contracts will be bought directly on qualifying ticks.'
+                        : `Virtual Hook: ON for this run; live purchases wait for ${this.config.virtualLossThreshold} consecutive all-loss batches.`
+                );
                 await new Promise<void>(resolve => {
                     this.releaseLock = resolve;
                 });

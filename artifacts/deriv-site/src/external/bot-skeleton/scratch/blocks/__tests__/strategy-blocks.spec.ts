@@ -73,6 +73,12 @@ describe('custom strategy Blockly blocks', () => {
             expect(block.getFieldValue('USE_VIRTUAL_HOOK')).toBe('TRUE');
             expect(block.getFieldValue('DIGIT_COUNT')).toBe('4');
             expect(block.getFieldValue('DIGIT_4')).toBe(7);
+            expect(block.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(true);
+            block.setFieldValue('FALSE', 'USE_VIRTUAL_HOOK');
+            expect(block.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(false);
+            expect(block.getFieldValue('VIRTUAL_LOSS_THRESHOLD')).toBe(2);
+            block.setFieldValue('TRUE', 'USE_VIRTUAL_HOOK');
+            expect(block.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(true);
         } finally {
             workspace.dispose();
         }
@@ -84,8 +90,14 @@ describe('custom strategy Blockly blocks', () => {
         try {
             const block = workspace.newBlock('matches_king_strategy');
             block.setFieldValue('FALSE', 'USE_VIRTUAL_HOOK');
+            expect(block.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(false);
             Blockly.Xml.domToWorkspace(Blockly.Xml.workspaceToDom(workspace), restored);
-            expect(restored.getAllBlocks(false)[0].getFieldValue('USE_VIRTUAL_HOOK')).toBe('FALSE');
+            const restoredBlock = restored.getAllBlocks(false)[0];
+            expect(restoredBlock.getFieldValue('USE_VIRTUAL_HOOK')).toBe('FALSE');
+            expect(restoredBlock.getFieldValue('VIRTUAL_LOSS_THRESHOLD')).toBe(2);
+            expect(restoredBlock.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(false);
+            restoredBlock.setFieldValue('TRUE', 'USE_VIRTUAL_HOOK');
+            expect(restoredBlock.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(true);
         } finally {
             workspace.dispose();
             restored.dispose();

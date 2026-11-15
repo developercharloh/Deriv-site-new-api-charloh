@@ -16,11 +16,15 @@ describe('Matches King Stop with real contract tracking', () => {
     let lockHeld: boolean;
     let unsubscribe: jest.Mock;
     let fields: Record<string, string>;
+    let pushVirtualHookTransaction: jest.Mock;
+    let pushJournalMessage: jest.Mock;
 
     beforeEach(() => {
         jest.useFakeTimers();
         sent = [];
         lockHeld = false;
+        pushVirtualHookTransaction = jest.fn();
+        pushJournalMessage = jest.fn();
         unsubscribe = jest.fn(() => { listener = undefined; });
         Object.defineProperty(navigator, 'locks', {
             configurable: true,
@@ -63,8 +67,11 @@ describe('Matches King Stop with real contract tracking', () => {
         };
         panel = new RunPanelStore({
             dbot: {},
-            journal: { pushMessage: jest.fn() },
-            transactions: { onBotContractEvent: jest.fn() },
+            journal: { pushMessage: pushJournalMessage },
+            transactions: {
+                onBotContractEvent: jest.fn(),
+                pushVirtualHookTransaction,
+            },
         } as any, {
             client: { loginid: 'VRTC_MATCHES_TEST', currency: 'USD' },
             common: { is_socket_opened: false },
@@ -103,12 +110,19 @@ describe('Matches King Stop with real contract tracking', () => {
         sent = [];
         expect(panel.startNativeMatchesKingBot()).toBe(true);
         tick(1);
+        const previousVirtualEvents = pushVirtualHookTransaction.mock.calls.length;
         expect(sent.filter(request => request.proposal === 1)).toHaveLength(value === 'FALSE' ? 2 : 0);
         if (value !== 'FALSE') {
             tick(2);
             tick(3);
             expect(sent.filter(request => request.proposal === 1)).toHaveLength(2);
+            expect(pushVirtualHookTransaction.mock.calls.length).toBeGreaterThan(previousVirtualEvents);
+        } else {
+            expect(pushVirtualHookTransaction).toHaveBeenCalledTimes(previousVirtualEvents);
         }
+        expect(pushJournalMessage.mock.calls.some(([message]) =>
+            String(message).includes(value === 'FALSE' ? 'Virtual Hook: OFF for this run' : 'Virtual Hook: ON for this run')
+        )).toBe(true);
         panel.onStopBotClick();
         // Resolve the outstanding proposals with rejection, so no live buy is
         // accepted and the stopping engine can release its resources.

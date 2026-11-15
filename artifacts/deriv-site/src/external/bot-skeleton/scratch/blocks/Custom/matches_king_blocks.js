@@ -56,6 +56,10 @@ window.Blockly.Blocks.matches_king_strategy = {
                 ]),
                 'USE_VIRTUAL_HOOK'
             );
+        this.getField('USE_VIRTUAL_HOOK').setValidator(function (value) {
+            this.getSourceBlock()?.updateVirtualHookVisibility_(value === 'TRUE');
+            return value;
+        });
 
         this.appendDummyInput('MATCHES_KING_VIRTUAL_HOOK')
             .appendField(localize('Virtual Hook · buy after'))
@@ -68,12 +72,16 @@ window.Blockly.Blocks.matches_king_strategy = {
         this.setInputsInline(false);
         this.setFieldValue('4', 'DIGIT_COUNT');
         this.updateDigitInputVisibility_(4);
+        this.updateVirtualHookVisibility_(this.getFieldValue('USE_VIRTUAL_HOOK') !== 'FALSE');
     },
     updateDigitInputVisibility_(count) {
         const visibleCount = Math.max(1, Math.min(10, Math.floor(Number(count) || 1)));
         for (let digitNumber = 1; digitNumber <= 10; digitNumber += 1) {
             this.getInput(`DIGIT_INPUT_${digitNumber}`)?.setVisible(digitNumber <= visibleCount);
         }
+    },
+    updateVirtualHookVisibility_(useVirtualHook) {
+        this.getInput('MATCHES_KING_VIRTUAL_HOOK')?.setVisible(Boolean(useVirtualHook));
     },
     meta() {
         return {
