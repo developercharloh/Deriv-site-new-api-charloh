@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DERIV_CONTINUOUS_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatilities';
+import { DERIV_CONTINUOUS_VOLATILITIES } from '@/utils/deriv-volatilities';
+import { useApiBase } from '@/hooks/useApiBase';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     calculateMacdSeries,
     calculateTsiSeries,
@@ -7,7 +9,6 @@ import {
     evaluateMacdMatchesConditions,
     evaluateMatchesConditions,
     formatCandleCountdown,
-    MATCHES_CANDLE_SECONDS,
     MATCHES_DIGITS,
     MATCHES_MACD_DIGITS,
     MATCHES_HISTORY_COUNT,
@@ -20,11 +21,10 @@ import {
     secondsUntilCandleClose,
     type Candle,
 } from './matches-signal-strategy';
+import { subscribeToMatchesCandleFeed, type MatchesCandleApi } from './matches-candle-feed';
 import './matches-signal-board.scss';
 
-const DERIV_WS = 'wss://ws.derivws.com/websockets/v3?app_id=1';
 const LIVE_TICK_MAX_AGE_MS = 2_500;
-const HISTORY_TIMEOUT_MS = 18_000;
 
 type FeedStatus = 'connecting' | 'warming' | 'live' | 'reconnecting' | 'error';
 
@@ -230,6 +230,8 @@ function MiniCandleMacdChart({ candles, macdSeries, label }: {
 export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strategy = 'tsi' }: MatchesSignalBoardProps) {
     const [feeds, setFeeds] = useState<Record<string, MarketFeed>>(makeInitialFeeds);
     const [clockNow, setClockNow] = useState(Date.now());
+    const { connectionStatus } = useApiBase();
+    const api = api_base.api as unknown as MatchesCandleApi | null;
 
     useEffect(() => {
         if (!active || maintenanceActive) {
@@ -244,122 +246,52 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
             return;
         }
 
-        let stopped = false;
-        let socket: WebSocket | null = null;
-        let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-        let historyTimer: ReturnType<typeof setTimeout> | null = null;
-        let retryAttempt = 0;
-        const requestToSymbol = new Map<number, DerivVolatility>();
-        const subscriptionToSymbol = new Map<string, string>();
-        const receivedHistory = new Set<string>();
-
-        DERIV_CONTINUOUS_VOLATILITIES.forEach((symbol, index) => {
-            requestToSymbol.set(4200 + index, symbol);
-        });
-
-        const openSocket = () => {
-            if (stopped) return;
+        if (connectionStatus !== 'opened' || !api) {
+            const isReconnecting = connectionStatus === 'closed';
             setFeeds(previous => Object.fromEntries(
                 DERIV_CONTINUOUS_VOLATILITIES.map(symbol => [symbol.code, {
                     ...previous[symbol.code],
-                    feedStatus: retryAttempt > 0 ? 'reconnecting' : 'connecting',
-                    error: undefined,
+                    feedStatus: isReconnecting ? 'reconnecting' : 'connecting',
+                    error: isReconnecting ? 'Waiting for the site’s Deriv connection to recover.' : undefined,
                     tsiSamples: [],
                     lastTickAt: null,
                     serverEpoch: null,
                 }]),
             ));
-            receivedHistory.clear();
-            subscriptionToSymbol.clear();
+            return;
+        }
 
-            try {
-                socket = new WebSocket(DERIV_WS);
-            } catch {
-                scheduleReconnect();
-                return;
-            }
+        setFeeds(previous => Object.fromEntries(
+            DERIV_CONTINUOUS_VOLATILITIES.map(symbol => [symbol.code, {
+                ...previous[symbol.code],
+                feedStatus: 'connecting',
+                error: undefined,
+                tsiSamples: [],
+                lastTickAt: null,
+                serverEpoch: null,
+            }]),
+        ));
 
-            socket.onopen = () => {
-                retryAttempt = 0;
-                DERIV_CONTINUOUS_VOLATILITIES.forEach((symbol, index) => {
-                    const requestId = 4200 + index;
-                    setTimeout(() => {
-                        if (stopped || socket?.readyState !== WebSocket.OPEN) return;
-                        socket.send(JSON.stringify({
-                            ticks_history: symbol.code,
-                            count: MATCHES_HISTORY_COUNT,
-                            end: 'latest',
-                            style: 'candles',
-                            granularity: MATCHES_CANDLE_SECONDS,
-                            subscribe: 1,
-                            req_id: requestId,
-                        }));
-                    }, index * 80);
-                });
-                historyTimer = setTimeout(() => {
-                    if (stopped || receivedHistory.size === DERIV_CONTINUOUS_VOLATILITIES.length) return;
-                    setFeeds(previous => Object.fromEntries(
-                        DERIV_CONTINUOUS_VOLATILITIES.map(symbol => {
-                            const feed = previous[symbol.code];
-                            return [symbol.code, feed.candles.length
-                                ? feed
-                                : { ...feed, feedStatus: 'error' as FeedStatus, error: 'Candle history is unavailable; retrying.' }];
-                        }),
-                    ));
-                    if (receivedHistory.size === 0) socket?.close();
-                }, HISTORY_TIMEOUT_MS);
-            };
-
-            socket.onmessage = event => {
-                let message: any;
-                try { message = JSON.parse(event.data); } catch { return; }
-                const requestId = Number(message.req_id);
-                const requestSymbol = requestToSymbol.get(requestId);
-                const subscriptionId = message.subscription?.id;
-                if (requestSymbol && subscriptionId !== undefined) {
-                    subscriptionToSymbol.set(String(subscriptionId), requestSymbol.code);
-                }
-
-                if (message.error) {
-                    if (requestSymbol) {
-                        setFeeds(previous => updateFeed(previous, requestSymbol.code, feed => ({
-                            ...feed,
-                            feedStatus: 'error',
-                            error: message.error.message || 'Deriv rejected the candle request.',
-                        })));
-                    }
-                    return;
-                }
-
-                const historyCandles = Array.isArray(message.candles)
-                    ? message.candles
-                    : Array.isArray(message.history?.candles) ? message.history.candles : null;
-                if (historyCandles && requestSymbol) {
-                    const candles = historyCandles
-                        .map((item: unknown) => normalizeCandle(item))
-                        .filter((item: Candle | null): item is Candle => item !== null)
-                        .sort((a: Candle, b: Candle) => a.time - b.time)
-                        .slice(-MATCHES_HISTORY_COUNT);
-                    receivedHistory.add(requestSymbol.code);
-                    setFeeds(previous => updateFeed(previous, requestSymbol.code, feed => ({
-                        ...feed,
-                        candles,
-                        feedStatus: candles.length ? 'warming' : 'error',
-                        error: candles.length ? undefined : 'No one-minute candles were returned.',
-                    })));
-                }
-
-                if (message.msg_type !== 'ohlc' || !message.ohlc) return;
-                const ohlc = message.ohlc;
-                const code = String(ohlc.symbol ?? '') ||
-                    (subscriptionId !== undefined ? subscriptionToSymbol.get(String(subscriptionId)) : '') ||
-                    requestSymbol?.code;
-                if (!code) return;
-
-                const candle = normalizeCandle(ohlc);
-                const tickEpoch = toEpoch(ohlc.epoch) ?? toEpoch(message.time);
+        return subscribeToMatchesCandleFeed({
+            api,
+            symbols: DERIV_CONTINUOUS_VOLATILITIES,
+            onHistory: (code, rawCandles) => {
+                const candles = rawCandles
+                    .map(item => normalizeCandle(item))
+                    .filter((item): item is Candle => item !== null)
+                    .sort((a, b) => a.time - b.time)
+                    .slice(-MATCHES_HISTORY_COUNT);
+                setFeeds(previous => updateFeed(previous, code, feed => ({
+                    ...feed,
+                    candles,
+                    feedStatus: candles.length ? 'warming' : 'error',
+                    error: candles.length ? undefined : 'No one-minute candles were returned.',
+                })));
+            },
+            onCandle: (code, rawOhlc, serverTime) => {
+                const candle = normalizeCandle(rawOhlc);
+                const tickEpoch = toEpoch(rawOhlc.epoch) ?? toEpoch(serverTime);
                 if (!candle || tickEpoch === null) return;
-
                 setFeeds(previous => updateFeed(previous, code, feed => {
                     const candles = mergeCandle(feed.candles, candle);
                     const tsi = calculateTsiSeries(candles).at(-1) ?? null;
@@ -376,49 +308,17 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                         error: undefined,
                     };
                 }));
-            };
-
-            socket.onerror = () => socket?.close();
-            socket.onclose = () => {
-                if (historyTimer) clearTimeout(historyTimer);
-                if (!stopped) scheduleReconnect();
-            };
-        };
-
-        const scheduleReconnect = () => {
-            if (stopped || reconnectTimer) return;
-            retryAttempt++;
-            const delay = Math.min(1_000 * (2 ** Math.min(retryAttempt, 4)), 15_000);
-            setFeeds(previous => Object.fromEntries(
-                DERIV_CONTINUOUS_VOLATILITIES.map(symbol => [symbol.code, {
-                    ...previous[symbol.code],
-                    feedStatus: 'reconnecting',
-                    error: undefined,
-                    tsiSamples: [],
-                    lastTickAt: null,
-                    serverEpoch: null,
-                }]),
-            ));
-            reconnectTimer = setTimeout(() => {
-                reconnectTimer = null;
-                openSocket();
-            }, delay);
-        };
-
-        openSocket();
-        return () => {
-            stopped = true;
-            if (reconnectTimer) clearTimeout(reconnectTimer);
-            if (historyTimer) clearTimeout(historyTimer);
-            if (socket) {
-                socket.onopen = null;
-                socket.onmessage = null;
-                socket.onerror = null;
-                socket.onclose = null;
-                try { socket.close(); } catch { /* socket already closed */ }
-            }
-        };
-    }, [active, maintenanceActive]);
+            },
+            onStatus: (code, feedStatus, message) => {
+                setFeeds(previous => updateFeed(previous, code, feed => ({
+                    ...feed,
+                    feedStatus,
+                    error: message,
+                    lastTickAt: feedStatus === 'reconnecting' ? null : feed.lastTickAt,
+                })));
+            },
+        });
+    }, [active, api, connectionStatus, maintenanceActive]);
 
     useEffect(() => {
         if (!active) return;
@@ -470,14 +370,26 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
             secondsToClose, tsiConditions, macdConditions, tradeNow, status,
         };
     }), [active, clockNow, feeds, maintenanceActive, strategy]);
+    const liveMarketCount = marketCards.filter(card => card.status === 'Live').length;
+    const connectionMessage = !active
+        ? 'Scanner paused'
+        : maintenanceActive
+            ? 'Market data is under maintenance'
+            : liveMarketCount === marketCards.length
+                ? `Live on all ${liveMarketCount} one-second indices`
+                : liveMarketCount > 0
+                    ? `Live on ${liveMarketCount} of ${marketCards.length} indices`
+                    : connectionStatus === 'closed'
+                        ? 'Reconnecting to the site Deriv connection'
+                        : connectionStatus === 'opened'
+                            ? 'Site connected · waiting for candle updates'
+                            : 'Connecting to the site Deriv connection';
 
     return (
         <section className='match-board' aria-label={strategy === 'tsi' ? 'Matches 0 to 4 signal scanner' : 'Matches 6 to 9 signal scanner'}>
             <div className='match-board__header'>
                 <div>
-                    <h2 className='match-board__title'>
-                        {strategy === 'tsi' ? 'Matches 0–4 · 1-minute TSI strategy' : 'Matches 6–9 · 1-minute MACD strategy'}
-                    </h2>
+                    <h2 className='match-board__title'>Matches · {strategy === 'tsi' ? 'TSI' : 'MACD'} alerts</h2>
                     <p className='match-board__subtitle'>
                         {active
                             ? `Watching ${DERIV_CONTINUOUS_VOLATILITIES.length} one-second Volatility indices`
@@ -501,6 +413,16 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                 {' '}No trades are placed automatically.
             </div>
 
+            <div
+                className={`match-board__connection${liveMarketCount === marketCards.length ? ' match-board__connection--live' : ''}${connectionStatus === 'closed' ? ' match-board__connection--reconnecting' : ''}`}
+                role='status'
+                aria-live='polite'
+            >
+                <span className='match-board__connection-dot' />
+                <span>{connectionMessage}</span>
+                <span className='match-board__connection-count'>{liveMarketCount}/{marketCards.length} live</span>
+            </div>
+
             <div className='match-board__grid'>
                 {marketCards.map(({
                     symbol, feed, tsiSeries, tsiSignalSeries, macdSeries, macdPoint, tsi, lastCandle,
@@ -511,6 +433,9 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                             <div>
                                 <strong className='match-market__symbol'>{symbol.short}</strong>
                                 <span className='match-market__label'>{symbol.label}</span>
+                                <span className='match-market__range'>
+                                    {strategy === 'tsi' ? 'MATCHES 0–4 · TSI' : 'MATCHES 6–9 · MACD'}
+                                </span>
                             </div>
             <span className={`match-market__status match-market__status--${status.toLowerCase().replace(/\s+/g, '-')}`}>
                                 {status}
@@ -563,9 +488,12 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                                 className='match-market__alerts'
                                 aria-label={`Trade now: ${symbol.label} Matches digits ${strategy === 'tsi' ? 'zero through four' : 'six through nine'}`}
                             >
+                                <strong className='match-market__alerts-heading'>
+                                    {strategy === 'tsi' ? 'MATCHES 0–4 SIGNALS' : 'MATCHES 6–9 SIGNALS'}
+                                </strong>
                                 {(strategy === 'tsi' ? MATCHES_DIGITS : MATCHES_MACD_DIGITS).map(digit => (
                                     <span className='match-market__alert' key={digit}>
-                                        <strong>MATCHES {digit}</strong>
+                                        <strong>MATCH {digit}</strong>
                                         <span>TRADE NOW</span>
                                     </span>
                                 ))}
@@ -596,7 +524,7 @@ export function MatchesSignalSection(props: MatchesSignalBoardProps) {
                     className={strategy === 'tsi' ? 'match-board__strategy-tab match-board__strategy-tab--active' : 'match-board__strategy-tab'}
                     onClick={() => setStrategy('tsi')}
                 >
-                    Matches 0–4 · TSI
+                    0–4 · TSI
                 </button>
                 <button
                     type='button'
@@ -605,7 +533,7 @@ export function MatchesSignalSection(props: MatchesSignalBoardProps) {
                     className={strategy === 'macd' ? 'match-board__strategy-tab match-board__strategy-tab--active' : 'match-board__strategy-tab'}
                     onClick={() => setStrategy('macd')}
                 >
-                    Matches 6–9 · MACD
+                    6–9 · MACD
                 </button>
             </div>
             <MatchesSignalBoard {...props} strategy={strategy} />
