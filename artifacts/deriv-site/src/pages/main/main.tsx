@@ -43,6 +43,7 @@ import RunPanel from '../../components/run-panel';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
+import { shouldRenderMobileRunPanel } from './mobile-run-panel-visibility';
 import './main.scss';
 
 const ChartWrapper      = lazy(() => import('../chart/chart-wrapper'));
@@ -538,12 +539,7 @@ const AppWrapper = observer(() => {
                 <TradingViewModal />
             </DesktopWrapper>
             <MobileWrapper>
-                {!is_open &&
-                    ![
-                        DBOT_TABS.AI_SIGNALS,
-                        DBOT_TABS.AI_ANALYSIS,
-                        DBOT_TABS.ADVANCED_DTRADER,
-                    ].includes(active_tab) && <RunPanel />}
+                {shouldRenderMobileRunPanel(active_tab, is_open) && <RunPanel />}
             </MobileWrapper>
             <Dialog
                 cancel_button_text={cancel_button_text || localize('Cancel')}

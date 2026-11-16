@@ -191,6 +191,12 @@
     }
 }
 
+.controls__section--analysis {
+    background-color: #fff !important;
+    border-top: 1px solid #e2e8f0;
+    box-shadow: 0 -4px 14px rgb(15 23 42 / 8%);
+}
+
 .controls {
     &__section {
         @include flex-center(space-between);

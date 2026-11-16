@@ -180,9 +180,13 @@ const DrawerFooter = ({ is_clear_stat_disabled, onClearStatClick }: TDrawerFoote
     </div>
 );
 
-const MobileDrawerFooter = () => {
+const MobileDrawerFooter = ({ isAnalysisTab }: { isAnalysisTab: boolean }) => {
     return (
-        <div className='controls__section'>
+        <div
+            className={classNames('controls__section', {
+                'controls__section--analysis': isAnalysisTab,
+            })}
+        >
             <div className='controls__buttons'>
                 <TradeAnimation className='controls__animation' should_show_overlay />
             </div>
@@ -333,7 +337,7 @@ const RunPanel = observer(() => {
                 >
                     {content}
                 </Drawer>
-                {!isDesktop && <MobileDrawerFooter />}
+                {!isDesktop && <MobileDrawerFooter isAnalysisTab={active_tab === DBOT_TABS.AI_ANALYSIS} />}
             </div>
 
             <StatisticsInfoModal
