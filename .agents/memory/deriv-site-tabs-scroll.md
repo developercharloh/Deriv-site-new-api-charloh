@@ -29,3 +29,18 @@ panel has an ID and `overflow-y: auto`.
 **How to apply:** Verify the ID exists in the rendered DOM, scope the full-height chain to
 the affected tab, make the intermediate wrappers column flex containers with hidden
 overflow, then assert the list's scroll range and a lower card in the mobile regression.
+
+## Header and pane selector isolation
+
+Scope pane layout and active-pane `:has()` selectors to `.dc-tabs__content-panel`,
+not bare tab IDs. Layout regressions must include the real header IDs and pane
+structure, not only the header classes.
+
+**Why:** Both the navigation item and the active pane use tab IDs. Bare ID selectors
+applied column layout and large bottom padding to navigation items, while bare
+`:has(#id-...)` matched inactive tabs too. A simplified browser fixture without IDs
+incorrectly passed several alignment checks.
+
+**How to apply:** Check both active and inactive tool tabs at mobile and tablet
+widths, before and after horizontal scrolling. Require the regression to reproduce
+the original failure with the unscoped selectors before trusting its passing result.
