@@ -5,6 +5,14 @@
     // fix for the RTL issue on tab active line
     .dc-tabs__active-line {
         right: auto;
+    }
+}
+
+.dc-tabs--main__tabs {
+    .dc-tabs__active-line,
+    .dc-tabs__item--is-scrollable-and-active::after {
+        display: none !important;
+    }
 }
 
 // Nexus AI was removed from the shipped app; exclude the legacy styles.
@@ -1896,7 +1904,6 @@
         }
     }
 
-    }
 }
 
 // The wrapper div added by Tabs around active tab content must also stretch
