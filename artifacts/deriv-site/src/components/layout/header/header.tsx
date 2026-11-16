@@ -37,16 +37,6 @@ const AppHeader = observer(() => {
     });
 
     const handleLogout = useLogout();
-    const isPublicNexusAI =
-        typeof window !== 'undefined' &&
-        (window.location.hash === '#nexus_ai' || window.location.hash === '#alpha_scan_ai');
-    const showPublicDemoAccount =
-        isPublicNexusAI &&
-        !isDesktop &&
-        !activeLoginid &&
-        !is_account_regenerating &&
-        !isAuthorizing &&
-        !isOAuthPending;
 
     // Clear OAuth-pending flag once the account is set (auth succeeded)
     // or after a generous timeout in case something goes wrong.
@@ -129,40 +119,6 @@ const AppHeader = observer(() => {
             setIsAuthorizing(false);
         }
     }, [setIsAuthorizing]);
-
-    const renderPublicDemoAccount = () => (
-        <div className='public-demo-account' aria-label='Public demo account'>
-            <div className='public-demo-account__type'>
-                <span>Demo account</span>
-                <span className='public-demo-account__chevron' aria-hidden='true'>
-                    ⌄
-                </span>
-            </div>
-            <strong>10,008.77 USD</strong>
-        </div>
-    );
-
-    const renderPublicDemoActions = () => (
-        <div className='public-demo-actions'>
-            <button
-                type='button'
-                className='hdr-refresh-btn public-demo-actions__refresh'
-                onClick={() => window.location.reload()}
-                title='Refresh page'
-                aria-label='Refresh page'
-            >
-                <svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg' width='20' height='20'>
-                    <path
-                        d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
-                        stroke='currentColor'
-                        strokeWidth='2'
-                        strokeLinecap='round'
-                        strokeLinejoin='round'
-                    />
-                </svg>
-            </button>
-        </div>
-    );
 
     const renderAccountSection = useCallback(
         (position: 'left' | 'right' = 'right') => {
@@ -290,14 +246,12 @@ const AppHeader = observer(() => {
                     <AppLogo />
                     {isDesktop ? (
                         <MenuItems />
-                    ) : showPublicDemoAccount ? (
-                        renderPublicDemoAccount()
                     ) : (
                         renderAccountSection('left')
                     )}
                 </Wrapper>
                 <Wrapper variant='right'>
-                    {showPublicDemoAccount ? renderPublicDemoActions() : renderAccountSection('right')}
+                    {renderAccountSection('right')}
                 </Wrapper>
             </Header>
         </>

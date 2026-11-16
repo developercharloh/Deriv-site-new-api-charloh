@@ -40,11 +40,6 @@
     touch-action: none;
 }
 
-html:has(.main.main--nexus-ai),
-body:has(.main.main--nexus-ai) {
-    touch-action: pan-y;
-}
-
 strong {
     font-weight: bold;
 }

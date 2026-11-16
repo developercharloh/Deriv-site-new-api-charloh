@@ -50,7 +50,6 @@ const AnalysisTool      = lazy(() => import('../ai-analysis-tool'));
 const ExecutionPlan     = lazy(() => import('../execution-plan'));
 const FreeBots          = lazy(() => import('../free-bots'));
 const AdvancedDTrader   = lazy(() => import('../advanced-dtrader'));
-const NexusAIComingSoon = lazy(() => import('../alpha-scan-ai-coming-soon'));
 const AiSignalsPage     = lazy(() => import('../ai-signals'));
 
 const AppWrapper = observer(() => {
@@ -87,7 +86,6 @@ const AppWrapper = observer(() => {
     const hash = [
         'dashboard',
         'bot_builder',
-        'nexus_ai',
         'chart',
         'ai_signals',
         'free_bots',
@@ -140,10 +138,10 @@ const AppWrapper = observer(() => {
     const is_preview_mode = window.location.pathname.includes('/preview');
     let tab_value: number | string = active_tab;
     const GetHashedValue = (tab: number) => {
-        tab_value = location.hash?.split('#')[1];
+        tab_value = location.hash?.slice(1);
         if (!tab_value) return is_preview_mode ? BOT_BUILDER : tab;
-        const normalized_tab = tab_value === 'alpha_scan_ai' ? 'nexus_ai' : tab_value;
-        return Number(hash.indexOf(String(normalized_tab)));
+        const hash_index = hash.indexOf(String(tab_value));
+        return hash_index >= 0 ? hash_index : DASHBOARD;
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
@@ -298,6 +296,9 @@ const AppWrapper = observer(() => {
         if (init_render.current) {
             setActiveTab(Number(active_hash_tab));
             if (!isDesktop) handleTabChange(Number(active_hash_tab));
+            if (location.hash && !hash.includes(location.hash.slice(1))) {
+                navigate(`${location.pathname}${location.search}#${hash[DASHBOARD]}`, { replace: true });
+            }
             init_render.current = false;
         } else {
             // Preserve URL parameters when navigating
@@ -386,9 +387,7 @@ const AppWrapper = observer(() => {
     return (
         <React.Fragment>
             <div
-                className={classNames('main', {
-                    'main--nexus-ai': active_tab === DBOT_TABS.ALPHA_SCAN_AI,
-                })}
+                className='main'
             >
                 <div
                     className={classNames('main__container', {
@@ -432,23 +431,6 @@ const AppWrapper = observer(() => {
                                 }
                                 id='id-bot-builder'
                             />
-                            <div
-                                label={
-                                    <>
-                                        <LabelPairedChartLineCaptionRegularIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='var(--text-general)'
-                                        />
-                                        <Localize i18n_default_text='Nexus AI' />
-                                    </>
-                                }
-                                id='id-alpha-scan-ai'
-                            >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Nexus AI...')} />}>
-                                    <NexusAIComingSoon />
-                                </Suspense>
-                            </div>
                             <div
                                 label={
                                     <>
@@ -502,16 +484,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
                             <div
-                                label={
-                                    <>
-                                        <LabelPairedChartLineCaptionRegularIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='var(--text-general)'
-                                        />
-                                        <Localize i18n_default_text='🧠 AI Analysis Tool' />
-                                    </>
-                                }
+                                label={localize('AI Analysis')}
                                 id='id-ai-analysis'
                             >
                                 <Suspense fallback={<ChunkLoader message={localize('Loading AI Analysis...')} />}>
@@ -553,7 +526,6 @@ const AppWrapper = observer(() => {
                     {![
                         DBOT_TABS.AI_SIGNALS,
                         DBOT_TABS.AI_ANALYSIS,
-                        DBOT_TABS.ALPHA_SCAN_AI,
                         DBOT_TABS.D_CIRCLES,
                         DBOT_TABS.ADVANCED_DTRADER,
                     ].includes(active_tab) && <RunPanel />}
@@ -566,7 +538,6 @@ const AppWrapper = observer(() => {
                     ![
                         DBOT_TABS.AI_SIGNALS,
                         DBOT_TABS.AI_ANALYSIS,
-                        DBOT_TABS.ALPHA_SCAN_AI,
                         DBOT_TABS.D_CIRCLES,
                         DBOT_TABS.ADVANCED_DTRADER,
                     ].includes(active_tab) && <RunPanel />}

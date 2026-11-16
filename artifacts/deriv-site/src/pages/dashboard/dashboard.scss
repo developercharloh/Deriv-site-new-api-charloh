@@ -9,11 +9,6 @@
     height: calc(100vh - 4.4rem);
     overflow: hidden;
 
-    &:has(.main.main--nexus-ai) {
-        height: auto;
-        overflow: visible;
-    }
-
     .toolbar__section {
         justify-content: end;
 

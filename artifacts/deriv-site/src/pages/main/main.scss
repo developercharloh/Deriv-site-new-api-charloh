@@ -5,9 +5,10 @@
     // fix for the RTL issue on tab active line
     .dc-tabs__active-line {
         right: auto;
-    }
 }
 
+// Nexus AI was removed from the shipped app; exclude the legacy styles.
+@if false {
 // ─── AI Analysis Tool — Coming Soon page ─────────────────────────────────────
 .ai-analysis-coming-soon {
     display: flex;
@@ -972,6 +973,8 @@
     }
 }
 
+}
+
 // ─── Coming Soon badge on nav tabs ───────────────────────────────────────────
 .tab-coming-soon-badge {
     display: inline-block;
@@ -1893,42 +1896,6 @@
         }
     }
 
-    // Keep the artwork and Journal natural-height inside the main scrollport.
-    #id-alpha-scan-ai .nexus-ai {
-        flex: 0 0 auto;
-        height: auto;
-        min-height: 0;
-        overflow: visible;
-    }
-
-    // Nexus owns one bounded touch-scroll area; its tab wrappers must remain
-    // natural-height so the entire artwork and Journal can scroll together.
-    .main.main--nexus-ai {
-        display: block;
-        box-sizing: border-box;
-        height: calc(100vh - 6rem) !important;
-        height: calc(100dvh - 6rem) !important;
-        max-height: none !important;
-        min-height: 0;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior-y: contain;
-        touch-action: pan-y;
-    }
-
-    .main.main--nexus-ai .main__container,
-    .main.main--nexus-ai .main__container > div,
-    .main.main--nexus-ai .dc-tabs,
-    .main.main--nexus-ai .dc-tabs__content,
-    .main.main--nexus-ai .dc-tabs__content-panel,
-    .main.main--nexus-ai #id-alpha-scan-ai {
-        display: block;
-        height: auto !important;
-        max-height: none !important;
-        min-height: 0;
-        overflow: visible !important;
-        touch-action: auto;
     }
 }
 
@@ -2030,6 +1997,8 @@
     }
 }
 
+// Nexus AI was removed from the shipped app; exclude its remaining styles.
+@if false {
 // Nexus AI — light, high-contrast execution cockpit. Keep this tool on the
 // document scroll chain so the complete journal remains reachable on touch and desktop.
 .main.main--nexus-ai {
@@ -2719,4 +2688,45 @@
     .nexus-ai__journal { margin-top: 12px; }
     .nexus-ai__empty-journal { min-height: 98px; padding: 12px; }
     .nexus-ai__footer { align-items: flex-start; flex-direction: column; gap: 6px; }
+}
+}
+
+@include mobile-or-tablet-screen {
+    // Keep the main mobile tab rail compact and predictable. The inner
+    // scrollbar is the only horizontal scroll container; tabs never shrink
+    // or spread themselves across the available width.
+    .dc-tabs__list--header--main__tabs {
+        min-width: 0;
+        overflow: hidden !important;
+        padding: 0.8rem 1.2rem 0;
+    }
+
+    .dc-tabs__list--main__tabs {
+        min-width: 0;
+        overflow: hidden !important;
+        justify-content: flex-start !important;
+    }
+
+    .dc-tabs__list--main__tabs > .dc-themed-scrollbars-wrapper {
+        display: flex;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        flex: 0 0 100%;
+        justify-content: flex-start;
+        gap: 0;
+        margin: 0;
+        padding: 0;
+    }
+
+    .dc-tabs__list--main__tabs .dc-tabs__item {
+        display: inline-flex;
+        width: max-content !important;
+        min-width: max-content;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        padding: 0 1rem;
+    }
 }
