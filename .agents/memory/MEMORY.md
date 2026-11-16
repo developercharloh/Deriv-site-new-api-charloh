@@ -67,3 +67,4 @@
 - [Matches King digit selection](matches-king-digit-selection.md) — keep a digit-count selector with one prediction box per selected Digit Match leg; a match wins only its own leg.
 - [Matches King rate-limit recovery](matches-king-rate-limit-recovery.md) — keep runs active with capped backoff; never resend accepted legs or bypass Stop/TP/SL.
 - [AI Analysis shared connection](ai-analysis-shared-connection.md) — the Analysis Tool should reuse the site's active Deriv session instead of opening a separate socket.
+- [Matches signal presentation](matches-signal-presentation.md) — one Matches tab, both ranges on each market, readable mobile statuses, and the site's shared Deriv connection.

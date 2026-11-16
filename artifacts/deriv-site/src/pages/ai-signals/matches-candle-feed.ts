@@ -69,6 +69,7 @@ export function subscribeToMatchesCandleFeed({
     const subscriptionToSymbol = new Map<string, string>();
     const subscriptionBySymbol = new Map<string, string | number>();
     const historyReceived = new Set<string>();
+    const lastMessageAt = new Map<string, number>();
     const retriesBySymbol = new Map<string, number>();
     const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const historyTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -122,16 +123,11 @@ export function subscribeToMatchesCandleFeed({
         const requestId = Number(message.req_id);
         const requestedSymbol = Number.isFinite(requestId) ? requestToSymbol.get(requestId) : undefined;
         const subscriptionId = message.subscription?.id;
-        if (requestedSymbol && subscriptionId !== undefined) {
-            subscriptionToSymbol.set(String(subscriptionId), requestedSymbol);
-            subscriptionBySymbol.set(requestedSymbol, subscriptionId);
-        }
-
-        const ohlcSymbol = typeof message.ohlc?.symbol === 'string' ? message.ohlc.symbol : undefined;
         const subscribedSymbol = subscriptionId !== undefined
             ? subscriptionToSymbol.get(String(subscriptionId))
             : undefined;
-        const symbol = requestedSymbol ?? ohlcSymbol ?? subscribedSymbol;
+        const symbol = requestedSymbol ?? subscribedSymbol;
+        if (!symbol) return; // Never consume or forget another site's subscription.
 
         if (!active) {
             if (subscriptionId !== undefined) forget(subscriptionId);
@@ -141,7 +137,10 @@ export function subscribeToMatchesCandleFeed({
             if (subscriptionId !== undefined) forget(subscriptionId);
             return;
         }
-        if (!symbol) return;
+        if (requestedSymbol && subscriptionId !== undefined) {
+            subscriptionToSymbol.set(String(subscriptionId), requestedSymbol);
+            subscriptionBySymbol.set(requestedSymbol, subscriptionId);
+        }
 
         if (message.error) {
             scheduleRetry(symbol, message.error.message || 'The site connection rejected candle history.');
@@ -157,12 +156,16 @@ export function subscribeToMatchesCandleFeed({
                 return;
             }
             historyReceived.add(symbol);
+            lastMessageAt.set(symbol, Date.now());
             retriesBySymbol.delete(symbol);
             clearHistoryTimer(symbol);
             onHistory(symbol, candles);
         }
 
         if (message.msg_type === 'ohlc' && message.ohlc && historyReceived.has(symbol)) {
+            if (message.ohlc.symbol && message.ohlc.symbol !== symbol) return;
+            lastMessageAt.set(symbol, Date.now());
+            retriesBySymbol.delete(symbol);
             onCandle(symbol, message.ohlc, message.time);
         }
     }
@@ -195,7 +198,7 @@ export function subscribeToMatchesCandleFeed({
             void Promise.resolve(result).then(response => {
                 const message = parseMessage(response);
                 if (message.error || message.candles || message.history || message.ohlc || message.subscription) {
-                    handleMessage(message);
+                    handleMessage({ ...message, req_id: message.req_id ?? requestId });
                 }
             }).catch(error => {
                 const detail = error?.error?.message ?? error?.message;
@@ -223,8 +226,18 @@ export function subscribeToMatchesCandleFeed({
         startTimers.add(timer);
     });
 
+    const watchdog = setInterval(() => {
+        symbols.forEach(({ code }) => {
+            const last = lastMessageAt.get(code);
+            if (historyReceived.has(code) && last !== undefined && Date.now() - last > HISTORY_TIMEOUT_MS) {
+                scheduleRetry(code, 'Live candles stopped arriving; restoring this market feed.');
+            }
+        });
+    }, 3_000);
+
     return () => {
         active = false;
+        clearInterval(watchdog);
         messageSubscription?.unsubscribe();
         startTimers.forEach(clearTimeout);
         retryTimers.forEach(clearTimeout);
