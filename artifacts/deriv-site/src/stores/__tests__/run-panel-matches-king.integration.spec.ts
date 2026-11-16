@@ -177,17 +177,16 @@ describe('Matches King Stop with real contract tracking', () => {
         }));
         await Promise.resolve();
         const tracking = sent.filter(item => item.proposal_open_contract);
-        expect(tracking).toHaveLength(2);
-        tracking.forEach(request => {
-            expect(Number.isSafeInteger(request.contract_id)).toBe(true);
-        });
+        expect(tracking).toHaveLength(1);
+        expect(tracking[0]).toMatchObject({ subscribe: 1 });
+        expect(tracking[0].contract_id).toBeUndefined();
         expect(panel.native_matches_king_engine).not.toBeNull();
-        tracking.forEach((request, index) => listener!({
+        [20705121999, 20705122000].forEach((contractId, index) => listener!({
             data: {
-                msg_type: 'proposal_open_contract', req_id: request.req_id,
-                subscription: { id: `position-${index}` },
+                msg_type: 'proposal_open_contract', ...(index === 0 ? { req_id: tracking[0].req_id } : {}),
+                subscription: { id: 'shared-positions' },
                 proposal_open_contract: {
-                    contract_id: request.contract_id, is_sold: 1, status: 'lost',
+                    contract_id: contractId, is_sold: 1, status: 'lost',
                     profit: -0.5, entry_tick: 100.01, exit_tick: 100.02,
                 },
             },
@@ -203,5 +202,48 @@ describe('Matches King Stop with real contract tracking', () => {
         expect(sent.filter(item => item.buy)).toHaveLength(2);
         expect((panel.root_store.transactions.onBotContractEvent as jest.Mock).mock.calls
             .filter(([event]) => event.status === 'lost' && event.is_expired)).toHaveLength(2);
+    });
+
+    it('finishes Stop after rate-limited tracking recovers missed results without resending buys', async () => {
+        tick(1);
+        tick(2);
+        tick(3);
+        sent.filter(item => item.proposal === 1).forEach((request, index) => listener!({
+            data: {
+                msg_type: 'proposal', req_id: request.req_id,
+                proposal: { id: `limited-${index}`, ask_price: 0.5, payout: 3.52 },
+            },
+        }));
+        sent.filter(item => item.buy).forEach((request, index) => listener!({
+            data: {
+                msg_type: 'buy', req_id: request.req_id,
+                buy: { contract_id: 20705121999 + index, buy_price: 0.5, payout: 3.52 },
+            },
+        }));
+        await Promise.resolve();
+        const shared = sent.find(item => item.proposal_open_contract);
+        listener!({ data: {
+            msg_type: 'proposal_open_contract', req_id: shared.req_id,
+            error: { code: 'RateLimit', message: 'You have reached the rate limit for proposal_open_contract.' },
+        } });
+        panel.onStopBotClick();
+        expect(panel.is_native_bot_stopping).toBe(true);
+        jest.advanceTimersByTime(6_000);
+        const snapshots = sent.filter(item => item.proposal_open_contract && item.contract_id);
+        expect(snapshots).toHaveLength(2);
+        snapshots.forEach(request => listener!({ data: {
+            msg_type: 'proposal_open_contract', req_id: request.req_id,
+            proposal_open_contract: {
+                contract_id: request.contract_id, is_sold: 1, status: 'lost',
+                profit: -0.5, entry_tick: 100.01, exit_tick: 100.02,
+            },
+        } }));
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(panel.is_running).toBe(false);
+        expect(panel.is_native_bot_stopping).toBe(false);
+        expect(panel.native_matches_king_engine).toBeNull();
+        expect(lockHeld).toBe(false);
+        expect(sent.filter(item => item.buy)).toHaveLength(2);
     });
 });

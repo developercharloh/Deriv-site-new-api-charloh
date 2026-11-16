@@ -240,6 +240,12 @@ export class DTraderEngine {
     private posRetryCounts = new Map<string, number>();
     private posRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
     private posRetrySequence = 0;
+    private sharedPosReqId: number | null = null;
+    private sharedPosSubId: string | null = null;
+    private sharedPosRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    private sharedPosRetryCount = 0;
+    private positionSnapshotsBlockedUntil = 0;
+    private nextPositionSnapshotAt = 0;
     private settledIds:    Set<string>           = new Set(); // ignore further POC updates after settle
 
     // Debounce for proposal refresh
@@ -301,6 +307,8 @@ export class DTraderEngine {
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    constructor(private readonly options: { sharedContractTracking?: boolean } = {}) {}
+
     start(initialCfg: DTConfig): boolean {
         if (!api_base.api) { this.fail('Deriv connection not ready — please log in first.'); return false; }
         if (!api_base.is_authorized) { this.fail('Not authorized — log in to your Deriv account first.'); return false; }
@@ -316,6 +324,7 @@ export class DTraderEngine {
         this.msgSub = (api_base.api as any).onMessage().subscribe((raw: any) => {
             this.handle(raw?.data ?? raw);
         });
+        if (this.options.sharedContractTracking) this.subscribeSharedPositions();
 
         // A previous runner can still own the symbol on Deriv for a short
         // time after its local `forget` was sent. Clear remote tick streams
@@ -365,6 +374,14 @@ export class DTraderEngine {
         }
         if (this.tickSubId)     { this.rawSend({ forget: this.tickSubId });     this.tickSubId = null; }
         if (this.proposalSubId) { this.rawSend({ forget: this.proposalSubId }); this.proposalSubId = null; }
+        if (this.sharedPosSubId) this.rawSend({ forget: this.sharedPosSubId });
+        if (this.sharedPosRetryTimer) clearTimeout(this.sharedPosRetryTimer);
+        this.sharedPosSubId = null;
+        this.sharedPosReqId = null;
+        this.sharedPosRetryTimer = null;
+        this.sharedPosRetryCount = 0;
+        this.positionSnapshotsBlockedUntil = 0;
+        this.nextPositionSnapshotAt = 0;
         this.posSubIds.forEach(id => this.rawSend({ forget: id }));
         this.posSubIds.clear();
         this.posSubIdSet.clear();
@@ -993,8 +1010,11 @@ export class DTraderEngine {
         const isMyTick = subId !== undefined && subId === this.tickSubId;
         const isMyProp = subId !== undefined && subId === this.proposalSubId;
         const isMyPos  = subId !== undefined && this.posSubIdSet.has(subId);
+        const isSharedPosition = msg.msg_type === 'proposal_open_contract' &&
+            ((reqId !== undefined && reqId === this.sharedPosReqId) ||
+                (subId !== undefined && subId === this.sharedPosSubId));
 
-        if (!isMyReq && !isMyTick && !isMyProp && !isMyPos) return;
+        if (!isMyReq && !isMyTick && !isMyProp && !isMyPos && !isSharedPosition) return;
         if (pairRequest) {
             this.myReqIds.delete(reqId!);
             this.digitPairRequestContexts.delete(reqId!);
@@ -1006,6 +1026,12 @@ export class DTraderEngine {
         if (msg.error) {
             const m = msg.error.message ?? 'Unknown error';
             this.log(`API error [${msg.msg_type}]: ${m}`, 'error');
+            if (isSharedPosition) {
+                this.sharedPosReqId = null;
+                this.sharedPosSubId = null;
+                this.retrySharedPositions(m);
+                return;
+            }
             if (msg.msg_type === 'proposal_open_contract' && reqId !== undefined) {
                 const contractId = this.posRequestContracts.get(reqId);
                 this.posRequestContracts.delete(reqId);
@@ -1052,6 +1078,13 @@ export class DTraderEngine {
         }
 
         if (msg.msg_type === 'proposal_open_contract') {
+            if (isSharedPosition) {
+                this.sharedPosReqId = null;
+                if (subId) this.sharedPosSubId = subId;
+                this.sharedPosRetryCount = 0;
+                if (this.sharedPosRetryTimer) clearTimeout(this.sharedPosRetryTimer);
+                this.sharedPosRetryTimer = null;
+            }
             const contractId = String(
                 msg.proposal_open_contract?.contract_id ??
                     (reqId === undefined ? '' : this.posRequestContracts.get(reqId) ?? '')
@@ -1085,7 +1118,9 @@ export class DTraderEngine {
                 this.handleSellAck(msg.sell);
                 break;
             case 'proposal_open_contract':
-                this.handlePOC(msg.proposal_open_contract, subId);
+                // The account stream belongs to the run, not any single leg.
+                // Settling one contract must never forget the shared stream.
+                this.handlePOC(msg.proposal_open_contract, isSharedPosition ? undefined : subId);
                 break;
         }
     }
@@ -1456,6 +1491,11 @@ export class DTraderEngine {
         ) {
             return;
         }
+        if (this.options.sharedContractTracking) {
+            this.subscribeSharedPositions();
+            this.queuePositionSnapshot(contractId);
+            return;
+        }
         this.posPendingContracts.add(contractId);
         const reqId = this.send({
             proposal_open_contract: 1,
@@ -1465,12 +1505,62 @@ export class DTraderEngine {
         this.posRequestContracts.set(reqId, contractId);
     }
 
+    private subscribeSharedPositions(): void {
+        if (!this.cfg || !api_base.api || !api_base.is_authorized ||
+            this.sharedPosReqId !== null || this.sharedPosSubId || this.sharedPosRetryTimer) return;
+        // Deriv supports a single stream for all of this account's contracts
+        // when contract_id is omitted. Ignore positions this engine doesn't own.
+        this.sharedPosReqId = this.send({ proposal_open_contract: 1, subscribe: 1 });
+    }
+
+    private retrySharedPositions(message: string): void {
+        if (!this.cfg || this.sharedPosRetryTimer) return;
+        this.sharedPosRetryCount += 1;
+        const delayMs = Math.max(5_000, getDerivRateLimitBackoffMs(this.sharedPosRetryCount));
+        this.positionSnapshotsBlockedUntil = Date.now() + delayMs;
+        this.log(
+            `Contract tracking is temporarily unavailable (${message}). Keeping accepted contracts; retrying the shared stream in ${Math.ceil(delayMs / 1_000)}s. No accepted purchases will be resent.`,
+            'system'
+        );
+        this.sharedPosRetryTimer = setTimeout(() => {
+            this.sharedPosRetryTimer = null;
+            this.subscribeSharedPositions();
+        }, delayMs);
+    }
+
+    private queuePositionSnapshot(contractId: string, delayMs = 5_000): void {
+        if (this.posRetryTimers.has(contractId) || !this.positions.has(contractId)) return;
+        const at = Math.max(Date.now() + delayMs, this.nextPositionSnapshotAt, this.positionSnapshotsBlockedUntil);
+        this.nextPositionSnapshotAt = at + 1_000;
+        this.posRetryTimers.set(contractId, setTimeout(() => {
+            this.posRetryTimers.delete(contractId);
+            if (!this.cfg || !this.positions.has(contractId)) return;
+            if (Date.now() < this.positionSnapshotsBlockedUntil) {
+                this.queuePositionSnapshot(contractId);
+                return;
+            }
+            if (this.posPendingContracts.has(contractId)) return;
+            // A settled contract can predate a recovered account stream. Read
+            // its authoritative result once, without creating another stream.
+            this.posPendingContracts.add(contractId);
+            const reqId = this.send({ proposal_open_contract: 1, contract_id: Number(contractId) });
+            this.posRequestContracts.set(reqId, contractId);
+        }, at - Date.now()));
+    }
+
     private handlePositionSubscriptionFailure(contractId: string, message: string): void {
         this.posPendingContracts.delete(contractId);
         if (!isDerivRateLimitError(message) || !this.positions.has(contractId)) return;
 
         const attempt = (this.posRetryCounts.get(contractId) ?? 0) + 1;
         this.posRetryCounts.set(contractId, attempt);
+        if (this.options.sharedContractTracking) {
+            const delayMs = Math.max(10_000, getDerivRateLimitBackoffMs(attempt));
+            this.positionSnapshotsBlockedUntil = Math.max(this.positionSnapshotsBlockedUntil, Date.now() + delayMs);
+            this.log(`Settlement check delayed by Deriv; keeping #${contractId} pending and retrying without buying it again.`, 'system');
+            this.queuePositionSnapshot(contractId, delayMs);
+            return;
+        }
         const staggerMs = (this.posRetrySequence++ % 10) * 200;
         const delayMs = Math.min(getDerivRateLimitBackoffMs(attempt) + staggerMs, 30_000);
         const previousTimer = this.posRetryTimers.get(contractId);

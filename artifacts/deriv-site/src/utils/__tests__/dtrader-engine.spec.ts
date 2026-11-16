@@ -8,7 +8,7 @@ jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
 import { DTraderEngine, type DTConfig } from '@/utils/dtrader-engine';
 import { api_base as mockApiBase } from '@/external/bot-skeleton/services/api/api-base';
 
-const makeHarness = (config: DTConfig) => {
+const makeHarness = (config: DTConfig, options: { sharedContractTracking?: boolean } = {}) => {
     const sent: SentPayload[] = [];
     let handler: MessageHandler | null = null;
     const api = {
@@ -31,11 +31,11 @@ const makeHarness = (config: DTConfig) => {
     };
     mockApiBase.api = api;
 
-    const engine = new DTraderEngine();
+    const engine = new DTraderEngine(options);
     const feedback: Array<{ kind: string; message: string }> = [];
     const positions: Array<Record<string, any>> = [];
     engine.onBuyFeedback = value => feedback.push(value);
-    engine.onPosition = value => positions.push(value);
+    engine.onPosition = value => positions.push({ ...value });
     engine.start(config);
 
     const emit = (message: Record<string, any>) => {
@@ -336,6 +336,96 @@ describe('DTraderEngine Alpha Scan execution path', () => {
             isOpen: false,
             profit: -10,
         });
+        harness.engine.stop();
+    });
+
+    it('uses one shared contract stream across batches and never forgets it after a leg settles', () => {
+        const harness = makeHarness(baseConfig, { sharedContractTracking: true });
+        const shared = harness.latest(payload => payload.proposal_open_contract === 1);
+        expect(shared).toMatchObject({ subscribe: 1 });
+        expect(shared.contract_id).toBeUndefined();
+        harness.emit({
+            msg_type: 'proposal_open_contract', req_id: shared.req_id,
+            subscription: { id: 'account-contracts' }, proposal_open_contract: {},
+        });
+
+        for (const id of [123456, 123457]) {
+            (harness.engine as any).registerBuyAck({ contract_id: id, buy_price: 10, payout: 19 }, baseConfig, false);
+            harness.emit({
+                msg_type: 'proposal_open_contract',
+                subscription: { id: 'account-contracts' },
+                proposal_open_contract: { contract_id: id, is_sold: 1, status: 'lost', profit: -10 },
+            });
+        }
+        // Unrelated account contracts must not appear in this bot's journal.
+        harness.emit({
+            msg_type: 'proposal_open_contract', subscription: { id: 'account-contracts' },
+            proposal_open_contract: { contract_id: 999999, is_sold: 1, profit: 100 },
+        });
+        jest.advanceTimersByTime(7_000);
+        expect(harness.sent.filter(payload => payload.proposal_open_contract === 1)).toHaveLength(1);
+        expect(harness.positions.filter(position => !position.isOpen).map(position => position.contractId))
+            .toEqual(['123456', '123457']);
+        expect(harness.sent.some(payload => payload.forget === 'account-contracts')).toBe(false);
+        harness.engine.stop();
+        expect(harness.sent.filter(payload => payload.forget === 'account-contracts')).toHaveLength(1);
+    });
+
+    it('recovers already-settled results using spaced snapshots after shared-stream rate limits', () => {
+        const harness = makeHarness(baseConfig, { sharedContractTracking: true });
+        const shared = harness.latest(payload => payload.proposal_open_contract === 1);
+        for (const id of [123456, 123457]) {
+            (harness.engine as any).registerBuyAck({ contract_id: id, buy_price: 10, payout: 19 }, baseConfig, false);
+        }
+        harness.emit({
+            msg_type: 'proposal_open_contract', req_id: shared.req_id,
+            error: { code: 'RateLimit', message: 'You have reached the rate limit for proposal_open_contract.' },
+        });
+        expect(harness.sent.filter(payload => payload.proposal_open_contract === 1)).toHaveLength(1);
+        jest.advanceTimersByTime(5_000);
+        const retriedShared = harness.latest(payload => payload.proposal_open_contract === 1 && !payload.contract_id);
+        expect(retriedShared.req_id).not.toBe(shared.req_id);
+        const firstSnapshot = harness.latest(payload => payload.contract_id === 123456);
+        expect(firstSnapshot.subscribe).toBeUndefined();
+        expect(harness.sent.some(payload => payload.contract_id === 123457)).toBe(false);
+        jest.advanceTimersByTime(1_000);
+        const secondSnapshot = harness.latest(payload => payload.contract_id === 123457);
+        expect(secondSnapshot.subscribe).toBeUndefined();
+        for (const request of [firstSnapshot, secondSnapshot]) {
+            harness.emit({
+                msg_type: 'proposal_open_contract', req_id: request.req_id,
+                proposal_open_contract: {
+                    contract_id: request.contract_id, is_sold: 1, status: 'lost', profit: -10,
+                },
+            });
+        }
+        expect(harness.positions.filter(position => !position.isOpen)).toHaveLength(2);
+        expect(harness.sent.some(payload => payload.buy)).toBe(false);
+        harness.engine.stop();
+        const sentCount = harness.sent.length;
+        jest.advanceTimersByTime(60_000);
+        expect(harness.sent).toHaveLength(sentCount);
+    });
+
+    it('backs off repeated snapshot rejections without creating more tracking subscriptions', () => {
+        const harness = makeHarness(baseConfig, { sharedContractTracking: true });
+        const shared = harness.latest(payload => payload.proposal_open_contract === 1);
+        harness.emit({
+            msg_type: 'proposal_open_contract', req_id: shared.req_id,
+            subscription: { id: 'account-contracts' }, proposal_open_contract: {},
+        });
+        (harness.engine as any).registerBuyAck({ contract_id: 123456, buy_price: 10, payout: 19 }, baseConfig, false);
+        jest.advanceTimersByTime(5_000);
+        const first = harness.latest(payload => payload.contract_id === 123456);
+        harness.emit({
+            msg_type: 'proposal_open_contract', req_id: first.req_id,
+            error: { code: 'RateLimit', message: 'You have reached the rate limit for proposal_open_contract.' },
+        });
+        jest.advanceTimersByTime(9_999);
+        expect(harness.sent.filter(payload => payload.contract_id === 123456)).toHaveLength(1);
+        jest.advanceTimersByTime(1);
+        expect(harness.sent.filter(payload => payload.contract_id === 123456)).toHaveLength(2);
+        expect(harness.sent.filter(payload => payload.proposal_open_contract === 1 && payload.subscribe === 1)).toHaveLength(1);
         harness.engine.stop();
     });
 

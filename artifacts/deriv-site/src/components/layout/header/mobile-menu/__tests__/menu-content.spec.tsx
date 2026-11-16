@@ -2,7 +2,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { mockStore, StoreProvider } from '@/hooks/useStore';
 import { mock_ws } from '@/utils/mock';
 import { useDevice } from '@deriv-com/ui';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import MenuContent from '../menu-content';
 
 jest.mock('@deriv-com/ui', () => ({
@@ -39,6 +39,14 @@ describe('MenuContent Component', () => {
         render(<MenuContent onLogout={mockOnLogout} />, { wrapper });
         expect(screen.getByText(/Dark theme/)).toBeInTheDocument();
         expect(screen.getByText(/Log out/)).toBeInTheDocument();
+    });
+
+    it('opens AI Analysis directly and closes the menu even when the theme toggle is disabled', () => {
+        const onNavigate = jest.fn();
+        render(<MenuContent enableThemeToggle={false} onNavigate={onNavigate} />, { wrapper });
+        fireEvent.click(screen.getByText('AI Analysis Tool'));
+        expect(mock_store.dashboard.active_tab).toBe(6);
+        expect(onNavigate).toHaveBeenCalledTimes(1);
     });
 
     it('adjusts text size for mobile devices', () => {

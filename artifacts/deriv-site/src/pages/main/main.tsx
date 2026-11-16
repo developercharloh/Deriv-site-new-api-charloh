@@ -546,6 +546,7 @@ const AppWrapper = observer(() => {
                     <RunStrategy />
                     {![
                         DBOT_TABS.AI_SIGNALS,
+                        DBOT_TABS.AI_ANALYSIS,
                         DBOT_TABS.ALPHA_SCAN_AI,
                         DBOT_TABS.D_CIRCLES,
                         DBOT_TABS.ADVANCED_DTRADER,
@@ -558,6 +559,7 @@ const AppWrapper = observer(() => {
                 {!is_open &&
                     ![
                         DBOT_TABS.AI_SIGNALS,
+                        DBOT_TABS.AI_ANALYSIS,
                         DBOT_TABS.ALPHA_SCAN_AI,
                         DBOT_TABS.D_CIRCLES,
                         DBOT_TABS.ADVANCED_DTRADER,

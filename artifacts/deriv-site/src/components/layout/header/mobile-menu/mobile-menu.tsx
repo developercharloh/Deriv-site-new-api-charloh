@@ -118,6 +118,7 @@ const MobileMenu = ({ onLogout }: TMobileMenuProps) => {
                     ) : (
                         <MenuContent
                             enableThemeToggle={enableThemeToggle}
+                            onNavigate={closeDrawer}
                             onOpenSubmenu={openSubmenu}
                             onLogout={() => {
                                 closeDrawer();

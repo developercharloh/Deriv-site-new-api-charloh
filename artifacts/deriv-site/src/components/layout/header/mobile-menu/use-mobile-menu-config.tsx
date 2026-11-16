@@ -1,5 +1,7 @@
 import { ComponentProps, ReactNode, useMemo } from 'react';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
+import { useStore } from '@/hooks/useStore';
+import { DBOT_TABS } from '@/constants/bot-contents';
 import RootStore from '@/stores/root-store';
 import { LegacyLogout1pxIcon, LegacyTheme1pxIcon } from '@deriv/quill-icons/Legacy';
 import { useTranslations } from '@deriv-com/translations';
@@ -28,11 +30,18 @@ const useMobileMenuConfig = (
 ) => {
     const { localize } = useTranslations();
     const { is_dark_mode_on, toggleTheme } = useThemeSwitcher();
+    const dashboard = useStore()?.dashboard;
 
     const menuConfig = useMemo((): TMenuConfig[] => {
 
         return [
             [
+                {
+                    as: 'button',
+                    label: localize('AI Analysis Tool'),
+                    LeftComponent: LegacyTheme1pxIcon,
+                    onClick: () => dashboard?.setActiveTab(DBOT_TABS.AI_ANALYSIS),
+                },
                 // ========================================
                 // CUSTOM MENU ITEMS PLACEHOLDER
                 // ========================================
@@ -76,6 +85,7 @@ const useMobileMenuConfig = (
         toggleTheme,
         localize,
         enableThemeToggle, // [AI] Added to recalculate menu when theme toggle config changes
+        dashboard,
     ]);
 
     // [AI] Check if menu has any items to determine if mobile menu should be shown

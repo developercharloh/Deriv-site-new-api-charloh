@@ -53,7 +53,7 @@ type LockManager = {
 };
 
 export class MatchesKingEngine {
-    private readonly trader = new DTraderEngine();
+    private readonly trader = new DTraderEngine({ sharedContractTracking: true });
     private running = false;
     private paused = false;
     private stopping = false;
