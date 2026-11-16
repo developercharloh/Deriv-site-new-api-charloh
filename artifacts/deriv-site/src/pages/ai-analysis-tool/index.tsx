@@ -324,6 +324,8 @@ const AiAnalysisTool: React.FC = observer(() => {
     const [connected,    setConnected]    = useState<'connecting' | 'live' | 'error'>('connecting');
     const [connectionError, setConnectionError] = useState('');
     const [retry, setRetry] = useState(0);
+    const retryTimerRef = useRef<number | null>(null);
+    const retryAttemptRef = useRef(0);
     const [patternStream, setPatternStream] = useState<{ label: string; win: boolean; neutral?: boolean }[]>([]);
     const [currentDigit, setCurrentDigit] = useState<number | null>(null);
     const [arrowKey,     setArrowKey]     = useState(0); // increments on each tick to retrigger animation
@@ -371,17 +373,39 @@ const AiAnalysisTool: React.FC = observer(() => {
 
         const api = api_base.api as unknown as AnalysisApiClient | null;
         let freshnessTimer: number | undefined;
-        const timer = window.setTimeout(() => {
+        const clearAutoRetry = () => {
+            if (retryTimerRef.current !== null) {
+                window.clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = null;
+            }
+        };
+        const retryForFeedError = (message: string) => {
+            if (retryTimerRef.current !== null) return;
+            window.clearTimeout(timer);
+            window.clearTimeout(freshnessTimer);
+            const retryDelay = Math.min(2_000 * 2 ** retryAttemptRef.current, 30_000);
+            retryAttemptRef.current = Math.min(retryAttemptRef.current + 1, 5);
             setConnected('error');
-            setConnectionError('No live data arrived from the site connection. Check your connection and retry.');
+            setConnectionError(`${message} Retrying automatically in ${Math.ceil(retryDelay / 1_000)}s.`);
+            retryTimerRef.current = window.setTimeout(() => {
+                retryTimerRef.current = null;
+                setRetry(value => value + 1);
+            }, retryDelay);
+        };
+        const timer = window.setTimeout(() => {
+            retryForFeedError('No live data arrived from the site connection. Check your connection.');
         }, 12_000);
         if (connectionStatus !== 'opened' || !api) {
             if (connectionStatus === 'closed') {
                 window.clearTimeout(timer);
+                clearAutoRetry();
                 setConnected('error');
                 setConnectionError('The site connection was interrupted. Analysis will resume when it reconnects.');
             }
-            return () => window.clearTimeout(timer);
+            return () => {
+                window.clearTimeout(timer);
+                clearAutoRetry();
+            };
         }
         const cleanup = subscribeToAnalysisFeed({
             api,
@@ -418,36 +442,37 @@ const AiAnalysisTool: React.FC = observer(() => {
                 setPatternStream(buildPattern(updated, pipRef.current, analysisTypeRef.current, overBarrierRef.current));
             },
             onStatus: (status, message) => {
-                setConnected(status);
-                setConnectionError(message ?? '');
                 if (status === 'live') {
+                    setConnected('live');
+                    setConnectionError('');
                     window.clearTimeout(timer);
                     window.clearTimeout(freshnessTimer);
+                    clearAutoRetry();
+                    retryAttemptRef.current = 0;
                     freshnessTimer = window.setTimeout(() => {
-                        setConnected('error');
-                        setConnectionError('Live ticks stopped arriving. Check the site connection and retry analysis.');
                         livePriceRef.current = null;
                         setLivePrice(null);
                         setPrevPrice(null);
                         setSparkPrices([]);
                         setPatternStream([]);
                         setCurrentDigit(null);
+                        retryForFeedError('Live ticks stopped arriving. Check the site connection.');
                     }, 12_000);
                 } else {
-                    window.clearTimeout(timer);
-                    window.clearTimeout(freshnessTimer);
                     livePriceRef.current = null;
                     setLivePrice(null);
                     setPrevPrice(null);
                     setSparkPrices([]);
                     setPatternStream([]);
                     setCurrentDigit(null);
+                    retryForFeedError(message ?? 'The site connection could not load market data.');
                 }
             },
         });
         return () => {
             window.clearTimeout(timer);
             window.clearTimeout(freshnessTimer);
+            clearAutoRetry();
             cleanup();
         };
     }, [sym, tickWindow, connectionStatus, accountId, retry, buildPattern]);
@@ -487,6 +512,14 @@ const AiAnalysisTool: React.FC = observer(() => {
     const pricePct     = prevPrice ? Math.abs(priceChange / prevPrice) * 100 : 0;
     const priceUp      = priceChange >= 0;
     const market       = MARKETS.find(m => m.code === sym) ?? MARKETS[0];
+    const retryAnalysis = () => {
+        if (retryTimerRef.current !== null) {
+            window.clearTimeout(retryTimerRef.current);
+            retryTimerRef.current = null;
+        }
+        retryAttemptRef.current = 0;
+        setRetry(value => value + 1);
+    };
 
     return (
         <div className='aat'>
@@ -505,7 +538,7 @@ const AiAnalysisTool: React.FC = observer(() => {
             {connectionError && (
                 <div className='aat__connection-error' role='status'>
                     {connectionError}{' '}
-                    <button type='button' onClick={() => setRetry(value => value + 1)}>Retry analysis</button>
+                    <button type='button' onClick={retryAnalysis}>Retry analysis</button>
                 </div>
             )}
 
@@ -686,10 +719,6 @@ const AiAnalysisTool: React.FC = observer(() => {
 
             {/* BotRedirector: silent observer — switches to Bot Builder when bot starts */}
             <BotRedirector setActiveTab={setActiveTab} />
-
-            <div className='aat__disclaimer'>
-                ⚠️ Statistical analysis only. Deriv synthetic indices are random — past data does not guarantee future results. Trade responsibly.
-            </div>
         </div>
     );
 });

@@ -1887,7 +1887,9 @@
         min-height: 0;
         overflow-x: hidden;
         overflow-y: auto;
-        padding-bottom: calc(72px + env(safe-area-inset-bottom));
+        // Keep enough scrollable space after the last analysis card so the
+        // fixed mobile Run button never covers the tool's data.
+        padding-bottom: calc(144px + env(safe-area-inset-bottom, 0px));
         -webkit-overflow-scrolling: touch;
         overscroll-behavior-y: contain;
         touch-action: pan-y;

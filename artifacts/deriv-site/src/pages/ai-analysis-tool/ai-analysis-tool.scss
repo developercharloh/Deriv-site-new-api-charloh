@@ -399,13 +399,29 @@
 }
 .aat__stat-sub { font-size: 7px; color: var(--aat-muted); }
 
-// ─── Disclaimer ───────────────────────────────────────────────────────────────
-.aat__disclaimer {
-    font-size: 8px; color: var(--aat-muted); line-height: 1.4;
-    padding: 6px 8px;
-    background: var(--aat-surface);
-    border: 1px solid var(--aat-border); border-radius: 8px;
-    text-align: center;
+// Keep the mobile analysis concise while preserving the data labels.
+@media (max-width: 720px) {
+    .aat {
+        gap: 4px;
+        padding: 4px;
+    }
+
+    .aat__droprows { gap: 3px; }
+    .aat__drop-card { padding: 5px 6px; }
+    .aat__price-card { padding: 6px 8px; }
+    .aat__price-val { font-size: 18px; }
+    .aat__pattern-card { padding: 5px 7px; }
+    .aat__pattern-hd { margin-bottom: 3px; }
+    .aat__pattern-block { width: 24px; height: 24px; }
+    .aat__ai-row { gap: 4px; }
+    .aat__rec-card, .aat__conf-card { padding: 7px; gap: 3px; }
+    .aat__dist-card { padding: 7px; }
+    .aat__dist-hd { margin-bottom: 4px; }
+    .aat__dist-grid { gap: 4px; padding-top: 14px; }
+    .aat__dist-cell { max-width: 50px; max-height: 50px; }
+    .aat__dist-arrow { top: -15px; font-size: 12px; }
+    .aat__stats-row { gap: 3px; }
+    .aat__stat-card { padding: 5px 2px 4px; }
 }
 
 // The global RunPanel / MobileDrawerFooter already renders the Run bar

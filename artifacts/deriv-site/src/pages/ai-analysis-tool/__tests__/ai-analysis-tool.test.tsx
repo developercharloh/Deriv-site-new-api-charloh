@@ -65,6 +65,7 @@ describe('AI Analysis site-session lifecycle', () => {
 
     it('uses selected market precision and tick window for live analysis, then releases streams on exit', () => {
         const view = render(<AiAnalysisTool />);
+        expect(screen.queryByText(/Statistical analysis only/)).not.toBeInTheDocument();
         const makePrices = (count: number, decimals: number) =>
             Array.from({ length: count }, (_, index) => `100.${String(index % 10).padStart(decimals, '0')}`);
         site.load('market-one', makePrices(1000, 2), 2, '100.03', 2);
@@ -140,6 +141,22 @@ describe('AI Analysis site-session lifecycle', () => {
         expect(screen.getByText('Streaming')).toBeInTheDocument();
         expect(screen.queryByRole('status')).not.toBeInTheDocument();
         view.unmount();
+    });
+
+    it('automatically retries a server error and resumes when the shared feed returns', () => {
+        const view = render(<AiAnalysisTool />);
+        site.emit({ error: { message: 'Internal server error' } });
+        expect(screen.getByRole('status')).toHaveTextContent('Retrying automatically in 2s');
+
+        act(() => jest.advanceTimersByTime(2_000));
+        expect(site.send.mock.calls.filter(([request]) => 'ticks_history' in request)).toHaveLength(2);
+
+        site.load('recovered-feed');
+        expect(screen.getByText('Streaming')).toBeInTheDocument();
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+        view.unmount();
+        expect(jest.getTimerCount()).toBe(0);
     });
 
     it('does not remain connecting forever when the site or market data is unavailable', () => {
