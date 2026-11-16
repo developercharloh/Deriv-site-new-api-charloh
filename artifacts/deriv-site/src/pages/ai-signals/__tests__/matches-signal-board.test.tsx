@@ -1,6 +1,6 @@
 import React from 'react';
-import { act, render, screen } from '@testing-library/react';
-import { MatchesSignalBoard } from '../matches-signal-board';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { MatchesSignalBoard, MatchesSignalSection } from '../matches-signal-board';
 
 class MockWebSocket {
     static OPEN = 1;
@@ -93,6 +93,47 @@ describe('MatchesSignalBoard', () => {
         });
         expect(screen.getByText('Live')).toBeInTheDocument();
         expect(screen.getByText('00:02')).toBeInTheDocument();
+        expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
+    });
+
+    it('offers a separate Matches 6–9 MACD scanner with candle color ignored', async () => {
+        render(<MatchesSignalSection active onToggle={jest.fn()} maintenanceActive={false} />);
+        fireEvent.click(screen.getByRole('tab', { name: 'Matches 6–9 · MACD' }));
+
+        expect(screen.getByText('Matches 6–9 · 1-minute MACD strategy')).toBeInTheDocument();
+        expect(screen.getByText(/Candle color is ignored/)).toBeInTheDocument();
+
+        const socket = sockets[0];
+        await act(async () => {
+            socket.open();
+            jest.advanceTimersByTime(700);
+        });
+        const requests = socket.sent.map(request => JSON.parse(request));
+        expect(requests).toHaveLength(8);
+        expect(requests.every(request =>
+            request.style === 'candles' &&
+            request.granularity === 60 &&
+            request.subscribe === 1,
+        )).toBe(true);
+
+        const candles = Array.from({ length: 70 }, (_, index) => ({
+            epoch: index * 60,
+            open: 100 + index,
+            high: 101.2 + index,
+            low: 99.8 + index,
+            close: 101 + index,
+        }));
+        await act(async () => {
+            socket.message({ msg_type: 'history', req_id: 4200, candles, subscription: { id: 'sub-macd' } });
+            socket.message({
+                msg_type: 'ohlc',
+                ohlc: { symbol: '1HZ10V', open_time: 4200, epoch: 4258, open: 170.5, high: 171, low: 169, close: 170 },
+                subscription: { id: 'sub-macd' },
+            });
+        });
+        expect(screen.getByRole('img', {
+            name: 'Volatility 10 (1s) Index one-minute candlesticks and MACD 12/26/9',
+        })).toBeInTheDocument();
         expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
     });
 });

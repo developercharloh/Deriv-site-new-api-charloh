@@ -9,6 +9,10 @@ export const MATCHES_TSI_FLAT_DELTA = 0.02;
 export const MATCHES_TSI_FLAT_SAMPLES = 3;
 export const MATCHES_ENTRY_SECONDS = 2;
 export const MATCHES_DIGITS = [0, 1, 2, 3, 4] as const;
+export const MATCHES_MACD_FAST_PERIOD = 12;
+export const MATCHES_MACD_SLOW_PERIOD = 26;
+export const MATCHES_MACD_SIGNAL_PERIOD = 9;
+export const MATCHES_MACD_DIGITS = [6, 7, 8, 9] as const;
 
 export interface Candle {
     time: number;
@@ -22,6 +26,20 @@ export interface MatchesStrategyConditions {
     tsiInRange: boolean;
     tsiFlat: boolean;
     greenCandle: boolean;
+    entryWindow: boolean;
+    feedFresh: boolean;
+    tradeNow: boolean;
+}
+
+export interface MacdPoint {
+    macdLine: number;
+    signalLine: number;
+    histogram: number;
+}
+
+export interface MatchesMacdConditions {
+    enteringFromAbove: boolean;
+    signalAway: boolean;
     entryWindow: boolean;
     feedFresh: boolean;
     tradeNow: boolean;
@@ -105,6 +123,70 @@ export function calculateTsiSignalSeries(
     const result: Array<number | null> = tsi.map(() => null);
     valid.forEach((item, index) => { result[item.index] = smoothed[index]; });
     return result;
+}
+
+/**
+ * Returns standard MACD (12/26/9 by default), aligned with the candle array.
+ * Warm-up positions are null so the UI does not present startup values as signals.
+ */
+export function calculateMacdSeries(
+    candles: Candle[],
+    fastPeriod = MATCHES_MACD_FAST_PERIOD,
+    slowPeriod = MATCHES_MACD_SLOW_PERIOD,
+    signalPeriod = MATCHES_MACD_SIGNAL_PERIOD,
+): Array<MacdPoint | null> {
+    const result: Array<MacdPoint | null> = Array(candles.length).fill(null);
+    if (candles.length < slowPeriod + signalPeriod - 1) return result;
+
+    const closes = candles.map(candle => candle.close);
+    const fast = ema(closes, fastPeriod);
+    const slow = ema(closes, slowPeriod);
+    const macdLine = fast.map((value, index) => value - slow[index]);
+    const signalLine = ema(macdLine, signalPeriod);
+    const warmup = slowPeriod + signalPeriod - 2;
+
+    for (let index = warmup; index < candles.length; index++) {
+        result[index] = {
+            macdLine: macdLine[index],
+            signalLine: signalLine[index],
+            histogram: macdLine[index] - signalLine[index],
+        };
+    }
+    return result;
+}
+
+/**
+ * Interprets the screenshot's "entering the histogram from above" as a
+ * descending MACD line that remains above the signal while the positive
+ * histogram contracts. "Signal line away" means its distance from zero is
+ * greater than the current histogram bar's height.
+ */
+export function evaluateMacdMatchesConditions(options: {
+    previous: MacdPoint | null;
+    current: MacdPoint | null;
+    secondsToClose: number | null;
+    feedFresh: boolean;
+}): MatchesMacdConditions {
+    const previous = options.previous;
+    const current = options.current;
+    const enteringFromAbove = previous !== null && current !== null &&
+        previous.macdLine > previous.signalLine &&
+        current.macdLine > current.signalLine &&
+        current.macdLine < previous.macdLine &&
+        current.histogram > 0 &&
+        current.histogram < previous.histogram;
+    const signalAway = current !== null &&
+        Math.abs(current.signalLine) > Math.abs(current.histogram);
+    const entryWindow = options.secondsToClose === MATCHES_ENTRY_SECONDS;
+    const feedFresh = options.feedFresh;
+
+    return {
+        enteringFromAbove,
+        signalAway,
+        entryWindow,
+        feedFresh,
+        tradeNow: enteringFromAbove && signalAway && entryWindow && feedFresh,
+    };
 }
 
 export function isTsiFlat(samples: number[], maxDelta = MATCHES_TSI_FLAT_DELTA): boolean {

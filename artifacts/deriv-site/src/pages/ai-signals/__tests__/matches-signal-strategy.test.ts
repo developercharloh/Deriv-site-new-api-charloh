@@ -1,9 +1,12 @@
 import {
+    calculateMacdSeries,
     calculateTsiSeries,
     calculateTsiSignalSeries,
+    evaluateMacdMatchesConditions,
     evaluateMatchesConditions,
     formatCandleCountdown,
     isTsiFlat,
+    type MacdPoint,
     mergeCandle,
     normalizeCandle,
     secondsUntilCandleClose,
@@ -40,6 +43,37 @@ describe('Matches 0–4 candle strategy', () => {
         expect(values[0]).toBeNull();
         expect(values.at(-1)).toBeCloseTo(1, 6);
         expect(calculateTsiSignalSeries(candles, 5, 3, 2).at(-1)).toBeCloseTo(1, 6);
+    });
+
+    it('calculates standard MACD lines and histogram after the warm-up period', () => {
+        const candles = Array.from({ length: 60 }, (_, index) =>
+            candle(index * 60, 100 + index, 101 + index));
+        const values = calculateMacdSeries(candles);
+        expect(values).toHaveLength(candles.length);
+        expect(values[32]).toBeNull();
+        expect(values[33]).not.toBeNull();
+        expect(values.at(-1)?.histogram).toBeCloseTo(
+            (values.at(-1) as MacdPoint).macdLine - (values.at(-1) as MacdPoint).signalLine,
+            10,
+        );
+    });
+
+    it('requires a descending MACD approach from above, a separated signal line, fresh data, and 00:02', () => {
+        const previous: MacdPoint = { macdLine: 1.4, signalLine: 0.6, histogram: 0.8 };
+        const current: MacdPoint = { macdLine: 1.3, signalLine: 0.7, histogram: 0.6 };
+        const options = { previous, current, secondsToClose: 2, feedFresh: true };
+
+        expect(evaluateMacdMatchesConditions(options).tradeNow).toBe(true);
+        expect(evaluateMacdMatchesConditions({ ...options, secondsToClose: 3 }).tradeNow).toBe(false);
+        expect(evaluateMacdMatchesConditions({ ...options, feedFresh: false }).tradeNow).toBe(false);
+        expect(evaluateMacdMatchesConditions({
+            ...options,
+            current: { macdLine: 1.5, signalLine: 0.7, histogram: 0.8 },
+        }).enteringFromAbove).toBe(false);
+        expect(evaluateMacdMatchesConditions({
+            ...options,
+            current: { macdLine: 1.3, signalLine: 0.5, histogram: 0.8 },
+        }).signalAway).toBe(false);
     });
 
     it('requires three live TSI samples within the configured flatness range', () => {

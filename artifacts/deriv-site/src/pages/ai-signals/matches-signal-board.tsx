@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DERIV_CONTINUOUS_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatilities';
 import {
+    calculateMacdSeries,
     calculateTsiSeries,
     calculateTsiSignalSeries,
+    evaluateMacdMatchesConditions,
     evaluateMatchesConditions,
     formatCandleCountdown,
     MATCHES_CANDLE_SECONDS,
     MATCHES_DIGITS,
+    MATCHES_MACD_DIGITS,
     MATCHES_HISTORY_COUNT,
+    type MacdPoint,
     MATCHES_TSI_MAX,
     MATCHES_TSI_MIN,
     MATCHES_TSI_SIGNAL_PERIOD,
@@ -37,6 +41,7 @@ interface MatchesSignalBoardProps {
     active: boolean;
     onToggle: () => void;
     maintenanceActive: boolean;
+    strategy?: 'tsi' | 'macd';
 }
 
 const makeInitialFeeds = (): Record<string, MarketFeed> => Object.fromEntries(
@@ -137,7 +142,92 @@ function MiniCandleTsiChart({ candles, tsiSeries, tsiSignalSeries, label }: {
     );
 }
 
-export function MatchesSignalBoard({ active, onToggle, maintenanceActive }: MatchesSignalBoardProps) {
+function MiniCandleMacdChart({ candles, macdSeries, label }: {
+    candles: Candle[];
+    macdSeries: Array<MacdPoint | null>;
+    label: string;
+}) {
+    const visibleCandles = candles.slice(-36);
+    const visibleMacd = macdSeries.slice(-36);
+    const width = 320;
+    const priceTop = 8;
+    const priceBottom = 82;
+    const macdTop = 101;
+    const macdBottom = 153;
+    const prices = visibleCandles.flatMap(candle => [candle.high, candle.low]);
+    const priceMin = Math.min(...prices);
+    const priceMax = Math.max(...prices);
+    const priceRange = priceMax - priceMin || Math.max(Math.abs(priceMax) * 0.0001, 1);
+    const step = width / Math.max(visibleCandles.length, 1);
+    const bodyWidth = Math.max(2, Math.min(7, step * 0.58));
+    const priceY = (value: number) => priceBottom - ((value - priceMin) / priceRange) * (priceBottom - priceTop);
+    const indicatorPoints = visibleMacd.filter((point): point is MacdPoint => point !== null);
+    const indicatorValues = indicatorPoints.flatMap(point => [point.macdLine, point.signalLine, point.histogram, 0]);
+    const macdMin = indicatorValues.length ? Math.min(...indicatorValues) : -1;
+    const macdMax = indicatorValues.length ? Math.max(...indicatorValues) : 1;
+    const macdRange = macdMax - macdMin || Math.max(Math.abs(macdMax) * 0.0001, 1);
+    const macdY = (value: number) => macdBottom - ((value - macdMin) / macdRange) * (macdBottom - macdTop);
+    const zeroY = macdY(0);
+    const linePoints = visibleMacd
+        .map((point, index) => point === null ? null : `${(index + 0.5) * step},${macdY(point.macdLine)}`)
+        .filter((point): point is string => point !== null)
+        .join(' ');
+    const signalPoints = visibleMacd
+        .map((point, index) => point === null ? null : `${(index + 0.5) * step},${macdY(point.signalLine)}`)
+        .filter((point): point is string => point !== null)
+        .join(' ');
+
+    if (!visibleCandles.length || !indicatorPoints.length) {
+        return <div className='match-chart match-chart--empty' aria-label={`${label} MACD chart loading`}>
+            {visibleCandles.length ? 'Warming up MACD history…' : 'Waiting for one-minute candle history…'}
+        </div>;
+    }
+
+    return (
+        <svg className='match-chart' viewBox={`0 0 ${width} 162`} role='img' aria-label={`${label} one-minute candlesticks and MACD 12/26/9`}>
+            <line x1='0' x2={width} y1={priceBottom + 5} y2={priceBottom + 5} className='match-chart__divider' />
+            {visibleCandles.map((candle, index) => {
+                const centerX = (index + 0.5) * step;
+                const openY = priceY(candle.open);
+                const closeY = priceY(candle.close);
+                const green = candle.close > candle.open;
+                return (
+                    <g key={`${candle.time}-${index}`} className={green ? 'match-chart__candle--green' : 'match-chart__candle--red'}>
+                        <line x1={centerX} x2={centerX} y1={priceY(candle.high)} y2={priceY(candle.low)} className='match-chart__wick' />
+                        <rect
+                            x={centerX - bodyWidth / 2}
+                            y={Math.min(openY, closeY)}
+                            width={bodyWidth}
+                            height={Math.max(1, Math.abs(closeY - openY))}
+                            className='match-chart__body'
+                        />
+                    </g>
+                );
+            })}
+            <line x1='0' x2={width} y1={zeroY} y2={zeroY} className='match-chart__macd-zero' />
+            {visibleMacd.map((point, index) => {
+                if (!point) return null;
+                const centerX = (index + 0.5) * step;
+                const barY = macdY(point.histogram);
+                return (
+                    <rect
+                        key={`hist-${index}`}
+                        x={centerX - Math.max(1, bodyWidth / 3)}
+                        y={Math.min(zeroY, barY)}
+                        width={Math.max(2, bodyWidth * 0.66)}
+                        height={Math.max(1, Math.abs(zeroY - barY))}
+                        className={point.histogram >= 0 ? 'match-chart__macd-hist--positive' : 'match-chart__macd-hist--negative'}
+                    />
+                );
+            })}
+            {linePoints && <polyline points={linePoints} className='match-chart__macd-line' />}
+            {signalPoints && <polyline points={signalPoints} className='match-chart__macd-signal' />}
+            <text x='4' y='97' className='match-chart__label'>MACD / Signal / Histogram</text>
+        </svg>
+    );
+}
+
+export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strategy = 'tsi' }: MatchesSignalBoardProps) {
     const [feeds, setFeeds] = useState<Record<string, MarketFeed>>(makeInitialFeeds);
     const [clockNow, setClockNow] = useState(Date.now());
 
@@ -340,6 +430,10 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive }: Matc
         const feed = feeds[symbol.code];
         const tsiSeries = calculateTsiSeries(feed.candles);
         const tsiSignalSeries = calculateTsiSignalSeries(feed.candles);
+        const macdSeries = calculateMacdSeries(feed.candles);
+        const validMacdPoints = macdSeries.filter((point): point is MacdPoint => point !== null);
+        const macdPoint = validMacdPoints.at(-1) ?? null;
+        const previousMacdPoint = validMacdPoints.at(-2) ?? null;
         const tsi = tsiSeries.at(-1) ?? null;
         const lastCandle = feed.candles.at(-1) ?? null;
         const feedFresh = active && feed.feedStatus === 'live' &&
@@ -350,13 +444,20 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive }: Matc
         const secondsToClose = lastCandle && serverNow !== null
             ? secondsUntilCandleClose(lastCandle.time, serverNow)
             : null;
-        const conditions = evaluateMatchesConditions({
+        const tsiConditions = evaluateMatchesConditions({
             candle: lastCandle,
             tsi,
             tsiSamples: feed.tsiSamples,
             secondsToClose,
             feedFresh,
         });
+        const macdConditions = evaluateMacdMatchesConditions({
+            previous: previousMacdPoint,
+            current: macdPoint,
+            secondsToClose,
+            feedFresh,
+        });
+        const tradeNow = strategy === 'tsi' ? tsiConditions.tradeNow : macdConditions.tradeNow;
         const status = !active ? 'Paused' :
             maintenanceActive ? 'Maintenance' :
                 feedFresh ? 'Live' :
@@ -364,14 +465,19 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive }: Matc
                         feed.feedStatus === 'reconnecting' ? 'Reconnecting' :
                             feed.candles.length ? 'Waiting for live tick' : 'Loading candles';
 
-        return { symbol, feed, tsiSeries, tsiSignalSeries, tsi, lastCandle, secondsToClose, conditions, status };
-    }), [active, clockNow, feeds, maintenanceActive]);
+        return {
+            symbol, feed, tsiSeries, tsiSignalSeries, macdSeries, macdPoint, tsi, lastCandle,
+            secondsToClose, tsiConditions, macdConditions, tradeNow, status,
+        };
+    }), [active, clockNow, feeds, maintenanceActive, strategy]);
 
     return (
-        <section className='match-board' aria-label='Matches 0 to 4 signal scanner'>
+        <section className='match-board' aria-label={strategy === 'tsi' ? 'Matches 0 to 4 signal scanner' : 'Matches 6 to 9 signal scanner'}>
             <div className='match-board__header'>
                 <div>
-                    <h2 className='match-board__title'>Matches 0–4 · 1-minute TSI strategy</h2>
+                    <h2 className='match-board__title'>
+                        {strategy === 'tsi' ? 'Matches 0–4 · 1-minute TSI strategy' : 'Matches 6–9 · 1-minute MACD strategy'}
+                    </h2>
                     <p className='match-board__subtitle'>
                         {active
                             ? `Watching ${DERIV_CONTINUOUS_VOLATILITIES.length} one-second Volatility indices`
@@ -389,12 +495,17 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive }: Matc
             </div>
 
             <div className='match-board__rule'>
-                Alert only when the live candle is green, normalized TSI is 0.80–0.90 and flat, and 00:02 remains.
-                No trades are placed automatically.
+                {strategy === 'tsi'
+                    ? 'Alert only when the live candle is green, normalized TSI is 0.80–0.90 and flat, and 00:02 remains.'
+                    : 'Alert when MACD descends toward signal from above, signal-line magnitude exceeds histogram height, and 00:02 remains. Candle color is ignored.'}
+                {' '}No trades are placed automatically.
             </div>
 
             <div className='match-board__grid'>
-                {marketCards.map(({ symbol, feed, tsiSeries, tsiSignalSeries, tsi, lastCandle, secondsToClose, conditions, status }) => (
+                {marketCards.map(({
+                    symbol, feed, tsiSeries, tsiSignalSeries, macdSeries, macdPoint, tsi, lastCandle,
+                    secondsToClose, tsiConditions, macdConditions, tradeNow, status,
+                }) => (
                     <article className='match-market' key={symbol.code}>
                         <div className='match-market__header'>
                             <div>
@@ -406,27 +517,53 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive }: Matc
                             </span>
                         </div>
 
-                        <MiniCandleTsiChart
-                            candles={feed.candles}
-                            tsiSeries={tsiSeries}
-                            tsiSignalSeries={tsiSignalSeries}
-                            label={symbol.label}
-                        />
+                        {strategy === 'tsi' ? (
+                            <MiniCandleTsiChart
+                                candles={feed.candles}
+                                tsiSeries={tsiSeries}
+                                tsiSignalSeries={tsiSignalSeries}
+                                label={symbol.label}
+                            />
+                        ) : (
+                            <MiniCandleMacdChart candles={feed.candles} macdSeries={macdSeries} label={symbol.label} />
+                        )}
 
                         <div className='match-market__metrics'>
-                            <span className={conditions.tsiInRange ? 'is-ready' : ''}>
-                                TSI {tsi === null ? '—' : tsi.toFixed(3)}
-                            </span>
-                            <span className={conditions.tsiFlat ? 'is-ready' : ''}>{conditions.tsiFlat ? 'Flat' : 'Not flat'}</span>
-                            <span className={conditions.greenCandle ? 'is-ready' : ''}>{conditions.greenCandle ? 'Green candle' : 'Not green'}</span>
-                            <span className={conditions.entryWindow ? 'is-ready' : ''}>
-                                {formatCandleCountdown(secondsToClose)}
-                            </span>
+                            {strategy === 'tsi' ? (
+                                <>
+                                    <span className={tsiConditions.tsiInRange ? 'is-ready' : ''}>
+                                        TSI {tsi === null ? '—' : tsi.toFixed(3)}
+                                    </span>
+                                    <span className={tsiConditions.tsiFlat ? 'is-ready' : ''}>{tsiConditions.tsiFlat ? 'Flat' : 'Not flat'}</span>
+                                    <span className={tsiConditions.greenCandle ? 'is-ready' : ''}>{tsiConditions.greenCandle ? 'Green candle' : 'Not green'}</span>
+                                    <span className={tsiConditions.entryWindow ? 'is-ready' : ''}>
+                                        {formatCandleCountdown(secondsToClose)}
+                                    </span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className={macdConditions.enteringFromAbove ? 'is-ready' : ''}>
+                                        MACD {macdPoint === null ? '—' : macdPoint.macdLine.toFixed(4)}
+                                    </span>
+                                    <span className={macdConditions.enteringFromAbove ? 'is-ready' : ''}>
+                                        {macdConditions.enteringFromAbove ? 'Entering from above' : 'Not entering'}
+                                    </span>
+                                    <span className={macdConditions.signalAway ? 'is-ready' : ''}>
+                                        {macdConditions.signalAway ? 'Signal away' : 'Signal near'}
+                                    </span>
+                                    <span className={macdConditions.entryWindow ? 'is-ready' : ''}>
+                                        {formatCandleCountdown(secondsToClose)}
+                                    </span>
+                                </>
+                            )}
                         </div>
 
-                        {conditions.tradeNow ? (
-                            <div className='match-market__alerts' aria-label={`Trade now: ${symbol.label} Matches digits zero through four`}>
-                                {MATCHES_DIGITS.map(digit => (
+                        {tradeNow ? (
+                            <div
+                                className='match-market__alerts'
+                                aria-label={`Trade now: ${symbol.label} Matches digits ${strategy === 'tsi' ? 'zero through four' : 'six through nine'}`}
+                            >
+                                {(strategy === 'tsi' ? MATCHES_DIGITS : MATCHES_MACD_DIGITS).map(digit => (
                                     <span className='match-market__alert' key={digit}>
                                         <strong>MATCHES {digit}</strong>
                                         <span>TRADE NOW</span>
@@ -436,7 +573,7 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive }: Matc
                         ) : (
                             <div className='match-market__waiting'>
                                 {feed.error || (active
-                                    ? 'Waiting for all entry conditions and the 00:02 candle window.'
+                                    ? `Waiting for ${strategy === 'tsi' ? 'TSI' : 'MACD'} entry conditions and the 00:02 candle window.`
                                     : 'Resume the scanner to receive live candle data.')}
                             </div>
                         )}
@@ -444,5 +581,34 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive }: Matc
                 ))}
             </div>
         </section>
+    );
+}
+
+export function MatchesSignalSection(props: MatchesSignalBoardProps) {
+    const [strategy, setStrategy] = useState<'tsi' | 'macd'>('tsi');
+    return (
+        <>
+            <div className='match-board__strategy-tabs' role='tablist' aria-label='Matches signal strategy'>
+                <button
+                    type='button'
+                    role='tab'
+                    aria-selected={strategy === 'tsi'}
+                    className={strategy === 'tsi' ? 'match-board__strategy-tab match-board__strategy-tab--active' : 'match-board__strategy-tab'}
+                    onClick={() => setStrategy('tsi')}
+                >
+                    Matches 0–4 · TSI
+                </button>
+                <button
+                    type='button'
+                    role='tab'
+                    aria-selected={strategy === 'macd'}
+                    className={strategy === 'macd' ? 'match-board__strategy-tab match-board__strategy-tab--active' : 'match-board__strategy-tab'}
+                    onClick={() => setStrategy('macd')}
+                >
+                    Matches 6–9 · MACD
+                </button>
+            </div>
+            <MatchesSignalBoard {...props} strategy={strategy} />
+        </>
     );
 }

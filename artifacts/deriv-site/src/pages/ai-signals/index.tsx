@@ -6,7 +6,7 @@ import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { destroyerBotIdFromDirection, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
-import { MatchesSignalBoard } from './matches-signal-board';
+import { MatchesSignalSection } from './matches-signal-board';
 import '@/components/ai-signal-orb/ai-signal-orb.scss';
 import './ai-signals-page.scss';
 
@@ -1301,7 +1301,7 @@ const AiSignalsPage: React.FC = () => {
                             <span className='aisig-page__title'>AI Signals</span>
                             <span className='aisig-page__subtitle'>
                                 {tradeType === 'matches_differs'
-                                    ? 'TSI + candle-close Match alerts'
+                                    ? 'Live Match strategy alerts'
                                     : tradeType === 'even_odd'
                                         ? '4-Model Reversal Scanner'
                                         : '10-Model Consensus Scanner'}
@@ -1330,7 +1330,7 @@ const AiSignalsPage: React.FC = () => {
                     {([
                         { t: 'over_under'      as TradeType, icon: '📈', label: 'Over / Under'     },
                         { t: 'even_odd'        as TradeType, icon: '⚖️', label: 'Even / Odd'       },
-                        { t: 'matches_differs' as TradeType, icon: '🎯', label: 'Matches 0–4' },
+                        { t: 'matches_differs' as TradeType, icon: '🎯', label: 'Matches' },
                     ]).map(({ t, icon, label }) => (
                         <button key={t} className={`ai-panel__type-btn${tradeType === t ? ' ai-panel__type-btn--active' : ''}`} onClick={() => setTradeType(t)}>
                             <span className='ai-panel__type-icon'>{icon}</span>{label}
@@ -1340,7 +1340,7 @@ const AiSignalsPage: React.FC = () => {
 
                 {/* ── Live Signal Feed — valid signals only ─────────────────── */}
                 {tradeType === 'matches_differs' ? (
-                    <MatchesSignalBoard
+                    <MatchesSignalSection
                         active={watchActive}
                         onToggle={() => setWatchActive(previous => !previous)}
                         maintenanceActive={maintenanceActive}
