@@ -125,6 +125,104 @@
     line-height: 1.5;
 }
 
+.match-replay {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 11px 12px;
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.58);
+}
+
+.match-replay__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    h3 {
+        margin: 0;
+        color: #e2e8f0;
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    p {
+        margin: 4px 0 0;
+        color: #64748b;
+        font-size: 9px;
+    }
+}
+
+.match-replay__button {
+    flex: 0 0 auto;
+    padding: 7px 10px;
+    border: 1px solid rgba(99, 102, 241, 0.34);
+    border-radius: 7px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #c7d2fe;
+    font-size: 9px;
+    font-weight: 800;
+    cursor: pointer;
+
+    &:disabled {
+        cursor: wait;
+        opacity: 0.6;
+    }
+}
+
+.match-replay__disclaimer,
+.match-replay__status {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 9px;
+    line-height: 1.5;
+}
+
+.match-replay__status--error { color: #fca5a5; }
+
+.match-replay__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+    gap: 7px;
+}
+
+.match-replay__market {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px;
+    border: 1px solid rgba(100, 116, 139, 0.16);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.3);
+
+    > strong { color: #e2e8f0; font-size: 9px; }
+    > span { color: #94a3b8; font-size: 8px; }
+    > small { color: #64748b; font-size: 7px; }
+}
+
+.match-replay__digits {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 2px;
+    margin-top: 2px;
+
+    > span {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 3px 1px;
+        border-radius: 4px;
+        background: rgba(148, 163, 184, 0.08);
+        color: #94a3b8;
+        font-size: 7px;
+    }
+
+    b { color: #c7d2fe; font-size: 8px; }
+}
+
 .match-board__grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
@@ -355,6 +453,7 @@
 
 @media (max-width: 520px) {
     .match-board__header { align-items: flex-start; }
+    .match-replay__header { align-items: flex-start; }
     .match-market { padding: 10px; }
     .match-chart { height: 140px; }
 }

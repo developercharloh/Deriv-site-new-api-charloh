@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DERIV_CONTINUOUS_VOLATILITIES } from '@/utils/deriv-volatilities';
+import { DERIV_CONTINUOUS_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatilities';
 import { useApiBase } from '@/hooks/useApiBase';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
@@ -20,13 +20,25 @@ import {
     normalizeCandle,
     secondsUntilCandleClose,
     type Candle,
+    MATCHES_REPLAY_TICK_COUNT,
+    replayMatchesTicks,
+    type MatchesReplayResult,
 } from './matches-signal-strategy';
 import { subscribeToMatchesCandleFeed, type MatchesCandleApi } from './matches-candle-feed';
 import './matches-signal-board.scss';
 
+const DERIV_WS = 'wss://ws.derivws.com/websockets/v3?app_id=1';
 const LIVE_TICK_MAX_AGE_MS = 2_500;
+const REPLAY_TIMEOUT_MS = 30_000;
+const REPLAY_REQUEST_ID_START = 5_200;
 
 type FeedStatus = 'connecting' | 'warming' | 'live' | 'reconnecting' | 'error';
+type ReplayState = 'idle' | 'loading' | 'complete' | 'error';
+
+interface MatchesReplayMarket extends MatchesReplayResult {
+    code: string;
+    label: string;
+}
 
 interface MarketFeed {
     candles: Candle[];
@@ -69,6 +81,79 @@ const updateFeed = (
     if (!feed) return current;
     return { ...current, [code]: update(feed) };
 };
+
+function requestMatchesReplayHistory(): Promise<MatchesReplayMarket[]> {
+    return new Promise((resolve, reject) => {
+        const socket = new WebSocket(DERIV_WS);
+        const requestToSymbol = new Map<number, DerivVolatility>();
+        const results = new Map<string, MatchesReplayMarket>();
+        let settled = false;
+        const timeout = setTimeout(() => finish(new Error('Historical replay timed out. Please try again.')), REPLAY_TIMEOUT_MS);
+
+        const finish = (error?: Error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            try { socket.close(); } catch { /* socket already closed */ }
+            if (error) reject(error);
+            else resolve(DERIV_CONTINUOUS_VOLATILITIES.map(symbol => results.get(symbol.code)!));
+        };
+
+        DERIV_CONTINUOUS_VOLATILITIES.forEach((symbol, index) => {
+            requestToSymbol.set(REPLAY_REQUEST_ID_START + index, symbol);
+        });
+
+        socket.onopen = () => {
+            DERIV_CONTINUOUS_VOLATILITIES.forEach((symbol, index) => {
+                setTimeout(() => {
+                    if (settled || socket.readyState !== WebSocket.OPEN) return;
+                    socket.send(JSON.stringify({
+                        ticks_history: symbol.code,
+                        count: MATCHES_REPLAY_TICK_COUNT,
+                        end: 'latest',
+                        style: 'ticks',
+                        req_id: REPLAY_REQUEST_ID_START + index,
+                    }));
+                }, index * 100);
+            });
+        };
+
+        socket.onmessage = event => {
+            let message: any;
+            try { message = JSON.parse(event.data); } catch { return; }
+            const symbol = requestToSymbol.get(Number(message.req_id));
+            if (!symbol) return;
+            if (message.error) {
+                finish(new Error(`${symbol.short} history request failed: ${message.error.message || 'Deriv returned an error.'}`));
+                return;
+            }
+
+            const history = message.history;
+            if (!history || !Array.isArray(history.times) || !Array.isArray(history.prices)) {
+                finish(new Error(`${symbol.short} returned an invalid tick history response.`));
+                return;
+            }
+
+            const ticks = history.times.flatMap((epoch: unknown, index: number) =>
+                history.prices[index] === undefined
+                    ? []
+                    : [{ epoch: Number(epoch), quote: history.prices[index] }],
+            );
+            const replay = replayMatchesTicks(ticks, Number(message.pip_size ?? history.pip_size));
+            if (replay.tickCount === 0) {
+                finish(new Error(`${symbol.short} returned no usable historical ticks.`));
+                return;
+            }
+            results.set(symbol.code, { ...replay, code: symbol.code, label: symbol.label });
+            if (results.size === DERIV_CONTINUOUS_VOLATILITIES.length) finish();
+        };
+
+        socket.onerror = () => finish(new Error('Could not connect to Deriv for historical replay.'));
+        socket.onclose = () => {
+            if (!settled) finish(new Error('Deriv closed the historical replay connection before all markets returned.'));
+        };
+    });
+}
 
 function MiniCandleTsiChart({ candles, tsiSeries, tsiSignalSeries, label }: {
     candles: Candle[];
@@ -232,6 +317,22 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
     const [clockNow, setClockNow] = useState(Date.now());
     const { connectionStatus } = useApiBase();
     const api = api_base.api as unknown as MatchesCandleApi | null;
+    const [replayState, setReplayState] = useState<ReplayState>('idle');
+    const [replayResults, setReplayResults] = useState<MatchesReplayMarket[]>([]);
+    const [replayError, setReplayError] = useState('');
+
+    const runHistoricalReplay = async () => {
+        setReplayState('loading');
+        setReplayError('');
+        setReplayResults([]);
+        try {
+            setReplayResults(await requestMatchesReplayHistory());
+            setReplayState('complete');
+        } catch (error) {
+            setReplayError(error instanceof Error ? error.message : 'Historical replay failed.');
+            setReplayState('error');
+        }
+    };
 
     useEffect(() => {
         if (!active || maintenanceActive) {
@@ -424,6 +525,59 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                 <span>{connectionMessage}</span>
                 <span className='match-board__connection-count'>{liveMarketCount}/{marketCards.length} live</span>
             </div>
+
+            <section className='match-replay' aria-label='Historical Matches setup replay'>
+                <div className='match-replay__header'>
+                    <div>
+                        <h3>Historical setup replay</h3>
+                        <p>Rebuilds one-minute candles from the latest {MATCHES_REPLAY_TICK_COUNT.toLocaleString()} ticks per market.</p>
+                    </div>
+                    <button
+                        type='button'
+                        className='match-replay__button'
+                        onClick={runHistoricalReplay}
+                        disabled={replayState === 'loading' || maintenanceActive}
+                    >
+                        {replayState === 'loading' ? 'Replaying…' : 'Replay history'}
+                    </button>
+                </div>
+                <p className='match-replay__disclaimer'>
+                    Historical observations only—not a profit guarantee. Digit counts show the next tick after each setup trigger, not trade performance.
+                </p>
+                {replayState === 'loading' && (
+                    <p className='match-replay__status' role='status'>Loading bounded tick history for all eight markets…</p>
+                )}
+                {replayState === 'error' && (
+                    <p className='match-replay__status match-replay__status--error' role='alert'>{replayError}</p>
+                )}
+                {replayState === 'complete' && (
+                    <div className='match-replay__grid' aria-live='polite'>
+                        {replayResults.map(result => {
+                            const nextTickCount = result.nextTickDigits.reduce((sum, count) => sum + count, 0);
+                            return (
+                                <article className='match-replay__market' key={result.code}>
+                                    <strong>{result.label}</strong>
+                                    <span>{result.triggerCount} setup {result.triggerCount === 1 ? 'trigger' : 'triggers'}</span>
+                                    <span>{nextTickCount} next-tick {nextTickCount === 1 ? 'digit' : 'digits'} recorded</span>
+                                    <span>{result.tickCount.toLocaleString()} ticks · {result.candleCount} candles analyzed</span>
+                                    {result.fromEpoch !== null && result.toEpoch !== null && (
+                                        <small>
+                                            {new Date(result.fromEpoch * 1000).toLocaleString()} – {new Date(result.toEpoch * 1000).toLocaleString()}
+                                        </small>
+                                    )}
+                                    <div className='match-replay__digits' aria-label={`${result.label} next-tick digit counts`}>
+                                        {result.nextTickDigits.map((count, digit) => (
+                                            <span key={digit} title={`Digit ${digit}: ${count}`}>
+                                                <b>{digit}</b>{count}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </article>
+                            );
+                        })}
+                    </div>
+                )}
+            </section>
 
             <div className='match-board__grid'>
                 {marketCards.map(({

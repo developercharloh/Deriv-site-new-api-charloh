@@ -11,6 +11,8 @@ import {
     normalizeCandle,
     secondsUntilCandleClose,
     type Candle,
+    MATCHES_REPLAY_TICK_COUNT,
+    replayMatchesTicks,
 } from '../matches-signal-strategy';
 
 const candle = (time: number, open: number, close: number): Candle => ({
@@ -104,5 +106,28 @@ describe('Matches 0–4 candle strategy', () => {
         expect(evaluateMatchesConditions({ ...options, candle: candle(120, 1.2, 1.1) }).tradeNow).toBe(false);
         expect(evaluateMatchesConditions({ ...options, tsi: 0.7 }).tradeNow).toBe(false);
         expect(evaluateMatchesConditions({ ...options, tsiSamples: [0.7, 0.85, 0.9] }).tradeNow).toBe(false);
+    });
+
+    it('replays the live entry checks and counts the following tick digit', () => {
+        const ticks: Array<{ epoch: number; quote: string }> = [];
+        let quote = 1_000;
+        for (let minute = 0; minute < 70; minute++) {
+            const openQuote = quote;
+            ticks.push({ epoch: minute * 60, quote: quote.toFixed(2) });
+            quote += minute % 10 === 9 ? -0.73 : 1;
+            ticks.push({ epoch: minute * 60 + 55, quote: quote.toFixed(2) });
+            for (let second = 56; second < 60; second++) {
+                ticks.push({ epoch: minute * 60 + second, quote: quote.toFixed(2) });
+            }
+            expect(quote).not.toBe(openQuote);
+        }
+
+        const result = replayMatchesTicks(ticks, 2);
+        expect(result.tickCount).toBe(ticks.length);
+        expect(result.candleCount).toBe(70);
+        expect(result.triggerCount).toBeGreaterThan(0);
+        expect(result.nextTickDigits.reduce((sum, count) => sum + count, 0)).toBe(result.triggerCount);
+        expect(result.nextTickDigits.some(count => count > 0)).toBe(true);
+        expect(MATCHES_REPLAY_TICK_COUNT).toBe(5_000);
     });
 });

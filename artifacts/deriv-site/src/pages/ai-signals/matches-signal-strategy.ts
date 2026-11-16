@@ -1,5 +1,6 @@
 export const MATCHES_CANDLE_SECONDS = 60;
 export const MATCHES_HISTORY_COUNT = 120;
+export const MATCHES_REPLAY_TICK_COUNT = 5_000;
 export const MATCHES_TSI_LONG_PERIOD = 25;
 export const MATCHES_TSI_SHORT_PERIOD = 13;
 export const MATCHES_TSI_SIGNAL_PERIOD = 7;
@@ -43,6 +44,20 @@ export interface MatchesMacdConditions {
     entryWindow: boolean;
     feedFresh: boolean;
     tradeNow: boolean;
+}
+
+export interface MatchesReplayTick {
+    epoch: number;
+    quote: number | string;
+}
+
+export interface MatchesReplayResult {
+    tickCount: number;
+    candleCount: number;
+    fromEpoch: number | null;
+    toEpoch: number | null;
+    triggerCount: number;
+    nextTickDigits: number[];
 }
 
 const finiteNumber = (value: unknown): number | null => {
@@ -226,6 +241,85 @@ export function evaluateMatchesConditions(options: {
         entryWindow,
         feedFresh,
         tradeNow: tsiInRange && tsiFlat && greenCandle && entryWindow && feedFresh,
+    };
+}
+
+export function replayMatchesTicks(
+    rawTicks: MatchesReplayTick[],
+    pipSize: number,
+): MatchesReplayResult {
+    const ticks = rawTicks
+        .flatMap(tick => {
+            const epoch = finiteNumber(tick.epoch);
+            const quote = finiteNumber(tick.quote);
+            return epoch === null || quote === null ? [] : [{ epoch, quote, rawQuote: tick.quote }];
+        })
+        .sort((a, b) => a.epoch - b.epoch);
+    const candles: Candle[] = [];
+    const tsiSamples: number[] = [];
+    const nextTickDigits = Array(10).fill(0) as number[];
+    const precision = Number.isInteger(pipSize) && pipSize >= 0 && pipSize <= 10 ? pipSize : null;
+    let triggerCount = 0;
+    let awaitingNextTick = false;
+    let lastTriggeredCandle: number | null = null;
+
+    ticks.forEach(tick => {
+        if (awaitingNextTick) {
+            const quoteText = typeof tick.rawQuote === 'string' ? tick.rawQuote : tick.quote.toString();
+            const inferredPrecision = quoteText.includes('.') ? quoteText.split('.')[1].length : 0;
+            const digitPrecision = precision ?? Math.min(inferredPrecision, 10);
+            const digitText = tick.quote.toFixed(digitPrecision);
+            const digit = Number(digitText[digitText.length - 1]);
+            if (Number.isInteger(digit) && digit >= 0 && digit <= 9) nextTickDigits[digit]++;
+            awaitingNextTick = false;
+        }
+
+        const candleTime = Math.floor(tick.epoch / MATCHES_CANDLE_SECONDS) * MATCHES_CANDLE_SECONDS;
+        const currentCandle = candles[candles.length - 1];
+        if (!currentCandle || currentCandle.time !== candleTime) {
+            candles.push({
+                time: candleTime,
+                open: tick.quote,
+                high: tick.quote,
+                low: tick.quote,
+                close: tick.quote,
+            });
+        } else {
+            currentCandle.high = Math.max(currentCandle.high, tick.quote);
+            currentCandle.low = Math.min(currentCandle.low, tick.quote);
+            currentCandle.close = tick.quote;
+        }
+
+        const tsiSeries = calculateTsiSeries(candles);
+        const tsi = tsiSeries[tsiSeries.length - 1] ?? null;
+        if (tsi !== null) tsiSamples.push(tsi);
+        const candle = candles[candles.length - 1] ?? null;
+        const conditions = evaluateMatchesConditions({
+            candle,
+            tsi,
+            tsiSamples: tsiSamples.slice(-MATCHES_TSI_FLAT_SAMPLES),
+            secondsToClose: candle ? secondsUntilCandleClose(candle.time, tick.epoch) : null,
+            feedFresh: true,
+        });
+
+        if (
+            conditions.tradeNow &&
+            candle !== null &&
+            lastTriggeredCandle !== candle.time
+        ) {
+            triggerCount++;
+            lastTriggeredCandle = candle.time;
+            awaitingNextTick = true;
+        }
+    });
+
+    return {
+        tickCount: ticks.length,
+        candleCount: candles.length,
+        fromEpoch: ticks[0]?.epoch ?? null,
+        toEpoch: ticks[ticks.length - 1]?.epoch ?? null,
+        triggerCount,
+        nextTickDigits,
     };
 }
 
