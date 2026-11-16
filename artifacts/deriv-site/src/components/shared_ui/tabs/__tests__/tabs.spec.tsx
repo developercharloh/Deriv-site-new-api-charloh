@@ -16,13 +16,13 @@ describe('shared tabs', () => {
             <Tabs active_index={0} className='main' is_scrollable top history={undefined as any}>
                 <div id='id-free-bots' label={<span>Free Bots</span>}>Free Bots panel</div>
                 <div id='id-ai-analysis' label={<span>AI Analysis</span>}>AI Analysis panel</div>
-                <div id='id-d-circles' label={<span>Execution Plan</span>}>Execution Plan panel</div>
+                <div id='id-advanced-dtrader' label={<span>Advanced D-Trader</span>}>Advanced D-Trader panel</div>
             </Tabs>
         );
 
         expect(screen.getByText('Free Bots')).toBeInTheDocument();
         expect(screen.getByText('AI Analysis')).toBeInTheDocument();
-        expect(screen.getByText('Execution Plan')).toBeInTheDocument();
+        expect(screen.getByText('Advanced D-Trader')).toBeInTheDocument();
         expect(container.querySelector('.dc-tabs')?.getAttribute('style')).toContain('--tab-width: unset');
         expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key/i);
 
@@ -30,13 +30,13 @@ describe('shared tabs', () => {
             <Tabs active_index={1} className='main' is_scrollable top history={undefined as any}>
                 <div id='id-free-bots' label={<span>Free Bots</span>}>Free Bots panel</div>
                 <div id='id-ai-analysis' label={<span>AI Analysis</span>}>AI Analysis panel</div>
-                <div id='id-d-circles' label={<span>Execution Plan</span>}>Execution Plan panel</div>
+                <div id='id-advanced-dtrader' label={<span>Advanced D-Trader</span>}>Advanced D-Trader panel</div>
             </Tabs>
         );
 
         expect(screen.getByText('AI Analysis')).toBeInTheDocument();
         expect(screen.getByText('AI Analysis panel')).toBeInTheDocument();
-        expect(screen.getByText('Execution Plan')).toBeInTheDocument();
+        expect(screen.getByText('Advanced D-Trader')).toBeInTheDocument();
         expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key/i);
         consoleError.mockRestore();
     });

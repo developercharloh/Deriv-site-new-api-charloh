@@ -47,7 +47,6 @@ import './main.scss';
 
 const ChartWrapper      = lazy(() => import('../chart/chart-wrapper'));
 const AnalysisTool      = lazy(() => import('../ai-analysis-tool'));
-const ExecutionPlan     = lazy(() => import('../execution-plan'));
 const FreeBots          = lazy(() => import('../free-bots'));
 const AdvancedDTrader   = lazy(() => import('../advanced-dtrader'));
 const AiSignalsPage     = lazy(() => import('../ai-signals'));
@@ -90,7 +89,6 @@ const AppWrapper = observer(() => {
         'ai_signals',
         'free_bots',
         'ai_analysis',
-        'd_circles',
         'advanced_dtrader',
     ];
     const { isDesktop } = useDevice();
@@ -457,7 +455,12 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
-                                        <Localize i18n_default_text='⚡ AI Signals' />
+                                        <LabelPairedChartLineCaptionRegularIcon
+                                            height='24px'
+                                            width='24px'
+                                            fill='var(--text-general)'
+                                        />
+                                        <Localize i18n_default_text='AI Signals' />
                                     </>
                                 }
                                 id='id-ai-signals'
@@ -484,7 +487,16 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
                             <div
-                                label={localize('AI Analysis')}
+                                label={
+                                    <>
+                                        <LabelPairedChartLineCaptionRegularIcon
+                                            height='24px'
+                                            width='24px'
+                                            fill='var(--text-general)'
+                                        />
+                                        <span>AI Analysis</span>
+                                    </>
+                                }
                                 id='id-ai-analysis'
                             >
                                 <Suspense fallback={<ChunkLoader message={localize('Loading AI Analysis...')} />}>
@@ -494,19 +506,12 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
-                                        <Localize i18n_default_text='🗂 Execution Plan' />
-                                    </>
-                                }
-                                id='id-d-circles'
-                            >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Execution Plan...')} />}>
-                                    <ExecutionPlan />
-                                </Suspense>
-                            </div>
-                            <div
-                                label={
-                                    <>
-                                        <Localize i18n_default_text='⚡ Advanced D-Trader' />
+                                        <LabelPairedChartLineCaptionRegularIcon
+                                            height='24px'
+                                            width='24px'
+                                            fill='var(--text-general)'
+                                        />
+                                        <Localize i18n_default_text='Advanced D-Trader' />
                                     </>
                                 }
                                 id='id-advanced-dtrader'
@@ -526,7 +531,6 @@ const AppWrapper = observer(() => {
                     {![
                         DBOT_TABS.AI_SIGNALS,
                         DBOT_TABS.AI_ANALYSIS,
-                        DBOT_TABS.D_CIRCLES,
                         DBOT_TABS.ADVANCED_DTRADER,
                     ].includes(active_tab) && <RunPanel />}
                 </div>
@@ -538,7 +542,6 @@ const AppWrapper = observer(() => {
                     ![
                         DBOT_TABS.AI_SIGNALS,
                         DBOT_TABS.AI_ANALYSIS,
-                        DBOT_TABS.D_CIRCLES,
                         DBOT_TABS.ADVANCED_DTRADER,
                     ].includes(active_tab) && <RunPanel />}
             </MobileWrapper>
