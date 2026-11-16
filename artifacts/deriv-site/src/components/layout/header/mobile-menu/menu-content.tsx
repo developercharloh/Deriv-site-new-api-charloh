@@ -9,10 +9,9 @@ type TMenuContentProps = {
     enableThemeToggle?: boolean;
     onOpenSubmenu?: (submenu: string) => void;
     onLogout?: () => void;
-    onNavigate?: () => void;
 };
 
-const MenuContent = observer(({ enableThemeToggle = true, onOpenSubmenu, onLogout, onNavigate }: TMenuContentProps) => {
+const MenuContent = observer(({ enableThemeToggle = true, onOpenSubmenu, onLogout }: TMenuContentProps) => {
     const { isDesktop } = useDevice();
     const { client } = useStore();
     const textSize = isDesktop ? 'sm' : 'md';
@@ -94,7 +93,6 @@ const MenuContent = observer(({ enableThemeToggle = true, onOpenSubmenu, onLogou
                                                     onOpenSubmenu(submenu);
                                                 } else if (onClick) {
                                                     onClick();
-                                                    onNavigate?.();
                                                 }
                                             }}
                                             rightComponent={
