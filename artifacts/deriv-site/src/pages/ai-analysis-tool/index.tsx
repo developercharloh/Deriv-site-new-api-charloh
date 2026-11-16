@@ -271,8 +271,8 @@ const Sparkline: React.FC<{ prices: number[] }> = ({ prices }) => {
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className='aat-sparkline'>
             <defs>
                 <linearGradient id='spkGrad' x1='0' y1='0' x2='1' y2='0'>
-                    <stop offset='0%' stopColor='#00e676' stopOpacity='0.4' />
-                    <stop offset='100%' stopColor='#00e676' />
+                    <stop offset='0%' stopColor='#087443' stopOpacity='0.4' />
+                    <stop offset='100%' stopColor='#087443' />
                 </linearGradient>
             </defs>
             <polyline points={pts} fill='none' stroke='url(#spkGrad)' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round' />
@@ -284,11 +284,11 @@ const Sparkline: React.FC<{ prices: number[] }> = ({ prices }) => {
 const ConfidenceGauge: React.FC<{ pct: number; strength: string }> = ({ pct, strength }) => {
     const R = 32, C = 2 * Math.PI * R;
     const fill = (pct / 100) * C;
-    const col = pct >= 80 ? '#00e676' : pct >= 65 ? '#ffd600' : '#ff3d57';
+    const col = pct >= 80 ? '#087443' : pct >= 65 ? '#855400' : '#b42336';
     return (
         <div className='aat-gauge'>
             <svg width='78' height='78' viewBox='0 0 78 78'>
-                <circle cx='39' cy='39' r={R} fill='none' stroke='rgba(255,255,255,0.07)' strokeWidth='6' />
+                <circle cx='39' cy='39' r={R} fill='none' stroke='rgba(31,41,55,0.14)' strokeWidth='6' />
                 <circle cx='39' cy='39' r={R} fill='none' stroke={col} strokeWidth='6'
                     strokeLinecap='round'
                     strokeDasharray={`${fill} ${C}`}
@@ -296,7 +296,7 @@ const ConfidenceGauge: React.FC<{ pct: number; strength: string }> = ({ pct, str
                     transform='rotate(-90 39 39)'
                     style={{ transition: 'stroke-dasharray 0.8s ease' }}
                 />
-                <text x='39' y='36' textAnchor='middle' dominantBaseline='middle' fill='#fff' fontSize='14' fontWeight='900'>{pct}%</text>
+                <text x='39' y='36' textAnchor='middle' dominantBaseline='middle' fill='#1f2937' fontSize='14' fontWeight='900'>{pct}%</text>
                 <text x='39' y='50' textAnchor='middle' fill={col} fontSize='6' fontWeight='800' letterSpacing='0.5'>{strength}</text>
             </svg>
             <span className='aat-gauge__lbl' style={{ color: col }}>Confidence</span>
