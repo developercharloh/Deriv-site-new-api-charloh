@@ -2708,13 +2708,22 @@
     }
 
     .dc-tabs__list--main__tabs {
+        display: flex;
         min-width: 0;
         overflow: hidden !important;
+        flex-wrap: nowrap !important;
         justify-content: flex-start !important;
+        align-items: center !important;
+    }
+
+    .dc-tabs__list--main__tabs.dc-tabs__list--border-bottom {
+        border-bottom: 0 !important;
     }
 
     .dc-tabs__list--main__tabs > .dc-themed-scrollbars-wrapper {
         display: flex;
+        flex-flow: row nowrap;
+        align-items: center;
         width: 100%;
         min-width: 0;
         max-width: 100%;
@@ -2723,18 +2732,23 @@
         gap: 0;
         margin: 0;
         padding: 0;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
     }
 
     .dc-tabs__list--main__tabs .dc-tabs__item {
-        display: inline-flex;
+        display: flex;
+        flex-flow: row nowrap;
         height: 40px;
         width: max-content !important;
         min-width: max-content;
         flex: 0 0 auto;
+        align-self: center;
         align-items: center;
         justify-content: center;
         gap: 0.4rem;
         line-height: 1;
         padding: 0 1rem;
+        white-space: nowrap;
     }
 }
