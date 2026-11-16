@@ -6,6 +6,7 @@ import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { destroyerBotIdFromDirection, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
+import { MatchesSignalBoard } from './matches-signal-board';
 import '@/components/ai-signal-orb/ai-signal-orb.scss';
 import './ai-signals-page.scss';
 
@@ -1011,6 +1012,14 @@ const AiSignalsPage: React.FC = () => {
 
     // Live Market Watch loop
     useEffect(() => {
+        if (tradeType === 'matches_differs') {
+            if (watchCdRef.current) { clearInterval(watchCdRef.current); watchCdRef.current = null; }
+            setWatchResults([]);
+            setWatchSpikes(new Set());
+            setWatchScanning(false);
+            setWatchDataMessage('');
+            return;
+        }
         if (!watchActive || maintenanceActive) {
             if (watchCdRef.current) { clearInterval(watchCdRef.current); watchCdRef.current = null; }
             return;
@@ -1080,7 +1089,7 @@ const AiSignalsPage: React.FC = () => {
 
     // ── Watchdog — live tick monitor per valid signal ─────────────────────────
     useEffect(() => {
-        const validSigs = watchResults.filter(r =>
+        const validSigs = tradeType === 'matches_differs' ? [] : watchResults.filter(r =>
             !watchSpikes.has(r.sym.code) && !r.gapDetected &&
             r.statsChecks.isSignal && !r.recentDominance.isCold
         );
@@ -1291,7 +1300,11 @@ const AiSignalsPage: React.FC = () => {
                         <div>
                             <span className='aisig-page__title'>AI Signals</span>
                             <span className='aisig-page__subtitle'>
-                                {tradeType === 'even_odd' ? '4-Model Reversal Scanner' : '10-Model Consensus Scanner'}
+                                {tradeType === 'matches_differs'
+                                    ? 'TSI + candle-close Match alerts'
+                                    : tradeType === 'even_odd'
+                                        ? '4-Model Reversal Scanner'
+                                        : '10-Model Consensus Scanner'}
                             </span>
                         </div>
                     </div>
@@ -1317,7 +1330,7 @@ const AiSignalsPage: React.FC = () => {
                     {([
                         { t: 'over_under'      as TradeType, icon: '📈', label: 'Over / Under'     },
                         { t: 'even_odd'        as TradeType, icon: '⚖️', label: 'Even / Odd'       },
-                        { t: 'matches_differs' as TradeType, icon: '🎯', label: 'Matches / Differs' },
+                        { t: 'matches_differs' as TradeType, icon: '🎯', label: 'Matches 0–4' },
                     ]).map(({ t, icon, label }) => (
                         <button key={t} className={`ai-panel__type-btn${tradeType === t ? ' ai-panel__type-btn--active' : ''}`} onClick={() => setTradeType(t)}>
                             <span className='ai-panel__type-icon'>{icon}</span>{label}
@@ -1326,7 +1339,13 @@ const AiSignalsPage: React.FC = () => {
                 </div>
 
                 {/* ── Live Signal Feed — valid signals only ─────────────────── */}
-                {(() => {
+                {tradeType === 'matches_differs' ? (
+                    <MatchesSignalBoard
+                        active={watchActive}
+                        onToggle={() => setWatchActive(previous => !previous)}
+                        maintenanceActive={maintenanceActive}
+                    />
+                ) : (() => {
                     const eoMode      = tradeType === 'even_odd';
                     const maxVotes    = eoMode ? 4 : 10;
                     const validSigs   = watchResults.filter(r => isWatchSignal(r));
