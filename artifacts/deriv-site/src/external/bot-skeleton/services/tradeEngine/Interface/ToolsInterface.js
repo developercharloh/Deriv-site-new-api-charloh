@@ -2,6 +2,7 @@ import { localize } from '@deriv-com/translations';
 import getCandleInterface from './CandleInterface';
 import getIndicatorsInterface from './IndicatorsInterface';
 import getMiscInterface from './MiscInterface';
+import { isCandleCloseEntryWindow } from '@/utils/candle-close-entry';
 
 const getToolsInterface = tradeEngine => {
     return {
@@ -43,6 +44,10 @@ const getToolsInterface = tradeEngine => {
             return invalid_msg;
         },
         getTime: () => parseInt(new Date().getTime() / 1000),
+        isCandleCloseEntryWindow: (intervalSeconds, secondsBeforeClose) => {
+            const brokerEpoch = tradeEngine.getPurchaseConditionTick?.();
+            return isCandleCloseEntryWindow(brokerEpoch, intervalSeconds, secondsBeforeClose);
+        },
         ...getCandleInterface(),
         ...getMiscInterface(tradeEngine),
         ...getIndicatorsInterface(tradeEngine),

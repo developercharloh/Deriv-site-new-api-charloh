@@ -122,6 +122,12 @@ export function parseXmlV2Config(xmlText: string): V2BotConfig {
         'MartingaleLevel', 'martingale_level', 'MaxLosses', 'Max Losses', 'maxLosses'
     ) ?? 6;
 
+    const candleEntryBlock = doc.querySelector('block[type="candle_close_entry_window"]');
+    const candleInterval = Number(candleEntryBlock?.querySelector('field[name="INTERVAL_SECONDS"]')?.textContent);
+    const secondsBeforeClose = Number(
+        candleEntryBlock?.querySelector('field[name="SECONDS_BEFORE_CLOSE"]')?.textContent,
+    );
+
     return {
         symbol,
         contractKind:    direction_kind,
@@ -134,5 +140,10 @@ export function parseXmlV2Config(xmlText: string): V2BotConfig {
         stopLoss,
         martingale,
         martingaleLevel,
+        ...(candleEntryBlock && Number.isInteger(candleInterval) && candleInterval > 1 &&
+            Number.isInteger(secondsBeforeClose) && secondsBeforeClose > 0 &&
+            secondsBeforeClose < candleInterval
+            ? { candleCloseEntryWindow: { intervalSeconds: candleInterval, secondsBeforeClose } }
+            : {}),
     };
 }

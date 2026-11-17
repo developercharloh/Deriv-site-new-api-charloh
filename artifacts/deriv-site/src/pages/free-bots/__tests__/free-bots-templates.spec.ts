@@ -51,13 +51,18 @@ const readCustomBlockTypes = (): Set<string> => {
 };
 
 describe('Free Bots template catalog', () => {
-    it('references unique, existing, well-formed Blockly XML templates', () => {
+    it('references existing, well-formed Blockly XML templates with only the intentional signal alias', () => {
         const xmlPaths = readCatalogXmlPaths();
         const catalogEntries = readCatalogBotSections();
         const uniqueTemplatePaths = catalogEntries.map(entry => entry.xmlPath);
+        const duplicatePaths = [...new Set(
+            uniqueTemplatePaths.filter((xmlPath, index) => uniqueTemplatePaths.indexOf(xmlPath) !== index),
+        )];
 
         expect(xmlPaths.length).toBeGreaterThan(0);
-        expect(new Set(uniqueTemplatePaths).size).toBe(uniqueTemplatePaths.length);
+        expect(duplicatePaths).toEqual(['/bots/OverUnder_Signal_Bot.xml']);
+        expect(catalogEntries.filter(entry => entry.xmlPath === '/bots/OverUnder_Signal_Bot.xml').map(entry => entry.id))
+            .toEqual(expect.arrayContaining(['over-under-secret-weapon', 'over-under-signal']));
 
         for (const xmlPath of xmlPaths) {
             expect(xmlPath).toMatch(/^\/bots\/[^/]+\.xml$/);
@@ -74,12 +79,15 @@ describe('Free Bots template catalog', () => {
         }
     });
 
-    it('removes retired bots and routes V1 Over/Under signals to the remaining template', () => {
+    it('keeps Secret Weapon in Premium and routes V1 Over/Under signals to the shared template', () => {
         const catalog = fs.readFileSync(catalogPath, 'utf8');
 
         expect(catalog).not.toContain("id: 'digit-pro-v1'");
         expect(catalog).not.toContain("id: 'over-under-ai-signals'");
-        expect(catalog).not.toContain("id: 'over-under-secret-weapon'");
+        expect(catalog).toContain("id: 'over-under-secret-weapon'");
+        expect(catalog).toContain("section: 'premium'");
+        expect(catalog).toContain("value: 'Broker tick at 00:02 before candle close'");
+        expect(BOT_XML_PATHS['over-under-secret-weapon']).toBe('/bots/OverUnder_Signal_Bot.xml');
         expect(catalog).not.toContain("id: 'matches-04-under-6'");
         expect(catalog).not.toContain("id: 'matches-04-under-5'");
         expect(catalog).not.toContain("id: 'matches-69-over-4'");
@@ -106,7 +114,10 @@ describe('Free Bots template catalog', () => {
                 customBlockTypes.has(block.getAttribute('type') || '')
             );
 
-            if (entry.id === 'edging-pro-engine') {
+            if (entry.id === 'over-under-secret-weapon') {
+                expect(entry.section).toBe('premium');
+                expect(entry.xmlPath).toBe('/bots/OverUnder_Signal_Bot.xml');
+            } else if (entry.id === 'edging-pro-engine') {
                 expect(entry.section).toBe('edging');
                 expect(usesCustomBlock).toBe(true);
             } else if (entry.id === 'matches-king') {
@@ -125,7 +136,6 @@ describe('Free Bots template catalog', () => {
             /id: 'matches-king',\s*section: 'matches-lab',[\s\S]*?xmlPath: '\/bots\/Matches_King\.xml'/
         );
         expect(catalogSource).toContain("title: 'Matches Lab'");
-        expect(catalogSource).not.toContain("id: 'over-under-secret-weapon'");
         expect(catalogSource).not.toContain('EdgingProRunnerModal');
     });
 

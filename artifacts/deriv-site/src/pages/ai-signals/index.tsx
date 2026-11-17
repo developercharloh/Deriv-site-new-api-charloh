@@ -7,7 +7,12 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { destroyerBotIdFromDirection, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
 import { MatchesSignalSection } from './matches-signal-board';
-import { getOverUnderSignalOptions, OVER_UNDER_SIGNAL_BARRIERS } from './over-under-signals';
+import { OverUnderSignalBoard } from './over-under-signal-board';
+import {
+    getOverUnderSignalOptions,
+    OVER_UNDER_SIGNAL_BARRIERS,
+    type OverUnderSignalOption,
+} from './over-under-signals';
 import '@/components/ai-signal-orb/ai-signal-orb.scss';
 import './ai-signals-page.scss';
 
@@ -139,6 +144,7 @@ interface MarketResult {
     winProb: number; sampleSize: number; votes: ModelVotes;
     recoveryOptions: RecoveryOption[]; noRecoveryRecommended: boolean;
     entryDigits: { digit: number; recommended: boolean; conditional: number; freqPct: number; avgWaitTicks: number; skipAdjustedWait: number }[];
+    overUnderOptions: OverUnderSignalOption[];
     segmentAgrees: boolean; signalStrength: number; pip: number;
     regimeScore: number; regimeOk: boolean; gapDetected: boolean; tfAgreement: number;
     statsChecks: StatsChecks;
@@ -290,6 +296,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
     let direction = '', contractType = '', barrier: number | null = null,
         recoveryBarrier: number | null = null, recoveryContractType: string | null = null,
         recoveryDirection: string | null = null, winProb = 0;
+    let overUnderOptions: OverUnderSignalOption[] = [];
     let winFn: (d: number) => boolean;
 
     if (tradeType === 'even_odd') {
@@ -321,19 +328,15 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
             winProb = 1 - freq[differDig] / N; winFn = d => d !== differDig;
         }
     } else {
-        const allOptions = getOverUnderSignalOptions(digits).map(option => ({
-            side: option.side,
-            b: option.barrier,
-            prob: option.probability,
-            edge: option.edge,
-        }));
+        const allOptions = getOverUnderSignalOptions(digits);
+        overUnderOptions = allOptions;
         const best = allOptions[0];
         const recovery = allOptions.filter(o => o.side !== best.side)[0] ?? allOptions[1] ?? best;
-        barrier = best.b; recoveryBarrier = recovery.b;
+        barrier = best.barrier; recoveryBarrier = recovery.barrier;
         recoveryContractType = recovery.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER';
-        recoveryDirection    = `${recovery.side} ${recovery.b}`;
-        direction = `${best.side} ${best.b}`; contractType = best.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER';
-        winProb = best.prob; winFn = d => best.side === 'OVER' ? d > best.b : d < best.b;
+        recoveryDirection    = `${recovery.side} ${recovery.barrier}`;
+        direction = `${best.side} ${best.barrier}`; contractType = best.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER';
+        winProb = best.probability; winFn = d => best.side === 'OVER' ? d > best.barrier : d < best.barrier;
     }
 
     // Theoretical expected win rate at this barrier (50 % for EO, barrier-dependent for OU)
@@ -802,7 +805,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
 
     return {
         sym, direction, contractType, barrier, recoveryBarrier, recoveryContractType, recoveryDirection,
-        winProb, sampleSize: N, votes, entryDigits, pip,
+        winProb, sampleSize: N, votes, entryDigits, overUnderOptions, pip,
         segmentAgrees: stabilityPass || crossWindowPass,
         signalStrength, recentDominance,
         regimeScore, regimeOk: crossWindowPass && stabilityPass,
@@ -1188,6 +1191,45 @@ const AiSignalsPage: React.FC = () => {
         return r.statsChecks.isSignal && !r.recentDominance.isCold;
     }, [watchSpikes]);
 
+    // Keep the Premium Over Under Secret Weapon synchronized only with a
+    // currently qualified signal and a fresh live watchdog confirmation.
+    useEffect(() => {
+        const storageKey = 'fb_signal_over_under';
+        const now = Date.now();
+        const liveCandidate = tradeType === 'over_under' && watchActive && !maintenanceActive
+            ? watchResults.find(r => {
+                const liveWatch = watchdogMap.get(r.sym.code);
+                return isWatchSignal(r) &&
+                    liveWatch?.status === 'holding' &&
+                    now - liveWatch.lastTickAt <= 4_000;
+            })
+            : undefined;
+
+        try {
+            if (!liveCandidate) {
+                localStorage.removeItem(storageKey);
+            } else {
+                const signal: BotSignal = {
+                    symbol: liveCandidate.sym.code,
+                    symbolLabel: liveCandidate.sym.label,
+                    direction: liveCandidate.direction,
+                    entryPoint: '00:02 before 1-minute candle close',
+                    confidence: liveCandidate.signalStrength,
+                    market: 'over_under',
+                    recoveryBarrier: liveCandidate.recoveryBarrier ?? undefined,
+                    contractType: liveCandidate.contractType,
+                    recoveryContractType: liveCandidate.recoveryContractType ?? undefined,
+                    savedAt: now,
+                    expiresAt: now + 4_500,
+                };
+                localStorage.setItem(storageKey, JSON.stringify(signal));
+            }
+            window.dispatchEvent(new Event('fb_signal_update'));
+        } catch {
+            // Storage may be disabled; the scanner and visible signals still work.
+        }
+    }, [isWatchSignal, maintenanceActive, tradeType, watchdogMap, watchActive, watchResults]);
+
     const openRunConfigDirect = useCallback(() => {
         let cfg: OrbRunConfig = DEFAULT_RUN_CFG;
         try { const raw = localStorage.getItem(ORB_RUN_CFG_KEY); if (raw) cfg = { ...DEFAULT_RUN_CFG, ...JSON.parse(raw) }; } catch { /* */ }
@@ -1257,7 +1299,10 @@ const AiSignalsPage: React.FC = () => {
 
             const signal: BotSignal = {
                 symbol: result.sym.code, symbolLabel: result.sym.label, direction,
-                entryPoint: `Digit ${editEntryPoint}`, confidence: result.signalStrength, market: tradeType,
+                entryPoint: tradeType === 'over_under'
+                    ? '00:02 before 1-minute candle close'
+                    : `Digit ${editEntryPoint}`,
+                confidence: result.signalStrength, market: tradeType,
                 recoveryBarrier: recoveryBarrierFinal,
                 contractType: primaryCt,
                 recoveryContractType: recoveryCt,
@@ -1396,7 +1441,7 @@ const AiSignalsPage: React.FC = () => {
                              )}
 
                             {/* No valid signals found */}
-                            {!watchScanning && hasResults && validSigs.length === 0 && (
+                            {!watchScanning && hasResults && validSigs.length === 0 && tradeType !== 'over_under' && (
                                 <div className='aisig-feed__nosig'>
                                     <span className='aisig-feed__nosig-icon'>🔍</span>
                                     <div>
@@ -1407,7 +1452,7 @@ const AiSignalsPage: React.FC = () => {
                             )}
 
                             {/* Valid signal cards */}
-                            {validSigs.length > 0 && (
+                            {validSigs.length > 0 && tradeType !== 'over_under' && (
                                 <div className='aisig-feed__cards'>
                                     {validSigs.map(r => {
                                         const vc2 = voteColor(r.statsChecks.passCount);
@@ -1506,6 +1551,34 @@ const AiSignalsPage: React.FC = () => {
                                         );
                                     })}
                                 </div>
+                            )}
+
+                            {tradeType === 'over_under' && (
+                                <OverUnderSignalBoard
+                                    active={watchActive}
+                                    maintenanceActive={maintenanceActive}
+                                    signals={watchResults.map(r => {
+                                        const liveWatch = watchdogMap.get(r.sym.code);
+                                        const liveWatchFresh = Boolean(
+                                            liveWatch && Date.now() - liveWatch.lastTickAt <= 4_000,
+                                        );
+                                        return {
+                                            symbol: r.sym,
+                                            direction: r.direction,
+                                            isSignal: isWatchSignal(r),
+                                            signalStrength: r.signalStrength,
+                                            winProbability: r.winProb,
+                                            options: r.overUnderOptions,
+                                            watchdogStatus: liveWatchFresh ? liveWatch?.status : 'warming',
+                                            watchdogWinPct: liveWatch?.winPct,
+                                            resultAvailable: true,
+                                        };
+                                    })}
+                                    onSelectSignal={symbolCode => {
+                                        const selected = watchResults.find(r => r.sym.code === symbolCode);
+                                        if (selected) loadWatchSignal(selected);
+                                    }}
+                                />
                             )}
                         </div>
                     );
@@ -1833,7 +1906,16 @@ const AiSignalsPage: React.FC = () => {
                         </div>
 
                         {/* Entry points */}
-                        {result.entryDigits.length > 0 && (
+                        {tradeType === 'over_under' ? (
+                            <div className='ai-panel__entries'>
+                                <div className='ai-panel__entries-hd'>
+                                    <span className='ai-panel__section-lbl'>Entry Timing</span>
+                                </div>
+                                <div className='aisig-page__ou-scope'>
+                                    One-minute candle · wait for the broker tick at 00:02 before close. Entry is not digit-triggered.
+                                </div>
+                            </div>
+                        ) : result.entryDigits.length > 0 && (
                             <div className='ai-panel__entries'>
                                 <div className='ai-panel__entries-hd'>
                                     <span className='ai-panel__section-lbl'>Entry Points<em className='ai-panel__section-hint'> — wait for this digit; timing accounts for bot delay</em></span>

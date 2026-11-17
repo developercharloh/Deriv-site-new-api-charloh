@@ -20,6 +20,7 @@
 // as a buy ack is received so it is ready before the next tick arrives.
 
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { isCandleCloseEntryWindow } from './candle-close-entry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,10 @@ export interface V2BotConfig {
     stopLoss:        number;
     currency?:       string;
     duration?:       number;   // contract length in ticks (1–10), default 1
+    candleCloseEntryWindow?: {
+        intervalSeconds: number;
+        secondsBeforeClose: number;
+    };
 }
 
 export interface V2BoundStores {
@@ -93,7 +98,7 @@ interface OpenContract {
     triggerDigit: number;
     triggerPrice: string | null;
 }
-interface ReadyProposal { id: string; price: number; stake: number; }
+interface ReadyProposal { id: string; price: number; stake: number; fetchedAt: number; }
 
 export const isWinningSettlement = (status: unknown, profit: number): boolean =>
     status === 'won' || (Number.isFinite(profit) && profit > 0);
@@ -138,6 +143,9 @@ export class DerivV2Engine {
     private chainActive:   boolean = false;
     private lastTickDigit: number  = 0;
     private lastTickQuote: string  = '';   // full price string of the last tick
+    private lastTickEpoch: number | null = null;
+    private lastEntryWindowCandle: number | null = null;
+    private lastProposalRequestedAt: number = 0;
     private currentStake:  number;
     private lossCount:     number  = 1;
     private totalProfit:   number  = 0;
@@ -191,6 +199,8 @@ export class DerivV2Engine {
         this.chainActive       = false;
         this.lastTickDigit     = 0;
         this.lastTickQuote     = '';
+        this.lastTickEpoch     = null;
+        this.lastEntryWindowCandle = null;
         this.readyProposal     = null;
         this.proposalInflight  = false;
         this.proposalStake     = null;
@@ -224,10 +234,19 @@ export class DerivV2Engine {
         });
 
         this.onStatus('scanning');
-        this.addLog(
-            `⚡ V2 Engine ready — scanning for entry digit ${this.config.entryPoint} on ${this.config.symbol}`,
-            'system'
-        );
+        if (this.config.candleCloseEntryWindow) {
+            const { intervalSeconds, secondsBeforeClose } = this.config.candleCloseEntryWindow;
+            this.addLog(
+                `⚡ V2 Engine ready — waiting for the ${intervalSeconds}-second candle close window (${secondsBeforeClose}s before close) on ${this.config.symbol}`,
+                'system'
+            );
+            this.fetchProposal();
+        } else {
+            this.addLog(
+                `⚡ V2 Engine ready — scanning for entry digit ${this.config.entryPoint} on ${this.config.symbol}`,
+                'system'
+            );
+        }
         this.subscribeTicks();
     }
 
@@ -239,6 +258,7 @@ export class DerivV2Engine {
         this.buyInflight      = false;
         this.tickWaiting      = false;
         this.readyProposal    = null;
+        this.lastEntryWindowCandle = null;
 
         if (this.tickWatchdog) { clearTimeout(this.tickWatchdog); this.tickWatchdog = null; }
         if (this.tickSubId) { this.rawSend({ forget: this.tickSubId }); this.tickSubId = null; }
@@ -343,7 +363,7 @@ export class DerivV2Engine {
         }, 4000);
     }
 
-    private handleTick(tick: { quote: number; pip_size?: number } | undefined): void {
+    private handleTick(tick: { quote: number; pip_size?: number; epoch?: number } | undefined): void {
         if (!tick) return;
         if (!this.ticksReceivedOk) {
             this.ticksReceivedOk = true;
@@ -352,6 +372,13 @@ export class DerivV2Engine {
         const digit = this.lastDigit(tick.quote);
         this.lastTickDigit = digit;
         this.lastTickQuote = this.formatQuote(tick.quote, tick.pip_size);
+        const epoch = Number(tick.epoch);
+        this.lastTickEpoch = Number.isFinite(epoch) ? Math.floor(epoch) : null;
+
+        if (this.config.candleCloseEntryWindow) {
+            this.handleCandleCloseEntryTick(this.lastTickEpoch);
+            return;
+        }
 
         if (!this.chainActive) {
             this.addLog(`Digit: ${digit}  |  Waiting for entry: ${this.config.entryPoint}`, 'scan');
@@ -365,6 +392,58 @@ export class DerivV2Engine {
         }
 
         this.tradeOnTick();
+    }
+
+    private handleCandleCloseEntryTick(epoch: number | null): void {
+        const window = this.config.candleCloseEntryWindow;
+        if (!this.isRunning || !window || epoch === null) return;
+
+        // Refresh proposals periodically while waiting, so a long wait cannot
+        // leave an expired proposal ID for the next candle.
+        if (!this.proposalInflight && !this.buyInflight) {
+            const proposalAge = this.readyProposal
+                ? Date.now() - this.readyProposal.fetchedAt
+                : Number.POSITIVE_INFINITY;
+            if (proposalAge >= 10_000 && Date.now() - this.lastProposalRequestedAt >= 10_000) {
+                this.readyProposal = null;
+                this.fetchProposal();
+            }
+        }
+
+        if (!isCandleCloseEntryWindow(epoch, window.intervalSeconds, window.secondsBeforeClose)) return;
+        const candleKey = Math.floor(epoch / window.intervalSeconds);
+        if (this.lastEntryWindowCandle === candleKey) return;
+
+        // Reserve this candle immediately. A slow or rejected buy must not
+        // cause the engine to submit another purchase in the same close window.
+        this.lastEntryWindowCandle = candleKey;
+        this.chainActive = true;
+        this.onStatus('trading');
+        this.addLog(
+            `Candle-close entry window reached — preparing one ${this.config.direction ?? this.config.contractKind} trade.`,
+            'info'
+        );
+
+        if (this.readyProposal && !this.buyInflight) {
+            const proposal = this.readyProposal;
+            this.readyProposal = null;
+            this.executeBuy(proposal);
+            return;
+        }
+
+        this.tickWaiting = true;
+        if (!this.proposalInflight) this.fetchProposal();
+    }
+
+    private isCurrentTickInEntryWindow(): boolean {
+        const window = this.config.candleCloseEntryWindow;
+        const epoch = this.lastTickEpoch;
+        return Boolean(
+            window &&
+            epoch !== null &&
+            this.lastEntryWindowCandle === Math.floor(epoch / window.intervalSeconds) &&
+            isCandleCloseEntryWindow(epoch, window.intervalSeconds, window.secondsBeforeClose)
+        );
     }
 
     private tradeOnTick(): void {
@@ -385,6 +464,7 @@ export class DerivV2Engine {
     private fetchProposal(): void {
         if (!this.isRunning || this.proposalInflight) return;
         this.proposalInflight = true;
+        this.lastProposalRequestedAt = Date.now();
         const requestedStake = this.currentStake;
         this.proposalStake = requestedStake;
 
@@ -428,11 +508,18 @@ export class DerivV2Engine {
             id:    String(proposal.id),
             price: parseFloat(proposal.ask_price ?? proposalStake),
             stake: proposalStake,
+            fetchedAt: Date.now(),
         };
 
         if (this.tickWaiting && !this.buyInflight) {
             this.tickWaiting = false;
-            this.executeBuy(ready);
+            if (!this.config.candleCloseEntryWindow || this.isCurrentTickInEntryWindow()) {
+                this.readyProposal = null;
+                this.executeBuy(ready);
+            } else {
+                this.readyProposal = ready;
+                this.addLog('Proposal was not ready inside the candle-close window; waiting for the next window.', 'system');
+            }
         } else {
             this.readyProposal = ready;
         }
@@ -468,7 +555,9 @@ export class DerivV2Engine {
         if (this.stores) this.stores.run_panel.setContractStage(3);
 
         this.addLog(
-            `⚡ Buy  $${this.currentStake.toFixed(2)}  digit:${this.lastTickDigit}  entry:${this.config.entryPoint}  (${this.openContracts.size} open)`,
+            this.config.candleCloseEntryWindow
+                ? `⚡ Buy  $${this.currentStake.toFixed(2)}  candle-close entry  (${this.openContracts.size} open)`
+                : `⚡ Buy  $${this.currentStake.toFixed(2)}  digit:${this.lastTickDigit}  entry:${this.config.entryPoint}  (${this.openContracts.size} open)`,
             'info'
         );
         this.send({ buy: p.id, price: p.price }, 'buy');

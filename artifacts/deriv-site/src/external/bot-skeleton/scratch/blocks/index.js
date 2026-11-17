@@ -13,6 +13,7 @@ import './Binary/Tools/Time';
 import './Binary/Trade Definition';
 import './Custom/apollo_blocks';
 import './Custom/analysis_blocks';
+import './Custom/candle_close_entry_block';
 import './Custom/even_odd_strike_eagle_blocks';
 import './Custom/edging_pro_blocks';
 import './Custom/matches_king_blocks';
