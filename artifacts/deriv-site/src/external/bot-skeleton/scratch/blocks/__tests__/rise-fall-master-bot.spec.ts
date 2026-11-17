@@ -6,6 +6,7 @@ import * as BlocklyJavaScriptNamespace from 'blockly/javascript';
 import DBotStore from '../../dbot-store';
 import { modifyContextMenu } from '../../utils';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
+import { configureOverUnderBotXml } from '@/utils/bot-patch';
 import { centerWorkspaceRoot, revealWorkspaceFromTop } from '../../utils/workspace-reveal';
 
 jest.mock('../../utils', () => ({
@@ -113,6 +114,9 @@ describe('Blockly bot template imports', () => {
         (Blockly.Block.prototype as any).getBlocksInStatement = function (inputName: string) {
             const firstBlock = this.getInputTargetBlock(inputName);
             return firstBlock ? firstBlock.getSiblings() : [];
+        };
+        (Blockly.Block.prototype as any).getChildByType = function (type: string) {
+            return this.getDescendants().find((block: any) => block.type === type);
         };
 
         await import('blockly/blocks');
@@ -845,6 +849,113 @@ describe('Blockly bot template imports', () => {
             expect(modifyContextMenuMock).toHaveBeenNthCalledWith(1, settingsMenu);
             expect(modifyContextMenuMock).toHaveBeenNthCalledWith(2, gateMenu);
         } finally {
+            workspace.dispose();
+        }
+    });
+
+    it('generates #21 code from its configured Over/Under template without runtime placeholders', () => {
+        const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/OverUnder_Signal_Bot.xml');
+        const sourceXml = fs.readFileSync(xmlPath, 'utf8');
+        const configured = configureOverUnderBotXml(sourceXml, {
+            mode: 'MACD_OVER_5',
+            barrier: 4,
+            stake: 0.35,
+            takeProfit: 15,
+            stopLoss: 50,
+            martingale: 2,
+        });
+        const previousWorkspace = (Blockly as any).derivWorkspace;
+        const previousStore = (DBotStore as any).singleton;
+        const previousLoadingState = (window as any).__DBOT_LOADING_XML;
+        const workspace = new Blockly.Workspace();
+        try {
+            window.Blockly.derivWorkspace = workspace;
+            (window as any).__DBOT_LOADING_XML = true;
+            (DBotStore as any).singleton = {
+                client: { is_logged_in: true, loginid: 'CR_TEST', currency: 'USD' },
+            };
+            const dropdownWarning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+            try {
+                Blockly.Xml.domToWorkspace(
+                    Blockly.utils.xml.textToDom(new XMLSerializer().serializeToString(configured.documentElement)),
+                    workspace,
+                );
+            } finally {
+                dropdownWarning.mockRestore();
+            }
+
+            setDropdownOptions(
+                workspace.getBlockById('ou_market'),
+                'MARKET_LIST',
+                [['Synthetic Indices', 'synthetic_index']],
+                'synthetic_index',
+            );
+            setDropdownOptions(
+                workspace.getBlockById('ou_market'),
+                'SUBMARKET_LIST',
+                [['Random Indices', 'random_index']],
+                'random_index',
+            );
+            setDropdownOptions(
+                workspace.getBlockById('ou_market'),
+                'SYMBOL_LIST',
+                [['Volatility 75 (1s) Index', '1HZ75V']],
+                '1HZ75V',
+            );
+            setDropdownOptions(
+                workspace.getBlockById('ou_tradetype'),
+                'TRADETYPECAT_LIST',
+                [['Digits', 'digits']],
+                'digits',
+            );
+            setDropdownOptions(
+                workspace.getBlockById('ou_tradetype'),
+                'TRADETYPE_LIST',
+                [['Over/Under', 'overunder']],
+                'overunder',
+            );
+            setDropdownOptions(
+                workspace.getBlockById('ou_contracttype'),
+                'TYPE_LIST',
+                [['Both', 'both']],
+                'both',
+            );
+            setDropdownOptions(
+                workspace.getBlockById('ou_tradeoptions'),
+                'DURATIONTYPE_LIST',
+                [['Ticks', 't']],
+                't',
+            );
+            workspace.getAllBlocks(false)
+                .filter(block => block.type === 'purchase')
+                .forEach(block => setDropdownOptions(
+                    block,
+                    'PURCHASE_LIST',
+                    [['Over', 'DIGITOVER'], ['Under', 'DIGITUNDER']],
+                    block.id === 'ou_purchase_under' ? 'DIGITUNDER' : 'DIGITOVER',
+                ));
+
+            javascriptGenerator.init(workspace);
+            (Blockly.JavaScript as any).variableDB_ = (javascriptGenerator as any).nameDB_;
+            const generated = javascriptGenerator.workspaceToCode(workspace);
+
+            expect(generated).toContain('Bot.init');
+            expect(generated).toContain('"DIGITOVER","DIGITUNDER"');
+            expect(generated).toContain('Bot.purchase');
+            expect(generated).toContain("currency           : 'USD'");
+            expect(generated).not.toContain("currency           : 'undefined'");
+        } finally {
+            (DBotStore as any).singleton = previousStore;
+            if (previousWorkspace) {
+                window.Blockly.derivWorkspace = previousWorkspace;
+            } else {
+                delete (window.Blockly as any).derivWorkspace;
+            }
+            if (previousLoadingState === undefined) {
+                delete (window as any).__DBOT_LOADING_XML;
+            } else {
+                (window as any).__DBOT_LOADING_XML = previousLoadingState;
+            }
             workspace.dispose();
         }
     });
