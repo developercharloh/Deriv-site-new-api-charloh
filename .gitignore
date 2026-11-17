@@ -47,3 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local live-feed verification evidence; retain only the concise report.
+/reports/task191/*
+!/reports/task191/REPORT.md
