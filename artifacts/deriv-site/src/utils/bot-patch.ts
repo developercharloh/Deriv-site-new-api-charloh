@@ -3,7 +3,7 @@
 // the same real XML files.
 
 import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
-import { applyCandleCloseEntryGate } from './candle-close-entry';
+import { CANDLE_CLOSE_ENTRY_SECONDS } from './candle-close-entry';
 import {
     acquireBlocklyXmlImportGuard,
     BLOCKLY_XML_IMPORT_SETTLE_MS,
@@ -26,10 +26,12 @@ export interface BotSignal {
     recoveryBarrier?:      number;   // Over/Under: AI-picked fallback barrier after a loss
     contractType?:         string;   // e.g. "DIGITOVER", "DIGITUNDER" — for Elite bot (primary)
     recoveryContractType?: string;   // OPPOSITE contract type for recovery (e.g. DIGITUNDER when primary is DIGITOVER)
+    indicatorMode?:         OverUnderIndicatorMode;
 }
 
 export interface OverUnderBotSettings {
     mode: OverUnderIndicatorMode;
+    barrier?: number;
     stake: number;
     takeProfit: number;
     stopLoss: number;
