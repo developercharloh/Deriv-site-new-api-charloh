@@ -845,6 +845,17 @@ export default class RunPanelStore {
             error_message = handleBackendError(backendError);
         }
 
+        if (
+            (error instanceof TypeError || error?.name === 'TypeError') &&
+            typeof error?.stack === 'string' &&
+            error_message
+        ) {
+            const stackFrames = error.stack.split('\n').slice(1, 4).join('\n');
+            if (stackFrames) {
+                error_message = `${error_message}\n${stackFrames}`;
+            }
+        }
+
         this.showErrorMessage(error_message, error);
     };
 

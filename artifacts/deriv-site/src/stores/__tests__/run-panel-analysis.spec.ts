@@ -705,4 +705,27 @@ describe('Binary Matrix analysis observer integration', () => {
             'journal__text'
         );
     });
+
+    it('adds a short stack trace to Journal TypeErrors so runtime failures can be diagnosed', () => {
+        const journal = {
+            onError: jest.fn(),
+            journal_filters: [],
+        };
+        const rootStore = {
+            dbot: {},
+            journal,
+        };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+
+        runPanel.onError(new TypeError("Cannot read properties of undefined (reading 'undefined')"));
+
+        expect(journal.onError).toHaveBeenCalledWith(
+            expect.stringMatching(/Cannot read properties of undefined[\s\S]*\n\s*at /)
+        );
+    });
 });
