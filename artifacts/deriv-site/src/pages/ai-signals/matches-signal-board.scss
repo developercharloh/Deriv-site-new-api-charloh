@@ -223,6 +223,101 @@
     b { color: #c7d2fe; font-size: 8px; }
 }
 
+.match-paper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 11px 12px;
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.58);
+}
+
+.match-paper__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+
+    h3 {
+        margin: 0;
+        color: #e2e8f0;
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    p {
+        margin: 4px 0 0;
+        color: #64748b;
+        font-size: 9px;
+    }
+}
+
+.match-paper__badge {
+    flex: 0 0 auto;
+    padding: 4px 6px;
+    border: 1px solid rgba(129, 140, 248, 0.32);
+    border-radius: 5px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #c7d2fe;
+    font-size: 7px;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+}
+
+.match-paper__empty {
+    margin: 0;
+    color: #64748b;
+    font-size: 9px;
+}
+
+.match-paper__list {
+    display: flex;
+    max-height: 250px;
+    flex-direction: column;
+    gap: 5px;
+    overflow-y: auto;
+}
+
+.match-paper__row {
+    display: grid;
+    grid-template-columns: minmax(100px, 1fr) minmax(95px, 0.8fr) minmax(145px, 1.1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border: 1px solid rgba(100, 116, 139, 0.13);
+    border-radius: 7px;
+    background: rgba(2, 6, 23, 0.3);
+    font-size: 8px;
+}
+
+.match-paper__market,
+.match-paper__details {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+
+    strong { color: #e2e8f0; font-size: 9px; }
+    span { color: #94a3b8; }
+}
+
+.match-paper__market > span {
+    color: #c7d2fe;
+    font-weight: 800;
+}
+
+.match-paper__result {
+    color: #cbd5e1;
+    font-weight: 800;
+    text-align: right;
+
+    &--pending { color: #fcd34d; }
+    &--match { color: #6ee7b7; }
+    &--miss { color: #fda4af; }
+    &--unavailable { color: #94a3b8; }
+}
+
 .match-board__grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
@@ -454,6 +549,9 @@
 @media (max-width: 520px) {
     .match-board__header { align-items: flex-start; }
     .match-replay__header { align-items: flex-start; }
+    .match-paper__header { align-items: flex-start; }
+    .match-paper__row { grid-template-columns: minmax(85px, 1fr) minmax(80px, 0.8fr); }
+    .match-paper__result { grid-column: 1 / -1; text-align: left; }
     .match-market { padding: 10px; }
     .match-chart { height: 140px; }
 }

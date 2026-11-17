@@ -2,9 +2,11 @@ import {
     calculateMacdSeries,
     calculateTsiSeries,
     calculateTsiSignalSeries,
+    advanceMatchesPaperSignals,
     evaluateMacdMatchesConditions,
     evaluateMatchesConditions,
     formatCandleCountdown,
+    getMatchesLastDigit,
     isTsiFlat,
     type MacdPoint,
     mergeCandle,
@@ -106,6 +108,68 @@ describe('Matches 0–4 candle strategy', () => {
         expect(evaluateMatchesConditions({ ...options, candle: candle(120, 1.2, 1.1) }).tradeNow).toBe(false);
         expect(evaluateMatchesConditions({ ...options, tsi: 0.7 }).tradeNow).toBe(false);
         expect(evaluateMatchesConditions({ ...options, tsiSamples: [0.7, 0.85, 0.9] }).tradeNow).toBe(false);
+    });
+
+    it('records each Matches 0–4 target once and resolves it from only the next tick', () => {
+        const options = {
+            marketCode: '1HZ10V',
+            marketLabel: 'Volatility 10 (1s) Index',
+            candle: candle(120, 1.2, 1.3),
+            tsi: 0.85,
+            alertEpoch: 178,
+            qualifying: true,
+            nextTickQuote: 1.23,
+            pipSize: 2,
+        };
+        const recorded = advanceMatchesPaperSignals([], options);
+        expect(recorded).toHaveLength(5);
+        expect(recorded.map(signal => signal.targetDigit)).toEqual([0, 1, 2, 3, 4]);
+        expect(recorded.every(signal => signal.result === 'pending')).toBe(true);
+        expect(advanceMatchesPaperSignals(recorded, options)).toHaveLength(5);
+
+        const sameTick = advanceMatchesPaperSignals(recorded, {
+            ...options,
+            qualifying: false,
+            nextTickQuote: 1.24,
+        });
+        expect(sameTick.every(signal => signal.result === 'pending')).toBe(true);
+
+        const afterNextTick = advanceMatchesPaperSignals(sameTick, {
+            ...options,
+            qualifying: false,
+            alertEpoch: 179,
+            nextTickQuote: 1.23,
+        });
+        expect(afterNextTick.map(signal => signal.result)).toEqual([
+            'miss', 'miss', 'miss', 'match', 'miss',
+        ]);
+        expect(afterNextTick.every(signal => signal.nextTickDigit === 3)).toBe(true);
+    });
+
+    it('labels next-tick outcomes unavailable rather than guessing without market precision', () => {
+        const recorded = advanceMatchesPaperSignals([], {
+            marketCode: '1HZ10V',
+            marketLabel: 'Volatility 10 (1s) Index',
+            candle: candle(120, 1.2, 1.3),
+            tsi: 0.85,
+            alertEpoch: 178,
+            qualifying: true,
+            nextTickQuote: 1.23,
+            pipSize: null,
+        });
+        const resolved = advanceMatchesPaperSignals(recorded, {
+            marketCode: '1HZ10V',
+            marketLabel: 'Volatility 10 (1s) Index',
+            candle: candle(120, 1.2, 1.3),
+            tsi: 0.85,
+            alertEpoch: 179,
+            qualifying: false,
+            nextTickQuote: 1.24,
+            pipSize: null,
+        });
+        expect(resolved.every(signal => signal.result === 'unavailable')).toBe(true);
+        expect(getMatchesLastDigit(1.23, 2)).toBe(3);
+        expect(getMatchesLastDigit(1.23, null)).toBeNull();
     });
 
     it('replays the live entry checks and counts the following tick digit', () => {

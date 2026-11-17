@@ -6,6 +6,7 @@ import {
     calculateMacdSeries,
     calculateTsiSeries,
     calculateTsiSignalSeries,
+    advanceMatchesPaperSignals,
     evaluateMacdMatchesConditions,
     evaluateMatchesConditions,
     formatCandleCountdown,
@@ -13,6 +14,7 @@ import {
     MATCHES_MACD_DIGITS,
     MATCHES_HISTORY_COUNT,
     type MacdPoint,
+    type MatchesPaperSignal,
     MATCHES_TSI_MAX,
     MATCHES_TSI_MIN,
     MATCHES_TSI_SIGNAL_PERIOD,
@@ -320,6 +322,7 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
     const [replayState, setReplayState] = useState<ReplayState>('idle');
     const [replayResults, setReplayResults] = useState<MatchesReplayMarket[]>([]);
     const [replayError, setReplayError] = useState('');
+    const [paperSignals, setPaperSignals] = useState<MatchesPaperSignal[]>([]);
 
     const runHistoricalReplay = async () => {
         setReplayState('loading');
@@ -472,6 +475,23 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
         };
     }), [active, clockNow, feeds, maintenanceActive, strategy]);
     const liveMarketCount = marketCards.filter(card => card.status === 'Live').length;
+    useEffect(() => {
+        setPaperSignals(previous => marketCards.reduce((signals, card) => {
+            const rawPipSize = api_base.pip_sizes?.[card.symbol.code];
+            const parsedPipSize = Number(rawPipSize);
+            return advanceMatchesPaperSignals(signals, {
+                marketCode: card.symbol.code,
+                marketLabel: card.symbol.label,
+                candle: card.lastCandle,
+                tsi: card.tsi,
+                alertEpoch: card.feed.serverEpoch,
+                qualifying: strategy !== 'macd' && card.tsiConditions.tradeNow,
+                nextTickQuote: card.feed.serverEpoch === null ? null : card.lastCandle?.close ?? null,
+                pipSize: Number.isInteger(parsedPipSize) ? parsedPipSize : null,
+            });
+        }, previous));
+    }, [marketCards, strategy]);
+
     const connectionMessage = !active
         ? 'Scanner paused'
         : maintenanceActive
@@ -575,6 +595,45 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                                 </article>
                             );
                         })}
+                    </div>
+                )}
+            </section>
+
+            <section className='match-paper' aria-label='Recent paper signal history'>
+                <div className='match-paper__header'>
+                    <div>
+                        <h3>Recent Matches 0–4 signals</h3>
+                        <p>Each alert is checked against the next live tick only.</p>
+                    </div>
+                    <span className='match-paper__badge'>PAPER RESULTS · NO TRADES</span>
+                </div>
+                {paperSignals.length === 0 ? (
+                    <p className='match-paper__empty'>No qualifying Matches 0–4 alerts yet.</p>
+                ) : (
+                    <div className='match-paper__list' aria-live='polite'>
+                        {[...paperSignals].reverse().map(signal => (
+                            <article className='match-paper__row' key={signal.id}>
+                                <div className='match-paper__market'>
+                                    <strong>{signal.marketLabel}</strong>
+                                    <span>MATCH {signal.targetDigit}</span>
+                                </div>
+                                <div className='match-paper__details'>
+                                    <span>Candle {new Date(signal.candle.time * 1000).toLocaleTimeString([], {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit',
+                                    })}</span>
+                                    <span>TSI {signal.tsi.toFixed(3)}</span>
+                                </div>
+                                <span className={`match-paper__result match-paper__result--${signal.result}`}>
+                                    {signal.result === 'pending'
+                                        ? 'Waiting for next tick'
+                                        : signal.result === 'unavailable'
+                                            ? 'Result unavailable'
+                                            : `Paper ${signal.result} · next digit ${signal.nextTickDigit}`}
+                                </span>
+                            </article>
+                        ))}
                     </div>
                 )}
             </section>

@@ -35,6 +35,9 @@ describe('Matches shared market board', () => {
     it('shows both ranges on every market without range tabs, using eight shared subscriptions', async () => {
         const { container } = render(<MatchesSignalSection active onToggle={jest.fn()} maintenanceActive={false} />);
         expect(screen.getByRole('heading', { name: 'Matches' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Recent Matches 0–4 signals' })).toBeInTheDocument();
+        expect(screen.getByText('PAPER RESULTS · NO TRADES')).toBeInTheDocument();
+        expect(screen.getByText('No qualifying Matches 0–4 alerts yet.')).toBeInTheDocument();
         expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
         expect(screen.getAllByText('MATCHES 0–4 · TSI')).toHaveLength(8);
         expect(screen.getAllByText('MATCHES 6–9 · MACD')).toHaveLength(8);

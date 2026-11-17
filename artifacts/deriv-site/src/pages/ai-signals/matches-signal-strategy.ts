@@ -60,11 +60,104 @@ export interface MatchesReplayResult {
     nextTickDigits: number[];
 }
 
+export interface MatchesPaperSignal {
+    id: string;
+    marketCode: string;
+    marketLabel: string;
+    targetDigit: number;
+    candle: Candle;
+    tsi: number;
+    alertEpoch: number;
+    nextTickDigit: number | null;
+    result: 'pending' | 'match' | 'miss' | 'unavailable';
+}
+
+export interface AdvanceMatchesPaperSignalsOptions {
+    marketCode: string;
+    marketLabel: string;
+    candle: Candle | null;
+    tsi: number | null;
+    alertEpoch: number | null;
+    qualifying: boolean;
+    nextTickQuote: number | null;
+    pipSize: number | null;
+}
+
+export const MATCHES_PAPER_SIGNAL_LIMIT = 20;
+
 const finiteNumber = (value: unknown): number | null => {
     if (value === null || value === undefined || value === '') return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
 };
+
+export function getMatchesLastDigit(quote: number, pipSize: number | null): number | null {
+    if (!Number.isFinite(quote) || pipSize === null || !Number.isInteger(pipSize) || pipSize < 0 || pipSize > 10) {
+        return null;
+    }
+    const digit = Number(quote.toFixed(pipSize).slice(-1));
+    return Number.isInteger(digit) && digit >= 0 && digit <= 9 ? digit : null;
+}
+
+export function advanceMatchesPaperSignals(
+    previous: MatchesPaperSignal[],
+    options: AdvanceMatchesPaperSignalsOptions,
+): MatchesPaperSignal[] {
+    const boundHistory = (signals: MatchesPaperSignal[]) => signals.length > MATCHES_PAPER_SIGNAL_LIMIT
+        ? signals.slice(-MATCHES_PAPER_SIGNAL_LIMIT)
+        : signals;
+    let next = previous;
+    const nextTickDigit = options.nextTickQuote === null
+        ? null
+        : getMatchesLastDigit(options.nextTickQuote, options.pipSize);
+
+    if (options.alertEpoch !== null && options.nextTickQuote !== null) {
+        let changed = false;
+        const resolved = previous.map(signal => {
+            if (
+                signal.marketCode !== options.marketCode ||
+                signal.result !== 'pending' ||
+                options.alertEpoch! <= signal.alertEpoch
+            ) return signal;
+            changed = true;
+            const result: MatchesPaperSignal['result'] = nextTickDigit === null
+                ? 'unavailable'
+                : nextTickDigit === signal.targetDigit ? 'match' : 'miss';
+            return {
+                ...signal,
+                nextTickDigit,
+                result,
+            };
+        });
+        if (changed) next = resolved;
+    }
+
+    if (!options.qualifying || !options.candle || options.tsi === null || options.alertEpoch === null) {
+        return boundHistory(next);
+    }
+
+    const existingIds = new Set(next.map(signal => signal.id));
+    const additions = MATCHES_DIGITS.flatMap(targetDigit => {
+        const id = `${options.marketCode}:${options.candle!.time}:${targetDigit}`;
+        if (existingIds.has(id)) return [];
+        existingIds.add(id);
+        return [{
+            id,
+            marketCode: options.marketCode,
+            marketLabel: options.marketLabel,
+            targetDigit,
+            candle: options.candle!,
+            tsi: options.tsi!,
+            alertEpoch: options.alertEpoch!,
+            nextTickDigit: null,
+            result: 'pending' as const,
+        }];
+    });
+
+    return additions.length
+        ? [...next, ...additions].slice(-MATCHES_PAPER_SIGNAL_LIMIT)
+        : boundHistory(next);
+}
 
 export function normalizeCandle(raw: any, granularity = MATCHES_CANDLE_SECONDS): Candle | null {
     if (!raw || typeof raw !== 'object') return null;
