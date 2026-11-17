@@ -15,6 +15,7 @@ import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig, FreeBotSection } from './types';
 import { applyOverUnderPreset } from './over-under-preset';
+import { isSignalFresh } from './signal-freshness';
 import { isBotBuilderWorkspaceReady } from './workspace-readiness';
 import FreeBotCategoryTabs from './FreeBotCategoryTabs';
 import './free-bots.scss';
@@ -43,15 +44,12 @@ const openBotBuilderTab = (dashboard: { setActiveTab: (tab: number) => void }) =
 
 // ─── Signal helpers ───────────────────────────────────────────────────────────
 
-const SIGNAL_TTL = 5 * 60 * 1000;
-
 function readSignal(key: string): LiveSignal | null {
     try {
         const raw = localStorage.getItem(key);
         if (!raw) return null;
         const sig = JSON.parse(raw) as LiveSignal;
-        if (Date.now() - sig.savedAt > SIGNAL_TTL) return null;
-        return sig;
+        return isSignalFresh(sig) ? sig : null;
     } catch { return null; }
 }
 
@@ -120,6 +118,27 @@ const BOTS: BotConfig[] = [
         ],
         xmlPath: '/bots/Rise_Fall_Master_Bot.xml',
         gradient: 'linear-gradient(135deg, #0a2a0a 0%, #1a5c1a 40%, #10b981 70%, #f59e0b 100%)',
+    },
+    {
+        id: 'over-under-secret-weapon',
+        section: 'premium',
+        name: 'Over Under Secret Weapon',
+        emoji: '🎯',
+        description:
+            'Uses the latest live Over/Under Signal Engine alert. Set stake, take profit, stop loss, and Martingale, then Save & Run to load the signal, wait for its entry digit, and start the selected Over or Under contract.',
+        market: 'Signal-driven (any Volatility Index)',
+        strategy: 'Live Over / Under Signal · Entry Timing · Martingale · Risk Stops',
+        params: [
+            { label: 'Signal', value: 'Latest active Over / Under alert' },
+            { label: 'Entry', value: 'Waits for the signal entry digit' },
+            { label: 'Stake', value: 'Set before each run' },
+            { label: 'Take Profit', value: 'Set before each run' },
+            { label: 'Stop Loss', value: 'Set before each run' },
+            { label: 'Martingale', value: 'Set before each run' },
+        ],
+        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
+        gradient: 'linear-gradient(135deg, #24103f 0%, #642876 52%, #d14778 100%)',
+        signalKey: 'fb_signal_over_under',
     },
     {
         id: 'matches-signal',
@@ -597,13 +616,15 @@ const FREE_BOT_SECTIONS: { id: FreeBotSection; title: string; emptyMessage?: str
 // Keep the existing catalog numbering stable even though Smart Contract is now the first tab.
 const BOTS_IN_ORDINAL_ORDER = [
     ...BOTS.filter(
-        bot => bot.section === 'premium' && !['smart-over-2-v2', 'smart-over-2-v3'].includes(bot.id)
+        bot => bot.section === 'premium' &&
+            !['smart-over-2-v2', 'smart-over-2-v3', 'over-under-secret-weapon'].includes(bot.id)
     ),
     ...BOTS.filter(bot => bot.section === 'smart-contract'),
     ...BOTS.filter(bot => bot.section === 'edging'),
     ...BOTS.filter(bot => bot.section === 'matches-lab'),
     ...BOTS.filter(bot => bot.id === 'smart-over-2-v2'),
     ...BOTS.filter(bot => bot.id === 'smart-over-2-v3'),
+    ...BOTS.filter(bot => bot.id === 'over-under-secret-weapon'),
 ];
 const BOT_ORDINALS = new Map(BOTS_IN_ORDINAL_ORDER.map((bot, index) => [bot.id, index + 1]));
 
@@ -616,6 +637,7 @@ const CARD_ART: Record<string, string> = {
     'differ-v2': '/assets/free-bots/mentorship.jpg',
     'even-odd-scanner': '/assets/free-bots/odd-autobot.jpg',
     'over-under-signal': '/assets/free-bots/under-autobot.jpg',
+    'over-under-secret-weapon': '/assets/free-bots/under-autobot.jpg',
     'over2-under7-reversal': '/assets/free-bots/hitnrun.jpg',
     'smart-over-2': '/assets/free-bots/concept-ai.jpg',
     'smart-over-2-v2': '/assets/free-bots/concept-ai.jpg',
@@ -638,6 +660,7 @@ const CARD_CATEGORY: Record<string, string> = {
     'differ-v2': 'DIFFERS',
     'even-odd-scanner': 'EVEN / ODD',
     'over-under-signal': 'OVER / UNDER SIGNAL',
+    'over-under-secret-weapon': 'OVER / UNDER · LIVE SIGNAL',
     'over2-under7-reversal': 'OVER / UNDER',
     'smart-over-2': 'DIGIT OVER 2',
     'smart-over-2-v2': 'DIGIT OVER 2',
@@ -659,6 +682,7 @@ const CARD_ACCENT: Record<string, string> = {
     'differ-v2': '#1e6bd0',
     'even-odd-scanner': '#bd8300',
     'over-under-signal': '#d9274c',
+    'over-under-secret-weapon': '#c83e78',
     'over2-under7-reversal': '#eb741d',
     'smart-over-2': '#0f9f79',
     'smart-over-2-v2': '#0f9f79',
@@ -755,6 +779,9 @@ const SignalTradeModal: React.FC<{
         setState('launching');
         setErrMsg('');
         try {
+            if (botId === 'over-under-secret-weapon' && !isSignalFresh(signal)) {
+                throw new Error('This Over/Under signal has expired. Wait for a fresh live signal, then try again.');
+            }
             const stake      = parseFloat(cfg.stake)      || 0.5;
             const takeProfit = parseFloat(cfg.takeProfit) || 10;
             const stopLoss   = parseFloat(cfg.stopLoss)   || 30;
@@ -762,6 +789,9 @@ const SignalTradeModal: React.FC<{
 
             // Fetch and patch the bot XML with the signal settings
             const doc    = await fetchAndPatchBot(botId, signal, stake, takeProfit, stopLoss, martingale);
+            if (botId === 'over-under-secret-weapon' && !isSignalFresh(signal)) {
+                throw new Error('This Over/Under signal expired while loading. Wait for a fresh live signal, then try again.');
+            }
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
 
             if (engineMode === 'v2') {
@@ -854,7 +884,13 @@ const SignalTradeModal: React.FC<{
                 <div className='fb-modal__footer'>
                     <button className='fb-modal__btn fb-modal__btn--cancel' onClick={onClose} disabled={state === 'launching'}>Cancel</button>
                     <button className='fb-modal__btn fb-modal__btn--run' onClick={handleRun} disabled={state === 'launching'}>
-                        {state === 'launching' ? '⏳ Launching…' : engineMode === 'v2' ? '⚡ Launch V2' : '🚀 Load Signal & Run'}
+                        {state === 'launching'
+                            ? '⏳ Launching…'
+                            : botId === 'over-under-secret-weapon'
+                                ? '🚀 Save & Run'
+                                : engineMode === 'v2'
+                                    ? '⚡ Launch V2'
+                                    : '🚀 Load Signal & Run'}
                     </button>
                 </div>
             </div>
