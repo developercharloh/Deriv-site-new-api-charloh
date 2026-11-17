@@ -131,12 +131,12 @@ const BOTS: BotConfig[] = [
         name: 'Over Under Secret Weapon',
         emoji: '🎯',
         description:
-            'When loaded from the live signal board, bot #21 uses the exact volatility that produced the signal. Configure its barrier and risk settings, then load it stopped into DBot Builder. It starts at the first 00:02-before-close window and keeps buying until Stop or a risk limit.',
+            'When loaded from the live signal board, bot #21 uses the exact volatility that produced the signal. Configure its barrier and risk settings, then load it stopped into DBot Builder. It buys immediately after you press Run and continues until Stop or a risk limit.',
         market: 'Volatility 75 (1s) Index (1HZ75V)',
-        strategy: 'Source-qualified · same-market execution · continuous after 00:02 start',
+        strategy: 'Source-qualified · same-market · immediate continuous buying',
         params: [
             { label: 'Signal conditions', value: 'Provided by the live source board' },
-            { label: 'Entry', value: 'Start at 00:02 before close, then buy each normal bot cycle' },
+            { label: 'Entry', value: 'Buy immediately when Run starts' },
             { label: 'Stake', value: 'Set before each run' },
             { label: 'Take Profit', value: 'Set before each run' },
             { label: 'Stop Loss', value: 'Set before each run' },
@@ -811,15 +811,15 @@ const OverUnderBotConfigModal: React.FC<{
                     <div className='fb-modal__signal-info'>
                 <strong id='ou-config-title' className='fb-modal__direction'>Configure #21 Over / Under</strong>
                         <span className='fb-modal__sym'>Volatility 75 (1s) Index</span>
-                        <span className='fb-modal__entry'>Live one-minute indicators · entry at 00:02 before candle close</span>
+                        <span className='fb-modal__entry'>Live source signal · immediate purchase on Run</span>
                     </div>
                     <button type='button' className='fb-modal__close' onClick={onClose} disabled={loading || submitting} aria-label='Close configuration'>✕</button>
                 </div>
 
                 <p className='fb-modal__ou-note'>
                     Signal conditions come from the signal source, not this bot. #21 loads stopped with the selected
-                    contract and risk settings. It starts at the first 00:02-before-close window, then keeps buying
-                    until Stop or a saved risk limit; use Run and Stop in DBot Builder.
+                    contract and risk settings, with no entry-point wait. It starts buying immediately on Run and
+                    continues until Stop or a saved risk limit.
                 </p>
 
                 <div className='fb-modal__fields'>

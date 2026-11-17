@@ -90,11 +90,13 @@ describe('Free Bots template catalog', () => {
         expect(catalog).not.toContain("id: 'over-under-ai-signals'");
         expect(catalog).toContain("id: 'over-under-secret-weapon'");
         expect(catalog).toContain("section: 'premium'");
-        expect(catalog).toContain("value: 'Start at 00:02 before close, then buy each normal bot cycle'");
+        expect(catalog).toContain("value: 'Buy immediately when Run starts'");
         expect(catalog).toContain('Signal conditions come from the signal source, not this bot.');
         expect(catalog).toContain('Barrier digit');
         const botPatcher = fs.readFileSync(botPatchPath, 'utf8');
-        expect(botPatcher).toContain("block('candle_close_entry_window'");
+        expect(botPatcher).toContain("setField('ou_tm_init', 'NUM', 1)");
+        expect(botPatcher).toContain("blockById('ou_ep_init')");
+        expect(botPatcher).not.toContain("block('candle_close_entry_window'");
         expect(botPatcher).not.toContain("block('over_under_indicator_signal'");
         expect(catalog).toContain('Configure & Load');
         expect(catalog).toContain('Load stopped bot into Builder');

@@ -66,6 +66,6 @@ describe('Over Under Secret Weapon signal configuration', () => {
 
         const options = within(screen.getByTestId('secret-weapon-barrier')).getAllByRole('option');
         expect(options.map(option => (option as HTMLOptionElement).value)).toEqual(['9', '8', '7', '6', '5', '4', '3', '2', '1']);
-        expect(screen.getByText(/first 00:02-before-close window/)).toBeInTheDocument();
+        expect(screen.getByText(/no entry-point wait/)).toBeInTheDocument();
     });
 });

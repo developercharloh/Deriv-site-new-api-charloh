@@ -4,7 +4,7 @@
 
 import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
 import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
-import { CANDLE_CLOSE_ENTRY_SECONDS } from './candle-close-entry';
+import { applyCandleCloseEntryGate } from './candle-close-entry';
 import {
     acquireBlocklyXmlImportGuard,
     BLOCKLY_XML_IMPORT_SETTLE_MS,
