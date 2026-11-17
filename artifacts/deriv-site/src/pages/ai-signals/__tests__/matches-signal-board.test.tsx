@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MatchesSignalBoard, MatchesSignalSection } from '../matches-signal-board';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
+import { calculateMacdSeries, evaluateMacdMatchesConditions, normalizeCandle } from '../matches-signal-strategy';
 
 jest.mock('@/hooks/useApiBase', () => ({ useApiBase: jest.fn() }));
 jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({ api_base: { api: null } }));
@@ -82,6 +83,63 @@ describe('Matches shared market board', () => {
         expect(send).toHaveBeenCalledWith({ forget: 'owned' });
         expect(send).not.toHaveBeenCalledWith({ forget: 'someone-else' });
         expect(listeners.size).toBe(0);
+    });
+
+    it('arms all eight MACD cards only with live data at 00:02 and disarms stale or paused cards', async () => {
+        const history = Array.from({ length: 70 }, (_, index) => {
+            const close = 100 + index + 0.004 * index ** 2;
+            return { epoch: index * 60, open: close + 0.1, high: close + 1, low: close - 1, close };
+        });
+        history[69] = { ...history[69],
+            open: history[68].close, high: history[68].close + 1,
+            low: history[68].close - 2, close: history[68].close - 1,
+        };
+        const macd = calculateMacdSeries(history.map(item => normalizeCandle(item)!));
+        // Prove this fixture qualifies independently of freshness and timing.
+        expect(evaluateMacdMatchesConditions({
+            previous: macd.at(-2)!, current: macd.at(-1)!, feedFresh: true, secondsToClose: 2,
+        }).tradeNow).toBe(true);
+
+        const { rerender } = render(
+            <MatchesSignalBoard active onToggle={jest.fn()} maintenanceActive={false} strategy='macd' />,
+        );
+        await act(async () => { jest.advanceTimersByTime(700); });
+        const requests = send.mock.calls.map(([request]) => request).filter(request => request.ticks_history);
+        expect(requests).toHaveLength(8);
+        await act(async () => {
+            requests.forEach((request, index) => emit({
+                req_id: request.req_id, candles: history, subscription: { id: `gate-${index}` },
+            }));
+        });
+        expect(screen.getAllByText('Waiting for live data')).toHaveLength(8);
+        expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
+
+        const liveAt = async (epoch: number) => act(async () => {
+            requests.forEach((request, index) => emit({
+                msg_type: 'ohlc',
+                ohlc: { ...history[69], open_time: 4140, epoch, symbol: request.ticks_history },
+                subscription: { id: `gate-${index}` },
+            }));
+        });
+        await liveAt(4197);
+        expect(screen.getByText('8/8 live')).toBeInTheDocument();
+        expect(screen.getAllByText('00:03')).toHaveLength(8);
+        expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
+        await liveAt(4198);
+        expect(screen.getAllByText('00:02')).toHaveLength(8);
+        // Each market has one status plus four digit-specific alerts.
+        expect(screen.getAllByText('TRADE NOW')).toHaveLength(40);
+        expect(screen.getAllByLabelText(/Trade now: .* Matches digits six through nine/)).toHaveLength(8);
+        // Stop delivering messages, then restore the live feed.
+        await act(async () => { jest.advanceTimersByTime(3_000); });
+        expect(screen.getAllByText('Waiting for live data')).toHaveLength(8);
+        expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
+        await liveAt(4199);
+        expect(screen.getAllByText('00:01')).toHaveLength(8);
+        expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
+        rerender(<MatchesSignalBoard active={false} onToggle={jest.fn()} maintenanceActive={false} strategy='macd' />);
+        expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
+        expect(send.mock.calls.every(([request]) => request.ticks_history || request.forget)).toBe(true);
     });
 });
 class MockWebSocket {
