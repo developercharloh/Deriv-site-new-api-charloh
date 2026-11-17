@@ -453,14 +453,6 @@
     stroke-linecap: round;
     stroke-linejoin: round;
 }
-.match-chart__tsi-signal {
-    fill: none;
-    stroke: #fcd34d;
-    stroke-width: 1.15;
-    stroke-dasharray: 3 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
 .match-chart__macd-zero { stroke: rgba(148, 163, 184, 0.38); stroke-width: 0.8; stroke-dasharray: 2 2; }
 .match-chart__macd-hist--positive { fill: rgba(52, 211, 153, 0.52); }
 .match-chart__macd-hist--negative { fill: rgba(251, 113, 133, 0.52); }

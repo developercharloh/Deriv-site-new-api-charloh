@@ -1,6 +1,6 @@
 import {
     calculateMacdSeries,
-    calculateTsiSeries,
+    calculateTrendStrengthIndexSeries,
     evaluateMacdMatchesConditions,
     evaluateMatchesConditions,
     MATCHES_ENTRY_SECONDS,
@@ -11,6 +11,7 @@ import {
     MATCHES_TSI_FLAT_SAMPLES,
     MATCHES_TSI_MAX,
     MATCHES_TSI_MIN,
+    MATCHES_TSI_PERIOD,
     secondsUntilCandleClose,
     type Candle,
     type MacdPoint,
@@ -71,13 +72,13 @@ export const getOverUnderIndicatorModeConfig = (
 const latestMacdPoints = (candles: Candle[]): { previous: MacdPoint | null; current: MacdPoint | null } => {
     const points = calculateMacdSeries(candles).filter((point): point is MacdPoint => point !== null);
     return {
-        previous: points.at(-2) ?? null,
-        current: points.at(-1) ?? null,
+        previous: points[points.length - 2] ?? null,
+        current: points[points.length - 1] ?? null,
     };
 };
 
-export const getCurrentOverUnderTsi = (candles: Candle[]): number | null =>
-    calculateTsiSeries(candles).at(-1) ?? null;
+export const getCurrentOverUnderTrendStrengthIndex = (candles: Candle[]): number | null =>
+    calculateTrendStrengthIndexSeries(candles).slice(-1)[0] ?? null;
 
 export function evaluateOverUnderIndicatorStatuses(options: {
     candles: Candle[];
@@ -86,8 +87,8 @@ export function evaluateOverUnderIndicatorStatuses(options: {
     feedFresh: boolean;
 }): OverUnderIndicatorStatus[] {
     const { candles, tsiSamples, secondsToClose, feedFresh } = options;
-    const candle = candles.at(-1) ?? null;
-    const tsi = calculateTsiSeries(candles).at(-1) ?? null;
+    const candle = candles[candles.length - 1] ?? null;
+    const tsi = calculateTrendStrengthIndexSeries(candles).slice(-1)[0] ?? null;
     const { previous, current } = latestMacdPoints(candles);
 
     const tsiConditions = evaluateMatchesConditions({
@@ -135,12 +136,12 @@ export function evaluateOverUnderIndicatorStatuses(options: {
             : [
                 {
                     key: 'tsi-range',
-                    label: `TSI in ${MATCHES_TSI_MIN.toFixed(1)}–${MATCHES_TSI_MAX.toFixed(1)} range`,
+                    label: `Trend Strength Index ${MATCHES_TSI_PERIOD} in ${MATCHES_TSI_MIN.toFixed(1)}–${MATCHES_TSI_MAX.toFixed(1)} range`,
                     met: tsiConditions.tsiInRange,
                 },
                 {
                     key: 'tsi-flat',
-                    label: `TSI flat across ${MATCHES_TSI_FLAT_SAMPLES} updates (range ≤ ${MATCHES_TSI_FLAT_DELTA.toFixed(2)})`,
+                    label: `Trend Strength Index flat across ${MATCHES_TSI_FLAT_SAMPLES} updates (range ≤ ${MATCHES_TSI_FLAT_DELTA.toFixed(2)})`,
                     met: tsiConditions.tsiFlat,
                 },
                 { key: 'green-candle', label: 'Current one-minute candle is green', met: tsiConditions.greenCandle },
@@ -170,7 +171,7 @@ export function evaluateOverUnderIndicatorStatusesAtEpoch(options: {
     brokerEpoch: number | null;
     feedFresh: boolean;
 }): OverUnderIndicatorStatus[] {
-    const lastCandle = options.candles.at(-1) ?? null;
+    const lastCandle = options.candles[options.candles.length - 1] ?? null;
     const secondsToClose = lastCandle && options.brokerEpoch !== null
         ? secondsUntilCandleClose(lastCandle.time, options.brokerEpoch)
         : null;

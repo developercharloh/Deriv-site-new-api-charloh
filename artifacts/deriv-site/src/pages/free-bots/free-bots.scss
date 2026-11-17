@@ -667,6 +667,47 @@
     }
 }
 
+.fb-modal--over-under {
+    max-width: 500px;
+
+    .fb-modal__direction {
+        font-size: 1.7rem;
+        letter-spacing: 0;
+    }
+
+    .fb-modal__ou-note {
+        margin: 14px 20px 0;
+        color: var(--text-general, #475569);
+        font-size: 1.15rem;
+        line-height: 1.5;
+    }
+
+    .fb-modal__field--wide {
+        grid-column: 1 / -1;
+    }
+
+    .fb-modal__field {
+        select {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 9px 12px;
+            border: 1.5px solid var(--border-normal, #ddd);
+            border-radius: 8px;
+            background: var(--general-section-1, #f8f9fa);
+            color: var(--text-prominent, #111);
+            font-size: 1.25rem;
+            font-weight: 650;
+
+            &:focus-visible {
+                outline: 3px solid rgba(16, 185, 129, 0.4);
+                outline-offset: 2px;
+            }
+
+            &:disabled { opacity: 0.6; }
+        }
+    }
+}
+
 @keyframes fb-modal-in {
     from { opacity: 0; transform: scale(0.93) translateY(16px); }
     to   { opacity: 1; transform: scale(1)    translateY(0); }

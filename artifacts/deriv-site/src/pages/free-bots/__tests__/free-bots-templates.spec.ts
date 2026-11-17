@@ -79,14 +79,25 @@ describe('Free Bots template catalog', () => {
         }
     });
 
-    it('keeps Secret Weapon in Premium and routes V1 Over/Under signals to the shared template', () => {
+    it('keeps one Premium Over/Under bot on the standard stopped Builder flow', () => {
         const catalog = fs.readFileSync(catalogPath, 'utf8');
+        const premiumOverUnder = catalog.match(
+            /id: 'over-under-secret-weapon'[\s\S]*?\n    \},/
+        )?.[0];
 
         expect(catalog).not.toContain("id: 'digit-pro-v1'");
         expect(catalog).not.toContain("id: 'over-under-ai-signals'");
         expect(catalog).toContain("id: 'over-under-secret-weapon'");
         expect(catalog).toContain("section: 'premium'");
         expect(catalog).toContain("value: 'Broker tick at 00:02 before candle close'");
+        expect(catalog).toContain('Trend Strength Index 14');
+        expect(catalog).toContain('Configure & Load');
+        expect(catalog).toContain('Load stopped bot into Builder');
+        expect(catalog).toContain('configureOverUnderBotXml');
+        expect(premiumOverUnder).toBeDefined();
+        expect(premiumOverUnder).not.toContain('signalKey');
+        expect(catalog).not.toContain('EngineSelector');
+        expect(catalog).not.toContain('deriv-v2-autostart');
         expect(BOT_XML_PATHS['over-under-secret-weapon']).toBe('/bots/OverUnder_Signal_Bot.xml');
         expect(catalog).not.toContain("id: 'matches-04-under-6'");
         expect(catalog).not.toContain("id: 'matches-04-under-5'");

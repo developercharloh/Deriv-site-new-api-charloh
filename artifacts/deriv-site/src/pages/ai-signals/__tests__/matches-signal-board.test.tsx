@@ -97,7 +97,7 @@ describe('Matches shared market board', () => {
         const macd = calculateMacdSeries(history.map(item => normalizeCandle(item)!));
         // Prove this fixture qualifies independently of freshness and timing.
         expect(evaluateMacdMatchesConditions({
-            previous: macd.at(-2)!, current: macd.at(-1)!, feedFresh: true, secondsToClose: 2,
+            previous: macd[macd.length - 2]!, current: macd[macd.length - 1]!, feedFresh: true, secondsToClose: 2,
         }).tradeNow).toBe(true);
 
         const { rerender } = render(
@@ -233,7 +233,7 @@ describe('MatchesSignalBoard', () => {
             apiMessageHandler?.({ msg_type: 'history', req_id: historyRequest.req_id, candles, subscription: { id: 'sub-1' } });
         });
         expect(screen.getByRole('img', {
-            name: 'Volatility 10 (1s) Index one-minute candlesticks and normalized TSI',
+            name: 'Volatility 10 (1s) Index one-minute candlesticks and Trend Strength Index',
         })).toBeInTheDocument();
 
         await act(async () => {

@@ -1,7 +1,6 @@
 import {
     calculateMacdSeries,
-    calculateTsiSeries,
-    calculateTsiSignalSeries,
+    calculateTrendStrengthIndexSeries,
     advanceMatchesPaperSignals,
     evaluateMacdMatchesConditions,
     evaluateMatchesConditions,
@@ -40,13 +39,20 @@ describe('Matches 0–4 candle strategy', () => {
         expect(mergeCandle(updated, candle(240, 1.5, 1.7), 2).map(item => item.time)).toEqual([180, 240]);
     });
 
-    it('calculates normalized TSI and leaves warm-up values unavailable', () => {
-        const candles = Array.from({ length: 70 }, (_, index) =>
+    it('calculates one-line Trend Strength Index as a rolling Pearson correlation', () => {
+        const candles = Array.from({ length: 20 }, (_, index) =>
             candle(index * 60, 100 + index, 101 + index));
-        const values = calculateTsiSeries(candles, 5, 3);
-        expect(values[0]).toBeNull();
-        expect(values.at(-1)).toBeCloseTo(1, 6);
-        expect(calculateTsiSignalSeries(candles, 5, 3, 2).at(-1)).toBeCloseTo(1, 6);
+        const values = calculateTrendStrengthIndexSeries(candles);
+        expect(values.slice(0, 13).every(value => value === null)).toBe(true);
+        expect(values[values.length - 1]).toBeCloseTo(1, 6);
+
+        const nonlinear = [1, 2, 2].map((close, index) => candle(index * 60, close, close));
+        const nonlinearValues = calculateTrendStrengthIndexSeries(nonlinear, 3);
+        expect(nonlinearValues[nonlinearValues.length - 1]).toBeCloseTo(Math.sqrt(0.75), 6);
+
+        const flat = candles.map(item => candle(item.time, 10, 10));
+        const flatValues = calculateTrendStrengthIndexSeries(flat);
+        expect(flatValues[flatValues.length - 1]).toBeNull();
     });
 
     it('calculates standard MACD lines and histogram after the warm-up period', () => {
@@ -56,8 +62,8 @@ describe('Matches 0–4 candle strategy', () => {
         expect(values).toHaveLength(candles.length);
         expect(values[32]).toBeNull();
         expect(values[33]).not.toBeNull();
-        expect(values.at(-1)?.histogram).toBeCloseTo(
-            (values.at(-1) as MacdPoint).macdLine - (values.at(-1) as MacdPoint).signalLine,
+        expect(values[values.length - 1]?.histogram).toBeCloseTo(
+            (values[values.length - 1] as MacdPoint).macdLine - (values[values.length - 1] as MacdPoint).signalLine,
             10,
         );
     });
@@ -178,7 +184,7 @@ describe('Matches 0–4 candle strategy', () => {
         for (let minute = 0; minute < 70; minute++) {
             const openQuote = quote;
             ticks.push({ epoch: minute * 60, quote: quote.toFixed(2) });
-            quote += minute % 10 === 9 ? -0.73 : 1;
+            quote += 1 + 1.5 * Math.sin(minute * 0.25);
             ticks.push({ epoch: minute * 60 + 55, quote: quote.toFixed(2) });
             for (let second = 56; second < 60; second++) {
                 ticks.push({ epoch: minute * 60 + second, quote: quote.toFixed(2) });

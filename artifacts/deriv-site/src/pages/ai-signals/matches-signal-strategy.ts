@@ -1,9 +1,7 @@
 export const MATCHES_CANDLE_SECONDS = 60;
 export const MATCHES_HISTORY_COUNT = 120;
 export const MATCHES_REPLAY_TICK_COUNT = 5_000;
-export const MATCHES_TSI_LONG_PERIOD = 25;
-export const MATCHES_TSI_SHORT_PERIOD = 13;
-export const MATCHES_TSI_SIGNAL_PERIOD = 7;
+export const MATCHES_TSI_PERIOD = 14;
 export const MATCHES_TSI_MIN = 0.8;
 export const MATCHES_TSI_MAX = 0.9;
 export const MATCHES_TSI_FLAT_DELTA = 0.02;
@@ -193,43 +191,39 @@ function ema(values: number[], period: number): number[] {
 }
 
 /**
- * Returns TSI normalized from its conventional -100..100 scale to -1..1.
- * The output stays aligned with the candle array; warm-up positions are null.
+ * TradingView Trend Strength Index: rolling Pearson correlation between close
+ * and time over the selected period. Values are naturally bounded from -1 to 1.
  */
-export function calculateTsiSeries(
+export function calculateTrendStrengthIndexSeries(
     candles: Candle[],
-    longPeriod = MATCHES_TSI_LONG_PERIOD,
-    shortPeriod = MATCHES_TSI_SHORT_PERIOD,
+    period = MATCHES_TSI_PERIOD,
 ): Array<number | null> {
     const result: Array<number | null> = Array(candles.length).fill(null);
-    if (candles.length < longPeriod + shortPeriod + 2) return result;
+    const windowSize = Math.floor(Number(period));
+    if (!Number.isFinite(windowSize) || windowSize < 2 || candles.length < windowSize) return result;
 
-    const closes = candles.map(candle => candle.close);
-    const momentum = closes.slice(1).map((close, index) => close - closes[index]);
-    const absoluteMomentum = momentum.map(value => Math.abs(value));
-    const smoothMomentum = ema(ema(momentum, longPeriod), shortPeriod);
-    const smoothAbsoluteMomentum = ema(ema(absoluteMomentum, longPeriod), shortPeriod);
-    const warmup = longPeriod + shortPeriod - 2;
+    const xMean = (windowSize - 1) / 2;
+    const sumXX = windowSize * (windowSize * windowSize - 1) / 12;
+    for (let end = windowSize - 1; end < candles.length; end++) {
+        const start = end - windowSize + 1;
+        const closes = candles.slice(start, end + 1).map(candle => candle.close);
+        if (!closes.every(Number.isFinite)) continue;
 
-    for (let index = warmup; index < smoothMomentum.length; index++) {
-        const denominator = smoothAbsoluteMomentum[index];
-        if (denominator > 0) result[index + 1] = smoothMomentum[index] / denominator;
+        const yMean = closes.reduce((sum, close) => sum + close, 0) / windowSize;
+        let sumXY = 0;
+        let sumYY = 0;
+        for (let index = 0; index < windowSize; index++) {
+            const xDelta = index - xMean;
+            const yDelta = closes[index] - yMean;
+            sumXY += xDelta * yDelta;
+            sumYY += yDelta * yDelta;
+        }
+
+        const denominator = Math.sqrt(sumXX * sumYY);
+        if (denominator > 0) {
+            result[end] = Math.max(-1, Math.min(1, sumXY / denominator));
+        }
     }
-    return result;
-}
-
-export function calculateTsiSignalSeries(
-    candles: Candle[],
-    longPeriod = MATCHES_TSI_LONG_PERIOD,
-    shortPeriod = MATCHES_TSI_SHORT_PERIOD,
-    signalPeriod = MATCHES_TSI_SIGNAL_PERIOD,
-): Array<number | null> {
-    const tsi = calculateTsiSeries(candles, longPeriod, shortPeriod);
-    const valid = tsi.flatMap((value, index) => value === null ? [] : [{ value, index }]);
-    if (!valid.length) return tsi.map(() => null);
-    const smoothed = ema(valid.map(item => item.value), signalPeriod);
-    const result: Array<number | null> = tsi.map(() => null);
-    valid.forEach((item, index) => { result[item.index] = smoothed[index]; });
     return result;
 }
 
@@ -383,7 +377,7 @@ export function replayMatchesTicks(
             currentCandle.close = tick.quote;
         }
 
-        const tsiSeries = calculateTsiSeries(candles);
+        const tsiSeries = calculateTrendStrengthIndexSeries(candles);
         const tsi = tsiSeries[tsiSeries.length - 1] ?? null;
         if (tsi !== null) tsiSamples.push(tsi);
         const candle = candles[candles.length - 1] ?? null;

@@ -19,24 +19,8 @@ describe('Over/Under live signal board', () => {
         render(
             <OverUnderSignalBoard
                 active
+                onToggle={jest.fn()}
                 maintenanceActive={false}
-                onSelectSignal={jest.fn()}
-                signals={[{
-                    symbol,
-                    direction: 'OVER 4',
-                    isSignal: true,
-                    signalStrength: 76,
-                    winProbability: 0.57,
-                    options: [
-                        { side: 'OVER', barrier: 4, probability: 0.57, edge: 0.07 },
-                        { side: 'OVER', barrier: 5, probability: 0.47, edge: 0.07 },
-                        { side: 'UNDER', barrier: 6, probability: 0.63, edge: 0.03 },
-                        { side: 'UNDER', barrier: 5, probability: 0.51, edge: 0.01 },
-                    ],
-                    watchdogStatus: 'holding',
-                    watchdogWinPct: 0.62,
-                    resultAvailable: true,
-                }]}
             />,
         );
 
@@ -49,12 +33,11 @@ describe('Over/Under live signal board', () => {
         expect(within(firstMarket).getByText('OVER 5')).toBeInTheDocument();
         expect(within(firstMarket).getByText('UNDER 6')).toBeInTheDocument();
         expect(within(firstMarket).getByText('UNDER 5')).toBeInTheDocument();
-        expect(within(firstMarket).getByText('57.0% observed')).toBeInTheDocument();
+        expect(within(firstMarket).getAllByText('Trend Strength Index 14 · one line')).toHaveLength(2);
         expect(within(firstMarket).getByText('Reconnecting')).toBeInTheDocument();
-        expect(within(firstMarket).getByText('WAITING FOR LIVE CHECK')).toBeInTheDocument();
-        expect(screen.getByText(/00:02 before the one-minute candle closes/)).toBeInTheDocument();
-        expect(
-            within(firstMarket).getByTestId(`button-review-signal-${symbol.code}`),
-        ).toBeDisabled();
+        expect(within(firstMarket).getAllByText('WAITING FOR INDICATOR CONDITIONS')).toHaveLength(4);
+        expect(screen.getByText(/fresh broker tick at 00:02/)).toBeInTheDocument();
+        expect(within(firstMarket).getByTestId(`data-signal-option-${symbol.code}-over-4`)).toBeInTheDocument();
+        expect(within(firstMarket).getByTestId(`data-signal-option-${symbol.code}-under-5`)).toBeInTheDocument();
     });
 });

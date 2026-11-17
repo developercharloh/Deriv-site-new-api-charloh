@@ -4,8 +4,7 @@ import { useApiBase } from '@/hooks/useApiBase';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     calculateMacdSeries,
-    calculateTsiSeries,
-    calculateTsiSignalSeries,
+    calculateTrendStrengthIndexSeries,
     advanceMatchesPaperSignals,
     evaluateMacdMatchesConditions,
     evaluateMatchesConditions,
@@ -13,11 +12,11 @@ import {
     MATCHES_DIGITS,
     MATCHES_MACD_DIGITS,
     MATCHES_HISTORY_COUNT,
+    MATCHES_TSI_PERIOD,
     type MacdPoint,
     type MatchesPaperSignal,
     MATCHES_TSI_MAX,
     MATCHES_TSI_MIN,
-    MATCHES_TSI_SIGNAL_PERIOD,
     mergeCandle,
     normalizeCandle,
     secondsUntilCandleClose,
@@ -157,15 +156,13 @@ function requestMatchesReplayHistory(): Promise<MatchesReplayMarket[]> {
     });
 }
 
-function MiniCandleTsiChart({ candles, tsiSeries, tsiSignalSeries, label }: {
+function MiniCandleTsiChart({ candles, tsiSeries, label }: {
     candles: Candle[];
     tsiSeries: Array<number | null>;
-    tsiSignalSeries: Array<number | null>;
     label: string;
 }) {
     const visibleCandles = candles.slice(-36);
     const visibleTsi = tsiSeries.slice(-36);
-    const visibleTsiSignal = tsiSignalSeries.slice(-36);
     const width = 320;
     const priceTop = 8;
     const priceBottom = 82;
@@ -185,11 +182,6 @@ function MiniCandleTsiChart({ candles, tsiSeries, tsiSignalSeries, label }: {
         .map((value, index) => value === null ? null : `${(index + 0.5) * step},${tsiY(value)}`)
         .filter((point): point is string => point !== null)
         .join(' ');
-    const signalPoints = visibleTsiSignal
-        .map((value, index) => value === null ? null : `${(index + 0.5) * step},${tsiY(value)}`)
-        .filter((point): point is string => point !== null)
-        .join(' ');
-
     if (!visibleCandles.length) {
         return <div className='match-chart match-chart--empty' aria-label={`${label} chart loading`}>
             Waiting for one-minute candle history…
@@ -197,7 +189,7 @@ function MiniCandleTsiChart({ candles, tsiSeries, tsiSignalSeries, label }: {
     }
 
     return (
-        <svg className='match-chart' viewBox={`0 0 ${width} 162`} role='img' aria-label={`${label} one-minute candlesticks and normalized TSI`}>
+        <svg className='match-chart' viewBox={`0 0 ${width} 162`} role='img' aria-label={`${label} one-minute candlesticks and Trend Strength Index`}>
             <rect x='0' y={bandTop} width={width} height={bandBottom - bandTop} className='match-chart__tsi-band' />
             <line x1='0' x2={width} y1={priceBottom + 5} y2={priceBottom + 5} className='match-chart__divider' />
             <line x1='0' x2={width} y1={bandTop} y2={bandTop} className='match-chart__tsi-guide' />
@@ -221,8 +213,7 @@ function MiniCandleTsiChart({ candles, tsiSeries, tsiSignalSeries, label }: {
                 );
             })}
             {linePoints && <polyline points={linePoints} className='match-chart__tsi-line' />}
-            {signalPoints && <polyline points={signalPoints} className='match-chart__tsi-signal' />}
-            <text x='4' y='97' className='match-chart__label'>TSI / Signal</text>
+            <text x='4' y='97' className='match-chart__label'>Trend Strength Index {MATCHES_TSI_PERIOD}</text>
             <text x={width - 25} y={bandTop - 2} className='match-chart__axis-label'>0.9</text>
             <text x={width - 25} y={bandBottom + 9} className='match-chart__axis-label'>0.8</text>
         </svg>
@@ -398,7 +389,7 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                 if (!candle || tickEpoch === null) return;
                 setFeeds(previous => updateFeed(previous, code, feed => {
                     const candles = mergeCandle(feed.candles, candle);
-                    const tsi = calculateTsiSeries(candles).at(-1) ?? null;
+                    const tsi = calculateTrendStrengthIndexSeries(candles).slice(-1)[0] ?? null;
                     const tsiSamples = tsi === null
                         ? feed.tsiSamples
                         : [...feed.tsiSamples, tsi].slice(-3);
@@ -432,14 +423,13 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
 
     const marketCards = useMemo(() => DERIV_CONTINUOUS_VOLATILITIES.map(symbol => {
         const feed = feeds[symbol.code];
-        const tsiSeries = calculateTsiSeries(feed.candles);
-        const tsiSignalSeries = calculateTsiSignalSeries(feed.candles);
+        const tsiSeries = calculateTrendStrengthIndexSeries(feed.candles);
         const macdSeries = calculateMacdSeries(feed.candles);
         const validMacdPoints = macdSeries.filter((point): point is MacdPoint => point !== null);
-        const macdPoint = validMacdPoints.at(-1) ?? null;
-        const previousMacdPoint = validMacdPoints.at(-2) ?? null;
-        const tsi = tsiSeries.at(-1) ?? null;
-        const lastCandle = feed.candles.at(-1) ?? null;
+        const macdPoint = validMacdPoints[validMacdPoints.length - 1] ?? null;
+        const previousMacdPoint = validMacdPoints[validMacdPoints.length - 2] ?? null;
+        const tsi = tsiSeries[tsiSeries.length - 1] ?? null;
+        const lastCandle = feed.candles[feed.candles.length - 1] ?? null;
         const feedFresh = active && feed.feedStatus === 'live' &&
             feed.lastTickAt !== null && clockNow - feed.lastTickAt <= LIVE_TICK_MAX_AGE_MS;
         const serverNow = feed.serverEpoch !== null && feed.lastTickAt !== null
@@ -470,7 +460,7 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                             feed.candles.length ? 'Waiting for live tick' : 'Loading candles';
 
         return {
-            symbol, feed, tsiSeries, tsiSignalSeries, macdSeries, macdPoint, tsi, lastCandle,
+            symbol, feed, tsiSeries, macdSeries, macdPoint, tsi, lastCandle,
             secondsToClose, tsiConditions, macdConditions, tradeNow, status,
         };
     }), [active, clockNow, feeds, maintenanceActive, strategy]);
@@ -640,7 +630,7 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
 
             <div className='match-board__grid'>
                 {marketCards.map(({
-                    symbol, feed, tsiSeries, tsiSignalSeries, macdSeries, macdPoint, tsi, lastCandle,
+                    symbol, feed, tsiSeries, macdSeries, macdPoint, tsi, lastCandle,
                     secondsToClose, tsiConditions, macdConditions, tradeNow, status,
                 }) => (
                     <article className='match-market' key={symbol.code}>
@@ -670,7 +660,6 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                             <MiniCandleTsiChart
                                 candles={feed.candles}
                                 tsiSeries={tsiSeries}
-                                tsiSignalSeries={tsiSignalSeries}
                                 label={symbol.label}
                             />
                         ) : (
@@ -681,7 +670,7 @@ export function MatchesSignalBoard({ active, onToggle, maintenanceActive, strate
                             {mode === 'tsi' ? (
                                 <>
                                     <span className={tsiConditions.tsiInRange ? 'is-ready' : ''}>
-                                        TSI {tsi === null ? '—' : tsi.toFixed(3)}
+                                        Trend Strength Index {tsi === null ? '—' : tsi.toFixed(3)}
                                     </span>
                                     <span className={tsiConditions.tsiFlat ? 'is-ready' : ''}>{tsiConditions.tsiFlat ? 'Flat' : 'Not flat'}</span>
                                     <span className={tsiConditions.greenCandle ? 'is-ready' : ''}>{tsiConditions.greenCandle ? 'Green candle' : 'Not green'}</span>

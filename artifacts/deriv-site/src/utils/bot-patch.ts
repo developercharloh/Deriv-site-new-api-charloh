@@ -8,6 +8,11 @@ import {
     acquireBlocklyXmlImportGuard,
     BLOCKLY_XML_IMPORT_SETTLE_MS,
 } from '@/external/bot-skeleton/utils/blockly-xml-import-guard';
+import {
+    getOverUnderIndicatorModeConfig,
+    OVER_UNDER_INDICATOR_MODES,
+    type OverUnderIndicatorMode,
+} from './over-under-indicator-strategy';
 
 export interface BotSignal {
     symbol:           string;
@@ -21,6 +26,14 @@ export interface BotSignal {
     recoveryBarrier?:      number;   // Over/Under: AI-picked fallback barrier after a loss
     contractType?:         string;   // e.g. "DIGITOVER", "DIGITUNDER" — for Elite bot (primary)
     recoveryContractType?: string;   // OPPOSITE contract type for recovery (e.g. DIGITUNDER when primary is DIGITOVER)
+}
+
+export interface OverUnderBotSettings {
+    mode: OverUnderIndicatorMode;
+    stake: number;
+    takeProfit: number;
+    stopLoss: number;
+    martingale: number;
 }
 
 export interface BlockPatch {
@@ -310,6 +323,159 @@ export function patchBotXml(
     return doc;
 }
 
+/**
+ * Applies the selected live indicator setup and risk settings to the single
+ * Premium Over/Under Blockly template before loading it in standard DBot.
+ */
+export function configureOverUnderBotXml(
+    xmlText: string,
+    settings: OverUnderBotSettings,
+): Document {
+    if (!OVER_UNDER_INDICATOR_MODES.includes(settings.mode)) {
+        throw new Error('Choose one of the available Over/Under indicator setups.');
+    }
+
+    const positiveSettings: Array<[string, number]> = [
+        ['Stake', settings.stake],
+        ['Take Profit', settings.takeProfit],
+        ['Stop Loss', settings.stopLoss],
+    ];
+    for (const [label, value] of positiveSettings) {
+        if (!Number.isFinite(value) || value <= 0) {
+            throw new Error(`${label} must be greater than zero.`);
+        }
+    }
+    if (!Number.isFinite(settings.martingale) || settings.martingale < 1) {
+        throw new Error('Martingale must be at least 1×.');
+    }
+
+    const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+    if (doc.getElementsByTagName('parsererror').length) {
+        throw new Error('Over/Under bot XML could not be parsed.');
+    }
+
+    const namespace = doc.documentElement.namespaceURI;
+    const create = (tag: string): Element =>
+        namespace ? doc.createElementNS(namespace, tag) : doc.createElement(tag);
+    const block = (type: string, id: string): Element => {
+        const element = create('block');
+        element.setAttribute('type', type);
+        element.setAttribute('id', id);
+        return element;
+    };
+    const field = (name: string, value: string): Element => {
+        const element = create('field');
+        element.setAttribute('name', name);
+        element.textContent = value;
+        return element;
+    };
+    const input = (tag: 'value' | 'statement', name: string, child: Element): Element => {
+        const element = create(tag);
+        element.setAttribute('name', name);
+        element.appendChild(child);
+        return element;
+    };
+    const variable = (id: string, variableId: string, name: string): Element => {
+        const get = block('variables_get', id);
+        get.appendChild(field('VAR', name));
+        get.firstElementChild?.setAttribute('id', variableId);
+        return get;
+    };
+    const number = (id: string, value: string): Element => {
+        const result = block('math_number', id);
+        result.appendChild(field('NUM', value));
+        return result;
+    };
+    const compare = (id: string, left: Element, right: Element): Element => {
+        const result = block('logic_compare', id);
+        result.appendChild(field('OP', 'EQ'));
+        result.append(input('value', 'A', left), input('value', 'B', right));
+        return result;
+    };
+    const purchase = (id: string, contract: 'DIGITOVER' | 'DIGITUNDER'): Element => {
+        const result = block('purchase', id);
+        result.appendChild(field('PURCHASE_LIST', contract));
+        return result;
+    };
+
+    const beforePurchase = Array.from(doc.getElementsByTagName('block'))
+        .find(candidate => candidate.getAttribute('type') === 'before_purchase');
+    const beforeStack = beforePurchase
+        ? Array.from(beforePurchase.children).find(child =>
+            child.localName === 'statement' && child.getAttribute('name') === 'BEFOREPURCHASE_STACK',
+        )
+        : undefined;
+    if (!beforePurchase || !beforeStack) {
+        throw new Error('Over/Under bot XML is missing its purchase conditions root.');
+    }
+
+    const beforeGate = block('controls_if', 'ou_tm_gate');
+    beforeGate.appendChild(input(
+        'value',
+        'IF0',
+        compare('ou_tm_cmp', variable('ou_tm_get', 'ou_tm_id', 'trading mode'), number('ou_tm_one', '1')),
+    ));
+
+    const indicatorGate = block('controls_if', 'ou_indicator_gate');
+    const indicatorSignal = block('over_under_indicator_signal', 'ou_indicator_signal');
+    indicatorSignal.appendChild(field('MODE', settings.mode));
+    indicatorGate.appendChild(input('value', 'IF0', indicatorSignal));
+
+    const directionGate = block('controls_if', 'ou_dir_purchase_check');
+    const mutation = create('mutation');
+    mutation.setAttribute('else', '1');
+    directionGate.appendChild(mutation);
+    const directionText = block('text', 'ou_over_text_cmp');
+    directionText.appendChild(field('TEXT', 'OVER'));
+    directionGate.appendChild(input(
+        'value',
+        'IF0',
+        compare('ou_dir_cmp', variable('ou_dir_get_purchase', 'ou_dir_id', 'Direction'), directionText),
+    ));
+    directionGate.appendChild(input('statement', 'DO0', purchase('ou_purchase_over', 'DIGITOVER')));
+    directionGate.appendChild(input('statement', 'ELSE', purchase('ou_purchase_under', 'DIGITUNDER')));
+    indicatorGate.appendChild(input('statement', 'DO0', directionGate));
+    beforeGate.appendChild(input('statement', 'DO0', indicatorGate));
+
+    while (beforeStack.firstChild) beforeStack.removeChild(beforeStack.firstChild);
+    beforeStack.appendChild(beforeGate);
+
+    const blocks = Array.from(doc.getElementsByTagName('block'));
+    const blockById = (id: string): Element => {
+        const block = blocks.find(candidate => candidate.getAttribute('id') === id);
+        if (!block) throw new Error(`Over/Under bot XML is missing the ${id} setting.`);
+        return block;
+    };
+    const setField = (blockId: string, fieldName: string, value: string | number) => {
+        const block = blockById(blockId);
+        const fields = Array.from(block.getElementsByTagName('field'));
+        const field = fields.find(candidate => candidate.getAttribute('name') === fieldName);
+        if (!field) throw new Error(`Over/Under bot XML is missing ${fieldName} on ${blockId}.`);
+        field.textContent = String(value);
+    };
+
+    const setup = getOverUnderIndicatorModeConfig(settings.mode);
+    setField('ou_indicator_signal', 'MODE', settings.mode);
+    setField('ou_tm_init', 'NUM', 1);
+    setField('ou_dir_text_val', 'TEXT', setup.side);
+    setField('ou_barrier_num', 'NUM', setup.barrier);
+    setField('ou_ep_num', 'NUM', setup.barrier);
+    setField('ou_stake_num', 'NUM', settings.stake);
+    setField('ou_initial_stake_num', 'NUM', settings.stake);
+    setField('ou_tp_num', 'NUM', settings.takeProfit);
+    setField('ou_mart_num', 'NUM', settings.martingale);
+    setField('sl_ou_num', 'NUM', settings.stopLoss);
+
+    const intervalBlocks = blocks.filter(block => block.getAttribute('type') === 'trade_definition_candleinterval');
+    const intervalField = intervalBlocks
+        .flatMap(block => Array.from(block.getElementsByTagName('field')))
+        .find(field => field.getAttribute('name') === 'CANDLEINTERVAL_LIST');
+    if (!intervalField) throw new Error('Over/Under bot XML is missing its one-minute candle setting.');
+    intervalField.textContent = '60';
+
+    return doc;
+}
+
 // ─── Per-bot patch maps ───────────────────────────────────────────────────────
 // Block IDs sourced directly from each bot's INITIALIZATION chain.
 
@@ -532,11 +698,25 @@ export async function fetchAndPatchBot(
           : effectiveCt === 'DIGITOVER'  ? 'DIGITUNDER'
           : undefined);
 
-    const doc = patchBotXml(rawXml, signal.symbol, patches, duration, effectiveCt, effectiveRecCt, signal.symbolLabel);
+    let doc = patchBotXml(rawXml, signal.symbol, patches, duration, effectiveCt, effectiveRecCt, signal.symbolLabel);
     if (botId === 'over-under-secret-weapon') {
-        applyCandleCloseEntryGate(doc, 'secret-weapon');
+        const direction = signal.direction.trim().toUpperCase();
+        const barrier = parseDigitFrom(direction);
+        const mode = direction.startsWith('UNDER')
+            ? barrier === 5 ? 'TSI_UNDER_5' : barrier === 6 ? 'TSI_UNDER_6' : ''
+            : barrier === 4 ? 'MACD_OVER_4' : barrier === 5 ? 'MACD_OVER_5' : '';
+        if (!mode || !OVER_UNDER_INDICATOR_MODES.includes(mode as OverUnderIndicatorMode)) {
+            throw new Error('The Over/Under signal does not match one of the supported indicator setups.');
+        }
+        doc = configureOverUnderBotXml(new XMLSerializer().serializeToString(doc.documentElement), {
+            mode: mode as OverUnderIndicatorMode,
+            stake,
+            takeProfit,
+            stopLoss,
+            martingale,
+        });
     } else if (botId === 'over-destroyer' || botId === 'under-destroyer') {
-        applyCandleCloseEntryGate(doc, 'destroyer');
+        applyCandleCloseEntryGate(doc);
     }
 
     if (doc.querySelector('parsererror')) throw new Error('Bot XML parse error — check the bot file.');
@@ -562,7 +742,7 @@ export function loadPatchedBotIntoWorkspace(xmlText: string, workspace: any): vo
         throw new Error('The selected bot does not contain any Blockly blocks.');
     }
     const rootTypes = new Set(
-        Array.from(dom.children)
+        (Array.from(dom.children) as Element[])
             .filter(element => element.tagName?.toLowerCase() === 'block')
             .map(element => element.getAttribute('type'))
     );

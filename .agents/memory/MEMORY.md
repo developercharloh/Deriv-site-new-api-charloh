@@ -62,6 +62,8 @@
 - [Edging Pro Virtual Hook](edging-pro-virtual-hook.md) — both-leg losses qualify the hook; one paid pair is exactly two contracts, and repeated spot prices are expected.
 - [Edging Pro account-run locking](edging-pro-account-locking.md) — require an account-scoped Web Lock; missing account identity or lock support must block live trading.
 - [Over/Under signal fallback](deriv-over-under-signal-fallback.md) — after removing the AI bot, V1 uses the remaining signal template with standard same-direction recovery.
+- [TradingView TSI semantics](deriv-tsi-semantics.md) — in Matches and Over/Under, TSI means the single-line Trend Strength Index, not the two-line True Strength Index.
+- [Over/Under Builder template sharing](deriv-over-under-builder-sharing.md) — apply Premium indicator configuration only to its loaded XML; preserve the legacy signal scanner template.
 - [Even Odd Strike Eagle Virtual Hook](even-odd-strike-eagle-hook.md) — Switch After controls the per-side virtual-loss gate and the number of real contracts before the Even/Odd side changes.
 - [Even Odd Strike Eagle Builder visibility](deriv-even-odd-strike-eagle-builder.md) — verify the actual template import and mobile reveal; late dropdown hydration can affect required roots and scroll position.
 - [Matches King digit selection](matches-king-digit-selection.md) — keep a digit-count selector with one prediction box per selected Digit Match leg; a match wins only its own leg.

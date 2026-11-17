@@ -2,8 +2,6 @@ export const ONE_MINUTE_CANDLE_SECONDS = 60;
 export const CANDLE_CLOSE_ENTRY_SECONDS = 2;
 export const CANDLE_CLOSE_ENTRY_BLOCK = 'candle_close_entry_window';
 
-export type CandleCloseGateTarget = 'destroyer' | 'secret-weapon';
-
 export function isCandleCloseEntryWindow(
     epoch: unknown,
     intervalSeconds = ONE_MINUTE_CANDLE_SECONDS,
@@ -118,35 +116,10 @@ function setBeforePurchaseWindow(doc: Document): Element {
     return gate;
 }
 
-/**
- * Applies the fixed, broker-tick based entry rule to an AI Signals Over/Under
- * template. The standard Free Bots signal template is left unchanged unless
- * its Premium Secret Weapon caller explicitly opts into this patch.
- */
-export function applyCandleCloseEntryGate(
-    doc: Document,
-    target: CandleCloseGateTarget,
-): Document {
+/** Applies the fixed broker-tick entry rule to a Destroyer template. */
+export function applyCandleCloseEntryGate(doc: Document): Document {
     setOneMinuteCandleInterval(doc);
-    const gate = setBeforePurchaseWindow(doc);
-
-    if (target === 'secret-weapon') {
-        const directionPurchase = doc.querySelector('block[id="ou_dir_purchase_check"]');
-        const doStatement = directChild(gate, 'statement', 'DO0');
-        const elseStatement = directChild(gate, 'statement', 'ELSE');
-        if (!directionPurchase || !doStatement || !elseStatement) {
-            throw new Error('The Secret Weapon template is missing its direction purchase blocks.');
-        }
-
-        // Keep the signal-selected Over/Under direction, but remove the old
-        // first-entry digit scan so every purchase waits for the same time gate.
-        if (directionPurchase.parentNode) directionPurchase.parentNode.removeChild(directionPurchase);
-        clearChildren(doStatement);
-        doStatement.appendChild(directionPurchase);
-        clearChildren(elseStatement);
-    } else {
-        replaceEntryDigitLogValues(doc);
-    }
-
+    setBeforePurchaseWindow(doc);
+    replaceEntryDigitLogValues(doc);
     return doc;
 }

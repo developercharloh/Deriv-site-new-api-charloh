@@ -14,7 +14,7 @@ import { adxSnapshot, macdSnapshot, rsiSnapshot } from '@/external/indicators';
 import { adaptiveMomentumLog } from '../utils/broadcast';
 import {
     evaluateOverUnderIndicatorStatusesAtEpoch,
-    getCurrentOverUnderTsi,
+    getCurrentOverUnderTrendStrengthIndex,
     OVER_UNDER_INDICATOR_MODES,
 } from '@/utils/over-under-indicator-strategy';
 
@@ -1748,7 +1748,7 @@ export default Engine =>
                 const expectedCandleTime = Math.floor(brokerEpoch / 60) * 60;
                 if (!currentCandle || currentCandle.time !== expectedCandleTime) return false;
 
-                const currentTsi = getCurrentOverUnderTsi(candles);
+                const currentTsi = getCurrentOverUnderTrendStrengthIndex(candles);
                 if (currentTsi !== null && this.overUnderSignalLastTick !== tick) {
                     if (
                         this.overUnderSignalLastEpoch !== null &&

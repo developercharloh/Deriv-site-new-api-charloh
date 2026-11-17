@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
@@ -10,21 +10,27 @@ import {
 } from '@/external/bot-skeleton/utils/blockly-xml-import-guard';
 import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
 import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
-import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
-import { parseXmlV2Config } from '@/utils/xml-v2-parser';
+import {
+    configureOverUnderBotXml,
+    parseDigitFrom,
+    fetchAndPatchBot,
+    loadPatchedBotIntoWorkspace,
+    type BotSignal,
+    type OverUnderBotSettings,
+} from '@/utils/bot-patch';
+import {
+    OVER_UNDER_INDICATOR_MODES,
+    type OverUnderIndicatorMode,
+} from '@/utils/over-under-indicator-strategy';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig, FreeBotSection } from './types';
-import { isSignalFresh } from './signal-freshness';
 import { isBotBuilderWorkspaceReady } from './workspace-readiness';
 import FreeBotCategoryTabs from './FreeBotCategoryTabs';
 import './free-bots.scss';
 
-const V2_CONFIG_KEY = 'free_bots_v2_config';
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type BotStatus = 'idle' | 'loading' | 'loaded' | 'error';
-type EngineMode = 'v1' | 'v2';
 type LiveSignal = BotSignal;
 
 interface SignalSettings {
@@ -124,11 +130,11 @@ const BOTS: BotConfig[] = [
         name: 'Over Under Secret Weapon',
         emoji: '🎯',
         description:
-            'Uses the latest live-confirmed Over/Under signal and waits for the broker tick at 00:02 before the one-minute candle closes. Set stake, take profit, stop loss, and Martingale before each run.',
-        market: 'Signal-driven (any Volatility Index)',
-        strategy: 'Live Over / Under Signal · 1-Minute Candle-Close Entry · Martingale · Risk Stops',
+            'Uses live one-minute MACD or Trend Strength Index signals for Over 4/5 or Under 6/5. Choose one setup and risk settings, then load it stopped into DBot Builder.',
+        market: 'Volatility 75 (1s) Index (1HZ75V)',
+        strategy: 'MACD Over 4/5 · Trend Strength Index 14 Under 6/5 · 00:02 Entry',
         params: [
-            { label: 'Signal', value: 'Latest live-confirmed Over / Under setup' },
+            { label: 'Setups', value: 'MACD Over 4/5 · Trend Strength Index 14 Under 6/5' },
             { label: 'Entry', value: 'Broker tick at 00:02 before candle close' },
             { label: 'Stake', value: 'Set before each run' },
             { label: 'Take Profit', value: 'Set before each run' },
@@ -137,7 +143,6 @@ const BOTS: BotConfig[] = [
         ],
         xmlPath: '/bots/OverUnder_Signal_Bot.xml',
         gradient: 'linear-gradient(135deg, #24103f 0%, #642876 52%, #d14778 100%)',
-        signalKey: 'fb_signal_over_under',
     },
     {
         id: 'matches-signal',
@@ -610,86 +615,16 @@ const CARD_ACCENT: Record<string, string> = {
     'even-odd-strike-eagle': '#15955e',
 };
 
-// ─── Engine selector dropdown ─────────────────────────────────────────────────
-
-const ENGINE_KEY = 'over_under_secret_weapon_engine_mode';
-
-const EngineSelector: React.FC<{
-    mode:    EngineMode;
-    onChange: (m: EngineMode) => void;
-}> = ({ mode, onChange }) => {
-    const [open, setOpen] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handler = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-        };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, []);
-
-    const labels: Record<EngineMode, string> = {
-        v1: 'Classic V1',
-        v2: 'Advanced V2',
-    };
-
-    return (
-        <div className='fb-engine-selector' ref={ref} data-testid='group-over-under-engine-selector'>
-            <button
-                type='button'
-                className={`fb-engine-selector__btn fb-engine-selector__btn--${mode}`}
-                data-testid='button-over-under-engine-selector'
-                aria-label={`Select engine version, current ${labels[mode]}`}
-                aria-haspopup='true'
-                aria-expanded={open}
-                aria-controls='over-under-engine-options'
-                onClick={() => setOpen(p => !p)}
-            >
-                <span>{labels[mode]}</span>
-                <span className='fb-engine-selector__arrow' aria-hidden='true'>{open ? '▲' : '▼'}</span>
-            </button>
-
-            {open && (
-                <div className='fb-engine-selector__dropdown' id='over-under-engine-options' role='group' aria-label='Over Under Secret Weapon engine options'>
-                    <button
-                        type='button'
-                        className={`fb-engine-selector__option ${mode === 'v1' ? 'fb-engine-selector__option--active' : ''}`}
-                        data-testid='button-over-under-engine-v1'
-                        aria-pressed={mode === 'v1'}
-                        onClick={() => { onChange('v1'); setOpen(false); }}
-                    >
-                        <div className='fb-engine-selector__opt-title'>Classic V1 — DBot</div>
-                        <div className='fb-engine-selector__opt-desc'>Loads bot into Deriv's standard DBot engine</div>
-                    </button>
-                    <button
-                        type='button'
-                        className={`fb-engine-selector__option ${mode === 'v2' ? 'fb-engine-selector__option--active' : ''}`}
-                        data-testid='button-over-under-engine-v2'
-                        aria-pressed={mode === 'v2'}
-                        onClick={() => { onChange('v2'); setOpen(false); }}
-                    >
-                        <div className='fb-engine-selector__opt-title'>Advanced V2 — Direct</div>
-                        <div className='fb-engine-selector__opt-desc'>Connects directly to Deriv API — zero-overhead execution</div>
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-};
-
 // ─── Signal Trade Modal ───────────────────────────────────────────────────────
 
 const SignalTradeModal: React.FC<{
     botId:      string;
     xmlPath:    string;
     signal:     LiveSignal;
-    engineMode: EngineMode;
     onClose:    () => void;
-}> = ({ botId, xmlPath, signal, engineMode, onClose }) => {
+}> = ({ botId, xmlPath, signal, onClose }) => {
     const store      = useStore();
     const storageKey = `fb_cfg_${botId}`;
-    const isSecretWeapon = botId === 'over-under-secret-weapon';
 
     const [cfg, setCfg] = useState<SignalSettings>(() => {
         try {
@@ -707,9 +642,6 @@ const SignalTradeModal: React.FC<{
         setState('launching');
         setErrMsg('');
         try {
-            if (isSecretWeapon && !isSignalFresh(signal)) {
-                throw new Error('This Over/Under signal has expired. Wait for a fresh live-confirmed setup, then try again.');
-            }
             const stake      = parseFloat(cfg.stake)      || 0.5;
             const takeProfit = parseFloat(cfg.takeProfit) || 10;
             const stopLoss   = parseFloat(cfg.stopLoss)   || 30;
@@ -717,23 +649,9 @@ const SignalTradeModal: React.FC<{
 
             // Fetch and patch the bot XML with the signal settings
             const doc    = await fetchAndPatchBot(botId, signal, stake, takeProfit, stopLoss, martingale);
-            if (isSecretWeapon && !isSignalFresh(signal)) {
-                throw new Error('This Over/Under signal expired while loading. Wait for a fresh live-confirmed setup, then try again.');
-            }
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
 
-            if (engineMode === 'v2') {
-                // Fix #1: V2 path — parse config, persist, fire autostart. Never touch Blockly.
-                const v2Cfg    = parseXmlV2Config(xmlStr);
-                const v2CfgStr = JSON.stringify(v2Cfg);
-                localStorage.setItem(V2_CONFIG_KEY, v2CfgStr);
-                window.dispatchEvent(new StorageEvent('storage', { key: V2_CONFIG_KEY, newValue: v2CfgStr }));
-                onClose();
-                setTimeout(() => window.dispatchEvent(new CustomEvent('deriv-v2-autostart')), 400);
-                return;
-            }
-
-            // V1 path — load into Blockly workspace and auto-run
+            // Generic signal bots retain their existing Builder-and-run flow.
             const Blockly = (window as any).Blockly;
             if (!Blockly?.derivWorkspace) { setState('no-ws'); return; }
 
@@ -770,23 +688,10 @@ const SignalTradeModal: React.FC<{
                     <button className='fb-modal__close' onClick={onClose}>✕</button>
                 </div>
 
-                {engineMode === 'v2' && (
-                    <div className='fb-modal__v2-badge'>⚡ V2 Engine — runs directly, results in V2 Panel</div>
-                )}
-
                 <div className='fb-modal__wire-summary'>
                     <span className='fb-modal__wire-item'>📡 Market: <strong>{injectedSymbol}</strong></span>
-                    {isSecretWeapon ? (
-                        <>
-                            <span className='fb-modal__wire-item'>⏱ Entry: <strong>00:02 before 1-minute candle close</strong></span>
-                            <span className='fb-modal__wire-item'>Uses the broker tick timestamp; it does not wait for an entry digit.</span>
-                        </>
-                    ) : (
-                        <>
-                            <span className='fb-modal__wire-item'>🎯 Entry: <strong>Digit {injectedDigit}</strong></span>
-                            <span className='fb-modal__wire-item'>⬇️ Will scan ticks until entry digit appears, then trade</span>
-                        </>
-                    )}
+                    <span className='fb-modal__wire-item'>🎯 Entry: <strong>Digit {injectedDigit}</strong></span>
+                    <span className='fb-modal__wire-item'>⬇️ Will scan ticks until entry digit appears, then trade</span>
                 </div>
 
                 <div className='fb-modal__fields'>
@@ -823,11 +728,133 @@ const SignalTradeModal: React.FC<{
                     <button className='fb-modal__btn fb-modal__btn--run' onClick={handleRun} disabled={state === 'launching'}>
                         {state === 'launching'
                             ? '⏳ Launching…'
-                            : isSecretWeapon
-                                ? '🚀 Save & Run'
-                                : engineMode === 'v2'
-                                    ? '⚡ Launch V2'
-                                    : '🚀 Load Signal & Run'}
+                            : '🚀 Load Signal & Run'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+type OverUnderConfigValues = SignalSettings & { mode: OverUnderIndicatorMode };
+
+const DEFAULT_OVER_UNDER_CONFIG: OverUnderConfigValues = {
+    mode: 'MACD_OVER_4',
+    stake: '0.35',
+    takeProfit: '15',
+    stopLoss: '50',
+    martingale: '2',
+};
+
+const OVER_UNDER_SETUP_LABELS: Record<OverUnderIndicatorMode, string> = {
+    MACD_OVER_4: 'MACD 12/26/9 · Over 4',
+    MACD_OVER_5: 'MACD 12/26/9 · Over 5',
+    TSI_UNDER_6: 'Trend Strength Index 14 · Under 6',
+    TSI_UNDER_5: 'Trend Strength Index 14 · Under 5',
+};
+
+const OverUnderBotConfigModal: React.FC<{
+    loading: boolean;
+    error?: string;
+    onLoad: (settings: OverUnderBotSettings) => Promise<boolean>;
+    onClose: () => void;
+}> = ({ loading, error, onLoad, onClose }) => {
+    const storageKey = 'fb_cfg_over-under-secret-weapon';
+    const [config, setConfig] = useState<OverUnderConfigValues>(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            return {
+                ...DEFAULT_OVER_UNDER_CONFIG,
+                ...(saved && typeof saved === 'object' ? saved : {}),
+                mode: OVER_UNDER_INDICATOR_MODES.includes(saved?.mode)
+                    ? saved.mode
+                    : DEFAULT_OVER_UNDER_CONFIG.mode,
+            };
+        } catch {
+            return DEFAULT_OVER_UNDER_CONFIG;
+        }
+    });
+    const [submitting, setSubmitting] = useState(false);
+    const [localError, setLocalError] = useState('');
+
+    const handleLoad = async () => {
+        setSubmitting(true);
+        setLocalError('');
+        const settings: OverUnderBotSettings = {
+            mode: config.mode,
+            stake: Number(config.stake),
+            takeProfit: Number(config.takeProfit),
+            stopLoss: Number(config.stopLoss),
+            martingale: Number(config.martingale),
+        };
+        const loaded = await onLoad(settings);
+        setSubmitting(false);
+        if (loaded) {
+            try { localStorage.setItem(storageKey, JSON.stringify(config)); } catch { /* optional preference */ }
+            onClose();
+        } else {
+            setLocalError('The bot could not be loaded. Check the message on the bot card and retry.');
+        }
+    };
+
+    return (
+        <div className='fb-modal-overlay' onClick={() => { if (!loading && !submitting) onClose(); }}>
+            <div className='fb-modal fb-modal--over-under' role='dialog' aria-modal='true' aria-labelledby='ou-config-title' onClick={event => event.stopPropagation()}>
+                <div className='fb-modal__header'>
+                    <div className='fb-modal__signal-info'>
+                        <strong id='ou-config-title' className='fb-modal__direction'>Configure Over / Under</strong>
+                        <span className='fb-modal__sym'>Volatility 75 (1s) Index</span>
+                        <span className='fb-modal__entry'>Live one-minute indicators · entry at 00:02 before candle close</span>
+                    </div>
+                    <button type='button' className='fb-modal__close' onClick={onClose} disabled={loading || submitting} aria-label='Close configuration'>✕</button>
+                </div>
+
+                <p className='fb-modal__ou-note'>
+                    Trend Strength Index is the single-line 14-period indicator. The selected setup is loaded stopped;
+                    use Run and Stop in DBot Builder when you are ready.
+                </p>
+
+                <div className='fb-modal__fields'>
+                    <div className='fb-modal__field fb-modal__field--wide'>
+                        <label htmlFor='ou-indicator-mode'>Indicator setup</label>
+                        <select
+                            id='ou-indicator-mode'
+                            value={config.mode}
+                            onChange={event => setConfig(previous => ({ ...previous, mode: event.target.value as OverUnderIndicatorMode }))}
+                            disabled={loading || submitting}
+                        >
+                            {OVER_UNDER_INDICATOR_MODES.map(mode => (
+                                <option key={mode} value={mode}>{OVER_UNDER_SETUP_LABELS[mode]}</option>
+                            ))}
+                        </select>
+                    </div>
+                    {([
+                        { label: 'Stake ($)', key: 'stake' as const, step: '0.01', min: '0.01' },
+                        { label: 'Take Profit ($)', key: 'takeProfit' as const, step: '0.5', min: '0.01' },
+                        { label: 'Stop Loss ($)', key: 'stopLoss' as const, step: '0.5', min: '0.01' },
+                        { label: 'Martingale (×)', key: 'martingale' as const, step: '0.1', min: '1' },
+                    ]).map(field => (
+                        <div key={field.key} className='fb-modal__field'>
+                            <label htmlFor={`ou-config-${field.key}`}>{field.label}</label>
+                            <input
+                                id={`ou-config-${field.key}`}
+                                type='number'
+                                min={field.min}
+                                step={field.step}
+                                value={config[field.key]}
+                                onChange={event => setConfig(previous => ({ ...previous, [field.key]: event.target.value }))}
+                                disabled={loading || submitting}
+                            />
+                        </div>
+                    ))}
+                </div>
+
+                {(error || localError) && <div className='fb-modal__error' role='alert'>{error || localError}</div>}
+
+                <div className='fb-modal__footer'>
+                    <button type='button' className='fb-modal__btn fb-modal__btn--cancel' onClick={onClose} disabled={loading || submitting}>Cancel</button>
+                    <button type='button' className='fb-modal__btn fb-modal__btn--run' onClick={handleLoad} disabled={loading || submitting}>
+                        {loading || submitting ? 'Loading into Builder…' : 'Load stopped bot into Builder'}
                     </button>
                 </div>
             </div>
@@ -1045,42 +1072,31 @@ async function postLoadReapplyFields(
 
 const BotCard: React.FC<{
     bot: BotConfig;
-    engineMode: EngineMode;
     ordinal: number;
-    onEngineModeChange?: (mode: EngineMode) => void;
 }> = observer(
-    ({ bot, engineMode, ordinal, onEngineModeChange }) => {
+    ({ bot, ordinal }) => {
     const store = useStore();
     const [status,     setStatus]     = useState<BotStatus>('idle');
     const [errorMsg,   setErrorMsg]   = useState('');
     const [showSignal, setShowSignal] = useState(false);
+    const [showOverUnderConfig, setShowOverUnderConfig] = useState(false);
 
     const signal = useSignal(bot.signalKey);
     const isSecretWeaponBot = bot.id === 'over-under-secret-weapon';
-    const signalCanRun = Boolean(
-        signal && (!isSecretWeaponBot || isSignalFresh(signal)),
-    );
-    const isEdgingProBot = bot.id === 'edging-pro-engine';
-    const isMatchesKingBot = bot.id === 'matches-king';
-    const isNativeRunnerBot = isEdgingProBot || isMatchesKingBot;
+    const signalCanRun = Boolean(signal);
 
-    const loadBot = async () => {
-        if (!store) return;
+    const loadBot = async (overUnderSettings?: OverUnderBotSettings): Promise<boolean> => {
+        if (!store) return false;
         if (!bot.xmlPath) {
             setStatus('error');
             setErrorMsg('This bot runs in its own engine and does not have a Blockly template.');
-            return;
+            return false;
         }
-        if (isSecretWeaponBot) {
-            if (!signal || !isSignalFresh(signal)) {
-                setStatus('error');
-                setErrorMsg('Waiting for a fresh live-confirmed Over/Under signal. Open AI Signals and keep the Over/Under scanner running.');
-                return;
-            }
+        if (isSecretWeaponBot && !overUnderSettings) {
             setStatus('idle');
             setErrorMsg('');
-            setShowSignal(true);
-            return;
+            setShowOverUnderConfig(true);
+            return false;
         }
         const { dashboard } = store;
         setStatus('loading');
@@ -1091,24 +1107,14 @@ const BotCard: React.FC<{
             // after the bot source has been updated.
             const res = await fetch(bot.xmlPath, { cache: 'no-store' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const xmlText = await res.text();
+            let xmlText = await res.text();
             if (!xmlText.trim()) {
                 throw new Error('This bot file is empty and cannot be loaded.');
             }
-            if (engineMode === 'v2' && !isNativeRunnerBot) {
-                // Fix #2 & #5: V2 path — parse config, persist, fire autostart.
-                // Do NOT load into Blockly — that arms DBot's engine and causes V1 to fire.
-                const v2Cfg    = parseXmlV2Config(xmlText);
-                const v2CfgStr = JSON.stringify(v2Cfg);
-                localStorage.setItem(V2_CONFIG_KEY, v2CfgStr);
-                window.dispatchEvent(new StorageEvent('storage', { key: V2_CONFIG_KEY, newValue: v2CfgStr }));
-                setWorkspaceBotTemplateIdentity((window as any).Blockly?.derivWorkspace, bot.id);
-                store.journal.setActiveBotTemplateId(bot.id);
-                store.save_modal.updateBotName(bot.name);
-                setStatus('loaded');
-                openBotBuilderTab(dashboard);
-                setTimeout(() => window.dispatchEvent(new CustomEvent('deriv-v2-autostart')), 400);
-                return;
+            if (isSecretWeaponBot && overUnderSettings) {
+                xmlText = new XMLSerializer().serializeToString(
+                    configureOverUnderBotXml(xmlText, overUnderSettings).documentElement,
+                );
             }
 
             // V1 path — navigate to Bot Builder FIRST so the workspace mounts and
@@ -1274,16 +1280,16 @@ const BotCard: React.FC<{
                     console.error('[Free Bots] Could not finish restoring bot dropdowns.', error);
                     scheduleWorkspaceReveal(Blockly.derivWorkspace);
                 });
+            return true;
         } catch (err: any) {
             setStatus('error');
             const message = err?.message || 'Failed to load bot.';
             setErrorMsg(message);
             console.error(`[Free Bots] Could not load ${bot.name}.`, err);
             globalObserver.emit('ui.log.error', `Could not load ${bot.name}: ${message}`);
+            return false;
         }
     };
-
-    const isV2Mode = engineMode === 'v2' && !isNativeRunnerBot;
 
     return (
         <>
@@ -1308,14 +1314,7 @@ const BotCard: React.FC<{
                         Bot #{ordinal} — {bot.name}
                     </h2>
 
-                    {isSecretWeaponBot && onEngineModeChange && (
-                        <div className='free-bots__secret-engine'>
-                            <span>Run this bot with</span>
-                            <EngineSelector mode={engineMode} onChange={onEngineModeChange} />
-                        </div>
-                    )}
-
-                    {signal && signalCanRun && (
+                    {!isSecretWeaponBot && signal && signalCanRun && (
                         <SignalBadge signal={signal} onClick={() => setShowSignal(true)} />
                     )}
 
@@ -1324,38 +1323,20 @@ const BotCard: React.FC<{
                     )}
 
                     <div className='free-bots__card-actions'>
-                        {/* V2 mode: same Load-into-builder flow, also saves parsed config */}
-                        {isV2Mode && (
-                            <button
-                                className={`free-bots__card-btn free-bots__card-btn--v2 ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
-                                onClick={loadBot}
-                                disabled={status === 'loading'}
-                            >
-                                {status === 'loading'
-                                    ? '⏳ Loading…'
-                                    : status === 'loaded'
-                                        ? '✅ Loaded — Run V2 in Builder'
-                                        : isSecretWeaponBot ? '⚡ Configure V2 signal' : '⚡ V2 Load'}
-                            </button>
-                        )}
+                        <button
+                            className={`free-bots__card-btn free-bots__card-btn--load ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
+                            onClick={() => { void loadBot(); }}
+                            disabled={status === 'loading'}
+                        >
+                            <span aria-hidden='true'>⇩</span>
+                            {status === 'loading'
+                                ? 'Loading…'
+                                : status === 'loaded'
+                                    ? 'Loaded in Builder'
+                                    : isSecretWeaponBot ? 'Configure & Load' : 'Load bot'}
+                        </button>
 
-                        {/* V1 mode: normal Load Bot button */}
-                        {!isV2Mode && (
-                            <button
-                                className={`free-bots__card-btn free-bots__card-btn--load ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
-                                onClick={loadBot}
-                                disabled={status === 'loading'}
-                            >
-                                <span aria-hidden='true'>⇩</span>
-                                {status === 'loading'
-                                    ? 'Loading…'
-                                    : status === 'loaded'
-                                        ? 'Loaded'
-                                        : isSecretWeaponBot ? 'Use live signal' : 'Load bot'}
-                            </button>
-                        )}
-
-                        {signal && signalCanRun && engineMode !== 'v2' && (
+                        {!isSecretWeaponBot && signal && signalCanRun && (
                             <button
                                 className='free-bots__card-btn free-bots__card-btn--signal'
                                 onClick={() => setShowSignal(true)}
@@ -1367,13 +1348,20 @@ const BotCard: React.FC<{
                 </div>
             </div>
 
-            {/* Signal modal — V1 and V2 aware */}
+            {showOverUnderConfig && (
+                <OverUnderBotConfigModal
+                    loading={status === 'loading'}
+                    error={status === 'error' ? errorMsg : ''}
+                    onLoad={loadBot}
+                    onClose={() => setShowOverUnderConfig(false)}
+                />
+            )}
+
             {showSignal && signal && bot.xmlPath && (
                 <SignalTradeModal
                     botId={bot.id}
                     xmlPath={bot.xmlPath}
                     signal={signal}
-                    engineMode={engineMode}
                     onClose={() => setShowSignal(false)}
                 />
             )}
@@ -1385,11 +1373,7 @@ const BotCard: React.FC<{
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const FreeBots = observer(() => {
-    const [engineMode, setEngineMode] = useState<EngineMode>(() =>
-        localStorage.getItem(ENGINE_KEY) === 'v2' ? 'v2' : 'v1',
-    );
     const [activeSectionId, setActiveSectionId] = useState<FreeBotSection>('smart-contract');
-    useEffect(() => { localStorage.setItem(ENGINE_KEY, engineMode); }, [engineMode]);
     const sections = FREE_BOT_SECTIONS.map(section => ({
         ...section,
         bots: BOTS.filter(bot => bot.section === section.id),
@@ -1420,8 +1404,6 @@ const FreeBots = observer(() => {
                             <BotCard
                                 key={bot.id}
                                 bot={bot}
-                                engineMode={bot.id === 'over-under-secret-weapon' ? engineMode : 'v1'}
-                                onEngineModeChange={bot.id === 'over-under-secret-weapon' ? setEngineMode : undefined}
                                 ordinal={BOT_ORDINALS.get(bot.id) ?? 0}
                             />
                         ))}

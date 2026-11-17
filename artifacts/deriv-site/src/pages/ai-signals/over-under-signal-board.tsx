@@ -3,15 +3,14 @@ import { DERIV_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatili
 import { useApiBase } from '@/hooks/useApiBase';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
-    calculateTsiSeries,
+    calculateTrendStrengthIndexSeries,
     formatCandleCountdown,
     MATCHES_CANDLE_SECONDS,
     MATCHES_HISTORY_COUNT,
     MATCHES_MACD_SIGNAL_PERIOD,
     MATCHES_MACD_SLOW_PERIOD,
     MATCHES_MACD_FAST_PERIOD,
-    MATCHES_TSI_LONG_PERIOD,
-    MATCHES_TSI_SHORT_PERIOD,
+    MATCHES_TSI_PERIOD,
     mergeCandle,
     normalizeCandle,
     secondsUntilCandleClose,
@@ -167,7 +166,7 @@ export function OverUnderSignalBoard({
                 if (!candle || !Number.isFinite(epoch)) return;
                 setFeeds(previous => updateFeed(previous, code, feed => {
                     const candles = mergeCandle(feed.candles, candle);
-                    const currentTsi = calculateTsiSeries(candles).at(-1) ?? null;
+                    const currentTsi = calculateTrendStrengthIndexSeries(candles).slice(-1)[0] ?? null;
                     return {
                         ...feed,
                         candles,
@@ -238,7 +237,7 @@ export function OverUnderSignalBoard({
             <div className='ou-board__heading'>
                 <div>
                     <h2>Over / Under Signals</h2>
-                    <p>MACD for Over 4/5 · TSI for Under 6/5</p>
+                    <p>MACD for Over 4/5 · Trend Strength Index 14 for Under 6/5</p>
                 </div>
                 <div className='ou-board__heading-actions'>
                     <span className='ou-board__interval'>1-MINUTE CANDLES</span>
@@ -259,7 +258,7 @@ export function OverUnderSignalBoard({
             </div>
             <p className='ou-board__rule'>
                 Signals use the same indicator filters as Matches. Over 4/5 require MACD 12/26/9 descending from above
-                with a contracting positive histogram; Under 6/5 require TSI 0.8–0.9, three flat updates, and a green
+                with a contracting positive histogram; Under 6/5 require Trend Strength Index 14 at 0.8–0.9, three flat updates, and a green
                 candle. Entry requires a fresh broker tick at 00:02 before close. This board does not place trades.
             </p>
             <div className='ou-board__grid'>
@@ -270,8 +269,6 @@ export function OverUnderSignalBoard({
                                 feed.feedStatus === 'error' ? 'Unavailable' :
                                     feed.feedStatus === 'reconnecting' ? 'Reconnecting' :
                                         feed.candles.length ? 'Waiting for live tick' : 'Loading candles';
-                    const selected = signal?.direction ?? '';
-
                     return (
                         <article className='ou-board__market' key={symbol.code} data-testid={`card-market-${symbol.code}`}>
                             <header className='ou-board__market-header'>
@@ -308,12 +305,12 @@ export function OverUnderSignalBoard({
                                             data-testid={`data-signal-option-${symbol.code}-${setup.side.toLowerCase()}-${setup.barrier}`}
                                         >
                                             <strong>{label}</strong>
-                                            <span>{setup.indicator} {setup.indicator === 'MACD'
+                                            <span>{setup.indicator === 'MACD'
                                                 ? `${MATCHES_MACD_FAST_PERIOD}/${MATCHES_MACD_SLOW_PERIOD}/${MATCHES_MACD_SIGNAL_PERIOD}`
-                                                : `${MATCHES_TSI_LONG_PERIOD}/${MATCHES_TSI_SHORT_PERIOD}`}</span>
+                                                : `Trend Strength Index ${MATCHES_TSI_PERIOD} · one line`}</span>
                                             <small>{setup.indicatorValue === null
                                                 ? 'Warming up indicator history'
-                                                : `${setup.indicator} ${setup.indicatorValue.toFixed(setup.indicator === 'MACD' ? 5 : 3)}`}</small>
+                                                : `${setup.indicator === 'MACD' ? 'MACD' : 'Trend Strength Index'} ${setup.indicatorValue.toFixed(setup.indicator === 'MACD' ? 5 : 3)}`}</small>
                                             <div className='ou-board__conditions'>
                                                 {setup.conditions.map(condition => (
                                                     <span
