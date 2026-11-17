@@ -14,6 +14,7 @@ import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type Bot
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig, FreeBotSection } from './types';
+import { applyOverUnderPreset } from './over-under-preset';
 import { isBotBuilderWorkspaceReady } from './workspace-readiness';
 import FreeBotCategoryTabs from './FreeBotCategoryTabs';
 import './free-bots.scss';
@@ -198,6 +199,90 @@ const BOTS: BotConfig[] = [
         xmlPath: '/bots/OverUnder_Signal_Bot.xml',
         gradient: 'linear-gradient(135deg, #0f1f3d 0%, #1a3a6b 50%, #6366f1 100%)',
         signalKey: 'fb_signal_over_under',
+    },
+    {
+        id: 'matches-04-under-6',
+        section: 'smart-contract',
+        name: 'Under 6 · Matches 0–4',
+        emoji: '⬇️',
+        description:
+            'Standalone Digit Under 6 setup aligned with the Matches 0–4 range. This bot runs independently and does not change or follow the Matches scanner.',
+        market: 'Volatility 75 (1s) Index (1HZ75V)',
+        strategy: 'Digit Under · Barrier 6 · Standalone',
+        params: [
+            { label: 'Contract', value: 'Under 6 only' },
+            { label: 'Entry Digit', value: '6' },
+            { label: 'Stake', value: '$0.50' },
+            { label: 'Take Profit', value: '$10' },
+            { label: 'Stop Loss', value: '$50' },
+        ],
+        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
+        overUnderPreset: { direction: 'UNDER', barrier: 6 },
+        gradient: 'linear-gradient(135deg, #112b45 0%, #15607b 55%, #22a6a1 100%)',
+        category: 'UNDER 6 · MATCHES 0–4',
+    },
+    {
+        id: 'matches-04-under-5',
+        section: 'smart-contract',
+        name: 'Under 5 · Matches 0–4',
+        emoji: '⬇️',
+        description:
+            'Standalone Digit Under 5 setup aligned with the Matches 0–4 range. This bot runs independently and does not change or follow the Matches scanner.',
+        market: 'Volatility 75 (1s) Index (1HZ75V)',
+        strategy: 'Digit Under · Barrier 5 · Standalone',
+        params: [
+            { label: 'Contract', value: 'Under 5 only' },
+            { label: 'Entry Digit', value: '5' },
+            { label: 'Stake', value: '$0.50' },
+            { label: 'Take Profit', value: '$10' },
+            { label: 'Stop Loss', value: '$50' },
+        ],
+        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
+        overUnderPreset: { direction: 'UNDER', barrier: 5 },
+        gradient: 'linear-gradient(135deg, #112b45 0%, #15607b 55%, #22a6a1 100%)',
+        category: 'UNDER 5 · MATCHES 0–4',
+    },
+    {
+        id: 'matches-69-over-4',
+        section: 'smart-contract',
+        name: 'Over 4 · Matches 6–9',
+        emoji: '⬆️',
+        description:
+            'Standalone Digit Over 4 setup aligned with the Matches 6–9 range. This bot runs independently and does not change or follow the Matches scanner.',
+        market: 'Volatility 75 (1s) Index (1HZ75V)',
+        strategy: 'Digit Over · Barrier 4 · Standalone',
+        params: [
+            { label: 'Contract', value: 'Over 4 only' },
+            { label: 'Entry Digit', value: '4' },
+            { label: 'Stake', value: '$0.50' },
+            { label: 'Take Profit', value: '$10' },
+            { label: 'Stop Loss', value: '$50' },
+        ],
+        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
+        overUnderPreset: { direction: 'OVER', barrier: 4 },
+        gradient: 'linear-gradient(135deg, #112b45 0%, #15607b 55%, #22a6a1 100%)',
+        category: 'OVER 4 · MATCHES 6–9',
+    },
+    {
+        id: 'matches-69-over-5',
+        section: 'smart-contract',
+        name: 'Over 5 · Matches 6–9',
+        emoji: '⬆️',
+        description:
+            'Standalone Digit Over 5 setup aligned with the Matches 6–9 range. This bot runs independently and does not change or follow the Matches scanner.',
+        market: 'Volatility 75 (1s) Index (1HZ75V)',
+        strategy: 'Digit Over · Barrier 5 · Standalone',
+        params: [
+            { label: 'Contract', value: 'Over 5 only' },
+            { label: 'Entry Digit', value: '5' },
+            { label: 'Stake', value: '$0.50' },
+            { label: 'Take Profit', value: '$10' },
+            { label: 'Stop Loss', value: '$50' },
+        ],
+        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
+        overUnderPreset: { direction: 'OVER', barrier: 5 },
+        gradient: 'linear-gradient(135deg, #112b45 0%, #15607b 55%, #22a6a1 100%)',
+        category: 'OVER 5 · MATCHES 6–9',
     },
     {
         id: 'over2-under7-reversal',
@@ -1017,11 +1102,14 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             if (!xmlText.trim()) {
                 throw new Error('This bot file is empty and cannot be loaded.');
             }
+            const configuredXmlText = bot.overUnderPreset
+                ? applyOverUnderPreset(xmlText, bot.overUnderPreset)
+                : xmlText;
 
             if (engineMode === 'v2' && !isNativeRunnerBot) {
                 // Fix #2 & #5: V2 path — parse config, persist, fire autostart.
                 // Do NOT load into Blockly — that arms DBot's engine and causes V1 to fire.
-                const v2Cfg    = parseXmlV2Config(xmlText);
+                const v2Cfg    = parseXmlV2Config(configuredXmlText);
                 const v2CfgStr = JSON.stringify(v2Cfg);
                 localStorage.setItem(V2_CONFIG_KEY, v2CfgStr);
                 window.dispatchEvent(new StorageEvent('storage', { key: V2_CONFIG_KEY, newValue: v2CfgStr }));
@@ -1065,7 +1153,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
 
             let importedTradeFields: ImportedTradeFields = {};
             const loadEventGroup = `dbot-load${Date.now()}`;
-            const dom = Blockly.utils.xml.textToDom(xmlText);
+            const dom = Blockly.utils.xml.textToDom(configuredXmlText);
             const importedField = (name: string): string | undefined => {
                 const value = dom.querySelector?.(`field[name="${name}"]`)?.textContent?.trim();
                 return value || undefined;

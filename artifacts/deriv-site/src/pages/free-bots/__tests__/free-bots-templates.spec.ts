@@ -53,9 +53,23 @@ const readCustomBlockTypes = (): Set<string> => {
 describe('Free Bots template catalog', () => {
     it('references unique, existing, well-formed Blockly XML templates', () => {
         const xmlPaths = readCatalogXmlPaths();
+        const reusableOverUnderPresets = new Set([
+            'matches-04-under-6',
+            'matches-04-under-5',
+            'matches-69-over-4',
+            'matches-69-over-5',
+        ]);
+        const catalogEntries = readCatalogBotSections();
+        const uniqueTemplatePaths = catalogEntries
+            .filter(entry => !reusableOverUnderPresets.has(entry.id))
+            .map(entry => entry.xmlPath);
 
         expect(xmlPaths.length).toBeGreaterThan(0);
-        expect(new Set(xmlPaths).size).toBe(xmlPaths.length);
+        expect(new Set(uniqueTemplatePaths).size).toBe(uniqueTemplatePaths.length);
+        expect(reusableOverUnderPresets.size).toBe(4);
+        expect(reusableOverUnderPresets.size).toBe(
+            catalogEntries.filter(entry => reusableOverUnderPresets.has(entry.id)).length,
+        );
 
         for (const xmlPath of xmlPaths) {
             expect(xmlPath).toMatch(/^\/bots\/[^/]+\.xml$/);
