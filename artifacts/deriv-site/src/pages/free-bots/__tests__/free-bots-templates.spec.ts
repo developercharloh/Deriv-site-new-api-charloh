@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getSmartOver2RecoveryContractType, shouldShowJournalEntryForBot } from '@/utils/bot-template-scope';
-import { BOT_XML_PATHS, botIdFromSignal, getBotPatches, patchBotXml } from '@/utils/bot-patch';
+import { BOT_XML_PATHS, botIdFromSignal } from '@/utils/bot-patch';
 
 const catalogPath = path.resolve(__dirname, '..', 'index.tsx');
 const publicBotsPath = path.resolve(__dirname, '../../../../public/bots');
@@ -53,24 +53,11 @@ const readCustomBlockTypes = (): Set<string> => {
 describe('Free Bots template catalog', () => {
     it('references unique, existing, well-formed Blockly XML templates', () => {
         const xmlPaths = readCatalogXmlPaths();
-        const reusableOverUnderBots = new Set([
-            'matches-04-under-6',
-            'matches-04-under-5',
-            'matches-69-over-4',
-            'matches-69-over-5',
-            'over-under-secret-weapon',
-        ]);
         const catalogEntries = readCatalogBotSections();
-        const uniqueTemplatePaths = catalogEntries
-            .filter(entry => !reusableOverUnderBots.has(entry.id))
-            .map(entry => entry.xmlPath);
+        const uniqueTemplatePaths = catalogEntries.map(entry => entry.xmlPath);
 
         expect(xmlPaths.length).toBeGreaterThan(0);
         expect(new Set(uniqueTemplatePaths).size).toBe(uniqueTemplatePaths.length);
-        expect(reusableOverUnderBots.size).toBe(5);
-        expect(reusableOverUnderBots.size).toBe(
-            catalogEntries.filter(entry => reusableOverUnderBots.has(entry.id)).length,
-        );
 
         for (const xmlPath of xmlPaths) {
             expect(xmlPath).toMatch(/^\/bots\/[^/]+\.xml$/);
@@ -92,71 +79,16 @@ describe('Free Bots template catalog', () => {
 
         expect(catalog).not.toContain("id: 'digit-pro-v1'");
         expect(catalog).not.toContain("id: 'over-under-ai-signals'");
+        expect(catalog).not.toContain("id: 'over-under-secret-weapon'");
+        expect(catalog).not.toContain("id: 'matches-04-under-6'");
+        expect(catalog).not.toContain("id: 'matches-04-under-5'");
+        expect(catalog).not.toContain("id: 'matches-69-over-4'");
+        expect(catalog).not.toContain("id: 'matches-69-over-5'");
         expect(fs.existsSync(path.join(publicBotsPath, 'Digit_Pro_V1.xml'))).toBe(false);
         expect(fs.existsSync(path.join(publicBotsPath, 'Over_Under_AI_Signals_Bot.xml'))).toBe(false);
         expect(BOT_XML_PATHS).not.toHaveProperty('over-under-ai-signals');
         expect(botIdFromSignal({ market: 'over_under', direction: 'OVER 5' })).toBe('over-under-signal');
         expect(BOT_XML_PATHS['over-under-signal']).toBe('/bots/OverUnder_Signal_Bot.xml');
-        expect(BOT_XML_PATHS['over-under-secret-weapon']).toBe('/bots/OverUnder_Signal_Bot.xml');
-        expect(getBotPatches(
-            'over-under-secret-weapon',
-            {
-                symbol: 'R_100',
-                symbolLabel: 'Volatility 100 Index',
-                direction: 'UNDER 6',
-                entryPoint: 'Digit 6',
-                confidence: 75,
-                market: 'over_under',
-            },
-            0.5,
-            10,
-            30,
-            2,
-        )).toEqual(expect.arrayContaining([
-            expect.objectContaining({ blockId: 'ou_dir_init', textValue: 'UNDER' }),
-            expect.objectContaining({ blockId: 'ou_barrier_init', numValue: 6 }),
-            expect.objectContaining({ blockId: 'sl_ou_init', numValue: 30 }),
-        ]));
-    });
-
-    it('patches Secret Weapon settings into the Over/Under trade before running', () => {
-        const xml = fs.readFileSync(path.join(publicBotsPath, 'OverUnder_Signal_Bot.xml'), 'utf8');
-        const signal = {
-            symbol: 'R_100',
-            symbolLabel: 'Volatility 100 Index',
-            direction: 'UNDER 6',
-            entryPoint: 'Digit 6',
-            confidence: 75,
-            market: 'over_under',
-        };
-        const patches = getBotPatches('over-under-secret-weapon', signal, 0.75, 12, 18, 2.5);
-        const document = patchBotXml(
-            xml,
-            signal.symbol,
-            patches,
-            1,
-            'DIGITUNDER',
-            'DIGITOVER',
-            signal.symbolLabel,
-        );
-        const valueFor = (blockId: string, fieldName: string) => {
-            const block = Array.from(document.getElementsByTagName('block'))
-                .find(candidate => candidate.getAttribute('id') === blockId);
-            return block
-                ? Array.from(block.getElementsByTagName('field'))
-                    .find(field => field.getAttribute('name') === fieldName)?.textContent
-                : null;
-        };
-
-        expect(document.querySelector('field[name="TYPE_LIST"]')?.textContent).toBe('DIGITUNDER');
-        expect(valueFor('ou_dir_init', 'VAR')).toBe('Direction');
-        expect(valueFor('ou_dir_text_val', 'TEXT')).toBe('UNDER');
-        expect(valueFor('ou_barrier_num', 'NUM')).toBe('6');
-        expect(valueFor('ou_ep_num', 'NUM')).toBe('6');
-        expect(valueFor('ou_stake_num', 'NUM')).toBe('0.75');
-        expect(valueFor('ou_tp_num', 'NUM')).toBe('12');
-        expect(valueFor('sl_ou_num', 'NUM')).toBe('18');
-        expect(valueFor('ou_mart_num', 'NUM')).toBe('2.5');
     });
 
     it('keeps Blockly bot placement tied to custom blocks while retaining the Edging Bots section', () => {
@@ -180,8 +112,6 @@ describe('Free Bots template catalog', () => {
             } else if (entry.id === 'matches-king') {
                 expect(entry.section).toBe('matches-lab');
                 expect(usesCustomBlock).toBe(true);
-            } else if (entry.id === 'over-under-secret-weapon') {
-                expect(entry.section).toBe('premium');
             } else {
                 expect(entry.section).toBe(usesCustomBlock ? 'premium' : 'smart-contract');
             }
@@ -195,7 +125,7 @@ describe('Free Bots template catalog', () => {
             /id: 'matches-king',\s*section: 'matches-lab',[\s\S]*?xmlPath: '\/bots\/Matches_King\.xml'/
         );
         expect(catalogSource).toContain("title: 'Matches Lab'");
-        expect(catalogSource).toMatch(/id: 'over-under-secret-weapon',\s*section: 'premium',[\s\S]*?signalKey: 'fb_signal_over_under'/);
+        expect(catalogSource).not.toContain("id: 'over-under-secret-weapon'");
         expect(catalogSource).not.toContain('EdgingProRunnerModal');
     });
 

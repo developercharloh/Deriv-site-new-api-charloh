@@ -934,11 +934,8 @@ const SignalEngine = () => {
         const topOU     = active.filter(s => s.market === 'over_under')
                                 .sort((a, b) => b.confidence - a.confidence)[0];
 
-        const push = (key: string, sig: Signal | undefined, clearWhenMissing = false) => {
-            if (!sig) {
-                if (clearWhenMissing) localStorage.removeItem(key);
-                return;
-            }
+        const push = (key: string, sig: Signal | undefined) => {
+            if (!sig) return;
             const payload: Record<string, unknown> = {
                 symbol:      sig.symbol,
                 symbolLabel: sig.symbolLabel,
@@ -947,7 +944,6 @@ const SignalEngine = () => {
                 confidence:  sig.confidence,
                 market:      sig.market,
                 savedAt:     now,
-                expiresAt:   sig.expiresAt,
             };
             // Over/Under: derive and save contract types for signal-aware Blockly templates.
             if (sig.market === 'over_under') {
@@ -961,7 +957,7 @@ const SignalEngine = () => {
         push('fb_signal_matches',    topMatch);
         push('fb_signal_differs',    topDiffer);
         push('fb_signal_even_odd',   topEO);
-        push('fb_signal_over_under', topOU, true);
+        push('fb_signal_over_under', topOU);
         window.dispatchEvent(new Event('fb_signal_update'));
     }, [signals]);
 

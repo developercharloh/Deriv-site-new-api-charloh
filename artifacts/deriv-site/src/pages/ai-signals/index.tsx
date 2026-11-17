@@ -7,6 +7,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { destroyerBotIdFromDirection, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
 import { MatchesSignalSection } from './matches-signal-board';
+import { getOverUnderSignalOptions, OVER_UNDER_SIGNAL_BARRIERS } from './over-under-signals';
 import '@/components/ai-signal-orb/ai-signal-orb.scss';
 import './ai-signals-page.scss';
 
@@ -320,14 +321,12 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
             winProb = 1 - freq[differDig] / N; winFn = d => d !== differDig;
         }
     } else {
-        const allOptions: { side: 'OVER' | 'UNDER'; b: number; prob: number; edge: number }[] = [];
-        for (let b = 1; b <= 8; b++) {
-            const ovP = digits.filter(d => d > b).length / N;
-            const unP = digits.filter(d => d < b).length / N;
-            allOptions.push({ side: 'OVER',  b, prob: ovP, edge: ovP - (9 - b) / 10 });
-            allOptions.push({ side: 'UNDER', b, prob: unP, edge: unP - b / 10 });
-        }
-        allOptions.sort((a, b2) => b2.edge - a.edge || b2.prob - a.prob);
+        const allOptions = getOverUnderSignalOptions(digits).map(option => ({
+            side: option.side,
+            b: option.barrier,
+            prob: option.probability,
+            edge: option.edge,
+        }));
         const best = allOptions[0];
         const recovery = allOptions.filter(o => o.side !== best.side)[0] ?? allOptions[1] ?? best;
         barrier = best.b; recoveryBarrier = recovery.b;
@@ -1337,6 +1336,11 @@ const AiSignalsPage: React.FC = () => {
                         </button>
                     ))}
                 </div>
+                {tradeType === 'over_under' && (
+                    <div className='aisig-page__ou-scope'>
+                        Over 4 · Over 5&nbsp;&nbsp; | &nbsp;&nbsp;Under 6 · Under 5
+                    </div>
+                )}
 
                 {/* ── Live Signal Feed — valid signals only ─────────────────── */}
                 {tradeType === 'matches_differs' ? (
@@ -1710,8 +1714,39 @@ const AiSignalsPage: React.FC = () => {
                                 </div>
                             ) : (
                                 <div className='ai-panel__pred-ou'>
-                                    <div className='ai-panel__seg' style={{ marginBottom: 8 }}>{(['OVER', 'UNDER'] as const).map(d => (<button key={d} className={`ai-panel__seg-btn${editDir === d ? ' ai-panel__seg-btn--active' : ''}`} onClick={() => setEditDir(d)}>{d}</button>))}</div>
-                                    <div className='ai-panel__barrier'><span className='ai-panel__barrier-lbl'>Barrier <span className='ai-panel__barrier-rec'>(AI: {result.barrier ?? '?'}★)</span></span><div className='ai-panel__barrier-grid'>{[1,2,3,4,5,6,7,8].map(b => (<button key={b} className={`ai-panel__barrier-btn${editBarrier === b ? ' ai-panel__barrier-btn--sel' : ''}${result.barrier === b ? ' ai-panel__barrier-btn--rec' : ''}`} onClick={() => setEditBarrier(b)}>{b}</button>))}</div></div>
+                                    <div className='ai-panel__seg' style={{ marginBottom: 8 }}>
+                                        {(['OVER', 'UNDER'] as const).map(d => (
+                                            <button
+                                                key={d}
+                                                className={`ai-panel__seg-btn${editDir === d ? ' ai-panel__seg-btn--active' : ''}`}
+                                                onClick={() => {
+                                                    setEditDir(d);
+                                                    const barriers = OVER_UNDER_SIGNAL_BARRIERS[d];
+                                                    if (!barriers.some(barrier => barrier === editBarrier)) {
+                                                        setEditBarrier(barriers[0]);
+                                                    }
+                                                }}
+                                            >
+                                                {d}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className='ai-panel__barrier'>
+                                        <span className='ai-panel__barrier-lbl'>
+                                            Barrier <span className='ai-panel__barrier-rec'>(AI: {result.barrier ?? '?'}★)</span>
+                                        </span>
+                                        <div className='ai-panel__barrier-grid'>
+                                            {OVER_UNDER_SIGNAL_BARRIERS[editDir === 'UNDER' ? 'UNDER' : 'OVER'].map(b => (
+                                                <button
+                                                    key={b}
+                                                    className={`ai-panel__barrier-btn${editBarrier === b ? ' ai-panel__barrier-btn--sel' : ''}${result.direction === `${editDir} ${b}` ? ' ai-panel__barrier-btn--rec' : ''}`}
+                                                    onClick={() => setEditBarrier(b)}
+                                                >
+                                                    {b}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                     <div className='ai-rec-panel'>
                                         <div className='ai-rec-panel__hd'>
                                             <span className='ai-rec-panel__title'>🔄 Recovery after loss</span>

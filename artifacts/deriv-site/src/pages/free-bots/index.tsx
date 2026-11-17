@@ -14,8 +14,6 @@ import { parseDigitFrom, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type Bot
 import { parseXmlV2Config } from '@/utils/xml-v2-parser';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig, FreeBotSection } from './types';
-import { applyOverUnderPreset } from './over-under-preset';
-import { isSignalFresh } from './signal-freshness';
 import { isBotBuilderWorkspaceReady } from './workspace-readiness';
 import FreeBotCategoryTabs from './FreeBotCategoryTabs';
 import './free-bots.scss';
@@ -49,7 +47,7 @@ function readSignal(key: string): LiveSignal | null {
         const raw = localStorage.getItem(key);
         if (!raw) return null;
         const sig = JSON.parse(raw) as LiveSignal;
-        return isSignalFresh(sig) ? sig : null;
+        return sig;
     } catch { return null; }
 }
 
@@ -118,27 +116,6 @@ const BOTS: BotConfig[] = [
         ],
         xmlPath: '/bots/Rise_Fall_Master_Bot.xml',
         gradient: 'linear-gradient(135deg, #0a2a0a 0%, #1a5c1a 40%, #10b981 70%, #f59e0b 100%)',
-    },
-    {
-        id: 'over-under-secret-weapon',
-        section: 'premium',
-        name: 'Over Under Secret Weapon',
-        emoji: '🎯',
-        description:
-            'Uses the latest live Over/Under Signal Engine alert. Set stake, take profit, stop loss, and Martingale, then Save & Run to load the signal, wait for its entry digit, and start the selected Over or Under contract.',
-        market: 'Signal-driven (any Volatility Index)',
-        strategy: 'Live Over / Under Signal · Entry Timing · Martingale · Risk Stops',
-        params: [
-            { label: 'Signal', value: 'Latest active Over / Under alert' },
-            { label: 'Entry', value: 'Waits for the signal entry digit' },
-            { label: 'Stake', value: 'Set before each run' },
-            { label: 'Take Profit', value: 'Set before each run' },
-            { label: 'Stop Loss', value: 'Set before each run' },
-            { label: 'Martingale', value: 'Set before each run' },
-        ],
-        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
-        gradient: 'linear-gradient(135deg, #24103f 0%, #642876 52%, #d14778 100%)',
-        signalKey: 'fb_signal_over_under',
     },
     {
         id: 'matches-signal',
@@ -218,90 +195,6 @@ const BOTS: BotConfig[] = [
         xmlPath: '/bots/OverUnder_Signal_Bot.xml',
         gradient: 'linear-gradient(135deg, #0f1f3d 0%, #1a3a6b 50%, #6366f1 100%)',
         signalKey: 'fb_signal_over_under',
-    },
-    {
-        id: 'matches-04-under-6',
-        section: 'smart-contract',
-        name: 'Under 6 · Matches 0–4',
-        emoji: '⬇️',
-        description:
-            'Standalone Digit Under 6 setup aligned with the Matches 0–4 range. This bot runs independently and does not change or follow the Matches scanner.',
-        market: 'Volatility 75 (1s) Index (1HZ75V)',
-        strategy: 'Digit Under · Barrier 6 · Standalone',
-        params: [
-            { label: 'Contract', value: 'Under 6 only' },
-            { label: 'Entry Digit', value: '6' },
-            { label: 'Stake', value: '$0.50' },
-            { label: 'Take Profit', value: '$10' },
-            { label: 'Stop Loss', value: '$50' },
-        ],
-        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
-        overUnderPreset: { direction: 'UNDER', barrier: 6 },
-        gradient: 'linear-gradient(135deg, #112b45 0%, #15607b 55%, #22a6a1 100%)',
-        category: 'UNDER 6 · MATCHES 0–4',
-    },
-    {
-        id: 'matches-04-under-5',
-        section: 'smart-contract',
-        name: 'Under 5 · Matches 0–4',
-        emoji: '⬇️',
-        description:
-            'Standalone Digit Under 5 setup aligned with the Matches 0–4 range. This bot runs independently and does not change or follow the Matches scanner.',
-        market: 'Volatility 75 (1s) Index (1HZ75V)',
-        strategy: 'Digit Under · Barrier 5 · Standalone',
-        params: [
-            { label: 'Contract', value: 'Under 5 only' },
-            { label: 'Entry Digit', value: '5' },
-            { label: 'Stake', value: '$0.50' },
-            { label: 'Take Profit', value: '$10' },
-            { label: 'Stop Loss', value: '$50' },
-        ],
-        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
-        overUnderPreset: { direction: 'UNDER', barrier: 5 },
-        gradient: 'linear-gradient(135deg, #112b45 0%, #15607b 55%, #22a6a1 100%)',
-        category: 'UNDER 5 · MATCHES 0–4',
-    },
-    {
-        id: 'matches-69-over-4',
-        section: 'smart-contract',
-        name: 'Over 4 · Matches 6–9',
-        emoji: '⬆️',
-        description:
-            'Standalone Digit Over 4 setup aligned with the Matches 6–9 range. This bot runs independently and does not change or follow the Matches scanner.',
-        market: 'Volatility 75 (1s) Index (1HZ75V)',
-        strategy: 'Digit Over · Barrier 4 · Standalone',
-        params: [
-            { label: 'Contract', value: 'Over 4 only' },
-            { label: 'Entry Digit', value: '4' },
-            { label: 'Stake', value: '$0.50' },
-            { label: 'Take Profit', value: '$10' },
-            { label: 'Stop Loss', value: '$50' },
-        ],
-        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
-        overUnderPreset: { direction: 'OVER', barrier: 4 },
-        gradient: 'linear-gradient(135deg, #112b45 0%, #15607b 55%, #22a6a1 100%)',
-        category: 'OVER 4 · MATCHES 6–9',
-    },
-    {
-        id: 'matches-69-over-5',
-        section: 'smart-contract',
-        name: 'Over 5 · Matches 6–9',
-        emoji: '⬆️',
-        description:
-            'Standalone Digit Over 5 setup aligned with the Matches 6–9 range. This bot runs independently and does not change or follow the Matches scanner.',
-        market: 'Volatility 75 (1s) Index (1HZ75V)',
-        strategy: 'Digit Over · Barrier 5 · Standalone',
-        params: [
-            { label: 'Contract', value: 'Over 5 only' },
-            { label: 'Entry Digit', value: '5' },
-            { label: 'Stake', value: '$0.50' },
-            { label: 'Take Profit', value: '$10' },
-            { label: 'Stop Loss', value: '$50' },
-        ],
-        xmlPath: '/bots/OverUnder_Signal_Bot.xml',
-        overUnderPreset: { direction: 'OVER', barrier: 5 },
-        gradient: 'linear-gradient(135deg, #112b45 0%, #15607b 55%, #22a6a1 100%)',
-        category: 'OVER 5 · MATCHES 6–9',
     },
     {
         id: 'over2-under7-reversal',
@@ -617,14 +510,13 @@ const FREE_BOT_SECTIONS: { id: FreeBotSection; title: string; emptyMessage?: str
 const BOTS_IN_ORDINAL_ORDER = [
     ...BOTS.filter(
         bot => bot.section === 'premium' &&
-            !['smart-over-2-v2', 'smart-over-2-v3', 'over-under-secret-weapon'].includes(bot.id)
+            !['smart-over-2-v2', 'smart-over-2-v3'].includes(bot.id)
     ),
     ...BOTS.filter(bot => bot.section === 'smart-contract'),
     ...BOTS.filter(bot => bot.section === 'edging'),
     ...BOTS.filter(bot => bot.section === 'matches-lab'),
     ...BOTS.filter(bot => bot.id === 'smart-over-2-v2'),
     ...BOTS.filter(bot => bot.id === 'smart-over-2-v3'),
-    ...BOTS.filter(bot => bot.id === 'over-under-secret-weapon'),
 ];
 const BOT_ORDINALS = new Map(BOTS_IN_ORDINAL_ORDER.map((bot, index) => [bot.id, index + 1]));
 
@@ -637,7 +529,6 @@ const CARD_ART: Record<string, string> = {
     'differ-v2': '/assets/free-bots/mentorship.jpg',
     'even-odd-scanner': '/assets/free-bots/odd-autobot.jpg',
     'over-under-signal': '/assets/free-bots/under-autobot.jpg',
-    'over-under-secret-weapon': '/assets/free-bots/under-autobot.jpg',
     'over2-under7-reversal': '/assets/free-bots/hitnrun.jpg',
     'smart-over-2': '/assets/free-bots/concept-ai.jpg',
     'smart-over-2-v2': '/assets/free-bots/concept-ai.jpg',
@@ -660,7 +551,6 @@ const CARD_CATEGORY: Record<string, string> = {
     'differ-v2': 'DIFFERS',
     'even-odd-scanner': 'EVEN / ODD',
     'over-under-signal': 'OVER / UNDER SIGNAL',
-    'over-under-secret-weapon': 'OVER / UNDER · LIVE SIGNAL',
     'over2-under7-reversal': 'OVER / UNDER',
     'smart-over-2': 'DIGIT OVER 2',
     'smart-over-2-v2': 'DIGIT OVER 2',
@@ -682,7 +572,6 @@ const CARD_ACCENT: Record<string, string> = {
     'differ-v2': '#1e6bd0',
     'even-odd-scanner': '#bd8300',
     'over-under-signal': '#d9274c',
-    'over-under-secret-weapon': '#c83e78',
     'over2-under7-reversal': '#eb741d',
     'smart-over-2': '#0f9f79',
     'smart-over-2-v2': '#0f9f79',
@@ -779,9 +668,6 @@ const SignalTradeModal: React.FC<{
         setState('launching');
         setErrMsg('');
         try {
-            if (botId === 'over-under-secret-weapon' && !isSignalFresh(signal)) {
-                throw new Error('This Over/Under signal has expired. Wait for a fresh live signal, then try again.');
-            }
             const stake      = parseFloat(cfg.stake)      || 0.5;
             const takeProfit = parseFloat(cfg.takeProfit) || 10;
             const stopLoss   = parseFloat(cfg.stopLoss)   || 30;
@@ -789,9 +675,6 @@ const SignalTradeModal: React.FC<{
 
             // Fetch and patch the bot XML with the signal settings
             const doc    = await fetchAndPatchBot(botId, signal, stake, takeProfit, stopLoss, martingale);
-            if (botId === 'over-under-secret-weapon' && !isSignalFresh(signal)) {
-                throw new Error('This Over/Under signal expired while loading. Wait for a fresh live signal, then try again.');
-            }
             const xmlStr = new XMLSerializer().serializeToString(doc.documentElement);
 
             if (engineMode === 'v2') {
@@ -886,11 +769,9 @@ const SignalTradeModal: React.FC<{
                     <button className='fb-modal__btn fb-modal__btn--run' onClick={handleRun} disabled={state === 'launching'}>
                         {state === 'launching'
                             ? '⏳ Launching…'
-                            : botId === 'over-under-secret-weapon'
-                                ? '🚀 Save & Run'
-                                : engineMode === 'v2'
-                                    ? '⚡ Launch V2'
-                                    : '🚀 Load Signal & Run'}
+                            : engineMode === 'v2'
+                                ? '⚡ Launch V2'
+                                : '🚀 Load Signal & Run'}
                     </button>
                 </div>
             </div>
@@ -1138,14 +1019,10 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
             if (!xmlText.trim()) {
                 throw new Error('This bot file is empty and cannot be loaded.');
             }
-            const configuredXmlText = bot.overUnderPreset
-                ? applyOverUnderPreset(xmlText, bot.overUnderPreset)
-                : xmlText;
-
             if (engineMode === 'v2' && !isNativeRunnerBot) {
                 // Fix #2 & #5: V2 path — parse config, persist, fire autostart.
                 // Do NOT load into Blockly — that arms DBot's engine and causes V1 to fire.
-                const v2Cfg    = parseXmlV2Config(configuredXmlText);
+                const v2Cfg    = parseXmlV2Config(xmlText);
                 const v2CfgStr = JSON.stringify(v2Cfg);
                 localStorage.setItem(V2_CONFIG_KEY, v2CfgStr);
                 window.dispatchEvent(new StorageEvent('storage', { key: V2_CONFIG_KEY, newValue: v2CfgStr }));
@@ -1189,7 +1066,7 @@ const BotCard: React.FC<{ bot: BotConfig; engineMode: EngineMode; ordinal: numbe
 
             let importedTradeFields: ImportedTradeFields = {};
             const loadEventGroup = `dbot-load${Date.now()}`;
-            const dom = Blockly.utils.xml.textToDom(configuredXmlText);
+            const dom = Blockly.utils.xml.textToDom(xmlText);
             const importedField = (name: string): string | undefined => {
                 const value = dom.querySelector?.(`field[name="${name}"]`)?.textContent?.trim();
                 return value || undefined;

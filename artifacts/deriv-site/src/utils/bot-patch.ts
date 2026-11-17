@@ -16,7 +16,6 @@ export interface BotSignal {
     confidence:       number;
     market:           string;   // 'matches_differs' | 'even_odd' | 'over_under'
     savedAt?:         number;
-    expiresAt?:       number;
     recoveryBarrier?:      number;   // Over/Under: AI-picked fallback barrier after a loss
     contractType?:         string;   // e.g. "DIGITOVER", "DIGITUNDER" — for Elite bot (primary)
     recoveryContractType?: string;   // OPPOSITE contract type for recovery (e.g. DIGITUNDER when primary is DIGITOVER)
@@ -36,7 +35,6 @@ export const BOT_XML_PATHS: Record<string, string> = {
     'even-odd-scanner':         '/bots/BINARYTOOL@EVEN_ODD_THUNDER_AI_PRO_BOT_1765711647662.xml',
     'even-odd-recovery':        '/bots/EVEN_ODD_RECOVERY_BOT.xml',
     'over-under-signal':        '/bots/OverUnder_Signal_Bot.xml',
-    'over-under-secret-weapon':'/bots/OverUnder_Signal_Bot.xml',
     'elite-entry-scanner':      '/bots/Elite_Entry_Scanner_Bot.xml',
     'over-destroyer':           '/bots/Over_Destroyer_Bot.xml',
     'under-destroyer':          '/bots/Under_Destroyer_Bot.xml',
@@ -375,8 +373,7 @@ export function getBotPatches(
             ];
         }
 
-        case 'over-under-signal':
-        case 'over-under-secret-weapon': {
+        case 'over-under-signal': {
             const dirText  = signal.direction.split(' ')[0].toUpperCase();
             const barrier  = parseDigitFrom(signal.direction);
             const entryPt  = parseDigitFrom(signal.entryPoint);
@@ -386,7 +383,6 @@ export function getBotPatches(
                 { blockId: 'ou_stake_init',        numValue: stake },
                 { blockId: 'ou_initial_stake_init',numValue: stake },
                 { blockId: 'ou_tp_init',           numValue: takeProfit },
-                { blockId: 'sl_ou_init',            numValue: stopLoss },
                 { blockId: 'ou_mart_level_init',   numValue: martingaleLevel },
                 { blockId: 'ou_mart_init',         numValue: martingale },
                 { blockId: 'ou_ep_init',           numValue: entryPt },
