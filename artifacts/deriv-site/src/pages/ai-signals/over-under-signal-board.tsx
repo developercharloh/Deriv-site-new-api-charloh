@@ -269,9 +269,9 @@ export function OverUnderSignalBoard({
             <p className='ou-board__rule'>
                 Signals use the same indicator filters as Matches. Over 4/5 require MACD 12/26/9 descending from above
                 with a contracting positive histogram; Under 6/5 require Trend Strength Index 14 at 0.8–0.9, three flat updates, and a green
-                candle. You can save a ready signal as soon as conditions and a fresh feed are available; there is no need
-                to wait for 00:02. #21 loads stopped for this exact market, then buys immediately when you press Run.
-                It keeps buying until you stop it or a saved risk limit is reached.
+                candle. Save & Run is available as soon as conditions and a fresh feed are ready; there is no need to wait
+                for 00:02. Saving starts #21 on the connected account for this exact market, then it keeps buying until
+                you stop it or a saved risk limit is reached.
             </p>
             <div className='ou-board__grid'>
                 {cards.map(({ symbol, feed, feedFresh, lastCandle, secondsToClose, setups }) => {
@@ -336,7 +336,7 @@ export function OverUnderSignalBoard({
                                             </div>
                                             <em>{isEntryNow ? 'ENTRY SIGNAL NOW' : setup.setupReady
                                                 ? setup.feedFresh
-                                                    ? setup.entryWindow ? 'SETUP READY · SAVE AVAILABLE' : 'SETUP READY · SAVE AVAILABLE BEFORE 00:02'
+                                                    ? setup.entryWindow ? 'SETUP READY · SAVE & RUN AVAILABLE' : 'SETUP READY · SAVE & RUN AVAILABLE BEFORE 00:02'
                                                     : 'SETUP READY · WAITING FOR LIVE FEED'
                                                 : 'WAITING FOR INDICATOR CONDITIONS'}</em>
                                             {canSaveOverUnderSignal(setup) && onSelectSignal && (
@@ -344,10 +344,10 @@ export function OverUnderSignalBoard({
                                                     type='button'
                                                     className='ou-board__save-signal'
                                                     data-testid={`button-configure-secret-weapon-${symbol.code}-${setup.mode.toLowerCase()}`}
-                                                    title='Available before 00:02; saving loads #21 stopped in DBot Builder'
+                                                     title='Starts #21 immediately on the connected account; check account and risk settings first'
                                                     onClick={() => onSelectSignal({ symbol, setup })}
                                                 >
-                                                    Save #21 for Run · {label}
+                                                    Save & Run #21 · {label}
                                                 </button>
                                             )}
                                         </div>

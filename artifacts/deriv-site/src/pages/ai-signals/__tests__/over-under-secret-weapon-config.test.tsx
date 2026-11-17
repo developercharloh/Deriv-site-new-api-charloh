@@ -26,7 +26,7 @@ function makeSelection(side: 'OVER' | 'UNDER'): OverUnderSignalSelection {
 describe('Over Under Secret Weapon signal configuration', () => {
     beforeEach(() => localStorage.clear());
 
-    it('offers Over barriers 0 through 8 and saves risk values without starting the bot', () => {
+    it('offers Over barriers 0 through 8 and passes risk values to Save & Run', () => {
         const onSave = jest.fn();
         render(
             <OverUnderSecretWeaponConfig
@@ -44,6 +44,7 @@ describe('Over Under Secret Weapon signal configuration', () => {
         fireEvent.change(screen.getByLabelText('Stake ($)'), { target: { value: '0.75' } });
         fireEvent.click(screen.getByTestId('secret-weapon-save'));
 
+        expect(screen.getByTestId('secret-weapon-save')).toHaveTextContent('Save & Run #21 now');
         expect(onSave).toHaveBeenCalledWith({
             barrier: 0,
             stake: 0.75,

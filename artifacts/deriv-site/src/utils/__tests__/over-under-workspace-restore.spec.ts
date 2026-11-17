@@ -1,5 +1,5 @@
 import { restoreDropdownSelections } from '@/external/bot-skeleton/scratch/utils';
-import { restoreOverUnderWorkspaceSymbol } from '../bot-patch';
+import { restoreOverUnderWorkspaceSymbol, runOverUnderSecretWeapon } from '../bot-patch';
 
 jest.mock('@/external/bot-skeleton/scratch/utils', () => ({
     scheduleWorkspaceReveal: jest.fn(),
@@ -99,5 +99,21 @@ describe('bot #21 dropdown restoration', () => {
 
         await expect(restoreOverUnderWorkspaceSymbol(workspace, '1HZ10V'))
             .rejects.toThrow('did not restore #21’s Over and Under purchase choices');
+    });
+
+    it('starts through DBot’s normal Run handler and reports a blocked start', async () => {
+        const runPanel = {
+            is_running: false,
+            onRunButtonClick: jest.fn(async () => {
+                runPanel.is_running = true;
+            }),
+        };
+        await runOverUnderSecretWeapon(runPanel);
+        expect(runPanel.onRunButtonClick).toHaveBeenCalledTimes(1);
+
+        await expect(runOverUnderSecretWeapon({
+            is_running: false,
+            onRunButtonClick: jest.fn(),
+        })).rejects.toThrow('DBot Builder did not start #21');
     });
 });

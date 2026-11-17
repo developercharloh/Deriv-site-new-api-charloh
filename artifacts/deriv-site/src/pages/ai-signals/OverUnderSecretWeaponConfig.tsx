@@ -96,9 +96,9 @@ export function OverUnderSecretWeaponConfig({
                     Market: <strong>{selection.symbol.label} ({selection.symbol.code})</strong>
                 </div>
                 <p className='ou-secret-weapon__note'>
-                    Signal conditions stay on the source board. This bot uses the saved market and contract and has no
-                    entry-point wait: after you press Run, it buys immediately on its normal bot cycle and continues
-                    until you stop it or a saved risk limit is reached. It loads stopped in DBot Builder.
+                    Signal conditions stay on the source board. Save & Run starts #21 on the connected Demo or Real account
+                    for the selected market, with no entry-point wait. It buys on the next normal bot cycle and continues
+                    until you stop it or a saved risk limit is reached. Confirm your account and risk settings before starting.
                 </p>
 
                 <label className='ai-runcfg__field'>
@@ -139,7 +139,7 @@ export function OverUnderSecretWeaponConfig({
                     onClick={submit}
                     data-testid='secret-weapon-save'
                 >
-                    {loading ? 'Saving #21 to DBot Builder…' : 'Save & Load #21 Stopped'}
+                    {loading ? 'Saving settings and starting #21…' : 'Save & Run #21 now'}
                 </button>
             </section>
         </div>

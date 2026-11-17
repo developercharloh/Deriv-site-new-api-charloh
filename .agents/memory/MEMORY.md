@@ -63,7 +63,7 @@
 - [Edging Pro account-run locking](edging-pro-account-locking.md) — require an account-scoped Web Lock; missing account identity or lock support must block live trading.
 - [Over/Under signal fallback](deriv-over-under-signal-fallback.md) — after removing the AI bot, V1 uses the remaining signal template with standard same-direction recovery.
 - [TradingView TSI semantics](deriv-tsi-semantics.md) — in Matches and Over/Under, TSI means the single-line Trend Strength Index, not the two-line True Strength Index.
-- [Over/Under signal-to-builder handoff](deriv-over-under-builder-sharing.md) — offer Save when setup and feed are ready, regardless of countdown; #21 buys on Run without an entry wait.
+- [Over/Under signal-to-builder handoff](deriv-over-under-builder-sharing.md) — Save & Run auto-starts #21 on the connected account; restore and verify all API-backed dropdowns first.
 - [Even Odd Strike Eagle Virtual Hook](even-odd-strike-eagle-hook.md) — Switch After controls the per-side virtual-loss gate and the number of real contracts before the Even/Odd side changes.
 - [Even Odd Strike Eagle Builder visibility](deriv-even-odd-strike-eagle-builder.md) — verify the actual template import and mobile reveal; late dropdown hydration can affect required roots and scroll position.
 - [Matches King digit selection](matches-king-digit-selection.md) — keep a digit-count selector with one prediction box per selected Digit Match leg; a match wins only its own leg.

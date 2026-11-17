@@ -843,3 +843,18 @@ export async function restoreOverUnderWorkspaceSymbol(
         throw new Error('DBot did not restore #21’s Over and Under purchase choices. Keep the bot stopped and retry Save.');
     }
 }
+
+/**
+ * Starts #21 through DBot's normal Run handler and rejects if the handler did
+ * not transition the panel into its running state.
+ */
+export async function runOverUnderSecretWeapon(runPanel: any): Promise<void> {
+    if (typeof runPanel?.onRunButtonClick !== 'function') {
+        throw new Error('DBot Builder could not start #21. Open Builder and try again.');
+    }
+
+    await runPanel.onRunButtonClick();
+    if (!runPanel.is_running) {
+        throw new Error('DBot Builder did not start #21. Check your account connection and try again.');
+    }
+}

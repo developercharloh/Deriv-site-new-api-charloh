@@ -8,6 +8,7 @@ import {
     destroyerBotIdFromDirection,
     fetchAndPatchBot,
     loadPatchedBotIntoWorkspace,
+    runOverUnderSecretWeapon,
     restoreOverUnderWorkspaceSymbol,
     type BotSignal,
 } from '@/utils/bot-patch';
@@ -1283,7 +1284,6 @@ const AiSignalsPage: React.FC = () => {
 
             store.journal.setActiveBotTemplateId('over-under-secret-weapon');
             store.save_modal.updateBotName('Over Under Secret Weapon');
-            store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
             try {
                 localStorage.setItem('fb_cfg_over-under-secret-weapon', JSON.stringify({
                     mode: selected.setup.mode,
@@ -1294,6 +1294,12 @@ const AiSignalsPage: React.FC = () => {
                     martingale: String(settings.martingale),
                 }));
             } catch { /* retain this run even if browser storage is unavailable */ }
+
+            // Let the guarded XML import and its dropdown events settle, then
+            // start through DBot's regular Run handler (same path as the Run button).
+            await new Promise<void>(resolve => window.setTimeout(resolve, 500));
+            await runOverUnderSecretWeapon(store.run_panel);
+            store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
             setSelectedOverUnderSignal(null);
         } catch (error: any) {
             setSecretWeaponError(error?.message || 'Could not save the signal to #21.');
