@@ -2,7 +2,10 @@
 // Used by both Free Bots and Signal Engine pages so both always load and patch
 // the same real XML files.
 
-import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
+import {
+    restoreDropdownSelections,
+    scheduleWorkspaceReveal,
+} from '@/external/bot-skeleton/scratch/utils';
 import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
 import { applyCandleCloseEntryGate } from './candle-close-entry';
 import {
@@ -787,80 +790,56 @@ export function loadPatchedBotIntoWorkspace(xmlText: string, workspace: any): vo
 }
 
 /**
- * Keeps #21 on the exact volatility selected by its source signal after
- * Blockly's asynchronous market dropdown cascade settles.
+ * Restores and validates #21's API-backed dropdown chain after XML import so
+ * the selected market and both Over/Under purchase blocks remain executable.
  */
-export async function restoreOverUnderWorkspaceSymbol(workspace: any, symbol: string): Promise<void> {
+export async function restoreOverUnderWorkspaceSymbol(
+    workspace: any,
+    symbol: string,
+    savedSelections?: Record<string, string[]>,
+): Promise<void> {
     const Blockly = (window as any).Blockly;
     if (!Blockly?.Events || !workspace || !symbol) {
         throw new Error('The DBot workspace is not ready for the selected volatility.');
     }
 
-    const delay = (milliseconds: number) =>
-        new Promise<void>(resolve => window.setTimeout(resolve, milliseconds));
-    let activeSymbols: any;
-    for (let attempt = 0; attempt < 50; attempt++) {
-        activeSymbols = (ApiHelpers as any)?.instance?.active_symbols;
-        if (activeSymbols) break;
-        await delay(200);
-    }
-    if (!activeSymbols) {
-        throw new Error('Deriv market options are not ready. Keep #21 stopped and retry Save.');
-    }
+    const expectedSelections = {
+        ...savedSelections,
+        MARKET_LIST: ['synthetic_index'],
+        SUBMARKET_LIST: ['random_index'],
+        SYMBOL_LIST: [symbol],
+        TRADETYPECAT_LIST: ['digits'],
+        TRADETYPE_LIST: ['overunder'],
+        TYPE_LIST: ['both'],
+        DURATIONTYPE_LIST: ['t'],
+        PURCHASE_LIST: ['DIGITOVER', 'DIGITUNDER'],
+    };
+    await restoreDropdownSelections(workspace, expectedSelections, (ApiHelpers as any)?.instance);
 
-    const marketBlock = workspace.getAllBlocks(true).find((block: any) => block.type === 'trade_definition_market');
-    const tradeTypeBlock = workspace.getAllBlocks(true).find((block: any) => block.type === 'trade_definition_tradetype');
-    if (!marketBlock) throw new Error('The loaded #21 bot is missing its market block.');
-
-    const eventGroup = `secret-weapon-market-${Date.now()}`;
-    const previousGroup = Blockly.Events.getGroup();
-    Blockly.Events.setGroup(eventGroup);
-    try {
-        marketBlock.getField('MARKET_LIST')?.updateOptions?.(
-            activeSymbols.getMarketDropdownOptions(),
-            { default_value: 'synthetic_index', should_pretend_empty: true, event_group: eventGroup },
-        );
-        marketBlock.getField('SUBMARKET_LIST')?.updateOptions?.(
-            activeSymbols.getSubmarketDropdownOptions('synthetic_index'),
-            { default_value: 'random_index', should_pretend_empty: true, event_group: eventGroup },
-        );
-        marketBlock.getField('SYMBOL_LIST')?.updateOptions?.(
-            activeSymbols.getSymbolDropdownOptions('random_index'),
-            { default_value: symbol, should_pretend_empty: true, event_group: eventGroup },
-        );
-        marketBlock.setFieldValue('synthetic_index', 'MARKET_LIST');
-        marketBlock.setFieldValue('random_index', 'SUBMARKET_LIST');
-        marketBlock.setFieldValue(symbol, 'SYMBOL_LIST');
-        tradeTypeBlock?.onchange?.({
-            type: Blockly.Events.BLOCK_CHANGE,
-            blockId: marketBlock.id,
-            name: 'SYMBOL_LIST',
-            group: eventGroup,
-        });
-    } finally {
-        Blockly.Events.setGroup(previousGroup);
+    const getBlock = (type: string) =>
+        workspace.getAllBlocks(true).find((block: any) => block.type === type);
+    const requiredFields: Array<[string, string, string]> = [
+        ['trade_definition_market', 'MARKET_LIST', 'synthetic_index'],
+        ['trade_definition_market', 'SUBMARKET_LIST', 'random_index'],
+        ['trade_definition_market', 'SYMBOL_LIST', symbol],
+        ['trade_definition_tradetype', 'TRADETYPECAT_LIST', 'digits'],
+        ['trade_definition_tradetype', 'TRADETYPE_LIST', 'overunder'],
+        ['trade_definition_contracttype', 'TYPE_LIST', 'both'],
+        ['trade_definition_tradeoptions', 'DURATIONTYPE_LIST', 't'],
+    ];
+    for (const [blockType, fieldName, expected] of requiredFields) {
+        if (getBlock(blockType)?.getFieldValue(fieldName) !== expected) {
+            throw new Error(`DBot did not restore #21's ${fieldName} selection. Keep the bot stopped and retry Save.`);
+        }
     }
 
-    const symbolOptions = marketBlock.getField('SYMBOL_LIST')?.menuGenerator_ ?? [];
+    const purchaseTypes = workspace.getAllBlocks(true)
+        .filter((block: any) => block.getField?.('PURCHASE_LIST'))
+        .map((block: any) => block.getFieldValue('PURCHASE_LIST'));
     if (
-        !symbolOptions.some((option: any[]) => option?.[1] === symbol) ||
-        marketBlock.getFieldValue('SYMBOL_LIST') !== symbol
+        purchaseTypes.length !== 2 ||
+        purchaseTypes.slice().sort().join(',') !== ['DIGITOVER', 'DIGITUNDER'].sort().join(',')
     ) {
-        throw new Error(`DBot could not keep the selected volatility ${symbol}. #21 remains stopped.`);
-    }
-
-    await delay(2_000);
-    if (marketBlock.getFieldValue('SYMBOL_LIST') !== symbol) {
-        const latestOptions = marketBlock.getField('SYMBOL_LIST')?.menuGenerator_ ?? [];
-        if (!latestOptions.some((option: any[]) => option?.[1] === symbol)) {
-            throw new Error(`DBot replaced the selected volatility ${symbol}. #21 remains stopped.`);
-        }
-        const currentGroup = Blockly.Events.getGroup();
-        Blockly.Events.setGroup(eventGroup);
-        try {
-            marketBlock.setFieldValue(symbol, 'SYMBOL_LIST');
-        } finally {
-            Blockly.Events.setGroup(currentGroup);
-        }
+        throw new Error('DBot did not restore #21’s Over and Under purchase choices. Keep the bot stopped and retry Save.');
     }
 }

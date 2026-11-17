@@ -13,6 +13,7 @@ import {
 } from '@/utils/bot-patch';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
+import { captureDropdownSelections } from '@/external/bot-skeleton/scratch/utils';
 import { MatchesSignalSection } from './matches-signal-board';
 import { OverUnderSignalBoard, type OverUnderSignalSelection } from './over-under-signal-board';
 import { OverUnderSecretWeaponConfig, type SecretWeaponRunSettings } from './OverUnderSecretWeaponConfig';
@@ -1267,6 +1268,7 @@ const AiSignalsPage: React.FC = () => {
                 settings.stopLoss,
                 settings.martingale,
             );
+            const savedDropdownSelections = captureDropdownSelections(document);
             const workspace = (window as any).Blockly?.derivWorkspace;
             if (!workspace) {
                 throw new Error('Open DBot Builder once, then return to this signal and save again.');
@@ -1277,7 +1279,7 @@ const AiSignalsPage: React.FC = () => {
                 workspace,
             );
             setWorkspaceBotTemplateIdentity(workspace, 'over-under-secret-weapon');
-            await restoreOverUnderWorkspaceSymbol(workspace, selected.symbol.code);
+            await restoreOverUnderWorkspaceSymbol(workspace, selected.symbol.code, savedDropdownSelections);
 
             store.journal.setActiveBotTemplateId('over-under-secret-weapon');
             store.save_modal.updateBotName('Over Under Secret Weapon');
