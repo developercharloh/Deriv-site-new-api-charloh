@@ -5,6 +5,7 @@ import { BOT_XML_PATHS, botIdFromSignal } from '@/utils/bot-patch';
 
 const catalogPath = path.resolve(__dirname, '..', 'index.tsx');
 const publicBotsPath = path.resolve(__dirname, '../../../../public/bots');
+const botPatchPath = path.resolve(__dirname, '../../../utils/bot-patch.ts');
 
 const readCatalogXmlPaths = (): string[] => {
     const catalog = fs.readFileSync(catalogPath, 'utf8');
@@ -89,8 +90,12 @@ describe('Free Bots template catalog', () => {
         expect(catalog).not.toContain("id: 'over-under-ai-signals'");
         expect(catalog).toContain("id: 'over-under-secret-weapon'");
         expect(catalog).toContain("section: 'premium'");
-        expect(catalog).toContain("value: 'Broker tick at 00:02 before candle close'");
-        expect(catalog).toContain('Trend Strength Index 14');
+        expect(catalog).toContain("value: '2 seconds before each 1-minute candle closes'");
+        expect(catalog).toContain('Signal conditions come from the signal source, not this bot.');
+        expect(catalog).toContain('Barrier digit');
+        const botPatcher = fs.readFileSync(botPatchPath, 'utf8');
+        expect(botPatcher).toContain("block('candle_close_entry_window'");
+        expect(botPatcher).not.toContain("block('over_under_indicator_signal'");
         expect(catalog).toContain('Configure & Load');
         expect(catalog).toContain('Load stopped bot into Builder');
         expect(catalog).toContain('configureOverUnderBotXml');

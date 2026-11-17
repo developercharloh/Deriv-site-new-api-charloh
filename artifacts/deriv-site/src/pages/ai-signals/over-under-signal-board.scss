@@ -330,6 +330,22 @@
     }
 }
 
+.ou-board__save-signal {
+    min-height: 34px;
+    margin-top: 4px;
+    padding: 7px 10px;
+    border: 1px solid rgba(16, 185, 129, 0.38);
+    border-radius: 7px;
+    background: rgba(16, 185, 129, 0.11);
+    color: #6ee7b7;
+    font-size: 9px;
+    font-weight: 850;
+    cursor: pointer;
+
+    &:hover { background: rgba(16, 185, 129, 0.2); }
+    &:focus-visible { outline: 3px solid #a8c5e8; outline-offset: 3px; }
+}
+
 .ou-board__market:focus-within {
     border-color: rgba(164, 192, 224, 0.52);
 }

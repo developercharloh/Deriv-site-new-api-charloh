@@ -3,6 +3,7 @@
 // the same real XML files.
 
 import { scheduleWorkspaceReveal } from '@/external/bot-skeleton/scratch/utils';
+import ApiHelpers from '@/external/bot-skeleton/services/api/api-helpers';
 import { CANDLE_CLOSE_ENTRY_SECONDS } from './candle-close-entry';
 import {
     acquireBlocklyXmlImportGuard,
@@ -326,8 +327,9 @@ export function patchBotXml(
 }
 
 /**
- * Applies the selected live indicator setup and risk settings to the single
- * Premium Over/Under Blockly template before loading it in standard DBot.
+ * Applies a source-qualified signal's market, direction/barrier, risk values,
+ * and 00:02 one-minute entry window to bot #21. Indicator conditions stay in
+ * the source board and are not duplicated inside the bot.
  */
 export function configureOverUnderBotXml(
     xmlText: string,
@@ -365,10 +367,10 @@ export function configureOverUnderBotXml(
         element.setAttribute('id', id);
         return element;
     };
-    const field = (name: string, value: string): Element => {
+    const field = (name: string, value: string | number): Element => {
         const element = create('field');
         element.setAttribute('name', name);
-        element.textContent = value;
+        element.textContent = String(value);
         return element;
     };
     const input = (tag: 'value' | 'statement', name: string, child: Element): Element => {
@@ -377,70 +379,6 @@ export function configureOverUnderBotXml(
         element.appendChild(child);
         return element;
     };
-    const variable = (id: string, variableId: string, name: string): Element => {
-        const get = block('variables_get', id);
-        get.appendChild(field('VAR', name));
-        get.firstElementChild?.setAttribute('id', variableId);
-        return get;
-    };
-    const number = (id: string, value: string): Element => {
-        const result = block('math_number', id);
-        result.appendChild(field('NUM', value));
-        return result;
-    };
-    const compare = (id: string, left: Element, right: Element): Element => {
-        const result = block('logic_compare', id);
-        result.appendChild(field('OP', 'EQ'));
-        result.append(input('value', 'A', left), input('value', 'B', right));
-        return result;
-    };
-    const purchase = (id: string, contract: 'DIGITOVER' | 'DIGITUNDER'): Element => {
-        const result = block('purchase', id);
-        result.appendChild(field('PURCHASE_LIST', contract));
-        return result;
-    };
-
-    const beforePurchase = Array.from(doc.getElementsByTagName('block'))
-        .find(candidate => candidate.getAttribute('type') === 'before_purchase');
-    const beforeStack = beforePurchase
-        ? Array.from(beforePurchase.children).find(child =>
-            child.localName === 'statement' && child.getAttribute('name') === 'BEFOREPURCHASE_STACK',
-        )
-        : undefined;
-    if (!beforePurchase || !beforeStack) {
-        throw new Error('Over/Under bot XML is missing its purchase conditions root.');
-    }
-
-    const beforeGate = block('controls_if', 'ou_tm_gate');
-    beforeGate.appendChild(input(
-        'value',
-        'IF0',
-        compare('ou_tm_cmp', variable('ou_tm_get', 'ou_tm_id', 'trading mode'), number('ou_tm_one', '1')),
-    ));
-
-    const indicatorGate = block('controls_if', 'ou_indicator_gate');
-    const indicatorSignal = block('over_under_indicator_signal', 'ou_indicator_signal');
-    indicatorSignal.appendChild(field('MODE', settings.mode));
-    indicatorGate.appendChild(input('value', 'IF0', indicatorSignal));
-
-    const directionGate = block('controls_if', 'ou_dir_purchase_check');
-    const mutation = create('mutation');
-    mutation.setAttribute('else', '1');
-    directionGate.appendChild(mutation);
-    const directionText = block('text', 'ou_over_text_cmp');
-    directionText.appendChild(field('TEXT', 'OVER'));
-    directionGate.appendChild(input(
-        'value',
-        'IF0',
-        compare('ou_dir_cmp', variable('ou_dir_get_purchase', 'ou_dir_id', 'Direction'), directionText),
-    ));
-    directionGate.appendChild(input('statement', 'DO0', purchase('ou_purchase_over', 'DIGITOVER')));
-    directionGate.appendChild(input('statement', 'ELSE', purchase('ou_purchase_under', 'DIGITUNDER')));
-    indicatorGate.appendChild(input('statement', 'DO0', directionGate));
-    beforeGate.appendChild(input('statement', 'DO0', indicatorGate));
-
-    while (beforeStack.firstChild) beforeStack.removeChild(beforeStack.firstChild);
-    beforeStack.appendChild(beforeGate);
 
     const blocks = Array.from(doc.getElementsByTagName('block'));
     const blockById = (id: string): Element => {
@@ -457,23 +395,71 @@ export function configureOverUnderBotXml(
     };
 
     const setup = getOverUnderIndicatorModeConfig(settings.mode);
-    setField('ou_indicator_signal', 'MODE', settings.mode);
+    const barrier = settings.barrier ?? setup.barrier;
+    const validBarrier = setup.side === 'OVER'
+        ? Number.isInteger(barrier) && barrier >= 0 && barrier <= 8
+        : Number.isInteger(barrier) && barrier >= 1 && barrier <= 9;
+    if (!validBarrier) {
+        throw new Error(setup.side === 'OVER'
+            ? 'Over barriers must be between 0 and 8.'
+            : 'Under barriers must be between 1 and 9.');
+    }
     setField('ou_tm_init', 'NUM', 1);
     setField('ou_dir_text_val', 'TEXT', setup.side);
-    setField('ou_barrier_num', 'NUM', setup.barrier);
-    setField('ou_ep_num', 'NUM', setup.barrier);
+    setField('ou_barrier_num', 'NUM', barrier);
+    setField('ou_ep_num', 'NUM', CANDLE_CLOSE_ENTRY_SECONDS);
     setField('ou_stake_num', 'NUM', settings.stake);
     setField('ou_initial_stake_num', 'NUM', settings.stake);
     setField('ou_tp_num', 'NUM', settings.takeProfit);
     setField('ou_mart_num', 'NUM', settings.martingale);
     setField('sl_ou_num', 'NUM', settings.stopLoss);
 
-    const intervalBlocks = blocks.filter(block => block.getAttribute('type') === 'trade_definition_candleinterval');
-    const intervalField = intervalBlocks
-        .flatMap(block => Array.from(block.getElementsByTagName('field')))
-        .find(field => field.getAttribute('name') === 'CANDLEINTERVAL_LIST');
+    const entryPointVariable = Array.from(doc.getElementsByTagName('variable'))
+        .find(variable => variable.getAttribute('id') === 'ou_ep_id');
+    if (entryPointVariable) entryPointVariable.textContent = 'Entry Point Seconds';
+    Array.from(doc.querySelectorAll('field[name="VAR"][id="ou_ep_id"]')).forEach(variableField => {
+        variableField.textContent = 'Entry Point Seconds';
+    });
+
+    const intervalField = Array.from(doc.getElementsByTagName('field'))
+        .find(candidate => candidate.getAttribute('name') === 'CANDLEINTERVAL_LIST');
     if (!intervalField) throw new Error('Over/Under bot XML is missing its one-minute candle setting.');
     intervalField.textContent = '60';
+
+    const beforePurchase = blocks.find(candidate => candidate.getAttribute('type') === 'before_purchase');
+    const runModeGate = blocks.find(candidate => candidate.getAttribute('id') === 'ou_tm_gate');
+    const runModePurchase = runModeGate
+        ? Array.from(runModeGate.children).find(child =>
+            child.localName === 'statement' && child.getAttribute('name') === 'DO0',
+        )
+        : undefined;
+    const directionPurchaseGate = runModePurchase
+        ? Array.from(runModePurchase.children).find(child => child.localName === 'block')
+        : undefined;
+    if (!beforePurchase || !runModeGate || !runModePurchase || !directionPurchaseGate) {
+        throw new Error('Over/Under bot XML is missing its Run and purchase blocks.');
+    }
+
+    // The live signal board supplies the qualifying setup and market. #21 only
+    // applies its saved contract/risk values and waits for the configured time.
+    const timeWindow = block('candle_close_entry_window', 'ou_candle_close_entry');
+    timeWindow.append(
+        field('SECONDS_BEFORE_CLOSE', CANDLE_CLOSE_ENTRY_SECONDS),
+        field('INTERVAL_SECONDS', 60),
+    );
+    const entryWindowGate = block('controls_if', 'ou_entry_time_gate');
+    entryWindowGate.appendChild(input('value', 'IF0', timeWindow));
+    const timedPurchase = create('statement');
+    timedPurchase.setAttribute('name', 'DO0');
+    entryWindowGate.appendChild(timedPurchase);
+    runModePurchase.replaceChild(entryWindowGate, directionPurchaseGate);
+    timedPurchase.appendChild(directionPurchaseGate);
+    Array.from(runModeGate.children)
+        .filter(child => child.localName === 'statement' && child.getAttribute('name') === 'ELSE')
+        .forEach(legacyScanner => runModeGate.removeChild(legacyScanner));
+    const runModeMutation = Array.from(runModeGate.children)
+        .find(child => child.localName === 'mutation');
+    runModeMutation?.setAttribute('else', '0');
 
     return doc;
 }
@@ -557,7 +543,10 @@ export function getBotPatches(
                 { blockId: 'ou_tp_init',           numValue: takeProfit },
                 { blockId: 'ou_mart_level_init',   numValue: martingaleLevel },
                 { blockId: 'ou_mart_init',         numValue: martingale },
-                { blockId: 'ou_ep_init',           numValue: entryPt },
+                {
+                    blockId: 'ou_ep_init',
+                    numValue: botId === 'over-under-secret-weapon' ? CANDLE_CLOSE_ENTRY_SECONDS : entryPt,
+                },
             ];
         }
 
@@ -704,14 +693,19 @@ export async function fetchAndPatchBot(
     if (botId === 'over-under-secret-weapon') {
         const direction = signal.direction.trim().toUpperCase();
         const barrier = parseDigitFrom(direction);
-        const mode = direction.startsWith('UNDER')
-            ? barrier === 5 ? 'TSI_UNDER_5' : barrier === 6 ? 'TSI_UNDER_6' : ''
-            : barrier === 4 ? 'MACD_OVER_4' : barrier === 5 ? 'MACD_OVER_5' : '';
-        if (!mode || !OVER_UNDER_INDICATOR_MODES.includes(mode as OverUnderIndicatorMode)) {
+        const isUnder = direction.startsWith('UNDER');
+        const mode = signal.indicatorMode ?? (isUnder
+            ? barrier === 5 ? 'TSI_UNDER_5' : 'TSI_UNDER_6'
+            : barrier === 5 ? 'MACD_OVER_5' : 'MACD_OVER_4');
+        if (
+            !OVER_UNDER_INDICATOR_MODES.includes(mode) ||
+            getOverUnderIndicatorModeConfig(mode).side !== (isUnder ? 'UNDER' : 'OVER')
+        ) {
             throw new Error('The Over/Under signal does not match one of the supported indicator setups.');
         }
         doc = configureOverUnderBotXml(new XMLSerializer().serializeToString(doc.documentElement), {
-            mode: mode as OverUnderIndicatorMode,
+            mode,
+            barrier,
             stake,
             takeProfit,
             stopLoss,
@@ -780,6 +774,85 @@ export function loadPatchedBotIntoWorkspace(xmlText: string, workspace: any): vo
             importGuard.releaseAfter(BLOCKLY_XML_IMPORT_SETTLE_MS);
         } else {
             importGuard.release();
+        }
+    }
+}
+
+/**
+ * Keeps #21 on the exact volatility selected by its source signal after
+ * Blockly's asynchronous market dropdown cascade settles.
+ */
+export async function restoreOverUnderWorkspaceSymbol(workspace: any, symbol: string): Promise<void> {
+    const Blockly = (window as any).Blockly;
+    if (!Blockly?.Events || !workspace || !symbol) {
+        throw new Error('The DBot workspace is not ready for the selected volatility.');
+    }
+
+    const delay = (milliseconds: number) =>
+        new Promise<void>(resolve => window.setTimeout(resolve, milliseconds));
+    let activeSymbols: any;
+    for (let attempt = 0; attempt < 50; attempt++) {
+        activeSymbols = (ApiHelpers as any)?.instance?.active_symbols;
+        if (activeSymbols) break;
+        await delay(200);
+    }
+    if (!activeSymbols) {
+        throw new Error('Deriv market options are not ready. Keep #21 stopped and retry Save.');
+    }
+
+    const marketBlock = workspace.getAllBlocks(true).find((block: any) => block.type === 'trade_definition_market');
+    const tradeTypeBlock = workspace.getAllBlocks(true).find((block: any) => block.type === 'trade_definition_tradetype');
+    if (!marketBlock) throw new Error('The loaded #21 bot is missing its market block.');
+
+    const eventGroup = `secret-weapon-market-${Date.now()}`;
+    const previousGroup = Blockly.Events.getGroup();
+    Blockly.Events.setGroup(eventGroup);
+    try {
+        marketBlock.getField('MARKET_LIST')?.updateOptions?.(
+            activeSymbols.getMarketDropdownOptions(),
+            { default_value: 'synthetic_index', should_pretend_empty: true, event_group: eventGroup },
+        );
+        marketBlock.getField('SUBMARKET_LIST')?.updateOptions?.(
+            activeSymbols.getSubmarketDropdownOptions('synthetic_index'),
+            { default_value: 'random_index', should_pretend_empty: true, event_group: eventGroup },
+        );
+        marketBlock.getField('SYMBOL_LIST')?.updateOptions?.(
+            activeSymbols.getSymbolDropdownOptions('random_index'),
+            { default_value: symbol, should_pretend_empty: true, event_group: eventGroup },
+        );
+        marketBlock.setFieldValue('synthetic_index', 'MARKET_LIST');
+        marketBlock.setFieldValue('random_index', 'SUBMARKET_LIST');
+        marketBlock.setFieldValue(symbol, 'SYMBOL_LIST');
+        tradeTypeBlock?.onchange?.({
+            type: Blockly.Events.BLOCK_CHANGE,
+            blockId: marketBlock.id,
+            name: 'SYMBOL_LIST',
+            group: eventGroup,
+        });
+    } finally {
+        Blockly.Events.setGroup(previousGroup);
+    }
+
+    const symbolOptions = marketBlock.getField('SYMBOL_LIST')?.menuGenerator_ ?? [];
+    if (
+        !symbolOptions.some((option: any[]) => option?.[1] === symbol) ||
+        marketBlock.getFieldValue('SYMBOL_LIST') !== symbol
+    ) {
+        throw new Error(`DBot could not keep the selected volatility ${symbol}. #21 remains stopped.`);
+    }
+
+    await delay(2_000);
+    if (marketBlock.getFieldValue('SYMBOL_LIST') !== symbol) {
+        const latestOptions = marketBlock.getField('SYMBOL_LIST')?.menuGenerator_ ?? [];
+        if (!latestOptions.some((option: any[]) => option?.[1] === symbol)) {
+            throw new Error(`DBot replaced the selected volatility ${symbol}. #21 remains stopped.`);
+        }
+        const currentGroup = Blockly.Events.getGroup();
+        Blockly.Events.setGroup(eventGroup);
+        try {
+            marketBlock.setFieldValue(symbol, 'SYMBOL_LIST');
+        } finally {
+            Blockly.Events.setGroup(currentGroup);
         }
     }
 }

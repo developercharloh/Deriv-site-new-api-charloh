@@ -4,10 +4,18 @@ import { Loader2, X, Zap, RefreshCw, PlayCircle } from '@/utils/lucide-shim';
 import { DERIV_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatilities';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
-import { destroyerBotIdFromDirection, fetchAndPatchBot, loadPatchedBotIntoWorkspace, type BotSignal } from '@/utils/bot-patch';
+import {
+    destroyerBotIdFromDirection,
+    fetchAndPatchBot,
+    loadPatchedBotIntoWorkspace,
+    restoreOverUnderWorkspaceSymbol,
+    type BotSignal,
+} from '@/utils/bot-patch';
+import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
 import { MatchesSignalSection } from './matches-signal-board';
-import { OverUnderSignalBoard } from './over-under-signal-board';
+import { OverUnderSignalBoard, type OverUnderSignalSelection } from './over-under-signal-board';
+import { OverUnderSecretWeaponConfig, type SecretWeaponRunSettings } from './OverUnderSecretWeaponConfig';
 import {
     getOverUnderSignalOptions,
     OVER_UNDER_SIGNAL_BARRIERS,
@@ -959,6 +967,9 @@ const AiSignalsPage: React.FC = () => {
     const [cfgMartingale,   setCfgMartingale]   = useState(DEFAULT_RUN_CFG.martingale);
     const [cfgMartingaleOn, setCfgMartingaleOn] = useState(DEFAULT_RUN_CFG.martingaleOn);
     const [cfgEoRecovery,   setCfgEoRecovery]   = useState(DEFAULT_RUN_CFG.eoRecovery);
+    const [selectedOverUnderSignal, setSelectedOverUnderSignal] = useState<OverUnderSignalSelection | null>(null);
+    const [secretWeaponSaving, setSecretWeaponSaving] = useState(false);
+    const [secretWeaponError, setSecretWeaponError] = useState('');
 
     // Live Market Watch — starts automatically on mount
     const [watchActive,    setWatchActive]    = useState(true);
@@ -1214,8 +1225,88 @@ const AiSignalsPage: React.FC = () => {
         setRunState('idle'); setRunErr(''); setShowRunConfig(true);
     }, [result]);
 
+    const saveOverUnderSignalToSecretWeapon = useCallback(async (settings: SecretWeaponRunSettings) => {
+        const selected = selectedOverUnderSignal;
+        if (!selected) return;
+        setSecretWeaponSaving(true);
+        setSecretWeaponError('');
+        try {
+            if (!store) throw new Error('DBot Builder is not ready.');
+            if (store.run_panel?.is_running) {
+                throw new Error('Stop the currently running bot before loading #21.');
+            }
+            for (const [label, value] of [
+                ['Stake', settings.stake],
+                ['Take Profit', settings.takeProfit],
+                ['Stop Loss', settings.stopLoss],
+            ] as const) {
+                if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be greater than zero.`);
+            }
+            if (!Number.isFinite(settings.martingale) || settings.martingale < 1) {
+                throw new Error('Martingale must be at least 1×.');
+            }
+
+            const side = selected.setup.side;
+            const contractType = side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER';
+            const signal: BotSignal = {
+                symbol: selected.symbol.code,
+                symbolLabel: selected.symbol.label,
+                direction: `${side} ${settings.barrier}`,
+                entryPoint: `Digit ${settings.barrier}`,
+                confidence: 100,
+                market: 'over_under',
+                indicatorMode: selected.setup.mode,
+                contractType,
+                recoveryContractType: contractType,
+            };
+            const document = await fetchAndPatchBot(
+                'over-under-secret-weapon',
+                signal,
+                settings.stake,
+                settings.takeProfit,
+                settings.stopLoss,
+                settings.martingale,
+            );
+            const workspace = (window as any).Blockly?.derivWorkspace;
+            if (!workspace) {
+                throw new Error('Open DBot Builder once, then return to this signal and save again.');
+            }
+
+            loadPatchedBotIntoWorkspace(
+                new XMLSerializer().serializeToString(document.documentElement),
+                workspace,
+            );
+            setWorkspaceBotTemplateIdentity(workspace, 'over-under-secret-weapon');
+            await restoreOverUnderWorkspaceSymbol(workspace, selected.symbol.code);
+
+            store.journal.setActiveBotTemplateId('over-under-secret-weapon');
+            store.save_modal.updateBotName('Over Under Secret Weapon');
+            store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+            try {
+                localStorage.setItem('fb_cfg_over-under-secret-weapon', JSON.stringify({
+                    mode: selected.setup.mode,
+                    barrier: settings.barrier,
+                    stake: String(settings.stake),
+                    takeProfit: String(settings.takeProfit),
+                    stopLoss: String(settings.stopLoss),
+                    martingale: String(settings.martingale),
+                }));
+            } catch { /* retain this run even if browser storage is unavailable */ }
+            setSelectedOverUnderSignal(null);
+        } catch (error: any) {
+            setSecretWeaponError(error?.message || 'Could not save the signal to #21.');
+        } finally {
+            setSecretWeaponSaving(false);
+        }
+    }, [selectedOverUnderSignal, store]);
+
     const handleExecuteTrade = useCallback(async () => {
         if (!result) return;
+        if (tradeType === 'over_under') {
+            setRunState('error');
+            setRunErr('Use a ready MACD/Trend Strength Index signal to configure bot #21.');
+            return;
+        }
         const liveWatch = watchdogMap.get(result.sym.code);
         if (!liveWatch || liveWatch.status !== 'holding' || Date.now() - liveWatch.lastTickAt > 4_000) {
             setRunState('error');
@@ -1291,7 +1382,7 @@ const AiSignalsPage: React.FC = () => {
     const vc = result ? voteColor(result.statsChecks.passCount) : '#6366f1';
     const recRuns = result ? calcRecRuns(result.statsChecks.passCount, result.winProb) : 5;
     const sessionOver = sessionCount >= recRuns;
-    const runTargetLabel = tradeType === 'over_under' ? (editDir === 'UNDER' ? 'Under Destroyer' : 'Over Destroyer') : tradeType === 'matches_differs' ? (editMatchesSide === 'DIFFERS' ? 'Differ V2' : 'Matches') : 'Even Odd Scanner';
+    const runTargetLabel = tradeType === 'over_under' ? '#21 — Over Under Secret Weapon' : tradeType === 'matches_differs' ? (editMatchesSide === 'DIFFERS' ? 'Differ V2' : 'Matches') : 'Even Odd Scanner';
     const models: ModelResult[] = [];
 
     return (
@@ -1356,6 +1447,10 @@ const AiSignalsPage: React.FC = () => {
                         active={watchActive}
                         onToggle={() => setWatchActive(previous => !previous)}
                         maintenanceActive={maintenanceActive}
+                        onSelectSignal={selection => {
+                            setSecretWeaponError('');
+                            setSelectedOverUnderSignal(selection);
+                        }}
                     />
                 ) : tradeType === 'matches_differs' ? (
                     <MatchesSignalSection
@@ -1924,7 +2019,7 @@ const AiSignalsPage: React.FC = () => {
 
 
             {/* ── Sticky Save & Run bar ──────────────────────────────────────── */}
-            {scanState === 'done' && result && !showRunConfig && (
+            {tradeType !== 'over_under' && scanState === 'done' && result && !showRunConfig && (
                 <div className='aisig-sticky-bar'>
                     <button
                         className='aisig-sticky-bar__btn'
@@ -1947,7 +2042,18 @@ const AiSignalsPage: React.FC = () => {
             )}
 
             {/* ── Run-config overlay ─────────────────────────────────────────── */}
-            {showRunConfig && (
+            {selectedOverUnderSignal && (
+                <OverUnderSecretWeaponConfig
+                    key={`${selectedOverUnderSignal.symbol.code}:${selectedOverUnderSignal.setup.mode}`}
+                    selection={selectedOverUnderSignal}
+                    loading={secretWeaponSaving}
+                    error={secretWeaponError}
+                    onClose={() => setSelectedOverUnderSignal(null)}
+                    onSave={saveOverUnderSignalToSecretWeapon}
+                />
+            )}
+
+            {showRunConfig && tradeType !== 'over_under' && (
                 <div className='ai-runcfg__overlay' onClick={() => runState !== 'launching' && setShowRunConfig(false)}>
                     <div className='ai-runcfg' onClick={e => e.stopPropagation()}>
                         <div className='ai-runcfg__header'>

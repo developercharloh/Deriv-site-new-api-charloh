@@ -40,6 +40,12 @@ interface OverUnderSignalBoardProps {
     active: boolean;
     onToggle: () => void;
     maintenanceActive: boolean;
+    onSelectSignal?: (selection: OverUnderSignalSelection) => void;
+}
+
+export interface OverUnderSignalSelection {
+    symbol: DerivVolatility;
+    setup: OverUnderIndicatorStatus;
 }
 
 const makeInitialFeeds = (): Record<string, MarketFeed> => Object.fromEntries(
@@ -109,6 +115,7 @@ export function OverUnderSignalBoard({
     active,
     onToggle,
     maintenanceActive,
+    onSelectSignal,
 }: OverUnderSignalBoardProps) {
     const [feeds, setFeeds] = useState<Record<string, MarketFeed>>(makeInitialFeeds);
     const [clockNow, setClockNow] = useState(Date.now());
@@ -259,7 +266,8 @@ export function OverUnderSignalBoard({
             <p className='ou-board__rule'>
                 Signals use the same indicator filters as Matches. Over 4/5 require MACD 12/26/9 descending from above
                 with a contracting positive histogram; Under 6/5 require Trend Strength Index 14 at 0.8–0.9, three flat updates, and a green
-                candle. Entry requires a fresh broker tick at 00:02 before close. This board does not place trades.
+                candle. Save a ready signal to configure bot #21 for this exact market. The bot stays stopped in DBot Builder
+                until you press Run, and its entry window is 00:02 before each one-minute candle closes.
             </p>
             <div className='ou-board__grid'>
                 {cards.map(({ symbol, feed, feedFresh, lastCandle, secondsToClose, setups }) => {
@@ -325,6 +333,16 @@ export function OverUnderSignalBoard({
                                             <em>{isEntryNow ? 'ENTRY SIGNAL NOW' : setup.setupReady
                                                 ? setup.entryWindow ? 'SETUP READY · CHECKING FEED' : 'SETUP READY · WAITING FOR 00:02'
                                                 : 'WAITING FOR INDICATOR CONDITIONS'}</em>
+                                            {setup.setupReady && setup.feedFresh && onSelectSignal && (
+                                                <button
+                                                    type='button'
+                                                    className='ou-board__save-signal'
+                                                    data-testid={`button-configure-secret-weapon-${symbol.code}-${setup.mode.toLowerCase()}`}
+                                                    onClick={() => onSelectSignal({ symbol, setup })}
+                                                >
+                                                    Configure #21 · {label}
+                                                </button>
+                                            )}
                                         </div>
                                     );
                                 })}

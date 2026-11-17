@@ -36,7 +36,8 @@ describe('Over/Under live signal board', () => {
         expect(within(firstMarket).getAllByText('Trend Strength Index 14 · one line')).toHaveLength(2);
         expect(within(firstMarket).getByText('Reconnecting')).toBeInTheDocument();
         expect(within(firstMarket).getAllByText('WAITING FOR INDICATOR CONDITIONS')).toHaveLength(4);
-        expect(screen.getByText(/fresh broker tick at 00:02/)).toBeInTheDocument();
+        expect(screen.getByText(/00:02 before each one-minute candle closes/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Configure #21/ })).not.toBeInTheDocument();
         expect(within(firstMarket).getByTestId(`data-signal-option-${symbol.code}-over-4`)).toBeInTheDocument();
         expect(within(firstMarket).getByTestId(`data-signal-option-${symbol.code}-under-5`)).toBeInTheDocument();
     });

@@ -19,6 +19,7 @@ import {
     type OverUnderBotSettings,
 } from '@/utils/bot-patch';
 import {
+    getOverUnderIndicatorModeConfig,
     OVER_UNDER_INDICATOR_MODES,
     type OverUnderIndicatorMode,
 } from '@/utils/over-under-indicator-strategy';
@@ -130,12 +131,12 @@ const BOTS: BotConfig[] = [
         name: 'Over Under Secret Weapon',
         emoji: '🎯',
         description:
-            'Uses live one-minute MACD or Trend Strength Index signals for Over 4/5 or Under 6/5. Choose one setup and risk settings, then load it stopped into DBot Builder.',
+            'When loaded from the live signal board, bot #21 uses the exact volatility that produced the signal. Configure its barrier and risk settings, then load it stopped into DBot Builder for a 00:02 entry on one-minute candles.',
         market: 'Volatility 75 (1s) Index (1HZ75V)',
-        strategy: 'MACD Over 4/5 · Trend Strength Index 14 Under 6/5 · 00:02 Entry',
+        strategy: 'Source-qualified Over/Under · same-market execution · 00:02 Entry',
         params: [
-            { label: 'Setups', value: 'MACD Over 4/5 · Trend Strength Index 14 Under 6/5' },
-            { label: 'Entry', value: 'Broker tick at 00:02 before candle close' },
+            { label: 'Signal conditions', value: 'Provided by the live source board' },
+            { label: 'Entry', value: '2 seconds before each 1-minute candle closes' },
             { label: 'Stake', value: 'Set before each run' },
             { label: 'Take Profit', value: 'Set before each run' },
             { label: 'Stop Loss', value: 'Set before each run' },
@@ -736,10 +737,11 @@ const SignalTradeModal: React.FC<{
     );
 };
 
-type OverUnderConfigValues = SignalSettings & { mode: OverUnderIndicatorMode };
+type OverUnderConfigValues = SignalSettings & { mode: OverUnderIndicatorMode; barrier: string };
 
 const DEFAULT_OVER_UNDER_CONFIG: OverUnderConfigValues = {
     mode: 'MACD_OVER_4',
+    barrier: '4',
     stake: '0.35',
     takeProfit: '15',
     stopLoss: '50',
@@ -763,12 +765,16 @@ const OverUnderBotConfigModal: React.FC<{
     const [config, setConfig] = useState<OverUnderConfigValues>(() => {
         try {
             const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            const mode = OVER_UNDER_INDICATOR_MODES.includes(saved?.mode)
+                ? saved.mode
+                : DEFAULT_OVER_UNDER_CONFIG.mode;
             return {
                 ...DEFAULT_OVER_UNDER_CONFIG,
                 ...(saved && typeof saved === 'object' ? saved : {}),
-                mode: OVER_UNDER_INDICATOR_MODES.includes(saved?.mode)
-                    ? saved.mode
-                    : DEFAULT_OVER_UNDER_CONFIG.mode,
+                mode,
+                barrier: String(Number.isInteger(Number(saved?.barrier))
+                    ? Number(saved.barrier)
+                    : getOverUnderIndicatorModeConfig(mode).barrier),
             };
         } catch {
             return DEFAULT_OVER_UNDER_CONFIG;
@@ -782,6 +788,7 @@ const OverUnderBotConfigModal: React.FC<{
         setLocalError('');
         const settings: OverUnderBotSettings = {
             mode: config.mode,
+            barrier: Number(config.barrier),
             stake: Number(config.stake),
             takeProfit: Number(config.takeProfit),
             stopLoss: Number(config.stopLoss),
@@ -802,7 +809,7 @@ const OverUnderBotConfigModal: React.FC<{
             <div className='fb-modal fb-modal--over-under' role='dialog' aria-modal='true' aria-labelledby='ou-config-title' onClick={event => event.stopPropagation()}>
                 <div className='fb-modal__header'>
                     <div className='fb-modal__signal-info'>
-                        <strong id='ou-config-title' className='fb-modal__direction'>Configure Over / Under</strong>
+                <strong id='ou-config-title' className='fb-modal__direction'>Configure #21 Over / Under</strong>
                         <span className='fb-modal__sym'>Volatility 75 (1s) Index</span>
                         <span className='fb-modal__entry'>Live one-minute indicators · entry at 00:02 before candle close</span>
                     </div>
@@ -810,21 +817,44 @@ const OverUnderBotConfigModal: React.FC<{
                 </div>
 
                 <p className='fb-modal__ou-note'>
-                    Trend Strength Index is the single-line 14-period indicator. The selected setup is loaded stopped;
-                    use Run and Stop in DBot Builder when you are ready.
+                    Signal conditions come from the signal source, not this bot. #21 loads stopped with the selected
+                    contract, 00:02 entry on one-minute candles, and risk settings; use Run and Stop in DBot Builder.
                 </p>
 
                 <div className='fb-modal__fields'>
                     <div className='fb-modal__field fb-modal__field--wide'>
-                        <label htmlFor='ou-indicator-mode'>Indicator setup</label>
+                        <label htmlFor='ou-indicator-mode'>Signal setup and direction</label>
                         <select
                             id='ou-indicator-mode'
                             value={config.mode}
-                            onChange={event => setConfig(previous => ({ ...previous, mode: event.target.value as OverUnderIndicatorMode }))}
+                            onChange={event => {
+                                const mode = event.target.value as OverUnderIndicatorMode;
+                                setConfig(previous => ({
+                                    ...previous,
+                                    mode,
+                                    barrier: String(getOverUnderIndicatorModeConfig(mode).barrier),
+                                }));
+                            }}
                             disabled={loading || submitting}
                         >
                             {OVER_UNDER_INDICATOR_MODES.map(mode => (
                                 <option key={mode} value={mode}>{OVER_UNDER_SETUP_LABELS[mode]}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className='fb-modal__field'>
+                        <label htmlFor='ou-barrier'>Barrier digit</label>
+                        <select
+                            id='ou-barrier'
+                            value={config.barrier}
+                            onChange={event => setConfig(previous => ({ ...previous, barrier: event.target.value }))}
+                            disabled={loading || submitting}
+                        >
+                            {(getOverUnderIndicatorModeConfig(config.mode).side === 'OVER'
+                                ? [0, 1, 2, 3, 4, 5, 6, 7, 8]
+                                : [9, 8, 7, 6, 5, 4, 3, 2, 1]
+                            ).map(value => (
+                                <option key={value} value={value}>{getOverUnderIndicatorModeConfig(config.mode).side} {value}</option>
                             ))}
                         </select>
                     </div>
