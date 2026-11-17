@@ -15,6 +15,7 @@ const blockDefinitions = {
     rsi_value: 'Bot.getRsiValue',
     bollinger_value: 'Bot.getBollingerValue',
     macd_cross: 'Bot.isMacdCross',
+    over_under_indicator_signal: 'Bot.getOverUnderIndicatorSignal',
     rsi_cross: 'Bot.isRsiCross',
     bollinger_squeeze: 'Bot.isBollingerSqueeze',
     indicator_ready: 'Bot.isIndicatorReady',

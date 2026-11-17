@@ -260,6 +260,25 @@ registerBoolean({
 });
 
 registerBoolean({
+    type: 'over_under_indicator_signal',
+    message0: 'Over/Under %1 indicator setup is active',
+    args0: [
+        dropdown('MODE', [
+            ['MACD Over 4', 'MACD_OVER_4'],
+            ['MACD Over 5', 'MACD_OVER_5'],
+            ['TSI Under 6', 'TSI_UNDER_6'],
+            ['TSI Under 5', 'TSI_UNDER_5'],
+        ]),
+    ],
+    tooltip: 'Checks the selected Over/Under setup using the same one-minute MACD or TSI conditions as the Matches signal board.',
+    meta: 'Over/Under indicator signal',
+    generatorCode: block => [
+        `Bot.getOverUnderIndicatorSignal('${block.getFieldValue('MODE') || 'MACD_OVER_4'}')`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
+});
+
+registerBoolean({
     type: 'rsi_cross',
     message0: 'RSI crosses %1 %2 using period %3 and %4',
     args0: [

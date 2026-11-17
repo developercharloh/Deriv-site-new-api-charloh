@@ -3,9 +3,15 @@ import { DERIV_VOLATILITIES, type DerivVolatility } from '@/utils/deriv-volatili
 import { useApiBase } from '@/hooks/useApiBase';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
+    calculateTsiSeries,
     formatCandleCountdown,
     MATCHES_CANDLE_SECONDS,
     MATCHES_HISTORY_COUNT,
+    MATCHES_MACD_SIGNAL_PERIOD,
+    MATCHES_MACD_SLOW_PERIOD,
+    MATCHES_MACD_FAST_PERIOD,
+    MATCHES_TSI_LONG_PERIOD,
+    MATCHES_TSI_SHORT_PERIOD,
     mergeCandle,
     normalizeCandle,
     secondsUntilCandleClose,
@@ -13,10 +19,9 @@ import {
 } from './matches-signal-strategy';
 import { subscribeToMatchesCandleFeed, type MatchesCandleApi } from './matches-candle-feed';
 import {
-    OVER_UNDER_SIGNAL_BARRIERS,
-    type OverUnderSignalOption,
-    type OverUnderSignalSide,
-} from './over-under-signals';
+    evaluateOverUnderIndicatorStatusesAtEpoch,
+    type OverUnderIndicatorStatus,
+} from '@/utils/over-under-indicator-strategy';
 import './over-under-signal-board.scss';
 
 const LIVE_TICK_MAX_AGE_MS = 2_500;
@@ -25,34 +30,23 @@ type FeedStatus = 'connecting' | 'warming' | 'live' | 'reconnecting' | 'error';
 
 interface MarketFeed {
     candles: Candle[];
+    tsiSamples: number[];
     feedStatus: FeedStatus;
     serverEpoch: number | null;
     lastTickAt: number | null;
     error?: string;
 }
 
-export interface OverUnderMarketSignal {
-    symbol: DerivVolatility;
-    direction: string;
-    isSignal: boolean;
-    signalStrength: number;
-    winProbability: number;
-    options: OverUnderSignalOption[];
-    watchdogStatus?: 'warming' | 'holding' | 'weakening' | 'reversed';
-    watchdogWinPct?: number;
-    resultAvailable: boolean;
-}
-
 interface OverUnderSignalBoardProps {
     active: boolean;
+    onToggle: () => void;
     maintenanceActive: boolean;
-    signals: OverUnderMarketSignal[];
-    onSelectSignal?: (symbolCode: string) => void;
 }
 
 const makeInitialFeeds = (): Record<string, MarketFeed> => Object.fromEntries(
     DERIV_VOLATILITIES.map(symbol => [symbol.code, {
         candles: [],
+        tsiSamples: [],
         feedStatus: 'connecting' as FeedStatus,
         serverEpoch: null,
         lastTickAt: null,
@@ -112,20 +106,10 @@ function MiniCandleChart({ candles, label }: { candles: Candle[]; label: string 
     );
 }
 
-function orderedOptions(options: OverUnderSignalOption[]) {
-    return (Object.entries(OVER_UNDER_SIGNAL_BARRIERS) as [OverUnderSignalSide, readonly number[]][])
-        .flatMap(([side, barriers]) => barriers.map(barrier => ({
-            side,
-            barrier,
-            option: options.find(option => option.side === side && option.barrier === barrier) ?? null,
-        })));
-}
-
 export function OverUnderSignalBoard({
     active,
+    onToggle,
     maintenanceActive,
-    signals,
-    onSelectSignal,
 }: OverUnderSignalBoardProps) {
     const [feeds, setFeeds] = useState<Record<string, MarketFeed>>(makeInitialFeeds);
     const [clockNow, setClockNow] = useState(Date.now());
@@ -141,6 +125,7 @@ export function OverUnderSignalBoard({
                 DERIV_VOLATILITIES.map(symbol => [symbol.code, {
                     ...previous[symbol.code],
                     feedStatus: status,
+                    tsiSamples: [],
                     serverEpoch: null,
                     lastTickAt: null,
                     error: maintenanceActive ? 'Deriv market data is under maintenance.' : undefined,
@@ -171,6 +156,7 @@ export function OverUnderSignalBoard({
                 setFeeds(previous => updateFeed(previous, code, feed => ({
                     ...feed,
                     candles,
+                    tsiSamples: [],
                     feedStatus: candles.length ? 'warming' : 'error',
                     error: candles.length ? undefined : 'No one-minute candles were returned.',
                 })));
@@ -179,20 +165,28 @@ export function OverUnderSignalBoard({
                 const candle = normalizeCandle(rawOhlc);
                 const epoch = Number(rawOhlc.epoch ?? serverTime);
                 if (!candle || !Number.isFinite(epoch)) return;
-                setFeeds(previous => updateFeed(previous, code, feed => ({
-                    ...feed,
-                    candles: mergeCandle(feed.candles, candle),
-                    feedStatus: 'live',
-                    serverEpoch: epoch,
-                    lastTickAt: Date.now(),
-                    error: undefined,
-                })));
+                setFeeds(previous => updateFeed(previous, code, feed => {
+                    const candles = mergeCandle(feed.candles, candle);
+                    const currentTsi = calculateTsiSeries(candles).at(-1) ?? null;
+                    return {
+                        ...feed,
+                        candles,
+                        tsiSamples: currentTsi === null
+                            ? feed.tsiSamples
+                            : [...feed.tsiSamples, currentTsi].slice(-3),
+                        feedStatus: 'live',
+                        serverEpoch: epoch,
+                        lastTickAt: Date.now(),
+                        error: undefined,
+                    };
+                }));
             },
             onStatus: (code, status, message) => {
                 setFeeds(previous => updateFeed(previous, code, feed => ({
                     ...feed,
                     feedStatus: status,
                     error: message,
+                    tsiSamples: status === 'reconnecting' ? [] : feed.tsiSamples,
                     lastTickAt: status === 'reconnecting' ? null : feed.lastTickAt,
                 })));
             },
@@ -205,13 +199,8 @@ export function OverUnderSignalBoard({
         return () => clearInterval(timer);
     }, [active]);
 
-    const signalByCode = useMemo(
-        () => new Map(signals.map(signal => [signal.symbol.code, signal])),
-        [signals],
-    );
     const cards = useMemo(() => DERIV_VOLATILITIES.map(symbol => {
         const feed = feeds[symbol.code];
-        const signal = signalByCode.get(symbol.code);
         const feedFresh = active && feed.feedStatus === 'live' &&
             feed.lastTickAt !== null && clockNow - feed.lastTickAt <= LIVE_TICK_MAX_AGE_MS;
         const serverNow = feed.serverEpoch !== null && feed.lastTickAt !== null
@@ -221,14 +210,15 @@ export function OverUnderSignalBoard({
         const secondsToClose = lastCandle && serverNow !== null
             ? secondsUntilCandleClose(lastCandle.time, serverNow)
             : null;
-        const liveReady = Boolean(
-            signal?.isSignal &&
-            feedFresh &&
-            signal.watchdogStatus === 'holding',
-        );
+        const setups = evaluateOverUnderIndicatorStatusesAtEpoch({
+            candles: feed.candles,
+            tsiSamples: feed.tsiSamples,
+            brokerEpoch: serverNow,
+            feedFresh,
+        });
 
-        return { symbol, feed, signal, feedFresh, lastCandle, secondsToClose, liveReady };
-    }), [active, clockNow, feeds, signalByCode]);
+        return { symbol, feed, feedFresh, lastCandle, secondsToClose, setups };
+    }), [active, clockNow, feeds]);
 
     const liveCount = cards.filter(card => card.feedFresh).length;
     const connectionLabel = maintenanceActive
@@ -248,9 +238,19 @@ export function OverUnderSignalBoard({
             <div className='ou-board__heading'>
                 <div>
                     <h2>Over / Under Signals</h2>
-                    <p>Over 4 · Over 5 · Under 6 · Under 5</p>
+                    <p>MACD for Over 4/5 · TSI for Under 6/5</p>
                 </div>
-                <span className='ou-board__interval'>1-MINUTE CANDLES</span>
+                <div className='ou-board__heading-actions'>
+                    <span className='ou-board__interval'>1-MINUTE CANDLES</span>
+                    <button
+                        type='button'
+                        className={`ou-board__toggle${active ? ' ou-board__toggle--active' : ''}`}
+                        onClick={onToggle}
+                        disabled={maintenanceActive}
+                    >
+                        {active ? 'Pause' : 'Resume'}
+                    </button>
+                </div>
             </div>
             <div className={`ou-board__connection${liveCount === cards.length && active ? ' ou-board__connection--live' : ''}`} role='status' aria-live='polite' data-testid='status-market-feed'>
                 <span className='ou-board__connection-dot' />
@@ -258,12 +258,12 @@ export function OverUnderSignalBoard({
                 <span className='ou-board__connection-count' data-testid='text-live-market-count'>{liveCount}/{cards.length} live</span>
             </div>
             <p className='ou-board__rule'>
-                Each market shows all four AI-scored barriers. The highlighted setup is the current consensus choice.
-                Entries wait for the broker tick at 00:02 before the one-minute candle closes. No trades are placed automatically.
+                Signals use the same indicator filters as Matches. Over 4/5 require MACD 12/26/9 descending from above
+                with a contracting positive histogram; Under 6/5 require TSI 0.8–0.9, three flat updates, and a green
+                candle. Entry requires a fresh broker tick at 00:02 before close. This board does not place trades.
             </p>
             <div className='ou-board__grid'>
-                {cards.map(({ symbol, feed, signal, feedFresh, lastCandle, secondsToClose, liveReady }) => {
-                    const options = orderedOptions(signal?.options ?? []);
+                {cards.map(({ symbol, feed, feedFresh, lastCandle, secondsToClose, setups }) => {
                     const status = !active ? 'Paused' :
                         maintenanceActive ? 'Unavailable' :
                             feedFresh ? 'Live' :
@@ -279,7 +279,7 @@ export function OverUnderSignalBoard({
                                     <strong>{symbol.short}</strong>
                                     <span>{symbol.label}</span>
                                 </div>
-                                <span className={`ou-board__status ou-board__status--${status.toLowerCase().replace(/\s+/g, '-')}`} data-testid={`status-market-${symbol.code}`}>
+                                    <span className={`ou-board__status ou-board__status--${status.toLowerCase().replace(/\s+/g, '-')}`} data-testid={`status-market-${symbol.code}`}>
                                     {status}
                                 </span>
                             </header>
@@ -298,62 +298,52 @@ export function OverUnderSignalBoard({
                             </div>
 
                             <div className='ou-board__options'>
-                                {options.map(({ option, side, barrier }) => {
-                                    if (!option) {
-                                        const label = `${side} ${barrier}`;
-                                        return (
-                                            <div className='ou-board__option ou-board__option--loading' key={label} data-testid={`data-signal-option-${symbol.code}-${side.toLowerCase()}-${barrier}`}>
-                                                <strong>{label}</strong>
-                                                <span>{feed.candles.length ? 'Waiting for AI scan' : 'Loading scan data'}</span>
-                                            </div>
-                                        );
-                                    }
-                                    const label = `${option.side} ${option.barrier}`;
-                                    const isSelected = selected === label;
+                                {setups.map((setup: OverUnderIndicatorStatus) => {
+                                    const label = `${setup.side} ${setup.barrier}`;
+                                    const isEntryNow = setup.tradeNow;
                                     return (
                                         <div
-                                            className={`ou-board__option${isSelected ? ' ou-board__option--selected' : ''}${isSelected && signal?.isSignal ? ' ou-board__option--signal' : ''}`}
-                                            key={label}
-                                            data-testid={`data-signal-option-${symbol.code}-${option.side.toLowerCase()}-${option.barrier}`}
+                                            className={`ou-board__option${setup.setupReady ? ' ou-board__option--selected' : ''}${isEntryNow ? ' ou-board__option--signal' : ''}`}
+                                            key={setup.mode}
+                                            data-testid={`data-signal-option-${symbol.code}-${setup.side.toLowerCase()}-${setup.barrier}`}
                                         >
                                             <strong>{label}</strong>
-                                            <span>{(option.probability * 100).toFixed(1)}% observed</span>
-                                            <small>{option.edge >= 0 ? '+' : ''}{(option.edge * 100).toFixed(1)}pp vs baseline</small>
-                                            {isSelected && (
-                                                <em>
-                                                    {signal?.isSignal
-                                                        ? liveReady ? 'LIVE SIGNAL' : 'WAITING FOR LIVE CHECK'
-                                                        : 'CURRENT BEST'}
-                                                </em>
-                                            )}
+                                            <span>{setup.indicator} {setup.indicator === 'MACD'
+                                                ? `${MATCHES_MACD_FAST_PERIOD}/${MATCHES_MACD_SLOW_PERIOD}/${MATCHES_MACD_SIGNAL_PERIOD}`
+                                                : `${MATCHES_TSI_LONG_PERIOD}/${MATCHES_TSI_SHORT_PERIOD}`}</span>
+                                            <small>{setup.indicatorValue === null
+                                                ? 'Warming up indicator history'
+                                                : `${setup.indicator} ${setup.indicatorValue.toFixed(setup.indicator === 'MACD' ? 5 : 3)}`}</small>
+                                            <div className='ou-board__conditions'>
+                                                {setup.conditions.map(condition => (
+                                                    <span
+                                                        key={condition.key}
+                                                        className={condition.met ? 'ou-board__condition ou-board__condition--met' : 'ou-board__condition'}
+                                                    >
+                                                        <i aria-hidden='true'>{condition.met ? '✓' : '·'}</i>
+                                                        {condition.label}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <em>{isEntryNow ? 'ENTRY SIGNAL NOW' : setup.setupReady
+                                                ? setup.entryWindow ? 'SETUP READY · CHECKING FEED' : 'SETUP READY · WAITING FOR 00:02'
+                                                : 'WAITING FOR INDICATOR CONDITIONS'}</em>
                                         </div>
                                     );
                                 })}
                             </div>
 
                             <p className='ou-board__waiting' data-testid={`text-signal-status-${symbol.code}`} aria-live='polite'>
-                                {signal?.isSignal
-                                    ? liveReady
-                                        ? 'Signal is confirmed on fresh live ticks. The Premium bot waits for the candle-close entry window.'
-                                        : `Waiting for fresh live confirmation${signal.watchdogWinPct === undefined ? '…' : ` · ${(signal.watchdogWinPct * 100).toFixed(0)}% recent hold`}.`
-                                    : signal?.resultAvailable
-                                        ? 'Waiting for the consensus filters to qualify one of these setups.'
-                                        : feed.error ?? 'AI scan results will appear when market history is ready.'}
+                                {!active
+                                    ? 'Scanner paused.'
+                                    : maintenanceActive
+                                        ? feed.error ?? 'Deriv market data is under maintenance.'
+                                        : !feedFresh
+                                            ? feed.error ?? 'Waiting for a fresh broker tick.'
+                                            : secondsToClose === null
+                                                ? 'Waiting for the broker candle clock.'
+                                                : `Indicators are evaluated from live one-minute candles. ${secondsToClose} seconds remain.`}
                             </p>
-
-                            {signal?.isSignal && onSelectSignal && (
-                                <button
-                                    className='ou-board__select'
-                                    type='button'
-                                    data-testid={`button-review-signal-${symbol.code}`}
-                                    aria-label={`${liveReady ? 'Review' : 'Live check for'} ${symbol.label} ${signal.direction} signal`}
-                                    disabled={!liveReady}
-                                    onClick={() => onSelectSignal(symbol.code)}
-                                    title={liveReady ? 'Open the qualified signal details' : 'Wait for the live tick check'}
-                                >
-                                    {liveReady ? 'Review signal' : 'Live check…'}
-                                </button>
-                            )}
                         </article>
                     );
                 })}

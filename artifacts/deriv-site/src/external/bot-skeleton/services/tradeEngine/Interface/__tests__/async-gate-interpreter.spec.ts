@@ -40,6 +40,38 @@ const runEvenOddGate = async (gateResult: boolean) => {
     expect(purchase).toHaveBeenCalledTimes(gateResult ? 1 : 0);
 };
 
+const runOverUnderIndicatorGate = async (gateResult: boolean) => {
+    const checkGate = jest.fn().mockResolvedValue(gateResult);
+    const purchase = jest.fn().mockResolvedValue(true);
+    const tradeEngine = {
+        getOverUnderIndicatorSignal: checkGate,
+        purchase,
+    };
+    const botInterface = {
+        ...getBotInterface(tradeEngine as any),
+        getTicksInterface: getTicksInterface(tradeEngine as any),
+        alert: jest.fn(),
+        prompt: jest.fn(),
+        sleep: jest.fn().mockResolvedValue(undefined),
+        console: { log: jest.fn() },
+    };
+
+    (Interface as jest.Mock).mockReturnValue({
+        tradeEngine: {},
+        getInterface: () => botInterface,
+    });
+
+    const interpreter = Interpreter();
+    await interpreter.run(`
+        if (Bot.getOverUnderIndicatorSignal("MACD_OVER_4")) {
+            Bot.purchase("DIGITOVER");
+        }
+    `);
+
+    expect(checkGate).toHaveBeenCalledWith('MACD_OVER_4');
+    expect(purchase).toHaveBeenCalledTimes(gateResult ? 1 : 0);
+};
+
 describe('Even Odd Strike Eagle async virtual gate', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -51,5 +83,19 @@ describe('Even Odd Strike Eagle async virtual gate', () => {
 
     it('allows a real purchase only after the virtual gate resolves true', async () => {
         await runEvenOddGate(true);
+    });
+});
+
+describe('Over/Under indicator async gate', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('does not purchase while the live indicator gate resolves false', async () => {
+        await runOverUnderIndicatorGate(false);
+    });
+
+    it('purchases only after the live indicator gate resolves true', async () => {
+        await runOverUnderIndicatorGate(true);
     });
 });

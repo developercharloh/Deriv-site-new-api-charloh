@@ -1014,7 +1014,7 @@ const AiSignalsPage: React.FC = () => {
 
     // Live Market Watch loop
     useEffect(() => {
-        if (tradeType === 'matches_differs') {
+        if (tradeType === 'matches_differs' || tradeType === 'over_under') {
             if (watchCdRef.current) { clearInterval(watchCdRef.current); watchCdRef.current = null; }
             setWatchResults([]);
             setWatchSpikes(new Set());
@@ -1191,45 +1191,6 @@ const AiSignalsPage: React.FC = () => {
         return r.statsChecks.isSignal && !r.recentDominance.isCold;
     }, [watchSpikes]);
 
-    // Keep the Premium Over Under Secret Weapon synchronized only with a
-    // currently qualified signal and a fresh live watchdog confirmation.
-    useEffect(() => {
-        const storageKey = 'fb_signal_over_under';
-        const now = Date.now();
-        const liveCandidate = tradeType === 'over_under' && watchActive && !maintenanceActive
-            ? watchResults.find(r => {
-                const liveWatch = watchdogMap.get(r.sym.code);
-                return isWatchSignal(r) &&
-                    liveWatch?.status === 'holding' &&
-                    now - liveWatch.lastTickAt <= 4_000;
-            })
-            : undefined;
-
-        try {
-            if (!liveCandidate) {
-                localStorage.removeItem(storageKey);
-            } else {
-                const signal: BotSignal = {
-                    symbol: liveCandidate.sym.code,
-                    symbolLabel: liveCandidate.sym.label,
-                    direction: liveCandidate.direction,
-                    entryPoint: '00:02 before 1-minute candle close',
-                    confidence: liveCandidate.signalStrength,
-                    market: 'over_under',
-                    recoveryBarrier: liveCandidate.recoveryBarrier ?? undefined,
-                    contractType: liveCandidate.contractType,
-                    recoveryContractType: liveCandidate.recoveryContractType ?? undefined,
-                    savedAt: now,
-                    expiresAt: now + 4_500,
-                };
-                localStorage.setItem(storageKey, JSON.stringify(signal));
-            }
-            window.dispatchEvent(new Event('fb_signal_update'));
-        } catch {
-            // Storage may be disabled; the scanner and visible signals still work.
-        }
-    }, [isWatchSignal, maintenanceActive, tradeType, watchdogMap, watchActive, watchResults]);
-
     const openRunConfigDirect = useCallback(() => {
         let cfg: OrbRunConfig = DEFAULT_RUN_CFG;
         try { const raw = localStorage.getItem(ORB_RUN_CFG_KEY); if (raw) cfg = { ...DEFAULT_RUN_CFG, ...JSON.parse(raw) }; } catch { /* */ }
@@ -1344,8 +1305,10 @@ const AiSignalsPage: React.FC = () => {
                         <div>
                             <span className='aisig-page__title'>AI Signals</span>
                             <span className='aisig-page__subtitle'>
-                                {tradeType === 'matches_differs'
-                                    ? 'Live Match strategy alerts'
+                                {tradeType === 'over_under'
+                                    ? 'Live MACD and TSI signals'
+                                    : tradeType === 'matches_differs'
+                                        ? 'Live Match strategy alerts'
                                     : tradeType === 'even_odd'
                                         ? '4-Model Reversal Scanner'
                                         : '10-Model Consensus Scanner'}
@@ -1388,7 +1351,13 @@ const AiSignalsPage: React.FC = () => {
                 )}
 
                 {/* ── Live Signal Feed — valid signals only ─────────────────── */}
-                {tradeType === 'matches_differs' ? (
+                {tradeType === 'over_under' ? (
+                    <OverUnderSignalBoard
+                        active={watchActive}
+                        onToggle={() => setWatchActive(previous => !previous)}
+                        maintenanceActive={maintenanceActive}
+                    />
+                ) : tradeType === 'matches_differs' ? (
                     <MatchesSignalSection
                         active={watchActive}
                         onToggle={() => setWatchActive(previous => !previous)}
@@ -1553,33 +1522,6 @@ const AiSignalsPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {tradeType === 'over_under' && (
-                                <OverUnderSignalBoard
-                                    active={watchActive}
-                                    maintenanceActive={maintenanceActive}
-                                    signals={watchResults.map(r => {
-                                        const liveWatch = watchdogMap.get(r.sym.code);
-                                        const liveWatchFresh = Boolean(
-                                            liveWatch && Date.now() - liveWatch.lastTickAt <= 4_000,
-                                        );
-                                        return {
-                                            symbol: r.sym,
-                                            direction: r.direction,
-                                            isSignal: isWatchSignal(r),
-                                            signalStrength: r.signalStrength,
-                                            winProbability: r.winProb,
-                                            options: r.overUnderOptions,
-                                            watchdogStatus: liveWatchFresh ? liveWatch?.status : 'warming',
-                                            watchdogWinPct: liveWatch?.winPct,
-                                            resultAvailable: true,
-                                        };
-                                    })}
-                                    onSelectSignal={symbolCode => {
-                                        const selected = watchResults.find(r => r.sym.code === symbolCode);
-                                        if (selected) loadWatchSignal(selected);
-                                    }}
-                                />
-                            )}
                         </div>
                     );
                 })()}

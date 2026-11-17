@@ -12,6 +12,11 @@ import { markBotTick } from '@/utils/bot-contract-gate';
 import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { adxSnapshot, macdSnapshot, rsiSnapshot } from '@/external/indicators';
 import { adaptiveMomentumLog } from '../utils/broadcast';
+import {
+    evaluateOverUnderIndicatorStatusesAtEpoch,
+    getCurrentOverUnderTsi,
+    OVER_UNDER_INDICATOR_MODES,
+} from '@/utils/over-under-indicator-strategy';
 
 const VOLATILITY_SCAN_REQUEST_GAP_MS = 750;
 const VOLATILITY_SCAN_HISTORY_RETRIES = 2;
@@ -236,6 +241,11 @@ export default Engine =>
             this.volatilityDiagnosticsPromise = null;
             this.purchaseConditionEvaluationTick = null;
             this.smartOver2RecoveryState = null;
+            this.overUnderSignalSymbol = null;
+            this.overUnderSignalLastTick = null;
+            this.overUnderSignalLastEpoch = null;
+            this.overUnderTsiSamples = [];
+            this.overUnderIndicatorError = null;
         }
 
         async watchTicks(symbol) {
@@ -1698,6 +1708,76 @@ export default Engine =>
         }
         getPurchaseConditionTick() {
             return this.store?.getState?.().newTick ?? this.latestTick?.epoch ?? null;
+        }
+        async getOverUnderIndicatorSignal(mode) {
+            if (!OVER_UNDER_INDICATOR_MODES.includes(mode)) return false;
+
+            const tick = this.latestTick;
+            const brokerEpoch = Number(this.getPurchaseConditionTick());
+            if (!tick || !Number.isFinite(brokerEpoch) || Number(tick.epoch) !== brokerEpoch) return false;
+
+            if (this.overUnderSignalSymbol !== this.symbol) {
+                this.overUnderSignalSymbol = this.symbol;
+                this.overUnderSignalLastTick = null;
+                this.overUnderSignalLastEpoch = null;
+                this.overUnderTsiSamples = [];
+            }
+
+            try {
+                const rawCandles = await this.getOhlc({ granularity: 60 });
+                if (this.latestTick !== tick || Number(this.getPurchaseConditionTick()) !== brokerEpoch) return false;
+
+                const candles = (Array.isArray(rawCandles) ? rawCandles : [])
+                    .map(candle => ({
+                        time: Number(candle.open_time ?? candle.time ?? candle.epoch),
+                        open: Number(candle.open),
+                        high: Number(candle.high),
+                        low: Number(candle.low),
+                        close: Number(candle.close),
+                    }))
+                    .filter(candle =>
+                        Number.isFinite(candle.time) &&
+                        Number.isFinite(candle.open) &&
+                        Number.isFinite(candle.high) &&
+                        Number.isFinite(candle.low) &&
+                        Number.isFinite(candle.close)
+                    )
+                    .sort((a, b) => a.time - b.time);
+
+                const currentCandle = candles.at(-1);
+                const expectedCandleTime = Math.floor(brokerEpoch / 60) * 60;
+                if (!currentCandle || currentCandle.time !== expectedCandleTime) return false;
+
+                const currentTsi = getCurrentOverUnderTsi(candles);
+                if (currentTsi !== null && this.overUnderSignalLastTick !== tick) {
+                    if (
+                        this.overUnderSignalLastEpoch !== null &&
+                        brokerEpoch - this.overUnderSignalLastEpoch > 2
+                    ) {
+                        this.overUnderTsiSamples = [];
+                    }
+                    this.overUnderTsiSamples = [...this.overUnderTsiSamples, currentTsi].slice(-3);
+                    this.overUnderSignalLastTick = tick;
+                    this.overUnderSignalLastEpoch = brokerEpoch;
+                }
+
+                const setup = evaluateOverUnderIndicatorStatusesAtEpoch({
+                    candles,
+                    tsiSamples: this.overUnderTsiSamples,
+                    brokerEpoch,
+                    feedFresh: true,
+                }).find(candidate => candidate.mode === mode);
+
+                this.overUnderIndicatorError = null;
+                return setup?.tradeNow ?? false;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                if (this.overUnderIndicatorError !== message) {
+                    this.overUnderIndicatorError = message;
+                    globalObserver.emit('ui.log.error', `Over/Under indicator data unavailable: ${message}`);
+                }
+                return false;
+            }
         }
         getVolatilityScanOrder() {
             const preferredCode = this.volatilityPreferredMarket?.code;
