@@ -328,8 +328,8 @@ export function patchBotXml(
 
 /**
  * Applies a source-qualified signal's market, direction/barrier, risk values,
- * and a one-time 00:02 start gate to bot #21. After that gate arms trading,
- * later purchases are not held for another candle window.
+ * to bot #21. Entry-point blocks are removed so Run starts purchasing
+ * immediately and later purchases continue on normal bot cycles.
  */
 export function configureOverUnderBotXml(
     xmlText: string,
@@ -404,24 +404,27 @@ export function configureOverUnderBotXml(
             ? 'Over barriers must be between 0 and 8.'
             : 'Under barriers must be between 1 and 9.');
     }
-    // Trading mode is the latch: it starts off and flips on only at the first
-    // 00:02 candle-close window, then stays on for subsequent bot cycles.
-    setField('ou_tm_init', 'NUM', 0);
+    // Trading mode enables immediate purchases as soon as the user presses Run.
+    setField('ou_tm_init', 'NUM', 1);
     setField('ou_dir_text_val', 'TEXT', setup.side);
     setField('ou_barrier_num', 'NUM', barrier);
-    setField('ou_ep_num', 'NUM', CANDLE_CLOSE_ENTRY_SECONDS);
     setField('ou_stake_num', 'NUM', settings.stake);
     setField('ou_initial_stake_num', 'NUM', settings.stake);
     setField('ou_tp_num', 'NUM', settings.takeProfit);
     setField('ou_mart_num', 'NUM', settings.martingale);
     setField('sl_ou_num', 'NUM', settings.stopLoss);
 
+    const entryPointInit = blockById('ou_ep_init');
+    const entryPointNext = Array.from(entryPointInit.children)
+        .find(child => child.localName === 'next');
+    const entryPointChain = entryPointInit.parentElement;
+    if (entryPointChain?.localName === 'next') {
+        if (entryPointNext) entryPointChain.parentNode?.replaceChild(entryPointNext, entryPointChain);
+        else entryPointChain.parentNode?.removeChild(entryPointChain);
+    }
     const entryPointVariable = Array.from(doc.getElementsByTagName('variable'))
         .find(variable => variable.getAttribute('id') === 'ou_ep_id');
-    if (entryPointVariable) entryPointVariable.textContent = 'Entry Point Seconds';
-    Array.from(doc.querySelectorAll('field[name="VAR"][id="ou_ep_id"]')).forEach(variableField => {
-        variableField.textContent = 'Entry Point Seconds';
-    });
+    if (entryPointVariable) entryPointVariable.parentNode?.removeChild(entryPointVariable);
 
     const intervalField = Array.from(doc.getElementsByTagName('field'))
         .find(candidate => candidate.getAttribute('name') === 'CANDLEINTERVAL_LIST');
@@ -457,32 +460,9 @@ export function configureOverUnderBotXml(
         throw new Error('Over/Under bot XML is missing its Run and purchase blocks.');
     }
 
-    // The source board supplies the qualifying setup and market. The first
-    // candle-close window arms trading; later cycles use the latched mode and
-    // can purchase without waiting for another 00:02 window.
-    const timeWindow = block('candle_close_entry_window', 'ou_candle_close_entry');
-    timeWindow.append(
-        field('SECONDS_BEFORE_CLOSE', CANDLE_CLOSE_ENTRY_SECONDS),
-        field('INTERVAL_SECONDS', 60),
-    );
-    const entryWindowGate = block('controls_if', 'ou_entry_time_gate');
-    entryWindowGate.appendChild(input('value', 'IF0', timeWindow));
-
-    const startTrading = block('variables_set', 'ou_entry_mode_set');
-    const tradingModeField = field('VAR', 'trading mode');
-    tradingModeField.setAttribute('id', 'ou_tm_id');
-    startTrading.appendChild(tradingModeField);
-    const tradingModeValue = block('math_number', 'ou_entry_mode_value');
-    tradingModeValue.appendChild(field('NUM', 1));
-    startTrading.appendChild(input('value', 'VALUE', tradingModeValue));
-    entryWindowGate.appendChild(input('statement', 'DO0', startTrading));
-    const nextModeGate = create('next');
-    beforePurchaseStack.replaceChild(entryWindowGate, runModeGate);
-    nextModeGate.appendChild(runModeGate);
-    entryWindowGate.appendChild(nextModeGate);
-
-    // Remove the unused legacy scan branch. The inner direction branch remains
-    // so OVER and UNDER continue using their own contract purchases.
+    // The source board supplies the qualifying setup and market. Once Run is
+    // pressed, #21 buys immediately; the inner direction branch still selects
+    // the correct OVER or UNDER contract.
     Array.from(runModeGate.children)
         .filter(child => child.localName === 'statement' && child.getAttribute('name') === 'ELSE')
         .forEach(legacyScanner => runModeGate.removeChild(legacyScanner));
@@ -572,10 +552,9 @@ export function getBotPatches(
                 { blockId: 'ou_tp_init',           numValue: takeProfit },
                 { blockId: 'ou_mart_level_init',   numValue: martingaleLevel },
                 { blockId: 'ou_mart_init',         numValue: martingale },
-                {
-                    blockId: 'ou_ep_init',
-                    numValue: botId === 'over-under-secret-weapon' ? CANDLE_CLOSE_ENTRY_SECONDS : entryPt,
-                },
+                ...(botId === 'over-under-secret-weapon'
+                    ? []
+                    : [{ blockId: 'ou_ep_init', numValue: entryPt }]),
             ];
         }
 
