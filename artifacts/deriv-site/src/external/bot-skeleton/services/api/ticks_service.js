@@ -44,6 +44,7 @@ export default class TicksService {
     constructor() {
         this.ticks = new Map();
         this.candles = new Map();
+        this.pipSizes = api_base.pip_sizes || {};
         this.tickListeners = new Map();
         this.ohlcListeners = new Map();
         this.subscriptions = new Map();

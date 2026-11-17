@@ -12,6 +12,14 @@ import TicksService from '../ticks_service';
 import { api_base } from '../api-base';
 
 describe('TicksService subscription recovery', () => {
+    it('starts with an empty pip-size map before the first tick request', () => {
+        (api_base as any).pip_sizes = {};
+
+        const service = new TicksService();
+
+        expect((service as any).pipSizes).toEqual({});
+    });
+
     it('uses a non-subscribed history request for scans', async () => {
         const tickRequests: Record<string, unknown>[] = [];
         const api = {

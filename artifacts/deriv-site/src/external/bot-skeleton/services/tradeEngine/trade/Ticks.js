@@ -2606,7 +2606,7 @@ export default Engine =>
         }
 
         getPipSize() {
-            return this.$scope.ticksService.pipSizes[this.symbol];
+            return this.$scope.ticksService.pipSizes?.[this.symbol];
         }
 
         async requestAccumulatorStats() {

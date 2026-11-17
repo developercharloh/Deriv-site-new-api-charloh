@@ -29,7 +29,7 @@ const decorate = (f, input, tradeEngine, config, ...args) => {
 };
 
 const getIndicatorsInterface = tradeEngine => {
-    const pipSize = tradeEngine.getPipSize();
+    const getPipSize = () => tradeEngine.getPipSize();
     const safeNumber = value => (Number.isFinite(Number(value)) ? Number(value) : 0);
     const snapshotValue = (snapshot, component) => safeNumber(snapshot?.[component]);
 
@@ -43,54 +43,76 @@ const getIndicatorsInterface = tradeEngine => {
         bb: (input, config, field) => decorate(bb, input, tradeEngine, config)[field],
         bba: (input, config, field) => decorate(bba, input, tradeEngine, config).map(r => r[field]),
         macda: (input, config, field) => decorate(macda, input, tradeEngine, config).map(r => r[field]),
-        getAroonValue: (input, periods, component) =>
-            snapshotValue(aroonSnapshot(input, { periods, pipSize }), component),
+        getAroonValue: (input, periods, component) => {
+            const snapshot = aroonSnapshot(input, { periods, pipSize: getPipSize() });
+            return snapshotValue(snapshot, component);
+        },
         getIchimokuValue: (input, conversionPeriods, basePeriods, spanPeriods, component) =>
             snapshotValue(
                 ichimokuSnapshot(input, {
                     conversionPeriods,
                     basePeriods,
                     spanPeriods,
-                    pipSize,
+                    pipSize: getPipSize(),
                 }),
                 component
             ),
         getAdxValue: (input, periods, component) => {
-            const value = snapshotValue(adxSnapshot(input, { periods, pipSize }), component);
+            const snapshot = adxSnapshot(input, { periods, pipSize: getPipSize() });
+            const value = snapshotValue(snapshot, component);
             tradeEngine.recordIndicatorValue?.('adx', value);
             return value;
         },
-        getAtrValue: (input, periods) => safeNumber(atrSnapshot(input, { periods, pipSize })),
-        getStochasticValue: (input, periods, signalPeriods, component) =>
-            snapshotValue(stochasticSnapshot(input, { periods, signalPeriods, pipSize }), component),
+        getAtrValue: (input, periods) => {
+            const snapshot = atrSnapshot(input, { periods, pipSize: getPipSize() });
+            return safeNumber(snapshot);
+        },
+        getStochasticValue: (input, periods, signalPeriods, component) => {
+            const snapshot = stochasticSnapshot(input, {
+                periods,
+                signalPeriods,
+                pipSize: getPipSize(),
+            });
+            return snapshotValue(snapshot, component);
+        },
         getMacdValue: (input, fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, component) => {
             const value = snapshotValue(
-                macdSnapshot(input, { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, pipSize }),
+                macdSnapshot(input, { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, pipSize: getPipSize() }),
                 component
             );
             tradeEngine.recordIndicatorValue?.('macd', value);
             return value;
         },
-        isMacdCross: (input, fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, direction) =>
-            macdCross(input, { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, pipSize }, direction),
+        isMacdCross: (input, fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, direction) => {
+            const config = { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, pipSize: getPipSize() };
+            return macdCross(input, config, direction);
+        },
         getRsiValue: (input, periods) => {
-            const value = safeNumber(rsiSnapshot(input, { periods, pipSize }));
+            const value = safeNumber(rsiSnapshot(input, { periods, pipSize: getPipSize() }));
             tradeEngine.recordIndicatorValue?.('rsi', value);
             return value;
         },
-        isRsiCross: (input, periods, level, direction) => rsiCross(input, { periods, pipSize }, level, direction),
+        isRsiCross: (input, periods, level, direction) => {
+            const config = { periods, pipSize: getPipSize() };
+            return rsiCross(input, config, level, direction);
+        },
         getBollingerValue: (input, periods, stdDevUp, stdDevDown, component) =>
             snapshotValue(
                 bollingerSnapshot(input, {
                     periods,
                     stdDevUp,
                     stdDevDown,
-                    pipSize,
+                    pipSize: getPipSize(),
                 }),
                 component
             ),
         isBollingerSqueeze: (input, periods, stdDevUp, stdDevDown, maxWidth) => {
-            const snapshot = bollingerSnapshot(input, { periods, stdDevUp, stdDevDown, pipSize });
+            const snapshot = bollingerSnapshot(input, {
+                periods,
+                stdDevUp,
+                stdDevDown,
+                pipSize: getPipSize(),
+            });
             return snapshot !== null && snapshot.width <= Number(maxWidth);
         },
         isIndicatorReady: (input, periods, minimumExtra) => isIndicatorReady(input, periods, minimumExtra),
