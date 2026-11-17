@@ -104,6 +104,7 @@ describe('bot #21 dropdown restoration', () => {
     it('starts through DBot’s normal Run handler and reports a blocked start', async () => {
         const runPanel = {
             is_running: false,
+            core: { client: { is_logged_in: true } },
             onRunButtonClick: jest.fn(async () => {
                 runPanel.is_running = true;
             }),
@@ -113,7 +114,14 @@ describe('bot #21 dropdown restoration', () => {
 
         await expect(runOverUnderSecretWeapon({
             is_running: false,
+            core: { client: { is_logged_in: true } },
             onRunButtonClick: jest.fn(),
-        })).rejects.toThrow('DBot Builder did not start #21');
+        })).rejects.toThrow('DBot blocked #21 from starting');
+
+        await expect(runOverUnderSecretWeapon({
+            is_running: false,
+            core: { client: { is_logged_in: false } },
+            onRunButtonClick: jest.fn(),
+        })).rejects.toThrow('Your Deriv account is not connected to DBot');
     });
 });

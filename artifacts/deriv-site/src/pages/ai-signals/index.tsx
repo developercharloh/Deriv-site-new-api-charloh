@@ -1295,11 +1295,16 @@ const AiSignalsPage: React.FC = () => {
                 }));
             } catch { /* retain this run even if browser storage is unavailable */ }
 
-            // Let the guarded XML import and its dropdown events settle, then
-            // start through DBot's regular Run handler (same path as the Run button).
-            await new Promise<void>(resolve => window.setTimeout(resolve, 500));
-            await runOverUnderSecretWeapon(store.run_panel);
+            // DBot's Run handler needs the Builder tab mounted as the active
+            // surface. Use the same tab-switch handoff as the other signal launchers.
             store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+            await new Promise<void>(resolve => window.setTimeout(resolve, 500));
+            try {
+                await runOverUnderSecretWeapon(store.run_panel);
+            } catch (error) {
+                store.dashboard.setActiveTab(DBOT_TABS.AI_SIGNALS);
+                throw error;
+            }
             setSelectedOverUnderSignal(null);
         } catch (error: any) {
             setSecretWeaponError(error?.message || 'Could not save the signal to #21.');

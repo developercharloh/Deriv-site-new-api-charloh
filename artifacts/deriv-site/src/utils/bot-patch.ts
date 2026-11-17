@@ -853,8 +853,12 @@ export async function runOverUnderSecretWeapon(runPanel: any): Promise<void> {
         throw new Error('DBot Builder could not start #21. Open Builder and try again.');
     }
 
+    const isLoggedIn = runPanel.core?.client?.is_logged_in;
     await runPanel.onRunButtonClick();
     if (!runPanel.is_running) {
-        throw new Error('DBot Builder did not start #21. Check your account connection and try again.');
+        if (isLoggedIn === false) {
+            throw new Error('Your Deriv account is not connected to DBot. Reconnect the account, then try again.');
+        }
+        throw new Error('DBot blocked #21 from starting. Check the Builder log for highlighted or missing required blocks.');
     }
 }
