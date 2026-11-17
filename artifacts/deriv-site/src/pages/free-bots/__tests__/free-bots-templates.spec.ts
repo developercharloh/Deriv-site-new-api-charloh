@@ -90,7 +90,7 @@ describe('Free Bots template catalog', () => {
         expect(catalog).not.toContain("id: 'over-under-ai-signals'");
         expect(catalog).toContain("id: 'over-under-secret-weapon'");
         expect(catalog).toContain("section: 'premium'");
-        expect(catalog).toContain("value: '2 seconds before each 1-minute candle closes'");
+        expect(catalog).toContain("value: 'Start at 00:02 before close, then buy each normal bot cycle'");
         expect(catalog).toContain('Signal conditions come from the signal source, not this bot.');
         expect(catalog).toContain('Barrier digit');
         const botPatcher = fs.readFileSync(botPatchPath, 'utf8');

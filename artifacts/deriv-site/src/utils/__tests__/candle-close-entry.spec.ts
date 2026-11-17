@@ -25,7 +25,7 @@ describe('broker-tick candle-close entry', () => {
         expect(isCandleCloseEntryWindow(58, 60, 60)).toBe(false);
     });
 
-    test('configures #21 with source-side signals and a 00:02 one-minute entry gate', () => {
+    test('arms #21 once at 00:02, then leaves subsequent purchases ungated', () => {
         const rawXml = botXml('OverUnder_Signal_Bot.xml');
         const original = parseXml(rawXml);
         expect(original.querySelector('block[id="ou_indicator_signal"]')).toBeNull();
@@ -41,7 +41,7 @@ describe('broker-tick candle-close entry', () => {
         });
         expect(doc.querySelector('block[type="trade_definition_candleinterval"] field[name="CANDLEINTERVAL_LIST"]')?.textContent)
             .toBe('60');
-        expect(doc.querySelector('block[id="ou_tm_init"] field[name="NUM"]')?.textContent).toBe('1');
+        expect(doc.querySelector('block[id="ou_tm_init"] field[name="NUM"]')?.textContent).toBe('0');
         expect(doc.querySelector('block[type="over_under_indicator_signal"]')).toBeNull();
         expect(doc.querySelector(
             'block[id="ou_entry_time_gate"] value[name="IF0"] block[type="candle_close_entry_window"] field[name="SECONDS_BEFORE_CLOSE"]'
@@ -49,6 +49,14 @@ describe('broker-tick candle-close entry', () => {
         expect(doc.querySelector(
             'block[id="ou_entry_time_gate"] value[name="IF0"] block[type="candle_close_entry_window"] field[name="INTERVAL_SECONDS"]'
         )?.textContent).toBe('60');
+        expect(doc.querySelector(
+            'block[id="ou_entry_time_gate"] statement[name="DO0"] block[id="ou_entry_mode_set"] field[name="VAR"]'
+        )?.textContent).toBe('trading mode');
+        expect(doc.querySelector(
+            'block[id="ou_entry_mode_set"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]'
+        )?.textContent).toBe('1');
+        expect(doc.querySelector('block[id="ou_entry_time_gate"] > next > block[id="ou_tm_gate"]')).not.toBeNull();
+        expect(doc.querySelector('block[id="ou_tm_gate"] block[type="candle_close_entry_window"]')).toBeNull();
         expect(doc.querySelector('block[id="ou_barrier_num"] field[name="NUM"]')?.textContent).toBe('0');
         expect(doc.querySelector('block[id="ou_ep_num"] field[name="NUM"]')?.textContent).toBe('2');
         expect(doc.querySelector('variable[id="ou_ep_id"]')?.textContent).toBe('Entry Point Seconds');

@@ -97,7 +97,8 @@ export function OverUnderSecretWeaponConfig({
                 </div>
                 <p className='ou-secret-weapon__note'>
                     Signal conditions stay on the source board. This bot uses the saved market and contract, enters
-                    2 seconds before each 1-minute candle closes, and remains stopped until you press Run in DBot Builder.
+                    at the first 00:02-before-close window, then keeps buying on its normal bot cycles until you stop it
+                    or a saved risk limit is reached. It remains stopped until you press Run in DBot Builder.
                 </p>
 
                 <label className='ai-runcfg__field'>

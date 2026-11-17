@@ -131,12 +131,12 @@ const BOTS: BotConfig[] = [
         name: 'Over Under Secret Weapon',
         emoji: '🎯',
         description:
-            'When loaded from the live signal board, bot #21 uses the exact volatility that produced the signal. Configure its barrier and risk settings, then load it stopped into DBot Builder for a 00:02 entry on one-minute candles.',
+            'When loaded from the live signal board, bot #21 uses the exact volatility that produced the signal. Configure its barrier and risk settings, then load it stopped into DBot Builder. It starts at the first 00:02-before-close window and keeps buying until Stop or a risk limit.',
         market: 'Volatility 75 (1s) Index (1HZ75V)',
-        strategy: 'Source-qualified Over/Under · same-market execution · 00:02 Entry',
+        strategy: 'Source-qualified · same-market execution · continuous after 00:02 start',
         params: [
             { label: 'Signal conditions', value: 'Provided by the live source board' },
-            { label: 'Entry', value: '2 seconds before each 1-minute candle closes' },
+            { label: 'Entry', value: 'Start at 00:02 before close, then buy each normal bot cycle' },
             { label: 'Stake', value: 'Set before each run' },
             { label: 'Take Profit', value: 'Set before each run' },
             { label: 'Stop Loss', value: 'Set before each run' },
@@ -818,7 +818,8 @@ const OverUnderBotConfigModal: React.FC<{
 
                 <p className='fb-modal__ou-note'>
                     Signal conditions come from the signal source, not this bot. #21 loads stopped with the selected
-                    contract, 00:02 entry on one-minute candles, and risk settings; use Run and Stop in DBot Builder.
+                    contract and risk settings. It starts at the first 00:02-before-close window, then keeps buying
+                    until Stop or a saved risk limit; use Run and Stop in DBot Builder.
                 </p>
 
                 <div className='fb-modal__fields'>

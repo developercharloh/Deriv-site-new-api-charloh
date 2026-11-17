@@ -267,7 +267,8 @@ export function OverUnderSignalBoard({
                 Signals use the same indicator filters as Matches. Over 4/5 require MACD 12/26/9 descending from above
                 with a contracting positive histogram; Under 6/5 require Trend Strength Index 14 at 0.8–0.9, three flat updates, and a green
                 candle. Save a ready signal to configure bot #21 for this exact market. The bot stays stopped in DBot Builder
-                until you press Run, and its entry window is 00:02 before each one-minute candle closes.
+                until you press Run. Its first purchase starts at the 00:02-before-close window; after that it keeps
+                buying on each normal bot cycle until you stop it or a saved risk limit is reached.
             </p>
             <div className='ou-board__grid'>
                 {cards.map(({ symbol, feed, feedFresh, lastCandle, secondsToClose, setups }) => {

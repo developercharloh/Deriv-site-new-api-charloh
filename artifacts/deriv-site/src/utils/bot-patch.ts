@@ -328,8 +328,8 @@ export function patchBotXml(
 
 /**
  * Applies a source-qualified signal's market, direction/barrier, risk values,
- * and 00:02 one-minute entry window to bot #21. Indicator conditions stay in
- * the source board and are not duplicated inside the bot.
+ * and a one-time 00:02 start gate to bot #21. After that gate arms trading,
+ * later purchases are not held for another candle window.
  */
 export function configureOverUnderBotXml(
     xmlText: string,
@@ -404,7 +404,9 @@ export function configureOverUnderBotXml(
             ? 'Over barriers must be between 0 and 8.'
             : 'Under barriers must be between 1 and 9.');
     }
-    setField('ou_tm_init', 'NUM', 1);
+    // Trading mode is the latch: it starts off and flips on only at the first
+    // 00:02 candle-close window, then stays on for subsequent bot cycles.
+    setField('ou_tm_init', 'NUM', 0);
     setField('ou_dir_text_val', 'TEXT', setup.side);
     setField('ou_barrier_num', 'NUM', barrier);
     setField('ou_ep_num', 'NUM', CANDLE_CLOSE_ENTRY_SECONDS);
@@ -427,7 +429,15 @@ export function configureOverUnderBotXml(
     intervalField.textContent = '60';
 
     const beforePurchase = blocks.find(candidate => candidate.getAttribute('type') === 'before_purchase');
+    const beforePurchaseStack = beforePurchase
+        ? Array.from(beforePurchase.children).find(child =>
+            child.localName === 'statement' && child.getAttribute('name') === 'BEFOREPURCHASE_STACK',
+        )
+        : undefined;
     const runModeGate = blocks.find(candidate => candidate.getAttribute('id') === 'ou_tm_gate');
+    const firstBeforePurchaseBlock = beforePurchaseStack
+        ? Array.from(beforePurchaseStack.children).find(child => child.localName === 'block')
+        : undefined;
     const runModePurchase = runModeGate
         ? Array.from(runModeGate.children).find(child =>
             child.localName === 'statement' && child.getAttribute('name') === 'DO0',
@@ -436,12 +446,20 @@ export function configureOverUnderBotXml(
     const directionPurchaseGate = runModePurchase
         ? Array.from(runModePurchase.children).find(child => child.localName === 'block')
         : undefined;
-    if (!beforePurchase || !runModeGate || !runModePurchase || !directionPurchaseGate) {
+    if (
+        !beforePurchase ||
+        !beforePurchaseStack ||
+        firstBeforePurchaseBlock !== runModeGate ||
+        !runModeGate ||
+        !runModePurchase ||
+        !directionPurchaseGate
+    ) {
         throw new Error('Over/Under bot XML is missing its Run and purchase blocks.');
     }
 
-    // The live signal board supplies the qualifying setup and market. #21 only
-    // applies its saved contract/risk values and waits for the configured time.
+    // The source board supplies the qualifying setup and market. The first
+    // candle-close window arms trading; later cycles use the latched mode and
+    // can purchase without waiting for another 00:02 window.
     const timeWindow = block('candle_close_entry_window', 'ou_candle_close_entry');
     timeWindow.append(
         field('SECONDS_BEFORE_CLOSE', CANDLE_CLOSE_ENTRY_SECONDS),
@@ -449,11 +467,22 @@ export function configureOverUnderBotXml(
     );
     const entryWindowGate = block('controls_if', 'ou_entry_time_gate');
     entryWindowGate.appendChild(input('value', 'IF0', timeWindow));
-    const timedPurchase = create('statement');
-    timedPurchase.setAttribute('name', 'DO0');
-    entryWindowGate.appendChild(timedPurchase);
-    runModePurchase.replaceChild(entryWindowGate, directionPurchaseGate);
-    timedPurchase.appendChild(directionPurchaseGate);
+
+    const startTrading = block('variables_set', 'ou_entry_mode_set');
+    const tradingModeField = field('VAR', 'trading mode');
+    tradingModeField.setAttribute('id', 'ou_tm_id');
+    startTrading.appendChild(tradingModeField);
+    const tradingModeValue = block('math_number', 'ou_entry_mode_value');
+    tradingModeValue.appendChild(field('NUM', 1));
+    startTrading.appendChild(input('value', 'VALUE', tradingModeValue));
+    entryWindowGate.appendChild(input('statement', 'DO0', startTrading));
+    const nextModeGate = create('next');
+    beforePurchaseStack.replaceChild(entryWindowGate, runModeGate);
+    nextModeGate.appendChild(runModeGate);
+    entryWindowGate.appendChild(nextModeGate);
+
+    // Remove the unused legacy scan branch. The inner direction branch remains
+    // so OVER and UNDER continue using their own contract purchases.
     Array.from(runModeGate.children)
         .filter(child => child.localName === 'statement' && child.getAttribute('name') === 'ELSE')
         .forEach(legacyScanner => runModeGate.removeChild(legacyScanner));
