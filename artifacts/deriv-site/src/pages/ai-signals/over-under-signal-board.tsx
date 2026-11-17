@@ -48,6 +48,9 @@ export interface OverUnderSignalSelection {
     setup: OverUnderIndicatorStatus;
 }
 
+export const canSaveOverUnderSignal = (setup: OverUnderIndicatorStatus): boolean =>
+    setup.setupReady && setup.feedFresh;
+
 const makeInitialFeeds = (): Record<string, MarketFeed> => Object.fromEntries(
     DERIV_VOLATILITIES.map(symbol => [symbol.code, {
         candles: [],
@@ -266,9 +269,9 @@ export function OverUnderSignalBoard({
             <p className='ou-board__rule'>
                 Signals use the same indicator filters as Matches. Over 4/5 require MACD 12/26/9 descending from above
                 with a contracting positive histogram; Under 6/5 require Trend Strength Index 14 at 0.8–0.9, three flat updates, and a green
-                candle. Save a ready signal to configure bot #21 for this exact market. The bot stays stopped in DBot Builder
-                until you press Run. #21 has no entry-point wait: it buys immediately on its normal bot cycle and keeps
-                buying until you stop it or a saved risk limit is reached.
+                candle. You can save a ready signal as soon as conditions and a fresh feed are available; there is no need
+                to wait for 00:02. #21 loads stopped for this exact market, then buys immediately when you press Run.
+                It keeps buying until you stop it or a saved risk limit is reached.
             </p>
             <div className='ou-board__grid'>
                 {cards.map(({ symbol, feed, feedFresh, lastCandle, secondsToClose, setups }) => {
@@ -332,16 +335,19 @@ export function OverUnderSignalBoard({
                                                 ))}
                                             </div>
                                             <em>{isEntryNow ? 'ENTRY SIGNAL NOW' : setup.setupReady
-                                                ? setup.entryWindow ? 'SETUP READY · CHECKING FEED' : 'SETUP READY · WAITING FOR 00:02'
+                                                ? setup.feedFresh
+                                                    ? setup.entryWindow ? 'SETUP READY · SAVE AVAILABLE' : 'SETUP READY · SAVE AVAILABLE BEFORE 00:02'
+                                                    : 'SETUP READY · WAITING FOR LIVE FEED'
                                                 : 'WAITING FOR INDICATOR CONDITIONS'}</em>
-                                            {setup.setupReady && setup.feedFresh && onSelectSignal && (
+                                            {canSaveOverUnderSignal(setup) && onSelectSignal && (
                                                 <button
                                                     type='button'
                                                     className='ou-board__save-signal'
                                                     data-testid={`button-configure-secret-weapon-${symbol.code}-${setup.mode.toLowerCase()}`}
+                                                    title='Available before 00:02; saving loads #21 stopped in DBot Builder'
                                                     onClick={() => onSelectSignal({ symbol, setup })}
                                                 >
-                                                    Configure #21 · {label}
+                                                    Save #21 for Run · {label}
                                                 </button>
                                             )}
                                         </div>
