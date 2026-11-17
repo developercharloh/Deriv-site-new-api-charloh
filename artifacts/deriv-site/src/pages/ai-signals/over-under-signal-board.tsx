@@ -48,7 +48,7 @@ export interface OverUnderSignalSelection {
     setup: OverUnderIndicatorStatus;
 }
 
-export const canSaveOverUnderSignal = (setup: OverUnderIndicatorStatus): boolean =>
+export const canEnterOverUnderSignal = (setup: OverUnderIndicatorStatus): boolean =>
     setup.setupReady && setup.feedFresh;
 
 const makeInitialFeeds = (): Record<string, MarketFeed> => Object.fromEntries(
@@ -269,9 +269,8 @@ export function OverUnderSignalBoard({
             <p className='ou-board__rule'>
                 Signals use the same indicator filters as Matches. Over 4/5 require MACD 12/26/9 descending from above
                 with a contracting positive histogram; Under 6/5 require Trend Strength Index 14 at 0.8–0.9, three flat updates, and a green
-                candle. Save & Run is available as soon as conditions and a fresh feed are ready; there is no need to wait
-                for 00:02. Saving starts #21 on the connected account for this exact market, then it keeps buying until
-                you stop it or a saved risk limit is reached.
+                candle. The Enter Now button stays available whenever an indicator setup and fresh feed are ready.
+                00:02 is a timing reference only; choose your own entry moment.
             </p>
             <div className='ou-board__grid'>
                 {cards.map(({ symbol, feed, feedFresh, lastCandle, secondsToClose, setups }) => {
@@ -302,17 +301,16 @@ export function OverUnderSignalBoard({
                                         : 'Waiting for candle clock'}
                                 </span>
                                 <strong className={secondsToClose !== null && secondsToClose <= 2 ? 'ou-board__timing--entry' : ''} data-testid={`status-entry-timing-${symbol.code}`}>
-                                    {secondsToClose !== null && secondsToClose <= 2 ? '00:02 ENTRY WINDOW' : 'Entry at 00:02'}
+                                    {secondsToClose !== null && secondsToClose <= 2 ? '00:02 TIMING REFERENCE' : 'Timing reference: 00:02'}
                                 </strong>
                             </div>
 
                             <div className='ou-board__options'>
                                 {setups.map((setup: OverUnderIndicatorStatus) => {
                                     const label = `${setup.side} ${setup.barrier}`;
-                                    const isEntryNow = setup.tradeNow;
                                     return (
                                         <div
-                                            className={`ou-board__option${setup.setupReady ? ' ou-board__option--selected' : ''}${isEntryNow ? ' ou-board__option--signal' : ''}`}
+                                            className={`ou-board__option${setup.setupReady ? ' ou-board__option--selected' : ''}`}
                                             key={setup.mode}
                                             data-testid={`data-signal-option-${symbol.code}-${setup.side.toLowerCase()}-${setup.barrier}`}
                                         >
@@ -324,7 +322,7 @@ export function OverUnderSignalBoard({
                                                 ? 'Warming up indicator history'
                                                 : `${setup.indicator === 'MACD' ? 'MACD' : 'Trend Strength Index'} ${setup.indicatorValue.toFixed(setup.indicator === 'MACD' ? 5 : 3)}`}</small>
                                             <div className='ou-board__conditions'>
-                                                {setup.conditions.map(condition => (
+                                                {setup.conditions.filter(condition => condition.key !== 'entry-window').map(condition => (
                                                     <span
                                                         key={condition.key}
                                                         className={condition.met ? 'ou-board__condition ou-board__condition--met' : 'ou-board__condition'}
@@ -334,20 +332,20 @@ export function OverUnderSignalBoard({
                                                     </span>
                                                 ))}
                                             </div>
-                                            <em>{isEntryNow ? 'ENTRY SIGNAL NOW' : setup.setupReady
+                                            <em>{setup.setupReady
                                                 ? setup.feedFresh
-                                                    ? setup.entryWindow ? 'SETUP READY · SAVE & RUN AVAILABLE' : 'SETUP READY · SAVE & RUN AVAILABLE BEFORE 00:02'
+                                                    ? 'SETUP READY · ENTER WHEN YOU CHOOSE'
                                                     : 'SETUP READY · WAITING FOR LIVE FEED'
                                                 : 'WAITING FOR INDICATOR CONDITIONS'}</em>
-                                            {canSaveOverUnderSignal(setup) && onSelectSignal && (
+                                            {canEnterOverUnderSignal(setup) && onSelectSignal && (
                                                 <button
                                                     type='button'
                                                     className='ou-board__save-signal'
                                                     data-testid={`button-configure-secret-weapon-${symbol.code}-${setup.mode.toLowerCase()}`}
-                                                     title='Starts #21 immediately on the connected account; check account and risk settings first'
+                                                    title='Choose when to enter; #21 starts after you confirm your risk settings'
                                                     onClick={() => onSelectSignal({ symbol, setup })}
                                                 >
-                                                    Save & Run #21 · {label}
+                                                    Enter Now · {label}
                                                 </button>
                                             )}
                                         </div>

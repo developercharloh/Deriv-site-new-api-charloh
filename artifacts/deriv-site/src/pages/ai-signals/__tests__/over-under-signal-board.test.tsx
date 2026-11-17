@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
 import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
-import { canSaveOverUnderSignal, OverUnderSignalBoard } from '../over-under-signal-board';
+import { canEnterOverUnderSignal, OverUnderSignalBoard } from '../over-under-signal-board';
 import type { OverUnderIndicatorStatus } from '@/utils/over-under-indicator-strategy';
 
 jest.mock('@/hooks/useApiBase', () => ({ useApiBase: jest.fn() }));
@@ -15,7 +15,7 @@ describe('Over/Under live signal board', () => {
         (useApiBase as jest.Mock).mockReturnValue({ connectionStatus: 'closed' });
     });
 
-    it('allows saving a ready, fresh setup before its 00:02 entry window', () => {
+    it('keeps Enter Now available at any second while the setup and feed are ready', () => {
         const setup: OverUnderIndicatorStatus = {
             mode: 'MACD_OVER_4',
             side: 'OVER',
@@ -28,9 +28,10 @@ describe('Over/Under live signal board', () => {
             tradeNow: false,
             conditions: [],
         };
-        expect(canSaveOverUnderSignal(setup)).toBe(true);
-        expect(canSaveOverUnderSignal({ ...setup, feedFresh: false })).toBe(false);
-        expect(canSaveOverUnderSignal({ ...setup, setupReady: false })).toBe(false);
+        expect(canEnterOverUnderSignal(setup)).toBe(true);
+        expect(canEnterOverUnderSignal({ ...setup, entryWindow: true, tradeNow: true })).toBe(true);
+        expect(canEnterOverUnderSignal({ ...setup, feedFresh: false })).toBe(false);
+        expect(canEnterOverUnderSignal({ ...setup, setupReady: false })).toBe(false);
     });
 
     it('shows all four approved barriers on every market, including while waiting for live data', () => {
@@ -55,7 +56,7 @@ describe('Over/Under live signal board', () => {
         expect(within(firstMarket).getAllByText('Trend Strength Index 14 · one line')).toHaveLength(2);
         expect(within(firstMarket).getByText('Reconnecting')).toBeInTheDocument();
         expect(within(firstMarket).getAllByText('WAITING FOR INDICATOR CONDITIONS')).toHaveLength(4);
-        expect(screen.getByText(/there is no need to wait for 00:02/)).toBeInTheDocument();
+        expect(screen.getByText(/00:02 is a timing reference only/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Configure #21/ })).not.toBeInTheDocument();
         expect(within(firstMarket).getByTestId(`data-signal-option-${symbol.code}-over-4`)).toBeInTheDocument();
         expect(within(firstMarket).getByTestId(`data-signal-option-${symbol.code}-under-5`)).toBeInTheDocument();
