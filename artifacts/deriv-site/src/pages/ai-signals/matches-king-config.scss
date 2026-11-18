@@ -1,0 +1,114 @@
+.aisig-page .mk-config__overlay {
+    padding: 16px;
+}
+
+.aisig-page .mk-config {
+    width: min(440px, 100%);
+}
+
+.mk-config__note {
+    margin: 0;
+    color: #aab6c6;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.mk-config__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.mk-config__digit-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 10px;
+    border: 1px solid rgba(99, 102, 241, 0.28);
+    border-radius: 9px;
+    background: rgba(99, 102, 241, 0.08);
+
+    > span {
+        color: #aab6c6;
+        font-size: 10px;
+        font-weight: 700;
+    }
+
+    > div {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    b {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 1px solid rgba(129, 140, 248, 0.38);
+        border-radius: 7px;
+        background: rgba(99, 102, 241, 0.18);
+        color: #e0e7ff;
+        font-size: 12px;
+    }
+
+    em {
+        color: #fca5a5;
+        font-size: 10px;
+        font-style: normal;
+    }
+}
+
+.mk-config__hook-toggle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px;
+    color: #d7e0ec;
+    font-size: 11px;
+    font-weight: 750;
+
+    input {
+        width: 16px;
+        height: 16px;
+        accent-color: #818cf8;
+    }
+}
+
+.match-market__setup-status--alert {
+    border-color: rgba(52, 211, 153, 0.45);
+    background: rgba(16, 185, 129, 0.09);
+}
+
+.match-market__enter {
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid rgba(52, 211, 153, 0.48);
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.12));
+    color: #6ee7b7;
+    font-size: 11px;
+    font-weight: 850;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+
+    &:hover {
+        transform: translateY(-1px);
+        border-color: rgba(52, 211, 153, 0.8);
+        background: rgba(16, 185, 129, 0.26);
+    }
+
+    &:focus-visible {
+        outline: 3px solid #a8c5e8;
+        outline-offset: 2px;
+    }
+}
+
+@media (max-width: 420px) {
+    .mk-config__grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

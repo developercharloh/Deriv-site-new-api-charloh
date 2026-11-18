@@ -136,6 +136,21 @@ describe('Matches King Stop with real contract tracking', () => {
         await Promise.resolve();
     });
 
+    it('passes the one-time initial candle-close wait from Blockly into Matches King', async () => {
+        panel.native_matches_king_engine?.stop();
+        await Promise.resolve();
+        await Promise.resolve();
+        fields.INITIAL_ENTRY_MODE = 'CANDLE_CLOSE';
+        sent = [];
+
+        expect(panel.startNativeMatchesKingBot()).toBe(true);
+        expect((panel.native_matches_king_engine as any)?.config.waitForInitialCandleClose).toBe(true);
+
+        panel.onStopBotClick();
+        await Promise.resolve();
+        await Promise.resolve();
+    });
+
     it.each(['scanning', 'paused'])('stops via the visible control while %s and releases the lock', async mode => {
         if (mode === 'paused') panel.onPauseButtonClick();
         panel.onStopBotClick();

@@ -8,6 +8,7 @@ import {
     destroyerBotIdFromDirection,
     fetchAndPatchBot,
     loadPatchedBotIntoWorkspace,
+    restoreMatchesKingWorkspaceSymbol,
     restoreEvenOddBeastWorkspace,
     runOverUnderSecretWeapon,
     restoreOverUnderWorkspaceSymbol,
@@ -17,6 +18,8 @@ import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
 import { captureDropdownSelections } from '@/external/bot-skeleton/scratch/utils';
 import { MatchesSignalSection } from './matches-signal-board';
+import { MatchesKingConfig, digitsForMatchesKingCount, type MatchesKingRunSettings } from './MatchesKingConfig';
+import type { MatchesKingSignalSelection } from './matches-signal-board';
 import { OverUnderSignalBoard, type OverUnderSignalSelection } from './over-under-signal-board';
 import { OverUnderSecretWeaponConfig, type SecretWeaponRunSettings } from './OverUnderSecretWeaponConfig';
 import { EvenOddBeastSignalBoard, type EvenOddBeastSignalSelection } from './even-odd-beast-signal-board';
@@ -978,6 +981,9 @@ const AiSignalsPage: React.FC = () => {
     const [selectedEvenOddSignal, setSelectedEvenOddSignal] = useState<EvenOddBeastSignalSelection | null>(null);
     const [evenOddBeastSaving, setEvenOddBeastSaving] = useState(false);
     const [evenOddBeastError, setEvenOddBeastError] = useState('');
+    const [selectedMatchesSignal, setSelectedMatchesSignal] = useState<MatchesKingSignalSelection | null>(null);
+    const [matchesKingSaving, setMatchesKingSaving] = useState(false);
+    const [matchesKingError, setMatchesKingError] = useState('');
 
     // Live Market Watch — starts automatically on mount
     const [watchActive,    setWatchActive]    = useState(true);
@@ -1395,6 +1401,70 @@ const AiSignalsPage: React.FC = () => {
         }
     }, [selectedEvenOddSignal, store]);
 
+    const saveMatchesSignalToKing = useCallback(async (settings: MatchesKingRunSettings) => {
+        const selected = selectedMatchesSignal;
+        if (!selected) return;
+        setMatchesKingSaving(true);
+        setMatchesKingError('');
+        try {
+            if (!store) throw new Error('DBot Builder is not ready.');
+            if (store.run_panel?.is_running) {
+                throw new Error('Stop the currently running bot before loading Matches King.');
+            }
+
+            const digits = digitsForMatchesKingCount(settings.digitCount);
+            const signal: BotSignal = {
+                symbol: selected.symbol.code,
+                symbolLabel: selected.symbol.label,
+                direction: `MATCHES ${digits.join(',')}`,
+                entryPoint: `Manual Enter Now · ${selected.setup.toUpperCase()} setup`,
+                confidence: 100,
+                market: 'matches_differs',
+            };
+            const document = await fetchAndPatchBot(
+                'matches-king',
+                signal,
+                settings.stake,
+                settings.takeProfit,
+                settings.stopLoss,
+                settings.martingale,
+                1,
+                settings,
+            );
+            const savedDropdownSelections = captureDropdownSelections(document);
+            const workspace = (window as any).Blockly?.derivWorkspace;
+            if (!workspace) {
+                throw new Error('Open DBot Builder once, then return to this signal and save again.');
+            }
+
+            loadPatchedBotIntoWorkspace(new XMLSerializer().serializeToString(document.documentElement), workspace);
+            setWorkspaceBotTemplateIdentity(workspace, 'matches-king');
+            await restoreMatchesKingWorkspaceSymbol(workspace, selected.symbol.code, savedDropdownSelections);
+            store.journal.setActiveBotTemplateId('matches-king');
+            store.save_modal.updateBotName('Matches King');
+
+            store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+            await new Promise<void>(resolve => window.setTimeout(resolve, 500));
+            if (typeof store.run_panel?.onRunButtonClick !== 'function') {
+                throw new Error('DBot Builder could not start Matches King. Open Builder and try again.');
+            }
+            const isLoggedIn = store.run_panel.core?.client?.is_logged_in;
+            await store.run_panel.onRunButtonClick();
+            if (!store.run_panel.is_running) {
+                if (isLoggedIn === false) {
+                    throw new Error('Your Deriv account is not connected to DBot. Reconnect the account, then try again.');
+                }
+                throw new Error('DBot blocked Matches King from starting. Check the Builder log for missing settings.');
+            }
+            setSelectedMatchesSignal(null);
+        } catch (error: any) {
+            store?.dashboard?.setActiveTab(DBOT_TABS.AI_SIGNALS);
+            setMatchesKingError(error?.message || 'Could not save the signal to Matches King.');
+        } finally {
+            setMatchesKingSaving(false);
+        }
+    }, [selectedMatchesSignal, store]);
+
     const handleExecuteTrade = useCallback(async () => {
         if (!result) return;
         if (tradeType === 'over_under') {
@@ -1552,6 +1622,10 @@ const AiSignalsPage: React.FC = () => {
                         active={watchActive}
                         onToggle={() => setWatchActive(previous => !previous)}
                         maintenanceActive={maintenanceActive}
+                        onSelectSignal={selection => {
+                            setMatchesKingError('');
+                            setSelectedMatchesSignal(selection);
+                        }}
                     />
                 ) : tradeType === 'even_odd' ? (
                     <EvenOddBeastSignalBoard
@@ -2158,6 +2232,20 @@ const AiSignalsPage: React.FC = () => {
                         setEvenOddBeastError('');
                     }}
                     onSave={saveEvenOddSignalToBeast}
+                />
+            )}
+
+            {selectedMatchesSignal && (
+                <MatchesKingConfig
+                    key={`${selectedMatchesSignal.symbol.code}:${selectedMatchesSignal.setup}`}
+                    selection={selectedMatchesSignal}
+                    loading={matchesKingSaving}
+                    error={matchesKingError}
+                    onClose={() => {
+                        setSelectedMatchesSignal(null);
+                        setMatchesKingError('');
+                    }}
+                    onSave={saveMatchesSignalToKing}
                 />
             )}
 

@@ -2,6 +2,7 @@ import {
     calculateMacdSeries,
     calculateTrendStrengthIndexSeries,
     advanceMatchesPaperSignals,
+    canEnterMatchesSignal,
     evaluateMacdMatchesConditions,
     evaluateMatchesConditions,
     formatCandleCountdown,
@@ -90,6 +91,29 @@ describe('Matches 0–4 candle strategy', () => {
         expect(isTsiFlat([0.81, 0.82])).toBe(false);
         expect(isTsiFlat([0.81, 0.82, 0.83])).toBe(true);
         expect(isTsiFlat([0.8, 0.82, 0.83])).toBe(false);
+    });
+
+    it('allows manual entry whenever indicator setup and live data are ready, independent of countdown', () => {
+        const tsi = {
+            tsiInRange: true,
+            tsiFlat: true,
+            greenCandle: true,
+            entryWindow: false,
+            feedFresh: true,
+            tradeNow: false,
+        };
+        const macd = {
+            enteringFromAbove: true,
+            signalAway: true,
+            entryWindow: false,
+            feedFresh: true,
+            tradeNow: false,
+        };
+
+        expect(canEnterMatchesSignal('tsi', tsi, macd)).toBe(true);
+        expect(canEnterMatchesSignal('macd', tsi, macd)).toBe(true);
+        expect(canEnterMatchesSignal('tsi', { ...tsi, feedFresh: false }, macd)).toBe(false);
+        expect(canEnterMatchesSignal('macd', tsi, { ...macd, signalAway: false })).toBe(false);
     });
 
     it('counts down from candle start to the two-second entry window', () => {

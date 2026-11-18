@@ -168,6 +168,36 @@ describe('MatchesKingEngine stop lifecycle', () => {
         expect(statuses[statuses.length - 1]).toBe('stopped');
         expect(trader.stop).toHaveBeenCalledTimes(1);
     });
+
+    it('waits for the first 00:02 tick only, then resumes its normal batch cadence', async () => {
+        const engine = new MatchesKingEngine({
+            ...config,
+            useVirtualHook: false,
+            waitForInitialCandleClose: true,
+        });
+        const trader = mockTraderInstances[0];
+        const logs: string[] = [];
+        engine.onLog = log => logs.push(log.message);
+        (engine as any).running = true;
+
+        trader.onTick('100.01', 1, 177, 'before-window');
+        expect(trader.buyDigitBatchNow).not.toHaveBeenCalled();
+        expect((engine as any).initialCandleClosePending).toBe(true);
+
+        trader.onTick('100.02', 2, 178, 'at-00-02');
+        await flushPromises();
+        expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(1);
+        expect((engine as any).initialCandleClosePending).toBe(false);
+        expect(logs.some(message => message.includes('Initial 00:02 entry point reached'))).toBe(true);
+
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
+        trader.onTick('100.03', 3, 179, 'after-first-entry');
+        await flushPromises();
+        expect(trader.buyDigitBatchNow).toHaveBeenCalledTimes(2);
+
+        trader.onPosition({ contractId: 'contract-7', isOpen: false, profit: -0.5 });
+        engine.stop();
+    });
 });
 
 describe('MatchesKingEngine rate-limit recovery', () => {

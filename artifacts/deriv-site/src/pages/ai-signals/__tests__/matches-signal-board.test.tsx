@@ -4,6 +4,7 @@ import { MatchesSignalBoard, MatchesSignalSection } from '../matches-signal-boar
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
 import { calculateMacdSeries, evaluateMacdMatchesConditions, normalizeCandle } from '../matches-signal-strategy';
+import * as matchesSignalStrategy from '../matches-signal-strategy';
 
 jest.mock('@/hooks/useApiBase', () => ({ useApiBase: jest.fn() }));
 jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({ api_base: { api: null } }));
@@ -85,7 +86,7 @@ describe('Matches shared market board', () => {
         expect(listeners.size).toBe(0);
     });
 
-    it('arms all eight MACD cards only with live data at 00:02 and disarms stale or paused cards', async () => {
+    it('keeps the timed paper-alert flag separate from live manual-entry readiness', async () => {
         const history = Array.from({ length: 70 }, (_, index) => {
             const close = 100 + index + 0.004 * index ** 2;
             return { epoch: index * 60, open: close + 0.1, high: close + 1, low: close - 1, close };
@@ -128,8 +129,8 @@ describe('Matches shared market board', () => {
         await liveAt(4198);
         expect(screen.getAllByText('00:02')).toHaveLength(8);
         // Each market has one status plus four digit-specific alerts.
-        expect(screen.getAllByText('TRADE NOW')).toHaveLength(40);
-        expect(screen.getAllByLabelText(/Trade now: .* Matches digits six through nine/)).toHaveLength(8);
+        expect(screen.getAllByText('SETUP READY · ENTER WHEN YOU CHOOSE')).toHaveLength(8);
+        expect(screen.getAllByLabelText(/Ready setup: .* Matches digits six through nine/)).toHaveLength(8);
         // Stop delivering messages, then restore the live feed.
         await act(async () => { jest.advanceTimersByTime(3_000); });
         expect(screen.getAllByText('Waiting for live data')).toHaveLength(8);
@@ -199,6 +200,7 @@ describe('MatchesSignalBoard', () => {
 
     afterEach(() => {
         jest.useRealTimers();
+        jest.restoreAllMocks();
         (api_base as any).api = null;
         Object.defineProperty(globalThis, 'WebSocket', {
             configurable: true,
@@ -250,7 +252,7 @@ describe('MatchesSignalBoard', () => {
 
     it('shows the MACD chart and ignores candle color in the MACD setup', async () => {
         render(<MatchesSignalBoard active onToggle={jest.fn()} maintenanceActive={false} strategy='macd' />);
-        expect(screen.getByText(/Candle color is ignored/)).toBeInTheDocument();
+        expect(screen.getByText(/signal-line magnitude exceeds histogram height/)).toBeInTheDocument();
 
         await act(async () => {
             jest.advanceTimersByTime(700);
@@ -283,6 +285,66 @@ describe('MatchesSignalBoard', () => {
             name: 'Volatility 10 (1s) Index one-minute candlesticks and MACD 12/26/9',
         })).toBeInTheDocument();
         expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
+    });
+
+    it('shows Enter Now on a ready live setup before 00:02 and leaves execution to the click', async () => {
+        const onSelectSignal = jest.fn();
+        const setupSpy = jest.spyOn(matchesSignalStrategy, 'evaluateMacdMatchesConditions')
+            .mockImplementation(({ feedFresh }) => ({
+                enteringFromAbove: true,
+                signalAway: true,
+                entryWindow: false,
+                feedFresh,
+                tradeNow: false,
+            }));
+        render(
+            <MatchesSignalBoard
+                active
+                onToggle={jest.fn()}
+                maintenanceActive={false}
+                strategy='macd'
+                onSelectSignal={onSelectSignal}
+            />,
+        );
+        await act(async () => { jest.advanceTimersByTime(700); });
+        const history = Array.from({ length: 70 }, (_, index) => ({
+            epoch: index * 60,
+            open: 100 + index,
+            high: 101 + index,
+            low: 99 + index,
+            close: 100.5 + index,
+        }));
+        await act(async () => {
+            apiRequests.forEach((request, index) => {
+                apiMessageHandler?.({
+                    msg_type: 'history',
+                    req_id: request.req_id,
+                    candles: history,
+                    subscription: { id: `manual-entry-${index}` },
+                });
+                apiMessageHandler?.({
+                    msg_type: 'ohlc',
+                    req_id: request.req_id,
+                    ohlc: {
+                        symbol: request.ticks_history,
+                        open_time: 4140,
+                        epoch: 4197,
+                        open: 169,
+                        high: 171,
+                        low: 168,
+                        close: 170,
+                    },
+                    subscription: { id: `manual-entry-${index}` },
+                });
+            });
+        });
+
+        expect(screen.getAllByText('00:03')).toHaveLength(8);
+        const enterButtons = screen.getAllByRole('button', { name: 'Enter Now · Matches King' });
+        expect(enterButtons).toHaveLength(8);
+        fireEvent.click(enterButtons[0]);
+        expect(onSelectSignal).toHaveBeenCalledWith(expect.objectContaining({ setup: 'macd' }));
+        setupSpy.mockRestore();
     });
 
     it('replays bounded tick history and shows per-market historical digit counts', async () => {

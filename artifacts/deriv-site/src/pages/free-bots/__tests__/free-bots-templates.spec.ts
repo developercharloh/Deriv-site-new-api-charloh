@@ -185,6 +185,7 @@ describe('Free Bots template catalog', () => {
         expect(strategy?.querySelector('field[name="STOP_LOSS"]')?.textContent).toBe('30');
         expect(strategy?.querySelector('field[name="USE_VIRTUAL_HOOK"]')?.textContent).toBe('TRUE');
         expect(strategy?.querySelector('field[name="VIRTUAL_LOSS_THRESHOLD"]')?.textContent).toBe('2');
+        expect(strategy?.querySelector('field[name="INITIAL_ENTRY_MODE"]')?.textContent).toBe('IMMEDIATE');
         expect(
             document.querySelector('statement[name="INITIALIZATION"] > block[type="matches_king_strategy"]')
         ).not.toBeNull();

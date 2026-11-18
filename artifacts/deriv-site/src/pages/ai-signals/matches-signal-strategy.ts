@@ -44,6 +44,18 @@ export interface MatchesMacdConditions {
     tradeNow: boolean;
 }
 
+export type MatchesSignalSetup = 'tsi' | 'macd';
+
+export function canEnterMatchesSignal(
+    setup: MatchesSignalSetup,
+    tsi: MatchesStrategyConditions,
+    macd: MatchesMacdConditions,
+): boolean {
+    return setup === 'tsi'
+        ? tsi.feedFresh && tsi.tsiInRange && tsi.tsiFlat && tsi.greenCandle
+        : macd.feedFresh && macd.enteringFromAbove && macd.signalAway;
+}
+
 export interface MatchesReplayTick {
     epoch: number;
     quote: number | string;

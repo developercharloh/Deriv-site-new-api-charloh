@@ -43,6 +43,17 @@ export interface OverUnderBotSettings {
     martingale: number;
 }
 
+export interface MatchesKingBotSettings {
+    stake: number;
+    takeProfit: number;
+    stopLoss: number;
+    martingale: number;
+    digitCount: number;
+    useVirtualHook: boolean;
+    virtualLossThreshold: number;
+    waitForInitialCandleClose: boolean;
+}
+
 export interface BlockPatch {
     blockId:    string;
     numValue?:  number;   // patches math_number → field[NUM]
@@ -52,6 +63,7 @@ export interface BlockPatch {
 // ─── Bot ID → XML path mapping ────────────────────────────────────────────────
 
 export const BOT_XML_PATHS: Record<string, string> = {
+    'matches-king':              '/bots/Matches_King.xml',
     'matches-signal':           '/bots/Matches_Signal_Bot.xml',
     'differ-v2':                '/bots/BINARYTOOL@_DIFFER_V2.0_(1)_(1)_1765711647662.xml',
     'even-odd-scanner':         '/bots/BINARYTOOL@EVEN_ODD_THUNDER_AI_PRO_BOT_1765711647662.xml',
@@ -369,6 +381,64 @@ export function configureEvenOddBeastBotXml(doc: Document, side: string): Docume
     if (!mutation) throw new Error('Even Odd Beast XML is missing its side-selection setup.');
     mutation.removeAttribute('else');
     mutation.setAttribute('elseif', '0');
+
+    return doc;
+}
+
+export function configureMatchesKingBotXml(doc: Document, settings: MatchesKingBotSettings): Document {
+    if (!Number.isInteger(settings.digitCount) || settings.digitCount < 1 || settings.digitCount > 10) {
+        throw new Error('Matches King needs between 1 and 10 match digits.');
+    }
+    if (settings.useVirtualHook && (
+        !Number.isInteger(settings.virtualLossThreshold) ||
+        settings.virtualLossThreshold < 1 ||
+        settings.virtualLossThreshold > 100
+    )) {
+        throw new Error('Matches King Virtual Hook needs a loss threshold from 1 to 100.');
+    }
+    for (const [label, value] of [
+        ['Stake', settings.stake],
+        ['Take Profit', settings.takeProfit],
+        ['Stop Loss', settings.stopLoss],
+    ] as const) {
+        if (!Number.isFinite(value) || value <= 0) {
+            throw new Error(`${label} must be greater than zero.`);
+        }
+    }
+    if (!Number.isFinite(settings.martingale) || settings.martingale < 1) {
+        throw new Error('Martingale must be at least 1×.');
+    }
+
+    const strategy = Array.from(doc.getElementsByTagName('block'))
+        .find(block => block.getAttribute('type') === 'matches_king_strategy');
+    const market = Array.from(doc.getElementsByTagName('block'))
+        .find(block => block.getAttribute('type') === 'trade_definition_market');
+    if (!strategy || !market) {
+        throw new Error('Matches King XML is missing its strategy or market settings.');
+    }
+
+    const setField = (block: Element, name: string, value: string | number) => {
+        const field = Array.from(block.getElementsByTagName('field'))
+            .find(candidate => candidate.getAttribute('name') === name);
+        if (!field) throw new Error(`Matches King XML is missing ${name}.`);
+        field.textContent = String(value);
+    };
+
+    setField(strategy, 'DIGIT_COUNT', settings.digitCount);
+    setField(strategy, 'INITIAL_ENTRY_MODE', settings.waitForInitialCandleClose ? 'CANDLE_CLOSE' : 'IMMEDIATE');
+    setField(strategy, 'STAKE', settings.stake);
+    setField(strategy, 'TAKE_PROFIT', settings.takeProfit);
+    setField(strategy, 'STOP_LOSS', settings.stopLoss);
+    setField(strategy, 'MARTINGALE', settings.martingale);
+    for (let index = 0; index < settings.digitCount; index += 1) {
+        setField(strategy, `DIGIT_${index + 1}`, index);
+    }
+    setField(strategy, 'USE_VIRTUAL_HOOK', settings.useVirtualHook ? 'TRUE' : 'FALSE');
+    setField(
+        strategy,
+        'VIRTUAL_LOSS_THRESHOLD',
+        Number.isInteger(settings.virtualLossThreshold) ? settings.virtualLossThreshold : 2,
+    );
 
     return doc;
 }
@@ -741,6 +811,7 @@ export async function fetchAndPatchBot(
     stopLoss:   number,
     martingale: number,
     duration:   number = 1,
+    matchesKingSettings?: MatchesKingBotSettings,
 ): Promise<Document> {
     const rawXml  = await loadRawXml(botId);
     const patches = getBotPatches(botId, signal, stake, takeProfit, stopLoss, martingale);
@@ -786,6 +857,17 @@ export async function fetchAndPatchBot(
             throw new Error('Even Odd Beast signals are limited to Continuous Volatility Indices.');
         }
         doc = configureEvenOddBeastBotXml(doc, side);
+    } else if (botId === 'matches-king') {
+        if (signal.market !== 'matches_differs') {
+            throw new Error('Matches King requires a Matches signal.');
+        }
+        if (!DERIV_CONTINUOUS_VOLATILITIES.some(symbol => symbol.code === signal.symbol)) {
+            throw new Error('Matches King signals are limited to Continuous Volatility Indices.');
+        }
+        if (!matchesKingSettings) {
+            throw new Error('Choose Matches King settings before starting the bot.');
+        }
+        doc = configureMatchesKingBotXml(doc, matchesKingSettings);
     }
 
     if (doc.querySelector('parsererror')) throw new Error('Bot XML parse error — check the bot file.');
@@ -964,6 +1046,48 @@ export async function restoreEvenOddBeastWorkspace(
         .map((block: any) => block.getFieldValue('PURCHASE_LIST'));
     if (purchaseTypes.length !== 1 || purchaseTypes[0] !== contractType) {
         throw new Error('DBot did not keep the selected Even/Odd purchase type. Keep the bot stopped and retry.');
+    }
+}
+
+export async function restoreMatchesKingWorkspaceSymbol(
+    workspace: any,
+    symbol: string,
+    savedSelections?: Record<string, string[]>,
+): Promise<void> {
+    if (
+        !workspace ||
+        !DERIV_CONTINUOUS_VOLATILITIES.some(volatility => volatility.code === symbol)
+    ) {
+        throw new Error('Matches King needs a Continuous Volatility market and a ready DBot workspace.');
+    }
+
+    const expectedSelections = {
+        ...savedSelections,
+        MARKET_LIST: ['synthetic_index'],
+        SUBMARKET_LIST: ['random_index'],
+        SYMBOL_LIST: [symbol],
+        TRADETYPECAT_LIST: ['digits'],
+        TRADETYPE_LIST: ['matchesdiffers'],
+        TYPE_LIST: ['DIGITMATCH'],
+        DURATIONTYPE_LIST: ['t'],
+    };
+    await restoreDropdownSelections(workspace, expectedSelections, (ApiHelpers as any)?.instance);
+
+    const getBlock = (type: string) =>
+        workspace.getAllBlocks(true).find((block: any) => block.type === type);
+    const requiredFields: Array<[string, string, string]> = [
+        ['trade_definition_market', 'MARKET_LIST', 'synthetic_index'],
+        ['trade_definition_market', 'SUBMARKET_LIST', 'random_index'],
+        ['trade_definition_market', 'SYMBOL_LIST', symbol],
+        ['trade_definition_tradetype', 'TRADETYPECAT_LIST', 'digits'],
+        ['trade_definition_tradetype', 'TRADETYPE_LIST', 'matchesdiffers'],
+        ['trade_definition_contracttype', 'TYPE_LIST', 'DIGITMATCH'],
+        ['trade_definition_tradeoptions', 'DURATIONTYPE_LIST', 't'],
+    ];
+    for (const [blockType, fieldName, expected] of requiredFields) {
+        if (getBlock(blockType)?.getFieldValue(fieldName) !== expected) {
+            throw new Error(`DBot did not restore Matches King's ${fieldName} selection. Keep the bot stopped and retry.`);
+        }
     }
 }
 
