@@ -136,15 +136,18 @@ describe('Matches King Stop with real contract tracking', () => {
         await Promise.resolve();
     });
 
-    it('passes the one-time initial candle-close wait from Blockly into Matches King', async () => {
+    it('starts from the first live tick even when an older workspace has the candle-close setting', async () => {
         panel.native_matches_king_engine?.stop();
         await Promise.resolve();
         await Promise.resolve();
         fields.INITIAL_ENTRY_MODE = 'CANDLE_CLOSE';
+        fields.USE_VIRTUAL_HOOK = 'FALSE';
         sent = [];
 
         expect(panel.startNativeMatchesKingBot()).toBe(true);
-        expect((panel.native_matches_king_engine as any)?.config.waitForInitialCandleClose).toBe(true);
+        expect((panel.native_matches_king_engine as any)?.config.waitForInitialCandleClose).toBeUndefined();
+        tick(177);
+        expect(sent.filter(request => request.proposal === 1)).toHaveLength(2);
 
         panel.onStopBotClick();
         await Promise.resolve();

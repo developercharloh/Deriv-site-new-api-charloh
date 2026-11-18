@@ -47,16 +47,6 @@ window.Blockly.Blocks.matches_king_strategy = {
             .appendField(localize('Stop Loss'))
             .appendField(new window.Blockly.FieldNumber(30, 0.01, 1000000, 0.01), 'STOP_LOSS');
 
-        this.appendDummyInput('MATCHES_KING_ENTRY_TIMING')
-            .appendField(
-                new window.Blockly.FieldDropdown([
-                    [localize('Start immediately'), 'IMMEDIATE'],
-                    [localize('Wait for 00:02 before candle close'), 'CANDLE_CLOSE'],
-                ]),
-                'INITIAL_ENTRY_MODE'
-            )
-            .setVisible(false);
-
         this.appendDummyInput('MATCHES_KING_USE_VIRTUAL_HOOK')
             .appendField(localize('Use Virtual Hook'))
             .appendField(
@@ -81,7 +71,6 @@ window.Blockly.Blocks.matches_king_strategy = {
 
         this.setInputsInline(false);
         this.setFieldValue('4', 'DIGIT_COUNT');
-        this.setFieldValue('IMMEDIATE', 'INITIAL_ENTRY_MODE');
         this.updateDigitInputVisibility_(4);
         this.updateVirtualHookVisibility_(this.getFieldValue('USE_VIRTUAL_HOOK') !== 'FALSE');
     },

@@ -51,7 +51,6 @@ export interface MatchesKingBotSettings {
     digits: number[];
     useVirtualHook: boolean;
     virtualLossThreshold: number;
-    waitForInitialCandleClose: boolean;
 }
 
 export interface BlockPatch {
@@ -431,7 +430,6 @@ export function configureMatchesKingBotXml(doc: Document, settings: MatchesKingB
     };
 
     setField(strategy, 'DIGIT_COUNT', settings.digits.length);
-    setField(strategy, 'INITIAL_ENTRY_MODE', settings.waitForInitialCandleClose ? 'CANDLE_CLOSE' : 'IMMEDIATE');
     setField(strategy, 'STAKE', settings.stake);
     setField(strategy, 'TAKE_PROFIT', settings.takeProfit);
     setField(strategy, 'STOP_LOSS', settings.stopLoss);

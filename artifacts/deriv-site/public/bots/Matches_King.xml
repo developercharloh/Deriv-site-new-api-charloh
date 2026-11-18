@@ -36,7 +36,6 @@
     <statement name="INITIALIZATION">
       <block type="matches_king_strategy" id="matches_king_strategy">
         <field name="DIGIT_COUNT">4</field>
-        <field name="INITIAL_ENTRY_MODE">IMMEDIATE</field>
         <field name="DIGIT_1">4</field>
         <field name="DIGIT_2">5</field>
         <field name="DIGIT_3">9</field>

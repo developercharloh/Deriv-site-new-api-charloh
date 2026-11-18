@@ -26,10 +26,9 @@ export interface MatchesKingConfig {
     stopLoss: number;
     useVirtualHook?: boolean;
     virtualLossThreshold: number;
-    waitForInitialCandleClose?: boolean;
 }
 
-export type MatchesKingStatus = 'scanning' | 'timing' | 'virtual' | 'buying' | 'waiting' | 'stopping' | 'paused' | 'stopped' | 'error';
+export type MatchesKingStatus = 'scanning' | 'virtual' | 'buying' | 'waiting' | 'stopping' | 'paused' | 'stopped' | 'error';
 
 interface VirtualBatch {
     entrySerial: number;
@@ -63,7 +62,6 @@ export class MatchesKingEngine {
     private tickSerial = 0;
     private lastTickKey: string | null = null;
     private lastEntryEpoch: string | null = null;
-    private initialCandleClosePending = false;
     private latestEpoch?: number;
     private latestSpot = '';
     private virtualBatch: VirtualBatch | null = null;
@@ -93,7 +91,6 @@ export class MatchesKingEngine {
 
     constructor(private readonly config: MatchesKingConfig) {
         this.currentStake = config.stake;
-        this.initialCandleClosePending = config.waitForInitialCandleClose === true;
         this.trader.onTick = (spot, digit, epoch, tickId) => this.handleTick(spot, digit, epoch, tickId);
         this.trader.onPosition = position => this.handlePosition(position);
         this.trader.onStatus = status => this.handleTraderStatus(status);
@@ -123,8 +120,7 @@ export class MatchesKingEngine {
                 this.stopping = false;
                 this.rateLimitAttempts = 0;
                 this.rateLimitUntil = 0;
-                this.initialCandleClosePending = this.config.waitForInitialCandleClose === true;
-                this.setStatus(this.initialCandleClosePending ? 'timing' : 'scanning');
+                this.setStatus('scanning');
                 this.trader.start({
                     symbol: this.config.symbol,
                     currency: this.config.currency,
@@ -142,9 +138,6 @@ export class MatchesKingEngine {
                         ? 'Virtual Hook: OFF for this run; selected contracts will be bought directly on qualifying ticks.'
                         : `Virtual Hook: ON for this run; live purchases wait for ${this.config.virtualLossThreshold} consecutive all-loss batches.`
                 );
-                if (this.initialCandleClosePending) {
-                    this.log('Waiting for 00:02 before the next one-minute candle close for the first entry; later batches will run continuously.');
-                }
                 await new Promise<void>(resolve => {
                     this.releaseLock = resolve;
                 });
@@ -163,13 +156,7 @@ export class MatchesKingEngine {
     resume(): void {
         if (!this.running || !this.paused) return;
         this.paused = false;
-        this.setStatus(
-            this.initialCandleClosePending
-                ? 'timing'
-                : this.liveBatch || Date.now() < this.rateLimitUntil
-                  ? 'waiting'
-                : 'scanning'
-        );
+        this.setStatus(this.liveBatch || Date.now() < this.rateLimitUntil ? 'waiting' : 'scanning');
     }
 
     stop(): void {
@@ -227,20 +214,6 @@ export class MatchesKingEngine {
         if (this.virtualBatch && this.tickSerial > this.virtualBatch.entrySerial) {
             this.settleVirtualBatch(digit, spot, epoch);
             return;
-        }
-        if (this.initialCandleClosePending) {
-            const elapsedSeconds = Number.isFinite(epoch)
-                ? ((Number(epoch) % 60) + 60) % 60
-                : null;
-            const secondsToClose = elapsedSeconds === null
-                ? null
-                : Math.ceil(60 - elapsedSeconds);
-            if (this.paused || secondsToClose !== 2) {
-                if (!this.paused) this.setStatus('timing');
-                return;
-            }
-            this.initialCandleClosePending = false;
-            this.log('Initial 00:02 entry point reached; later Matches King batches will run continuously.');
         }
         if (Date.now() < this.rateLimitUntil) {
             this.setStatus('waiting');

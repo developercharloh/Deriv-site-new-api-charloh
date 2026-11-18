@@ -16,7 +16,6 @@ describe('Matches King signal bot patching', () => {
             digits: [6, 7, 8],
             useVirtualHook: false,
             virtualLossThreshold: 4,
-            waitForInitialCandleClose: true,
         });
 
         const field = (name: string) => Array.from(doc.getElementsByTagName('field'))
@@ -30,7 +29,7 @@ describe('Matches King signal bot patching', () => {
         expect(field('MARTINGALE')).toBe('1.8');
         expect(field('USE_VIRTUAL_HOOK')).toBe('FALSE');
         expect(field('VIRTUAL_LOSS_THRESHOLD')).toBe('4');
-        expect(field('INITIAL_ENTRY_MODE')).toBe('CANDLE_CLOSE');
+        expect(field('INITIAL_ENTRY_MODE')).toBeUndefined();
     });
 
     it('rejects a digit count outside the supported range', () => {
@@ -46,7 +45,6 @@ describe('Matches King signal bot patching', () => {
             digits: [],
             useVirtualHook: true,
             virtualLossThreshold: 2,
-            waitForInitialCandleClose: true,
         })).toThrow('Matches King needs between 1 and 10 match digits.');
     });
 });

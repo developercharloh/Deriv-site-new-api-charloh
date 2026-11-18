@@ -12,7 +12,6 @@ export interface MatchesKingRunSettings {
     digits: number[];
     useVirtualHook: boolean;
     virtualLossThreshold: number;
-    waitForInitialCandleClose: boolean;
 }
 
 interface Props {
@@ -92,7 +91,6 @@ export function MatchesKingConfig({ selection, loading, error, onClose, onSave }
             digits,
             useVirtualHook,
             virtualLossThreshold: Number(virtualLossThreshold),
-            waitForInitialCandleClose: true,
         };
         if (
             !Number.isFinite(settings.stake) || settings.stake < 0.35 ||
@@ -166,9 +164,8 @@ export function MatchesKingConfig({ selection, loading, error, onClose, onSave }
                     Market: <strong>{selection.symbol.label} ({selection.symbol.code})</strong>
                 </div>
                 <p className='mk-config__note'>
-                    After you save and run, Matches King waits for the next 00:02 candle-close point for its first
-                    entry. Later batches run continuously without that timing wait. If Virtual Hook is on, its
-                    configured all-loss batches happen before real contracts are bought.
+                    After you save and run, Matches King starts selecting entries from incoming live ticks. If
+                    Virtual Hook is on, its configured all-loss batches happen before real contracts are bought.
                 </p>
 
                 <div className='mk-config__grid'>

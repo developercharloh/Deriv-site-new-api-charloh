@@ -1256,7 +1256,6 @@ export default class RunPanelStore {
             stopLoss: fieldNumber('STOP_LOSS', 30),
             useVirtualHook: strategyBlock.getFieldValue('USE_VIRTUAL_HOOK') !== 'FALSE',
             virtualLossThreshold: Math.floor(fieldNumber('VIRTUAL_LOSS_THRESHOLD', 2)),
-            waitForInitialCandleClose: strategyBlock.getFieldValue('INITIAL_ENTRY_MODE') === 'CANDLE_CLOSE',
         });
         this.native_matches_king_engine = engine;
 
@@ -1287,7 +1286,7 @@ export default class RunPanelStore {
                     ? contract_stages.PURCHASE_SENT
                     : status === 'waiting'
                       ? contract_stages.PURCHASE_RECEIVED
-                      : status === 'scanning' || status === 'timing' || status === 'virtual'
+                      : status === 'scanning' || status === 'virtual'
                         ? contract_stages.RUNNING
                         : contract_stages.STARTING;
             this.updateNativeBot(stage, status === 'waiting');

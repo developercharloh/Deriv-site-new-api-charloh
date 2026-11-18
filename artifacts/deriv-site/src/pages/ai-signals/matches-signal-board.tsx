@@ -537,7 +537,7 @@ export function MatchesSignalBoard({
                     : strategy === 'tsi'
                     ? 'Enter Now appears when the live candle is green, normalized TSI is 0.80–0.90 and flat. 00:02 is a timing reference only.'
                     : 'Enter Now appears when MACD descends toward signal from above and signal-line magnitude exceeds histogram height. 00:02 is a timing reference only.'}
-                {' '}After you save and run #19, the first entry waits for the next 00:02 point; later batches run continuously.
+                {' '}After you save and run #19, it starts selecting entries from incoming live ticks.
             </div>
 
             <div

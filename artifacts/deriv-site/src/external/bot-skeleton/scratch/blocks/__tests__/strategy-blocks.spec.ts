@@ -73,8 +73,7 @@ describe('custom strategy Blockly blocks', () => {
             ), workspace);
             const block = workspace.getAllBlocks(false)[0];
             expect(block.getFieldValue('USE_VIRTUAL_HOOK')).toBe('TRUE');
-            expect(block.getFieldValue('INITIAL_ENTRY_MODE')).toBe('IMMEDIATE');
-            expect(block.getInput('MATCHES_KING_ENTRY_TIMING')?.visible).toBe(false);
+            expect(block.getField('INITIAL_ENTRY_MODE')).toBeNull();
             expect(block.getFieldValue('DIGIT_COUNT')).toBe('4');
             expect(block.getFieldValue('DIGIT_4')).toBe(7);
             expect(block.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(true);
@@ -88,18 +87,16 @@ describe('custom strategy Blockly blocks', () => {
         }
     });
 
-    it('preserves Matches King false when saving and reopening its Blockly settings', () => {
+    it('preserves Matches King Virtual Hook settings when saving and reopening', () => {
         const workspace = new Blockly.Workspace();
         const restored = new Blockly.Workspace();
         try {
             const block = workspace.newBlock('matches_king_strategy');
-            block.setFieldValue('CANDLE_CLOSE', 'INITIAL_ENTRY_MODE');
             block.setFieldValue('6', 'VIRTUAL_LOSS_THRESHOLD');
             block.setFieldValue('FALSE', 'USE_VIRTUAL_HOOK');
             expect(block.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(false);
             Blockly.Xml.domToWorkspace(Blockly.Xml.workspaceToDom(workspace), restored);
             const restoredBlock = restored.getAllBlocks(false)[0];
-            expect(restoredBlock.getFieldValue('INITIAL_ENTRY_MODE')).toBe('CANDLE_CLOSE');
             expect(restoredBlock.getFieldValue('USE_VIRTUAL_HOOK')).toBe('FALSE');
             expect(restoredBlock.getFieldValue('VIRTUAL_LOSS_THRESHOLD')).toBe(6);
             expect(restoredBlock.getInput('MATCHES_KING_VIRTUAL_HOOK')?.visible).toBe(false);

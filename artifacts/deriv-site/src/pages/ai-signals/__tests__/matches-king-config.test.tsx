@@ -33,7 +33,6 @@ describe('Matches King signal configuration', () => {
             digits: [0, 1, 2],
             useVirtualHook: true,
             virtualLossThreshold: 2,
-            waitForInitialCandleClose: true,
         });
     });
 
