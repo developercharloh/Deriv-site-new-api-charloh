@@ -9,6 +9,7 @@ export interface MatchesKingRunSettings {
     stopLoss: number;
     martingale: number;
     digitCount: number;
+    digits: number[];
     useVirtualHook: boolean;
     virtualLossThreshold: number;
     waitForInitialCandleClose: boolean;
@@ -28,17 +29,20 @@ const DEFAULTS = {
     takeProfit: '10',
     stopLoss: '30',
     martingale: '2',
-    digitCount: '4',
     useVirtualHook: true,
     virtualLossThreshold: '2',
 };
 
-export function digitsForMatchesKingCount(count: number): number[] {
-    const safeCount = Math.max(1, Math.min(10, Math.floor(count)));
-    return Array.from({ length: safeCount }, (_, digit) => digit);
+export function digitsForMatchesKingCount(count: number, setup: MatchesKingSignalSelection['setup']): number[] {
+    const start = setup === 'tsi' ? 0 : 6;
+    const rangeSize = setup === 'tsi' ? 5 : 4;
+    const safeCount = Number.isFinite(count)
+        ? Math.max(1, Math.min(rangeSize, Math.floor(count)))
+        : 1;
+    return Array.from({ length: safeCount }, (_, index) => start + index);
 }
 
-function loadSettings() {
+function loadSettings(defaultDigitCount: number) {
     try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
         return {
@@ -46,7 +50,7 @@ function loadSettings() {
             takeProfit: typeof saved?.takeProfit === 'string' ? saved.takeProfit : DEFAULTS.takeProfit,
             stopLoss: typeof saved?.stopLoss === 'string' ? saved.stopLoss : DEFAULTS.stopLoss,
             martingale: typeof saved?.martingale === 'string' ? saved.martingale : DEFAULTS.martingale,
-            digitCount: typeof saved?.digitCount === 'string' ? saved.digitCount : DEFAULTS.digitCount,
+            digitCount: typeof saved?.digitCount === 'string' ? saved.digitCount : String(defaultDigitCount),
             useVirtualHook: typeof saved?.useVirtualHook === 'boolean'
                 ? saved.useVirtualHook
                 : DEFAULTS.useVirtualHook,
@@ -55,23 +59,27 @@ function loadSettings() {
                 : DEFAULTS.virtualLossThreshold,
         };
     } catch {
-        return DEFAULTS;
+        return { ...DEFAULTS, digitCount: String(defaultDigitCount) };
     }
 }
 
 export function MatchesKingConfig({ selection, loading, error, onClose, onSave }: Props) {
-    const [initial] = useState(loadSettings);
+    const maxDigitCount = selection.setup === 'tsi' ? 5 : 4;
+    const [initial] = useState(() => loadSettings(maxDigitCount));
     const [stake, setStake] = useState(initial.stake);
     const [takeProfit, setTakeProfit] = useState(initial.takeProfit);
     const [stopLoss, setStopLoss] = useState(initial.stopLoss);
     const [martingale, setMartingale] = useState(initial.martingale);
-    const [digitCount, setDigitCount] = useState(initial.digitCount);
+    const savedDigitCount = Number(initial.digitCount);
+    const [digitCount, setDigitCount] = useState(
+        String(Number.isInteger(savedDigitCount) ? Math.max(1, Math.min(maxDigitCount, savedDigitCount)) : maxDigitCount)
+    );
     const [useVirtualHook, setUseVirtualHook] = useState(initial.useVirtualHook);
     const [virtualLossThreshold, setVirtualLossThreshold] = useState(initial.virtualLossThreshold);
     const [validationError, setValidationError] = useState('');
     const count = Number(digitCount);
-    const digits = Number.isInteger(count) && count >= 1 && count <= 10
-        ? digitsForMatchesKingCount(count)
+    const digits = Number.isInteger(count) && count >= 1 && count <= maxDigitCount
+        ? digitsForMatchesKingCount(count, selection.setup)
         : [];
 
     const submit = () => {
@@ -81,6 +89,7 @@ export function MatchesKingConfig({ selection, loading, error, onClose, onSave }
             stopLoss: Number(stopLoss),
             martingale: Number(martingale),
             digitCount: count,
+            digits,
             useVirtualHook,
             virtualLossThreshold: Number(virtualLossThreshold),
             waitForInitialCandleClose: true,
@@ -97,8 +106,8 @@ export function MatchesKingConfig({ selection, loading, error, onClose, onSave }
             setValidationError('Martingale must be at least 1×.');
             return;
         }
-        if (!Number.isInteger(count) || count < 1 || count > 10) {
-            setValidationError('Choose between 1 and 10 match digits.');
+        if (!Number.isInteger(count) || count < 1 || count > maxDigitCount) {
+            setValidationError(`Choose between 1 and ${maxDigitCount} match digits for this setup.`);
             return;
         }
         if (useVirtualHook && (
@@ -190,13 +199,13 @@ export function MatchesKingConfig({ selection, loading, error, onClose, onSave }
                         disabled={loading}
                         data-testid='matches-king-digit-count'
                     >
-                        {Array.from({ length: 10 }, (_, index) => index + 1).map(value => (
+                        {Array.from({ length: maxDigitCount }, (_, index) => index + 1).map(value => (
                             <option key={value} value={value}>{value}</option>
                         ))}
                     </select>
                 </label>
                 <div className='mk-config__digit-preview' aria-live='polite' data-testid='matches-king-digit-preview'>
-                    <span>Auto-filled match digits</span>
+                    <span>Auto-filled digits from this setup</span>
                     <div>{digits.length ? digits.map(digit => <b key={digit}>{digit}</b>) : <em>Choose 1–10 digits</em>}</div>
                 </div>
 

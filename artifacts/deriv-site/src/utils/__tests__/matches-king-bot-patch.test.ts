@@ -13,7 +13,7 @@ describe('Matches King signal bot patching', () => {
             takeProfit: 25,
             stopLoss: 40,
             martingale: 1.8,
-            digitCount: 3,
+            digits: [6, 7, 8],
             useVirtualHook: false,
             virtualLossThreshold: 4,
             waitForInitialCandleClose: true,
@@ -23,7 +23,7 @@ describe('Matches King signal bot patching', () => {
             .find(item => item.getAttribute('name') === name)?.textContent;
         expect(field('SYMBOL_LIST')).toBe('1HZ10V');
         expect(field('DIGIT_COUNT')).toBe('3');
-        expect([field('DIGIT_1'), field('DIGIT_2'), field('DIGIT_3')]).toEqual(['0', '1', '2']);
+        expect([field('DIGIT_1'), field('DIGIT_2'), field('DIGIT_3')]).toEqual(['6', '7', '8']);
         expect(field('STAKE')).toBe('1.25');
         expect(field('TAKE_PROFIT')).toBe('25');
         expect(field('STOP_LOSS')).toBe('40');
@@ -43,7 +43,7 @@ describe('Matches King signal bot patching', () => {
             takeProfit: 10,
             stopLoss: 30,
             martingale: 2,
-            digitCount: 0,
+            digits: [],
             useVirtualHook: true,
             virtualLossThreshold: 2,
             waitForInitialCandleClose: true,

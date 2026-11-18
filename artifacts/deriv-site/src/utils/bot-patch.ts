@@ -48,7 +48,7 @@ export interface MatchesKingBotSettings {
     takeProfit: number;
     stopLoss: number;
     martingale: number;
-    digitCount: number;
+    digits: number[];
     useVirtualHook: boolean;
     virtualLossThreshold: number;
     waitForInitialCandleClose: boolean;
@@ -386,7 +386,13 @@ export function configureEvenOddBeastBotXml(doc: Document, side: string): Docume
 }
 
 export function configureMatchesKingBotXml(doc: Document, settings: MatchesKingBotSettings): Document {
-    if (!Number.isInteger(settings.digitCount) || settings.digitCount < 1 || settings.digitCount > 10) {
+    if (
+        !Array.isArray(settings.digits) ||
+        settings.digits.length < 1 ||
+        settings.digits.length > 10 ||
+        new Set(settings.digits).size !== settings.digits.length ||
+        !settings.digits.every(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9)
+    ) {
         throw new Error('Matches King needs between 1 and 10 match digits.');
     }
     if (settings.useVirtualHook && (
@@ -424,14 +430,14 @@ export function configureMatchesKingBotXml(doc: Document, settings: MatchesKingB
         field.textContent = String(value);
     };
 
-    setField(strategy, 'DIGIT_COUNT', settings.digitCount);
+    setField(strategy, 'DIGIT_COUNT', settings.digits.length);
     setField(strategy, 'INITIAL_ENTRY_MODE', settings.waitForInitialCandleClose ? 'CANDLE_CLOSE' : 'IMMEDIATE');
     setField(strategy, 'STAKE', settings.stake);
     setField(strategy, 'TAKE_PROFIT', settings.takeProfit);
     setField(strategy, 'STOP_LOSS', settings.stopLoss);
     setField(strategy, 'MARTINGALE', settings.martingale);
-    for (let index = 0; index < settings.digitCount; index += 1) {
-        setField(strategy, `DIGIT_${index + 1}`, index);
+    for (let index = 0; index < settings.digits.length; index += 1) {
+        setField(strategy, `DIGIT_${index + 1}`, settings.digits[index]);
     }
     setField(strategy, 'USE_VIRTUAL_HOOK', settings.useVirtualHook ? 'TRUE' : 'FALSE');
     setField(

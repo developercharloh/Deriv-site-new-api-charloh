@@ -18,7 +18,7 @@ import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
 import { captureDropdownSelections } from '@/external/bot-skeleton/scratch/utils';
 import { MatchesSignalSection } from './matches-signal-board';
-import { MatchesKingConfig, digitsForMatchesKingCount, type MatchesKingRunSettings } from './MatchesKingConfig';
+import { MatchesKingConfig, type MatchesKingRunSettings } from './MatchesKingConfig';
 import type { MatchesKingSignalSelection } from './matches-signal-board';
 import { OverUnderSignalBoard, type OverUnderSignalSelection } from './over-under-signal-board';
 import { OverUnderSecretWeaponConfig, type SecretWeaponRunSettings } from './OverUnderSecretWeaponConfig';
@@ -1412,7 +1412,7 @@ const AiSignalsPage: React.FC = () => {
                 throw new Error('Stop the currently running bot before loading Matches King.');
             }
 
-            const digits = digitsForMatchesKingCount(settings.digitCount);
+            const digits = settings.digits;
             const signal: BotSignal = {
                 symbol: selected.symbol.code,
                 symbolLabel: selected.symbol.label,
