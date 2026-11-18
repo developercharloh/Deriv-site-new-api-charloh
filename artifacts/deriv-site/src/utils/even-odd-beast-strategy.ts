@@ -23,7 +23,6 @@ export type EvenOddBeastAnalysis = {
         | 'stale_candle'
         | 'precision_unavailable'
         | 'decimal_digits_do_not_match'
-        | 'conditions_match_opposite_side'
         | 'indicator_conditions_not_met'
         | 'ready_even'
         | 'ready_odd';
@@ -202,16 +201,7 @@ export const analyzeEvenOddBeastCandles = ({
         return { ...base, signal: 'WAIT', reason: 'decimal_digits_do_not_match' };
     }
 
-    const matchedDigit = candleDigit;
-    const selectedConditions = matchedDigit % 2 === 0 ? evenConditions : oddConditions;
-    const oppositeConditions = matchedDigit % 2 === 0 ? oddConditions : evenConditions;
-    if (selectedConditions) {
-        return matchedDigit % 2 === 0
-            ? { ...base, signal: 'EVEN', reason: 'ready_even' }
-            : { ...base, signal: 'ODD', reason: 'ready_odd' };
-    }
-    if (oppositeConditions) {
-        return { ...base, signal: 'WAIT', reason: 'conditions_match_opposite_side' };
-    }
+    if (evenConditions) return { ...base, signal: 'EVEN', reason: 'ready_even' };
+    if (oddConditions) return { ...base, signal: 'ODD', reason: 'ready_odd' };
     return { ...base, signal: 'WAIT', reason: 'indicator_conditions_not_met' };
 };

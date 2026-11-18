@@ -388,9 +388,9 @@ describe('Binary Matrix analysis observer integration', () => {
             journalScope: 'even-odd-beast',
             market: '1HZ25V',
             candleTime: 100,
-            candleDigit: 3,
-            movingAverageDigit: 3,
-            matchedDigit: 3,
+            candleDigit: 2,
+            movingAverageDigit: 2,
+            matchedDigit: 2,
             candleOpen: 100.1,
             candleClose: 100.3,
             candleColor: 'GREEN',
@@ -402,6 +402,7 @@ describe('Binary Matrix analysis observer integration', () => {
             evenConditions: false,
             oddConditions: true,
             signal: 'ODD',
+            selectedSide: 'ODD',
             reason: 'ready_odd',
             result: true,
         };
@@ -409,7 +410,9 @@ describe('Binary Matrix analysis observer integration', () => {
         runPanel.onEvenOddBeastAnalysis(analysis as any);
 
         expect(journal.updateEvenOddBeastAnalysisMessage).toHaveBeenCalledWith(
-            expect.stringContaining('[Even Odd Beast] Status · 1HZ25V · matched digit 3 (ODD)')
+            expect.stringContaining(
+                '[Even Odd Beast] Status · 1HZ25V · matched digit 2 (EVEN) · selected side ODD'
+            )
         );
         expect(journal.updateEvenOddBeastAnalysisMessage).toHaveBeenCalledWith(
             expect.stringContaining('READY TO BUY ODD')

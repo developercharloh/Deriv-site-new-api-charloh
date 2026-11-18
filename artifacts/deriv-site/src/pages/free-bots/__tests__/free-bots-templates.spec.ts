@@ -279,6 +279,9 @@ describe('Free Bots template catalog', () => {
         expect(document.querySelector('statement[name="ELSE"] block[type="trade_again"]')).not.toBeNull();
         expect(catalog).toContain("id: 'even-odd-beast',\n        section: 'premium'");
         expect(catalog).toContain("name: 'Even Odd Beast'");
+        expect(catalog).toContain('without requiring another digit match');
+        expect(catalog).toContain("value: 'Repeat selected side while setup holds'");
+        expect(catalog).not.toContain('one trade per qualifying 1-minute candle');
         expect(getSmartOver2JournalScope('even-odd-beast')).toBe('even-odd-beast');
     });
 

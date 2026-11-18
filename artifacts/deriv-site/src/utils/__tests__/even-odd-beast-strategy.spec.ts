@@ -4,6 +4,7 @@ const candleStart = 1_700_000_040;
 
 const buildCandles = (direction: 'up' | 'down', matchedParity: 'EVEN' | 'ODD') => {
     const fraction = matchedParity === 'EVEN' ? 0.12 : 0.13;
+    const setupSide = direction === 'down' ? 'EVEN' : 'ODD';
     const candles = Array.from({ length: 50 }, (_, index) => {
         const trend = index * index * index * 10;
         const close = direction === 'up' ? 100_000 + trend + fraction : 2_000_000 - trend + fraction;
@@ -36,7 +37,7 @@ const buildCandles = (direction: 'up' | 'down', matchedParity: 'EVEN' | 'ODD') =
         if (
             analysis.matchedDigit !== null &&
             analysis.matchedDigit % 2 === (matchedParity === 'EVEN' ? 0 : 1) &&
-            analysis.signal === matchedParity
+            analysis.signal === setupSide
         ) {
             return { candles, analysis };
         }
@@ -80,23 +81,24 @@ describe('Even Odd Beast candle analysis', () => {
         expect(analysis.matchedDigit! % 2).toBe(1);
     });
 
-    it('blocks a bullish setup when the matching decimal digit is even', () => {
-        const { candles } = buildCandles('up', 'ODD');
-        const finalCandle = candles[candles.length - 1];
-        finalCandle.close = Math.floor(finalCandle.close) + 0.02;
-        finalCandle.open = finalCandle.close - 1;
-        finalCandle.high = finalCandle.close;
-        finalCandle.low = finalCandle.open;
-        const analysis = analyzeEvenOddBeastCandles({
-            candles,
-            pipSize: 2,
-            expectedCandleTime: candleStart,
-        });
+    it('selects the Odd contract for bullish conditions even when the matched digit is even', () => {
+        const { analysis } = buildCandles('up', 'EVEN');
 
         expect(analysis.matchedDigit).not.toBeNull();
         expect(analysis.matchedDigit! % 2).toBe(0);
-        expect(analysis.signal).toBe('WAIT');
-        expect(analysis.reason).toBe('conditions_match_opposite_side');
+        expect(analysis.oddConditions).toBe(true);
+        expect(analysis.signal).toBe('ODD');
+        expect(analysis.reason).toBe('ready_odd');
+    });
+
+    it('selects the Even contract for bearish conditions even when the matched digit is odd', () => {
+        const { analysis } = buildCandles('down', 'ODD');
+
+        expect(analysis.matchedDigit).not.toBeNull();
+        expect(analysis.matchedDigit! % 2).toBe(1);
+        expect(analysis.evenConditions).toBe(true);
+        expect(analysis.signal).toBe('EVEN');
+        expect(analysis.reason).toBe('ready_even');
     });
 
     it('waits when the candle and moving-average decimal digits differ', () => {

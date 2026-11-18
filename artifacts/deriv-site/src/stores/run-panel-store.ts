@@ -78,6 +78,7 @@ type TEvenOddBeastAnalysis = Omit<EvenOddBeastAnalysis, 'reason'> & {
     journalScope?: string | null;
     reason: string;
     result: boolean;
+    selectedSide?: 'EVEN' | 'ODD' | null;
 };
 
 export type TParityAnalysis = {
@@ -1398,19 +1399,20 @@ export default class RunPanelStore {
             stale_candle: 'waiting for the current candle',
             precision_unavailable: 'waiting for symbol precision',
             decimal_digits_do_not_match: 'candle and moving-average digits do not match',
-            conditions_match_opposite_side: 'indicator setup belongs to the opposite parity',
             indicator_conditions_not_met: 'indicator conditions do not align',
             ready_even: 'Even setup is ready',
             ready_odd: 'Odd setup is ready',
             other_side_selected: `signal selects ${analysis.signal}; checking that side`,
-            already_traded_this_candle: 'already traded this one-minute candle',
+            latched_setup_not_met: 'selected setup paused; waiting for it to return',
+            already_purchased_this_tick: 'already purchased on this broker tick',
             contract_still_open: 'waiting for the open contract to settle',
         };
         const resultLabel = analysis.result
             ? `READY TO BUY ${analysis.signal}`
             : `SKIP · ${reasonLabels[analysis.reason] || analysis.reason}`;
+        const selectedSideLabel = analysis.selectedSide ? ` · selected side ${analysis.selectedSide}` : '';
         const message =
-            `[Even Odd Beast] Status · ${analysis.market || 'N/A'} · ${digitStatus} · ` +
+            `[Even Odd Beast] Status · ${analysis.market || 'N/A'} · ${digitStatus}${selectedSideLabel} · ` +
             `${analysis.candleColor} candle ${analysis.priceVsMovingAverage.toLowerCase()} MA · ` +
             `MA trend ${analysis.movingAverageTrend} · MACD ${macdTone} ` +
             `(${analysis.macdTrend}, ${analysis.macdHistogram ?? 'waiting'}) · ${resultLabel}`;

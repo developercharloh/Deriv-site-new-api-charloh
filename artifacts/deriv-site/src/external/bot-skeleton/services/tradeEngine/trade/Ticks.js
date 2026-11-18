@@ -248,7 +248,8 @@ export default Engine =>
             this.overUnderTsiSamples = [];
             this.overUnderIndicatorError = null;
             this.evenOddBeastAnalysisCache = null;
-            this.evenOddBeastLastTradedCandleTime = null;
+            this.evenOddBeastActiveSide = null;
+            this.evenOddBeastLastPurchaseEpoch = null;
             this.evenOddBeastLastJournalSignature = null;
             this.evenOddBeastLastError = null;
         }
@@ -1831,27 +1832,49 @@ export default Engine =>
 
             if (this.latestTick !== tick || Number(this.getPurchaseConditionTick()) !== brokerEpoch) return false;
 
+            if (
+                !this.evenOddBeastActiveSide &&
+                analysis.matchedDigit !== null &&
+                analysis.signal !== 'WAIT'
+            ) {
+                this.evenOddBeastActiveSide = analysis.signal;
+            }
+
+            const activeSide = this.evenOddBeastActiveSide;
+            const setupIsActive =
+                activeSide === 'EVEN'
+                    ? analysis.evenConditions
+                    : activeSide === 'ODD'
+                      ? analysis.oddConditions
+                      : false;
             let reason = analysis.reason;
             let result = false;
-            if (analysis.signal !== 'WAIT') {
-                if (analysis.signal !== selectedSide) {
-                    reason = 'other_side_selected';
-                } else if (this.evenOddBeastLastTradedCandleTime === analysis.candleTime) {
-                    reason = 'already_traded_this_candle';
-                } else if ((this.getActiveContractIds?.() || []).length > 0) {
-                    reason = 'contract_still_open';
-                } else {
-                    result = true;
-                    this.evenOddBeastLastTradedCandleTime = analysis.candleTime;
-                    reason = `ready_${selectedSide.toLowerCase()}`;
-                }
+            if (!activeSide) {
+                reason =
+                    analysis.matchedDigit === null
+                        ? 'decimal_digits_do_not_match'
+                        : 'indicator_conditions_not_met';
+            } else if (activeSide !== selectedSide) {
+                reason = 'other_side_selected';
+            } else if (!setupIsActive) {
+                reason = 'latched_setup_not_met';
+            } else if (this.evenOddBeastLastPurchaseEpoch === brokerEpoch) {
+                reason = 'already_purchased_this_tick';
+            } else if ((this.getActiveContractIds?.() || []).length > 0) {
+                reason = 'contract_still_open';
+            } else {
+                result = true;
+                this.evenOddBeastLastPurchaseEpoch = brokerEpoch;
+                reason = `ready_${activeSide.toLowerCase()}`;
             }
 
             const journalSignature = [
                 analysis.candleTime,
                 analysis.candleDigit,
                 analysis.movingAverageDigit,
-                analysis.signal,
+                activeSide,
+                analysis.evenConditions,
+                analysis.oddConditions,
                 reason,
                 result,
             ].join(':');
@@ -1861,6 +1884,8 @@ export default Engine =>
                     journalScope: 'even-odd-beast',
                     market: this.symbol || 'N/A',
                     ...analysis,
+                    signal: activeSide || analysis.signal,
+                    selectedSide: activeSide,
                     reason,
                     result,
                 });

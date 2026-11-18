@@ -3,8 +3,8 @@ name: Even Odd Beast parity rule
 description: User-corrected entry rule and directional conditions for the Premium Even Odd Beast bot.
 ---
 
-Even Odd Beast reads the second decimal digit of the candle close and MA9. They must match exactly. An even shared digit permits only the bearish Even setup; an odd shared digit permits only the bullish Odd setup. If conditions qualify for the opposite side, skip the trade. Do not add a NEXUS dependency.
+Even Odd Beast reads the second decimal digit of the candle close and MA9. An exact digit match is the initial trigger; the indicator setup selects the contract independently of the matched digit's parity (bearish setup → Even, bullish setup → Odd). After the first trigger, keep the selected side latched and re-enter on later broker ticks while that side's setup remains true; do not require another digit match. Pause buys while the selected setup is false, and stop the run at TP/SL. Do not add a NEXUS dependency.
 
-**Why:** The user explicitly corrected the entry rule: matching parity selects the same contract side, and opposite-side conditions must not trigger a trade.
+**Why:** The user clarified that the setup determines the contract side and that the match is a one-time trigger for continuous entries.
 
-**How to apply:** Preserve this rule in strategy logic, imported Blockly templates, and regression tests; reject mismatches and opposite-side signals.
+**How to apply:** Preserve the one-time match trigger, setup-based side selection, latched re-entry, setup pause, and session risk limits in strategy logic and regression tests.

@@ -510,15 +510,15 @@ const BOTS: BotConfig[] = [
         name: 'Even Odd Beast',
         emoji: '🦁',
         description:
-            'Trades one-tick Even/Odd contracts on Volatility 25 (1s) Index. It matches the second decimal digit of the live candle and 9-period moving average, then only trades the corresponding parity when candle direction, moving-average slope, and dark MACD histogram align. Allows at most one entry per one-minute candle.',
+            'Matches the second decimal digit of the live candle close and 9-period moving average once. The Even or Odd indicator setup selects the contract side; after selection, the bot repeats that side on new ticks while its setup remains true, without requiring another digit match. Stops at session take-profit or stop-loss.',
         market: 'Volatility 25 (1s) Index (1HZ25V)',
-        strategy: 'Even / Odd · 1m SMA 9 · MACD 12/26/9 · Decimal parity gate',
+        strategy: 'Even / Odd · SMA 9 · MACD 12/26/9 · Latched setup-side entries',
         params: [
             { label: 'Initial Stake', value: '$0.70' },
             { label: 'Take Profit', value: '$10' },
             { label: 'Stop Loss', value: '$50' },
             { label: 'Martingale', value: '2× after a loss; reset after a win' },
-            { label: 'Entry', value: 'One trade per qualifying 1-minute candle' },
+            { label: 'Entry', value: 'Repeat selected side while setup holds' },
             { label: 'Duration', value: '1 Tick' },
         ],
         xmlPath: '/bots/Even_Odd_Beast.xml',
