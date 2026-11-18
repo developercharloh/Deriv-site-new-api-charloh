@@ -757,6 +757,37 @@ describe('Blockly bot template imports', () => {
         }
     });
 
+    it('imports Even Odd Beast with both signal gates and session risk controls', () => {
+        const xmlPath = path.resolve(__dirname, '../../../../../../public/bots/Even_Odd_Beast.xml');
+        const xml = Blockly.utils.xml.textToDom(fs.readFileSync(xmlPath, 'utf8'));
+        const workspace = new Blockly.Workspace();
+        const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        try {
+            expect(() => Blockly.Xml.domToWorkspace(xml, workspace)).not.toThrow();
+
+            const blockTypes = workspace.getAllBlocks(false).map(block => block.type);
+            expect(blockTypes).toEqual(
+                expect.arrayContaining([
+                    'trade_definition',
+                    'even_odd_beast_signal',
+                    'apollo_purchase2',
+                    'variables_set',
+                    'trade_again',
+                ])
+            );
+            expect(workspace.getBlockById('eob_even_signal')?.getFieldValue('SIDE')).toBe('EVEN');
+            expect(workspace.getBlockById('eob_odd_signal')?.getFieldValue('SIDE')).toBe('ODD');
+            expect(workspace.getBlockById('eob_set_stake')).toBeDefined();
+            expect(workspace.getBlockById('eob_set_martingale')).toBeDefined();
+            expect(workspace.getBlockById('eob_set_take_profit')).toBeDefined();
+            expect(workspace.getBlockById('eob_set_stop_loss')).toBeDefined();
+        } finally {
+            consoleWarn.mockRestore();
+            workspace.dispose();
+        }
+    });
+
     it('imports Las ET unchanged and generates its legacy purchase from the live trade prediction', () => {
         const sourceXmlPath = path.resolve(
             __dirname,

@@ -372,6 +372,54 @@ describe('Binary Matrix analysis observer integration', () => {
         );
     });
 
+    it('shows Even Odd Beast signal details only in its own Journal', () => {
+        const journal = {
+            updateEvenOddBeastAnalysisMessage: jest.fn(),
+            active_bot_template_id: 'even-odd-beast',
+        };
+        const rootStore = { dbot: {}, journal, transactions: {} };
+        const core = {
+            client: { loginid: null },
+            common: { is_socket_opened: false },
+            ui: {},
+        };
+        const runPanel = new RunPanelStore(rootStore as any, core as any);
+        const analysis = {
+            journalScope: 'even-odd-beast',
+            market: '1HZ25V',
+            candleTime: 100,
+            candleDigit: 3,
+            movingAverageDigit: 3,
+            matchedDigit: 3,
+            candleOpen: 100.1,
+            candleClose: 100.3,
+            candleColor: 'GREEN',
+            movingAverage: 100.2,
+            priceVsMovingAverage: 'ABOVE',
+            movingAverageTrend: 'RISING',
+            macdHistogram: 0.1,
+            macdTrend: 'RISING',
+            evenConditions: false,
+            oddConditions: true,
+            signal: 'ODD',
+            reason: 'ready_odd',
+            result: true,
+        };
+
+        runPanel.onEvenOddBeastAnalysis(analysis as any);
+
+        expect(journal.updateEvenOddBeastAnalysisMessage).toHaveBeenCalledWith(
+            expect.stringContaining('[Even Odd Beast] Status · 1HZ25V · matched digit 3 (ODD)')
+        );
+        expect(journal.updateEvenOddBeastAnalysisMessage).toHaveBeenCalledWith(
+            expect.stringContaining('READY TO BUY ODD')
+        );
+
+        journal.active_bot_template_id = 'matches-signal';
+        runPanel.onEvenOddBeastAnalysis(analysis as any);
+        expect(journal.updateEvenOddBeastAnalysisMessage).toHaveBeenCalledTimes(1);
+    });
+
     it('shows V3 digits, range qualification, and Virtual Hook progress in the Journal status row', () => {
         const journal = {
             pushMessage: jest.fn(),

@@ -15,6 +15,9 @@ const getTicksInterface = tradeEngine => {
         // Keep this Promise<boolean> gate on the tick interface so the
         // interpreter awaits live one-minute candle data before evaluating it.
         getOverUnderIndicatorSignal: (...args) => tradeEngine.getOverUnderIndicatorSignal(...args),
+        // This asynchronous signal gate must stay on the tick interface so the
+        // interpreter waits for the live candle/indicator analysis.
+        getEvenOddBeastSignal: (...args) => tradeEngine.getEvenOddBeastSignal(...args),
         // This Promise<boolean> gate must use the tick interface so the interpreter
         // wraps it as an async function before Blockly evaluates its condition.
         checkEvenOddStrikeEagleVirtualHook: (...args) =>

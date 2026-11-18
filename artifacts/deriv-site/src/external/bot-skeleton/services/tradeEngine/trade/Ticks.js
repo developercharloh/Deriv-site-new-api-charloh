@@ -17,6 +17,7 @@ import {
     getCurrentOverUnderTrendStrengthIndex,
     OVER_UNDER_INDICATOR_MODES,
 } from '@/utils/over-under-indicator-strategy';
+import { analyzeEvenOddBeastCandles } from '@/utils/even-odd-beast-strategy';
 
 const VOLATILITY_SCAN_REQUEST_GAP_MS = 750;
 const VOLATILITY_SCAN_HISTORY_RETRIES = 2;
@@ -246,6 +247,10 @@ export default Engine =>
             this.overUnderSignalLastEpoch = null;
             this.overUnderTsiSamples = [];
             this.overUnderIndicatorError = null;
+            this.evenOddBeastAnalysisCache = null;
+            this.evenOddBeastLastTradedCandleTime = null;
+            this.evenOddBeastLastJournalSignature = null;
+            this.evenOddBeastLastError = null;
         }
 
         async watchTicks(symbol) {
@@ -1778,6 +1783,89 @@ export default Engine =>
                 }
                 return false;
             }
+        }
+        async getEvenOddBeastSignal(side) {
+            const selectedSide = String(side ?? '').trim().toUpperCase();
+            if (selectedSide !== 'EVEN' && selectedSide !== 'ODD') return false;
+
+            const tick = this.latestTick;
+            const brokerEpoch = Number(this.getPurchaseConditionTick());
+            if (!tick || !Number.isFinite(brokerEpoch) || Number(tick.epoch) !== brokerEpoch) return false;
+
+            const cacheKey = `${this.symbol}:${brokerEpoch}`;
+            if (!this.evenOddBeastAnalysisCache || this.evenOddBeastAnalysisCache.key !== cacheKey) {
+                this.evenOddBeastAnalysisCache = {
+                    key: cacheKey,
+                    promise: Promise.resolve()
+                        // `getOhlc` can return FAST-clock execution quotes
+                        // instead of timestamped candles. This strategy must
+                        // always analyze the broker's actual 60-second bars.
+                        .then(() =>
+                            this.$scope.ticksService.request({
+                                symbol: this.symbol,
+                                granularity: 60,
+                            })
+                        )
+                        .then(candles =>
+                            analyzeEvenOddBeastCandles({
+                                candles,
+                                pipSize: this.getPipSize(),
+                                expectedCandleTime: Math.floor(brokerEpoch / 60) * 60,
+                            })
+                        ),
+                };
+            }
+
+            let analysis;
+            try {
+                analysis = await this.evenOddBeastAnalysisCache.promise;
+                this.evenOddBeastLastError = null;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                if (this.evenOddBeastLastError !== message) {
+                    this.evenOddBeastLastError = message;
+                    globalObserver.emit('ui.log.error', `Even Odd Beast indicator data unavailable: ${message}`);
+                }
+                return false;
+            }
+
+            if (this.latestTick !== tick || Number(this.getPurchaseConditionTick()) !== brokerEpoch) return false;
+
+            let reason = analysis.reason;
+            let result = false;
+            if (analysis.signal !== 'WAIT') {
+                if (analysis.signal !== selectedSide) {
+                    reason = 'other_side_selected';
+                } else if (this.evenOddBeastLastTradedCandleTime === analysis.candleTime) {
+                    reason = 'already_traded_this_candle';
+                } else if ((this.getActiveContractIds?.() || []).length > 0) {
+                    reason = 'contract_still_open';
+                } else {
+                    result = true;
+                    this.evenOddBeastLastTradedCandleTime = analysis.candleTime;
+                    reason = `ready_${selectedSide.toLowerCase()}`;
+                }
+            }
+
+            const journalSignature = [
+                analysis.candleTime,
+                analysis.candleDigit,
+                analysis.movingAverageDigit,
+                analysis.signal,
+                reason,
+                result,
+            ].join(':');
+            if (journalSignature !== this.evenOddBeastLastJournalSignature) {
+                this.evenOddBeastLastJournalSignature = journalSignature;
+                globalObserver.emit('bot.analysis.even_odd_beast', {
+                    journalScope: 'even-odd-beast',
+                    market: this.symbol || 'N/A',
+                    ...analysis,
+                    reason,
+                    result,
+                });
+            }
+            return result;
         }
         getVolatilityScanOrder() {
             const preferredCode = this.volatilityPreferredMarket?.code;

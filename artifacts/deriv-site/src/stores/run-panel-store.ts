@@ -18,6 +18,7 @@ import { MatchesKingEngine, type MatchesKingStatus } from '@/utils/matches-king-
 import { parseMatchesKingDigits } from '@/utils/matches-king-strategy';
 import { readBlocklyNumberVariable } from '@/utils/binary-matrix-settings';
 import { getSmartOver2JournalScope, isRiseFallMasterBotIdentity } from '@/utils/bot-template-scope';
+import type { EvenOddBeastAnalysis } from '@/utils/even-odd-beast-strategy';
 import type { DTPosition } from '@/utils/dtrader-engine';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { Buy, ProposalOpenContract } from '@deriv/api-types';
@@ -70,6 +71,13 @@ type TSmartOver2RecoveryEvent = {
     settlementEpoch?: number | null;
     entrySpot?: number | string | null;
     exitSpot?: number | string | null;
+};
+
+type TEvenOddBeastAnalysis = Omit<EvenOddBeastAnalysis, 'reason'> & {
+    market: string;
+    journalScope?: string | null;
+    reason: string;
+    result: boolean;
 };
 
 export type TParityAnalysis = {
@@ -1369,6 +1377,47 @@ export default class RunPanelStore {
         );
     };
 
+    onEvenOddBeastAnalysis = (analysis: TEvenOddBeastAnalysis) => {
+        const activeJournalScope = getSmartOver2JournalScope(this.root_store.journal.active_bot_template_id);
+        if (analysis.journalScope !== 'even-odd-beast' || analysis.journalScope !== activeJournalScope) return;
+
+        const digitStatus =
+            analysis.candleDigit === null || analysis.movingAverageDigit === null
+                ? 'waiting for decimal digits'
+                : analysis.matchedDigit === null
+                  ? `digit mismatch ${analysis.candleDigit}/${analysis.movingAverageDigit}`
+                  : `matched digit ${analysis.matchedDigit} (${analysis.matchedDigit % 2 === 0 ? 'EVEN' : 'ODD'})`;
+        const macdTone =
+            Number(analysis.macdHistogram) > 0 && analysis.macdTrend === 'RISING'
+                ? 'DARK GREEN'
+                : Number(analysis.macdHistogram) < 0 && analysis.macdTrend === 'FALLING'
+                  ? 'DARK RED'
+                  : 'NOT DARK';
+        const reasonLabels: Record<string, string> = {
+            waiting_for_candles: 'waiting for indicator history',
+            stale_candle: 'waiting for the current candle',
+            precision_unavailable: 'waiting for symbol precision',
+            decimal_digits_do_not_match: 'candle and moving-average digits do not match',
+            conditions_match_opposite_side: 'indicator setup belongs to the opposite parity',
+            indicator_conditions_not_met: 'indicator conditions do not align',
+            ready_even: 'Even setup is ready',
+            ready_odd: 'Odd setup is ready',
+            other_side_selected: `signal selects ${analysis.signal}; checking that side`,
+            already_traded_this_candle: 'already traded this one-minute candle',
+            contract_still_open: 'waiting for the open contract to settle',
+        };
+        const resultLabel = analysis.result
+            ? `READY TO BUY ${analysis.signal}`
+            : `SKIP · ${reasonLabels[analysis.reason] || analysis.reason}`;
+        const message =
+            `[Even Odd Beast] Status · ${analysis.market || 'N/A'} · ${digitStatus} · ` +
+            `${analysis.candleColor} candle ${analysis.priceVsMovingAverage.toLowerCase()} MA · ` +
+            `MA trend ${analysis.movingAverageTrend} · MACD ${macdTone} ` +
+            `(${analysis.macdTrend}, ${analysis.macdHistogram ?? 'waiting'}) · ${resultLabel}`;
+
+        this.root_store.journal.updateEvenOddBeastAnalysisMessage(message);
+    };
+
     onSmartOver2Analysis = (analysis: TSmartOver2Analysis) => {
         const activeJournalScope = getSmartOver2JournalScope(this.root_store.journal.active_bot_template_id);
         if (!analysis.journalScope || analysis.journalScope !== activeJournalScope) return;
@@ -1989,6 +2038,7 @@ export default class RunPanelStore {
         observer.register('ui.log.notify', journal.onNotify);
         observer.register('ui.log.success', journal.onLogSuccess);
         observer.register('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.register('bot.analysis.even_odd_beast', this.onEvenOddBeastAnalysis);
         observer.register('bot.analysis.smart_over2', this.onSmartOver2Analysis);
         observer.register('bot.smart_over2.recovery', this.onSmartOver2RecoveryEvent);
         observer.register('bot.analysis.parity', this.onParityAnalysis);
@@ -2015,6 +2065,7 @@ export default class RunPanelStore {
         observer.unregisterAll('ui.log.notify');
         observer.unregisterAll('ui.log.success');
         observer.unregister('bot.analysis.condition', this.onLastDigitsAnalysis);
+        observer.unregister('bot.analysis.even_odd_beast', this.onEvenOddBeastAnalysis);
         observer.unregister('bot.analysis.smart_over2', this.onSmartOver2Analysis);
         observer.unregister('bot.smart_over2.recovery', this.onSmartOver2RecoveryEvent);
         observer.unregister('bot.analysis.parity', this.onParityAnalysis);

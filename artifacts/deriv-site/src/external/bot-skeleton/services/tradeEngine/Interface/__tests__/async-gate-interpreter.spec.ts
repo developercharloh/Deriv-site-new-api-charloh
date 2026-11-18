@@ -72,6 +72,38 @@ const runOverUnderIndicatorGate = async (gateResult: boolean) => {
     expect(purchase).toHaveBeenCalledTimes(gateResult ? 1 : 0);
 };
 
+const runEvenOddBeastGate = async (gateResult: boolean) => {
+    const checkGate = jest.fn().mockResolvedValue(gateResult);
+    const purchase = jest.fn().mockResolvedValue(true);
+    const tradeEngine = {
+        getEvenOddBeastSignal: checkGate,
+        purchase,
+    };
+    const botInterface = {
+        ...getBotInterface(tradeEngine as any),
+        getTicksInterface: getTicksInterface(tradeEngine as any),
+        alert: jest.fn(),
+        prompt: jest.fn(),
+        sleep: jest.fn().mockResolvedValue(undefined),
+        console: { log: jest.fn() },
+    };
+
+    (Interface as jest.Mock).mockReturnValue({
+        tradeEngine: {},
+        getInterface: () => botInterface,
+    });
+
+    const interpreter = Interpreter();
+    await interpreter.run(`
+        if (Bot.getEvenOddBeastSignal("ODD")) {
+            Bot.purchase("DIGITODD");
+        }
+    `);
+
+    expect(checkGate).toHaveBeenCalledWith('ODD');
+    expect(purchase).toHaveBeenCalledTimes(gateResult ? 1 : 0);
+};
+
 describe('Even Odd Strike Eagle async virtual gate', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -97,5 +129,19 @@ describe('Over/Under indicator async gate', () => {
 
     it('purchases only after the live indicator gate resolves true', async () => {
         await runOverUnderIndicatorGate(true);
+    });
+});
+
+describe('Even Odd Beast async signal gate', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('does not purchase before the Even Odd Beast candle analysis passes', async () => {
+        await runEvenOddBeastGate(false);
+    });
+
+    it('purchases only after the Even Odd Beast signal resolves ready', async () => {
+        await runEvenOddBeastGate(true);
     });
 });

@@ -279,6 +279,20 @@ registerBoolean({
 });
 
 registerBoolean({
+    type: 'even_odd_beast_signal',
+    message0: 'Even Odd Beast %1 setup is ready',
+    args0: [dropdown('SIDE', [['Even', 'EVEN'], ['Odd', 'ODD']])],
+    category: window.Blockly.Categories.Before_Purchase,
+    tooltip:
+        'Checks the matching decimal digit, candle direction, nine-period moving average trend, and MACD histogram before allowing an Even or Odd purchase.',
+    meta: 'Even Odd Beast signal',
+    generatorCode: block => [
+        `Bot.getEvenOddBeastSignal('${block.getFieldValue('SIDE') || 'EVEN'}')`,
+        generator().ORDER_FUNCTION_CALL,
+    ],
+});
+
+registerBoolean({
     type: 'rsi_cross',
     message0: 'RSI crosses %1 %2 using period %3 and %4',
     args0: [

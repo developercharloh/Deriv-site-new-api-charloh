@@ -61,6 +61,7 @@ export interface IJournalStore {
     updateAdaptiveAnalysisMessage: (message: string) => void;
     updateVolatilityScanMessage: (message: string) => void;
     updateSmartOver2AnalysisMessage: (message: string) => void;
+    updateEvenOddBeastAnalysisMessage: (message: string) => void;
     updateEdgingProAnalysisMessage: (message: string) => void;
     updateStatMessage: (
         message: string,
@@ -99,6 +100,7 @@ export default class JournalStore {
             updateAdaptiveAnalysisMessage: action.bound,
             updateVolatilityScanMessage: action.bound,
             updateSmartOver2AnalysisMessage: action.bound,
+            updateEvenOddBeastAnalysisMessage: action.bound,
             updateEdgingProAnalysisMessage: action.bound,
             filtered_messages: computed,
             visible_messages: computed,
@@ -368,6 +370,35 @@ export default class JournalStore {
 
     updateSmartOver2AnalysisMessage(message: string) {
         const analysisPrefix = '[Smart Over 2] Status';
+        const activeTemplateId = this.active_bot_template_id;
+        const existingIndex = this.unfiltered_messages.findIndex(
+            item =>
+                item.message_type === MessageTypes.NOTIFY &&
+                typeof item.message === 'string' &&
+                item.message.startsWith(analysisPrefix) &&
+                (!activeTemplateId || item.extra?.botTemplateId === activeTemplateId)
+        );
+
+        if (existingIndex < 0) {
+            this.pushMessage(message, MessageTypes.NOTIFY, 'journal__text');
+            return;
+        }
+
+        const existing = this.unfiltered_messages[existingIndex];
+        const updated = {
+            ...existing,
+            message,
+            time: formatDate(this.getServerTime(), 'HH:mm:ss [GMT]'),
+        };
+        this.unfiltered_messages = [
+            updated,
+            ...this.unfiltered_messages.slice(0, existingIndex),
+            ...this.unfiltered_messages.slice(existingIndex + 1),
+        ];
+    }
+
+    updateEvenOddBeastAnalysisMessage(message: string) {
+        const analysisPrefix = '[Even Odd Beast] Status';
         const activeTemplateId = this.active_bot_template_id;
         const existingIndex = this.unfiltered_messages.findIndex(
             item =>

@@ -505,6 +505,27 @@ const BOTS: BotConfig[] = [
         category: 'EVEN / ODD',
     },
     {
+        id: 'even-odd-beast',
+        section: 'premium',
+        name: 'Even Odd Beast',
+        emoji: '🦁',
+        description:
+            'Trades one-tick Even/Odd contracts on Volatility 25 (1s) Index. It matches the second decimal digit of the live candle and 9-period moving average, then only trades the corresponding parity when candle direction, moving-average slope, and dark MACD histogram align. Allows at most one entry per one-minute candle.',
+        market: 'Volatility 25 (1s) Index (1HZ25V)',
+        strategy: 'Even / Odd · 1m SMA 9 · MACD 12/26/9 · Decimal parity gate',
+        params: [
+            { label: 'Initial Stake', value: '$0.70' },
+            { label: 'Take Profit', value: '$10' },
+            { label: 'Stop Loss', value: '$50' },
+            { label: 'Martingale', value: '2× after a loss; reset after a win' },
+            { label: 'Entry', value: 'One trade per qualifying 1-minute candle' },
+            { label: 'Duration', value: '1 Tick' },
+        ],
+        xmlPath: '/bots/Even_Odd_Beast.xml',
+        gradient: 'linear-gradient(135deg, #21100a 0%, #7c2d12 48%, #f59e0b 100%)',
+        category: 'EVEN / ODD',
+    },
+    {
         id: 'las-et',
         section: 'premium',
         name: 'Las ET',
@@ -1214,23 +1235,25 @@ const BotCard: React.FC<{
                     .map((node: any) => node.getAttribute?.('type'))
                     .filter((type): type is string => Boolean(type))
             );
-            const requiredEagleTypes =
+            const requiredTemplateTypes =
                 bot.id === 'even-odd-strike-eagle'
                     ? [
                           'trade_definition_tradeoptions',
                           'even_odd_strike_eagle_virtual_hook_gate',
                           'apollo_purchase2',
                       ]
-                    : [];
-            const missingEagleTypes = requiredEagleTypes.filter(type => !xmlBlockTypes.has(type));
-            if (missingEagleTypes.length > 0) {
+                    : bot.id === 'even-odd-beast'
+                      ? ['trade_definition_tradeoptions', 'even_odd_beast_signal', 'apollo_purchase2']
+                      : [];
+            const missingTemplateTypes = requiredTemplateTypes.filter(type => !xmlBlockTypes.has(type));
+            if (missingTemplateTypes.length > 0) {
                 throw new Error(
-                    `Even Odd Strike Eagle XML is missing required block(s): ${missingEagleTypes.join(', ')}.`
+                    `${bot.name} XML is missing required block(s): ${missingTemplateTypes.join(', ')}.`
                 );
             }
 
             setWorkspaceBotTemplateIdentity(Blockly.derivWorkspace, bot.id);
-            if (bot.id === 'even-odd-strike-eagle') {
+            if (bot.id === 'even-odd-strike-eagle' || bot.id === 'even-odd-beast') {
                 // Use Blockly's full workspace importer for this template so all
                 // roots, variables, and nested Purchase blocks load as one guarded
                 // operation instead of being added root-by-root.
@@ -1268,10 +1291,10 @@ const BotCard: React.FC<{
             const missingLoadedTypes = ['trade_definition', 'before_purchase', 'after_purchase'].filter(
                 type => !loadedTopTypes.has(type)
             );
-            const missingLoadedEagleTypes = requiredEagleTypes.filter(
+            const missingLoadedTemplateTypes = requiredTemplateTypes.filter(
                 type => !loadedBlocks.some((block: any) => block.type === type)
             );
-            const incompleteTypes = [...missingLoadedTypes, ...missingLoadedEagleTypes];
+            const incompleteTypes = [...missingLoadedTypes, ...missingLoadedTemplateTypes];
             if (incompleteTypes.length > 0 || loadedBlocks.length === 0) {
                 throw new Error(
                     `Bot XML loaded incompletely (missing ${incompleteTypes.join(', ') || 'all blocks'}; ` +

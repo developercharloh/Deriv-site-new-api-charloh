@@ -1,6 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { getSmartOver2RecoveryContractType, shouldShowJournalEntryForBot } from '@/utils/bot-template-scope';
+import {
+    getSmartOver2JournalScope,
+    getSmartOver2RecoveryContractType,
+    shouldShowJournalEntryForBot,
+} from '@/utils/bot-template-scope';
 import { BOT_XML_PATHS, botIdFromSignal } from '@/utils/bot-patch';
 
 const catalogPath = path.resolve(__dirname, '..', 'index.tsx');
@@ -245,6 +249,37 @@ describe('Free Bots template catalog', () => {
         expect(document.querySelector('block[type="before_purchase"]')?.getAttribute('collapsed')).not.toBe('true');
         expect(document.querySelector('block[type="after_purchase"]')?.getAttribute('collapsed')).not.toBe('true');
         expect(xml).not.toMatch(/DIGITOVER|DIGITUNDER|RISE|FALL|apex|multi.?strategy/i);
+    });
+
+    it('registers Even Odd Beast in Premium Bots with both parity gates and risk controls', () => {
+        const xml = fs.readFileSync(path.join(publicBotsPath, 'Even_Odd_Beast.xml'), 'utf8');
+        const document = new DOMParser().parseFromString(xml, 'application/xml');
+        const catalog = fs.readFileSync(catalogPath, 'utf8');
+        const purchaseTypes = Array.from(document.querySelectorAll('block[type="apollo_purchase2"]')).map(
+            block => block.querySelector('field[name="PURCHASE_LIST"]')?.textContent?.trim()
+        );
+        const signalSides = Array.from(document.querySelectorAll('block[type="even_odd_beast_signal"]')).map(
+            block => block.querySelector('field[name="SIDE"]')?.textContent?.trim()
+        );
+
+        expect(document.querySelector('parsererror')).toBeNull();
+        expect(purchaseTypes).toEqual(['DIGITEVEN', 'DIGITODD']);
+        expect(signalSides).toEqual(['EVEN', 'ODD']);
+        expect(document.querySelector('field[name="SYMBOL_LIST"]')?.textContent).toBe('1HZ25V');
+        expect(document.querySelector('field[name="CANDLEINTERVAL_LIST"]')?.textContent).toBe('60');
+        expect(document.querySelector('field[name="DURATIONTYPE_LIST"]')?.textContent).toBe('t');
+        expect(
+            document.querySelector(
+                'block[id="eob_set_stake"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]'
+            )?.textContent
+        ).toBe('0.7');
+        expect(document.querySelector('block[id="eob_set_martingale"] field[name="NUM"]')?.textContent).toBe('2');
+        expect(document.querySelector('block[id="eob_set_take_profit"] field[name="NUM"]')?.textContent).toBe('10');
+        expect(document.querySelector('block[id="eob_set_stop_loss"] field[name="NUM"]')?.textContent).toBe('50');
+        expect(document.querySelector('statement[name="ELSE"] block[type="trade_again"]')).not.toBeNull();
+        expect(catalog).toContain("id: 'even-odd-beast',\n        section: 'premium'");
+        expect(catalog).toContain("name: 'Even Odd Beast'");
+        expect(getSmartOver2JournalScope('even-odd-beast')).toBe('even-odd-beast');
     });
 
     it('uses separate Run once thresholds for virtual losses and live wins before switching sides', () => {
