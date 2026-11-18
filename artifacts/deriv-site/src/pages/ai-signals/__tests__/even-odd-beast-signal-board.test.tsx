@@ -6,6 +6,8 @@ import { DERIV_CONTINUOUS_VOLATILITIES } from '@/utils/deriv-volatilities';
 import {
     canTradeEvenOddBeastSignal,
     EvenOddBeastSignalBoard,
+    formatCandleCloseCountdown,
+    getSecondsUntilCandleClose,
 } from '../even-odd-beast-signal-board';
 
 jest.mock('@/hooks/useApiBase', () => ({ useApiBase: jest.fn() }));
@@ -22,6 +24,16 @@ describe('Even Odd Beast setup signal board', () => {
         expect(canTradeEvenOddBeastSignal('ODD', true)).toBe(true);
         expect(canTradeEvenOddBeastSignal('WAIT', true)).toBe(false);
         expect(canTradeEvenOddBeastSignal('ODD', false)).toBe(false);
+    });
+
+    it('counts down to the next one-minute candle close using server time', () => {
+        expect(getSecondsUntilCandleClose(3_600)).toBe(60);
+        expect(getSecondsUntilCandleClose(3_630.2)).toBe(30);
+        expect(getSecondsUntilCandleClose(3_659.2)).toBe(1);
+        expect(getSecondsUntilCandleClose(null)).toBeNull();
+        expect(formatCandleCloseCountdown(60)).toBe('01:00');
+        expect(formatCandleCloseCountdown(9)).toBe('00:09');
+        expect(formatCandleCloseCountdown(null)).toBe('Waiting');
     });
 
     it('lists only continuous markets and keeps digit-entry rules off the signal board', () => {
@@ -44,6 +56,8 @@ describe('Even Odd Beast setup signal board', () => {
             .every(button => (button as HTMLButtonElement).disabled)).toBe(true);
         expect(screen.getByText(/green candle above a rising MA9/)).toBeInTheDocument();
         expect(screen.getByText(/red candle below a falling MA9/)).toBeInTheDocument();
+        expect(screen.getAllByText('1-minute candle closes in')).toHaveLength(DERIV_CONTINUOUS_VOLATILITIES.length);
+        expect(screen.getAllByTestId('candle-close-countdown').every(timer => timer.textContent?.includes('Waiting'))).toBe(true);
         expect(screen.queryByText(/match|entry digit/i)).not.toBeInTheDocument();
         expect(within(screen.getAllByRole('article')[0]).getByText('Waiting for live data')).toBeInTheDocument();
     });

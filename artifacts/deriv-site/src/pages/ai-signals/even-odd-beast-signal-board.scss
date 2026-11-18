@@ -204,6 +204,37 @@
 .eob-board__candle--down { color: #fb7185; }
 .eob-board__chart-label { fill: #64748b; font-size: 7px; font-family: inherit; }
 
+.eob-board__candle-countdown {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 30px;
+    padding: 6px 9px;
+    border: 1px solid rgba(100, 116, 139, 0.22);
+    border-radius: 7px;
+    background: rgba(7, 15, 25, 0.48);
+
+    span {
+        color: #94a3b8;
+        font-size: 9px;
+        font-weight: 750;
+    }
+
+    strong {
+        color: #aab6c6;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 900;
+    }
+
+    &--live {
+        border-color: rgba(16, 185, 129, 0.24);
+
+        strong { color: #6ee7b7; }
+    }
+}
+
 .eob-board__signal {
     display: flex;
     align-items: center;

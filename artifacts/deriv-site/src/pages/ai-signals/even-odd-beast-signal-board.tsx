@@ -16,6 +16,18 @@ import './even-odd-beast-signal-board.scss';
 const LIVE_TICK_MAX_AGE_MS = 2_500;
 type FeedStatus = 'connecting' | 'warming' | 'live' | 'reconnecting' | 'error';
 
+export const getSecondsUntilCandleClose = (serverEpoch: number | null): number | null => {
+    if (serverEpoch === null || !Number.isFinite(serverEpoch)) return null;
+    const elapsed = ((serverEpoch % MATCHES_CANDLE_SECONDS) + MATCHES_CANDLE_SECONDS) % MATCHES_CANDLE_SECONDS;
+    return Math.max(0, Math.ceil(MATCHES_CANDLE_SECONDS - elapsed));
+};
+
+export const formatCandleCloseCountdown = (secondsRemaining: number | null): string => {
+    if (secondsRemaining === null || !Number.isFinite(secondsRemaining)) return 'Waiting';
+    const seconds = Math.max(0, Math.floor(secondsRemaining));
+    return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+};
+
 interface MarketFeed {
     candles: Candle[];
     pipSize: number | null;
@@ -171,7 +183,7 @@ export function EvenOddBeastSignalBoard({
             },
             onCandle: (code, rawOhlc, serverTime) => {
                 const candle = normalizeCandle(rawOhlc);
-                const epoch = Number(rawOhlc.epoch ?? serverTime);
+                const epoch = Number(serverTime ?? rawOhlc.epoch);
                 if (!candle || !Number.isFinite(epoch)) return;
                 setFeeds(previous => updateFeed(previous, code, feed => ({
                     ...feed,
@@ -221,6 +233,7 @@ export function EvenOddBeastSignalBoard({
             symbol,
             feed,
             feedFresh,
+            candleCloseCountdown: getSecondsUntilCandleClose(serverNow),
             analysis,
             status: setupStatus(analysis, feedFresh, active),
         };
@@ -271,7 +284,7 @@ export function EvenOddBeastSignalBoard({
             </div>
 
             <div className='eob-board__grid'>
-                {markets.map(({ symbol, feed, feedFresh, analysis, status }) => {
+                {markets.map(({ symbol, feed, feedFresh, candleCloseCountdown, analysis, status }) => {
                     const canTrade = canTradeEvenOddBeastSignal(analysis.setupSignal, feedFresh);
                     const histogram = analysis.macdHistogram;
                     return (
@@ -287,6 +300,21 @@ export function EvenOddBeastSignalBoard({
                             </div>
 
                             <MiniCandleChart candles={feed.candles} label={symbol.label} />
+
+                            <div
+                                className={`eob-board__candle-countdown${feedFresh ? ' eob-board__candle-countdown--live' : ''}`}
+                                role='timer'
+                                aria-live='off'
+                                aria-label={
+                                    feedFresh
+                                        ? `One-minute candle closes in ${formatCandleCloseCountdown(candleCloseCountdown)}`
+                                        : 'Waiting for live data to show candle close countdown'
+                                }
+                                data-testid='candle-close-countdown'
+                            >
+                                <span>1-minute candle closes in</span>
+                                <strong>{feedFresh ? formatCandleCloseCountdown(candleCloseCountdown) : 'Waiting'}</strong>
+                            </div>
 
                             <div className={`eob-board__signal${status.ready ? ` eob-board__signal--${analysis.setupSignal.toLowerCase()}` : ''}`}>
                                 <span className='eob-board__signal-dot' />
