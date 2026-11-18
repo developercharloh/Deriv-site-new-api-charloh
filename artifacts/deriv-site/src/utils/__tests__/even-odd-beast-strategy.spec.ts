@@ -59,6 +59,7 @@ describe('Even Odd Beast candle analysis', () => {
             movingAverageTrend: 'FALLING',
             macdTrend: 'FALLING',
             evenConditions: true,
+            setupSignal: 'EVEN',
             signal: 'EVEN',
             reason: 'ready_even',
         });
@@ -75,6 +76,7 @@ describe('Even Odd Beast candle analysis', () => {
             movingAverageTrend: 'RISING',
             macdTrend: 'RISING',
             oddConditions: true,
+            setupSignal: 'ODD',
             signal: 'ODD',
             reason: 'ready_odd',
         });
@@ -124,6 +126,7 @@ describe('Even Odd Beast candle analysis', () => {
 
         expect(analysis.reason).toBe('decimal_digits_do_not_match');
         expect(analysis.signal).toBe('WAIT');
+        expect(analysis.setupSignal).toBe('ODD');
     });
 
     it('fails closed for stale candles, missing precision, and insufficient history', () => {

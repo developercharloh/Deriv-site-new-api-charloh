@@ -127,6 +127,21 @@ describe('custom strategy Blockly blocks', () => {
         workspace.dispose();
     });
 
+    it('keeps the standalone Even Odd Beast side automatic and emits locked signal mode', () => {
+        const workspace = new Blockly.Workspace();
+        javascriptGenerator.init(workspace);
+        const block = workspace.newBlock('even_odd_beast_signal');
+
+        expect(block.getFieldValue('MODE')).toBe('AUTO');
+        block.setFieldValue('ODD', 'SIDE');
+        block.setFieldValue('LOCKED', 'MODE');
+        const generated = javascriptGenerator.blockToCode(block);
+        const code = Array.isArray(generated) ? generated[0] : generated;
+
+        expect(code).toContain("Bot.getEvenOddBeastSignal('ODD', 'LOCKED')");
+        workspace.dispose();
+    });
+
     it('allows every directional primary signal regardless of secondary direction', () => {
         const workspace = new Blockly.Workspace();
         javascriptGenerator.init(workspace);

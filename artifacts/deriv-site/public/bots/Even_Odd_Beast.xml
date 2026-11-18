@@ -223,6 +223,7 @@
         <value name="IF0">
           <block type="even_odd_beast_signal" id="eob_even_signal">
             <field name="SIDE">EVEN</field>
+            <field name="MODE">AUTO</field>
           </block>
         </value>
         <statement name="DO0">
@@ -233,6 +234,7 @@
         <value name="IF1">
           <block type="even_odd_beast_signal" id="eob_odd_signal">
             <field name="SIDE">ODD</field>
+            <field name="MODE">AUTO</field>
           </block>
         </value>
         <statement name="DO1">

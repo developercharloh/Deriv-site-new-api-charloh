@@ -8,6 +8,7 @@ import {
     destroyerBotIdFromDirection,
     fetchAndPatchBot,
     loadPatchedBotIntoWorkspace,
+    restoreEvenOddBeastWorkspace,
     runOverUnderSecretWeapon,
     restoreOverUnderWorkspaceSymbol,
     type BotSignal,
@@ -18,6 +19,8 @@ import { captureDropdownSelections } from '@/external/bot-skeleton/scratch/utils
 import { MatchesSignalSection } from './matches-signal-board';
 import { OverUnderSignalBoard, type OverUnderSignalSelection } from './over-under-signal-board';
 import { OverUnderSecretWeaponConfig, type SecretWeaponRunSettings } from './OverUnderSecretWeaponConfig';
+import { EvenOddBeastSignalBoard, type EvenOddBeastSignalSelection } from './even-odd-beast-signal-board';
+import { EvenOddBeastConfig, type EvenOddBeastRunSettings } from './EvenOddBeastConfig';
 import {
     getOverUnderSignalOptions,
     OVER_UNDER_SIGNAL_BARRIERS,
@@ -972,6 +975,9 @@ const AiSignalsPage: React.FC = () => {
     const [selectedOverUnderSignal, setSelectedOverUnderSignal] = useState<OverUnderSignalSelection | null>(null);
     const [secretWeaponSaving, setSecretWeaponSaving] = useState(false);
     const [secretWeaponError, setSecretWeaponError] = useState('');
+    const [selectedEvenOddSignal, setSelectedEvenOddSignal] = useState<EvenOddBeastSignalSelection | null>(null);
+    const [evenOddBeastSaving, setEvenOddBeastSaving] = useState(false);
+    const [evenOddBeastError, setEvenOddBeastError] = useState('');
 
     // Live Market Watch — starts automatically on mount
     const [watchActive,    setWatchActive]    = useState(true);
@@ -1022,12 +1028,13 @@ const AiSignalsPage: React.FC = () => {
     // Reset on trade type change
     useEffect(() => {
         setResult(null); setNoSigBest(null); setScanState('idle'); setHasSignal(false);
-        setSpikedMarkets([]); setRunState('idle'); setRunErr('');
+        setSpikedMarkets([]); setRunState('idle'); setRunErr(''); setShowRunConfig(false);
+        setSelectedEvenOddSignal(null); setEvenOddBeastSaving(false); setEvenOddBeastError('');
     }, [tradeType]);
 
     // Live Market Watch loop
     useEffect(() => {
-        if (tradeType === 'matches_differs' || tradeType === 'over_under') {
+        if (tradeType === 'matches_differs' || tradeType === 'over_under' || tradeType === 'even_odd') {
             if (watchCdRef.current) { clearInterval(watchCdRef.current); watchCdRef.current = null; }
             setWatchResults([]);
             setWatchSpikes(new Set());
@@ -1104,7 +1111,7 @@ const AiSignalsPage: React.FC = () => {
 
     // ── Watchdog — live tick monitor per valid signal ─────────────────────────
     useEffect(() => {
-        const validSigs = tradeType === 'matches_differs' ? [] : watchResults.filter(r =>
+        const validSigs = tradeType === 'matches_differs' || tradeType === 'even_odd' ? [] : watchResults.filter(r =>
             !watchSpikes.has(r.sym.code) && !r.gapDetected &&
             r.statsChecks.isSignal && !r.recentDominance.isCold
         );
@@ -1313,6 +1320,81 @@ const AiSignalsPage: React.FC = () => {
         }
     }, [selectedOverUnderSignal, store]);
 
+    const saveEvenOddSignalToBeast = useCallback(async (settings: EvenOddBeastRunSettings) => {
+        const selected = selectedEvenOddSignal;
+        if (!selected) return;
+        setEvenOddBeastSaving(true);
+        setEvenOddBeastError('');
+        try {
+            if (!store) throw new Error('DBot Builder is not ready.');
+            if (store.run_panel?.is_running) {
+                throw new Error('Stop the currently running bot before loading Even Odd Beast.');
+            }
+            for (const [label, value] of [
+                ['Stake', settings.stake],
+                ['Take Profit', settings.takeProfit],
+                ['Stop Loss', settings.stopLoss],
+            ] as const) {
+                if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be greater than zero.`);
+            }
+            if (!Number.isFinite(settings.martingale) || settings.martingale < 1) {
+                throw new Error('Martingale must be at least 1×.');
+            }
+
+            const signal: BotSignal = {
+                symbol: selected.symbol.code,
+                symbolLabel: selected.symbol.label,
+                direction: selected.side,
+                entryPoint: 'One-minute indicator setup',
+                confidence: 100,
+                market: 'even_odd',
+            };
+            const document = await fetchAndPatchBot(
+                'even-odd-beast',
+                signal,
+                settings.stake,
+                settings.takeProfit,
+                settings.stopLoss,
+                settings.martingale,
+            );
+            const savedDropdownSelections = captureDropdownSelections(document);
+            const workspace = (window as any).Blockly?.derivWorkspace;
+            if (!workspace) {
+                throw new Error('Open DBot Builder once, then return to this signal and save again.');
+            }
+
+            loadPatchedBotIntoWorkspace(new XMLSerializer().serializeToString(document.documentElement), workspace);
+            setWorkspaceBotTemplateIdentity(workspace, 'even-odd-beast');
+            await restoreEvenOddBeastWorkspace(
+                workspace,
+                selected.symbol.code,
+                selected.side,
+                savedDropdownSelections,
+            );
+            store.journal.setActiveBotTemplateId('even-odd-beast');
+            store.save_modal.updateBotName('Even Odd Beast');
+
+            store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
+            await new Promise<void>(resolve => window.setTimeout(resolve, 500));
+            if (typeof store.run_panel?.onRunButtonClick !== 'function') {
+                throw new Error('DBot Builder could not start Even Odd Beast. Open Builder and try again.');
+            }
+            const isLoggedIn = store.run_panel.core?.client?.is_logged_in;
+            await store.run_panel.onRunButtonClick();
+            if (!store.run_panel.is_running) {
+                if (isLoggedIn === false) {
+                    throw new Error('Your Deriv account is not connected to DBot. Reconnect the account, then try again.');
+                }
+                throw new Error('DBot blocked Even Odd Beast from starting. Check the Builder log for missing settings.');
+            }
+            setSelectedEvenOddSignal(null);
+        } catch (error: any) {
+            setEvenOddBeastError(error?.message || 'Could not save the signal to Even Odd Beast.');
+        } finally {
+            setEvenOddBeastSaving(false);
+        }
+    }, [selectedEvenOddSignal, store]);
+
     const handleExecuteTrade = useCallback(async () => {
         if (!result) return;
         if (tradeType === 'over_under') {
@@ -1414,7 +1496,7 @@ const AiSignalsPage: React.FC = () => {
                                     : tradeType === 'matches_differs'
                                         ? 'Live Match strategy alerts'
                                     : tradeType === 'even_odd'
-                                        ? '4-Model Reversal Scanner'
+                                        ? 'One-minute MA9 and MACD setup signals'
                                         : '10-Model Consensus Scanner'}
                             </span>
                         </div>
@@ -1470,6 +1552,16 @@ const AiSignalsPage: React.FC = () => {
                         active={watchActive}
                         onToggle={() => setWatchActive(previous => !previous)}
                         maintenanceActive={maintenanceActive}
+                    />
+                ) : tradeType === 'even_odd' ? (
+                    <EvenOddBeastSignalBoard
+                        active={watchActive}
+                        onToggle={() => setWatchActive(previous => !previous)}
+                        maintenanceActive={maintenanceActive}
+                        onSelectSignal={selection => {
+                            setEvenOddBeastError('');
+                            setSelectedEvenOddSignal(selection);
+                        }}
                     />
                 ) : (() => {
                     const eoMode      = tradeType === 'even_odd';
@@ -2055,6 +2147,20 @@ const AiSignalsPage: React.FC = () => {
             )}
 
             {/* ── Run-config overlay ─────────────────────────────────────────── */}
+            {selectedEvenOddSignal && (
+                <EvenOddBeastConfig
+                    key={`${selectedEvenOddSignal.symbol.code}:${selectedEvenOddSignal.side}`}
+                    selection={selectedEvenOddSignal}
+                    loading={evenOddBeastSaving}
+                    error={evenOddBeastError}
+                    onClose={() => {
+                        setSelectedEvenOddSignal(null);
+                        setEvenOddBeastError('');
+                    }}
+                    onSave={saveEvenOddSignalToBeast}
+                />
+            )}
+
             {selectedOverUnderSignal && (
                 <OverUnderSecretWeaponConfig
                     key={`${selectedOverUnderSignal.symbol.code}:${selectedOverUnderSignal.setup.mode}`}

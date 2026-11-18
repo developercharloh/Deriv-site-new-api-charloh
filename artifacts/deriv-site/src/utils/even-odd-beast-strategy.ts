@@ -17,6 +17,7 @@ export type EvenOddBeastAnalysis = {
     macdTrend: 'RISING' | 'FALLING' | 'FLAT' | 'WAITING';
     evenConditions: boolean;
     oddConditions: boolean;
+    setupSignal: EvenOddBeastSide | 'WAIT';
     signal: EvenOddBeastSide | 'WAIT';
     reason:
         | 'waiting_for_candles'
@@ -43,6 +44,7 @@ const emptyAnalysis = (reason: EvenOddBeastAnalysis['reason']): EvenOddBeastAnal
     macdTrend: 'WAITING',
     evenConditions: false,
     oddConditions: false,
+    setupSignal: 'WAIT',
     signal: 'WAIT',
     reason,
 });
@@ -195,6 +197,7 @@ export const analyzeEvenOddBeastCandles = ({
         macdTrend,
         evenConditions,
         oddConditions,
+        setupSignal: evenConditions ? 'EVEN' : oddConditions ? 'ODD' : 'WAIT',
     } satisfies Omit<EvenOddBeastAnalysis, 'signal' | 'reason'>;
 
     if (candleDigit !== movingAverageDigit) {

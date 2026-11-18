@@ -20,6 +20,7 @@ interface DerivCandleMessage {
     msg_type?: string;
     req_id?: number | string;
     time?: number | string;
+    pip_size?: number | string;
     error?: { message?: string };
     history?: { candles?: unknown[] };
     candles?: unknown[];
@@ -30,7 +31,7 @@ interface DerivCandleMessage {
 interface SubscribeToMatchesCandleFeedOptions {
     api: MatchesCandleApi;
     symbols: MatchesFeedSymbol[];
-    onHistory: (symbol: string, candles: unknown[]) => void;
+    onHistory: (symbol: string, candles: unknown[], pipSize?: number | null) => void;
     onCandle: (symbol: string, ohlc: Record<string, unknown>, serverTime?: unknown) => void;
     onStatus: (symbol: string, status: MatchesFeedStatus, message?: string) => void;
 }
@@ -159,7 +160,8 @@ export function subscribeToMatchesCandleFeed({
             lastMessageAt.set(symbol, Date.now());
             retriesBySymbol.delete(symbol);
             clearHistoryTimer(symbol);
-            onHistory(symbol, candles);
+            const pipSize = Number(message.pip_size);
+            onHistory(symbol, candles, Number.isInteger(pipSize) ? pipSize : null);
         }
 
         if (message.msg_type === 'ohlc' && message.ohlc && historyReceived.has(symbol)) {

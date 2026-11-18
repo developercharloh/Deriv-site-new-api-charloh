@@ -17,6 +17,7 @@ import {
     OVER_UNDER_INDICATOR_MODES,
     type OverUnderIndicatorMode,
 } from './over-under-indicator-strategy';
+import { DERIV_CONTINUOUS_VOLATILITIES } from './deriv-volatilities';
 
 export interface BotSignal {
     symbol:           string;
@@ -60,6 +61,7 @@ export const BOT_XML_PATHS: Record<string, string> = {
     'elite-entry-scanner':      '/bots/Elite_Entry_Scanner_Bot.xml',
     'over-destroyer':           '/bots/Over_Destroyer_Bot.xml',
     'under-destroyer':          '/bots/Under_Destroyer_Bot.xml',
+    'even-odd-beast':           '/bots/Even_Odd_Beast.xml',
 };
 
 // Resolve which Destroyer bot to use from an OVER/UNDER direction string
@@ -329,6 +331,48 @@ export function patchBotXml(
     return doc;
 }
 
+export function configureEvenOddBeastBotXml(doc: Document, side: string): Document {
+    const selectedSide = String(side ?? '').trim().toUpperCase();
+    if (selectedSide !== 'EVEN' && selectedSide !== 'ODD') {
+        throw new Error('Even Odd Beast needs an EVEN or ODD signal side.');
+    }
+
+    const blocks = Array.from(doc.getElementsByTagName('block'));
+    const blockById = (id: string): Element => {
+        const block = blocks.find(candidate => candidate.getAttribute('id') === id);
+        if (!block) throw new Error(`Even Odd Beast XML is missing the ${id} block.`);
+        return block;
+    };
+    const setField = (blockId: string, fieldName: string, value: string) => {
+        const block = blockById(blockId);
+        const field = Array.from(block.getElementsByTagName('field'))
+            .find(candidate => candidate.getAttribute('name') === fieldName);
+        if (!field) throw new Error(`Even Odd Beast XML is missing ${fieldName} on ${blockId}.`);
+        field.textContent = value;
+    };
+
+    setField('eob_even_signal', 'SIDE', selectedSide);
+    setField('eob_even_signal', 'MODE', 'LOCKED');
+    setField('eob_purchase_even', 'PURCHASE_LIST', selectedSide === 'EVEN' ? 'DIGITEVEN' : 'DIGITODD');
+
+    const selectionBlock = blockById('eob_select_even_or_odd');
+    for (const child of Array.from(selectionBlock.children)) {
+        if (
+            (child.localName === 'value' || child.localName === 'statement') &&
+            ['IF1', 'DO1'].includes(child.getAttribute('name') ?? '')
+        ) {
+            selectionBlock.removeChild(child);
+        }
+    }
+    const mutation = Array.from(selectionBlock.children)
+        .find(child => child.localName === 'mutation');
+    if (!mutation) throw new Error('Even Odd Beast XML is missing its side-selection setup.');
+    mutation.removeAttribute('else');
+    mutation.setAttribute('elseif', '0');
+
+    return doc;
+}
+
 /**
  * Applies a source-qualified signal's market, direction/barrier, risk values,
  * to bot #21. Entry-point blocks are removed so Run starts purchasing
@@ -542,6 +586,15 @@ export function getBotPatches(
             ];
         }
 
+        case 'even-odd-beast': {
+            return [
+                { blockId: 'eob_set_stake', numValue: stake },
+                { blockId: 'eob_set_martingale', numValue: martingale },
+                { blockId: 'eob_set_take_profit', numValue: takeProfit },
+                { blockId: 'eob_set_stop_loss', numValue: stopLoss },
+            ];
+        }
+
         case 'over-under-signal':
         case 'over-under-secret-weapon': {
             const dirText  = signal.direction.split(' ')[0].toUpperCase();
@@ -724,6 +777,15 @@ export async function fetchAndPatchBot(
         });
     } else if (botId === 'over-destroyer' || botId === 'under-destroyer') {
         applyCandleCloseEntryGate(doc);
+    } else if (botId === 'even-odd-beast') {
+        const side = signal.direction.trim().toUpperCase();
+        if (signal.market !== 'even_odd' || (side !== 'EVEN' && side !== 'ODD')) {
+            throw new Error('Even Odd Beast requires an Even/Odd setup signal.');
+        }
+        if (!DERIV_CONTINUOUS_VOLATILITIES.some(symbol => symbol.code === signal.symbol)) {
+            throw new Error('Even Odd Beast signals are limited to Continuous Volatility Indices.');
+        }
+        doc = configureEvenOddBeastBotXml(doc, side);
     }
 
     if (doc.querySelector('parsererror')) throw new Error('Bot XML parse error — check the bot file.');
@@ -841,6 +903,67 @@ export async function restoreOverUnderWorkspaceSymbol(
         purchaseTypes.slice().sort().join(',') !== ['DIGITOVER', 'DIGITUNDER'].sort().join(',')
     ) {
         throw new Error('DBot did not restore #21’s Over and Under purchase choices. Keep the bot stopped and retry Save.');
+    }
+}
+
+export async function restoreEvenOddBeastWorkspace(
+    workspace: any,
+    symbol: string,
+    side: string,
+    savedSelections?: Record<string, string[]>,
+): Promise<void> {
+    const selectedSide = String(side ?? '').trim().toUpperCase();
+    if (
+        !workspace ||
+        !DERIV_CONTINUOUS_VOLATILITIES.some(volatility => volatility.code === symbol) ||
+        (selectedSide !== 'EVEN' && selectedSide !== 'ODD')
+    ) {
+        throw new Error('Even Odd Beast needs a Continuous Volatility market and a valid signal side.');
+    }
+
+    const contractType = selectedSide === 'EVEN' ? 'DIGITEVEN' : 'DIGITODD';
+    const expectedSelections = {
+        ...savedSelections,
+        MARKET_LIST: ['synthetic_index'],
+        SUBMARKET_LIST: ['random_index'],
+        SYMBOL_LIST: [symbol],
+        TRADETYPECAT_LIST: ['digits'],
+        TRADETYPE_LIST: ['evenodd'],
+        TYPE_LIST: ['both'],
+        DURATIONTYPE_LIST: ['t'],
+        PURCHASE_LIST: [contractType],
+    };
+    await restoreDropdownSelections(workspace, expectedSelections, (ApiHelpers as any)?.instance);
+
+    const getBlock = (type: string) =>
+        workspace.getAllBlocks(true).find((block: any) => block.type === type);
+    const requiredFields: Array<[string, string, string]> = [
+        ['trade_definition_market', 'MARKET_LIST', 'synthetic_index'],
+        ['trade_definition_market', 'SUBMARKET_LIST', 'random_index'],
+        ['trade_definition_market', 'SYMBOL_LIST', symbol],
+        ['trade_definition_tradetype', 'TRADETYPECAT_LIST', 'digits'],
+        ['trade_definition_tradetype', 'TRADETYPE_LIST', 'evenodd'],
+        ['trade_definition_contracttype', 'TYPE_LIST', 'both'],
+        ['trade_definition_tradeoptions', 'DURATIONTYPE_LIST', 't'],
+    ];
+    for (const [blockType, fieldName, expected] of requiredFields) {
+        if (getBlock(blockType)?.getFieldValue(fieldName) !== expected) {
+            throw new Error(`DBot did not restore Even Odd Beast's ${fieldName} selection. Keep the bot stopped and retry.`);
+        }
+    }
+
+    const signalBlock = workspace.getBlockById?.('eob_even_signal');
+    if (
+        signalBlock?.getFieldValue('SIDE') !== selectedSide ||
+        signalBlock?.getFieldValue('MODE') !== 'LOCKED'
+    ) {
+        throw new Error('DBot did not keep the selected Even/Odd setup side. Keep the bot stopped and retry.');
+    }
+    const purchaseTypes = workspace.getAllBlocks(true)
+        .filter((block: any) => block.type === 'apollo_purchase2')
+        .map((block: any) => block.getFieldValue('PURCHASE_LIST'));
+    if (purchaseTypes.length !== 1 || purchaseTypes[0] !== contractType) {
+        throw new Error('DBot did not keep the selected Even/Odd purchase type. Keep the bot stopped and retry.');
     }
 }
 

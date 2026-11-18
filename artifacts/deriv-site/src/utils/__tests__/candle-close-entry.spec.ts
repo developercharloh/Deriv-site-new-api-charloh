@@ -139,6 +139,61 @@ describe('broker-tick candle-close entry', () => {
         }
     });
 
+    test('routes continuous-volatility Even/Odd setups into the configured Even Odd Beast', async () => {
+        const xml = botXml('Even_Odd_Beast.xml');
+        const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+            ok: true,
+            text: async () => xml,
+        } as Response);
+        try {
+            const doc = await fetchAndPatchBot(
+                'even-odd-beast',
+                {
+                    symbol: '1HZ75V',
+                    symbolLabel: 'Volatility 75 (1s) Index',
+                    direction: 'ODD',
+                    entryPoint: 'One-minute indicator setup',
+                    confidence: 100,
+                    market: 'even_odd',
+                },
+                0.9,
+                12,
+                35,
+                1.8,
+            );
+            expect(doc.querySelector('field[name="SYMBOL_LIST"]')?.textContent).toBe('1HZ75V');
+            expect(doc.querySelector('block[id="eob_stake_value"] field[name="NUM"]')?.textContent).toBe('0.9');
+            expect(doc.querySelector('block[id="eob_martingale_value"] field[name="NUM"]')?.textContent).toBe('1.8');
+            expect(doc.querySelector('block[id="eob_take_profit_value"] field[name="NUM"]')?.textContent).toBe('12');
+            expect(doc.querySelector('block[id="eob_stop_loss_value"] field[name="NUM"]')?.textContent).toBe('35');
+            expect(doc.querySelector('block[id="eob_even_signal"] field[name="SIDE"]')?.textContent).toBe('ODD');
+            expect(doc.querySelector('block[id="eob_even_signal"] field[name="MODE"]')?.textContent).toBe('LOCKED');
+            expect(doc.querySelector('block[id="eob_purchase_even"] field[name="PURCHASE_LIST"]')?.textContent)
+                .toBe('DIGITODD');
+            expect(doc.querySelector('block[id="eob_odd_signal"]')).toBeNull();
+            expect(doc.querySelector('block[id="eob_select_even_or_odd"] > mutation')?.getAttribute('elseif'))
+                .toBe('0');
+
+            await expect(fetchAndPatchBot(
+                'even-odd-beast',
+                {
+                    symbol: 'R_100',
+                    symbolLabel: 'Volatility 100 Index',
+                    direction: 'ODD',
+                    entryPoint: 'One-minute indicator setup',
+                    confidence: 100,
+                    market: 'even_odd',
+                },
+                0.7,
+                10,
+                50,
+                2,
+            )).rejects.toThrow('limited to Continuous Volatility Indices');
+        } finally {
+            fetchMock.mockRestore();
+        }
+    });
+
     test('rewires both Destroyer templates without retaining digit entry gates', () => {
         for (const name of ['Over_Destroyer_Bot.xml', 'Under_Destroyer_Bot.xml']) {
             const doc = parseXml(botXml(name));

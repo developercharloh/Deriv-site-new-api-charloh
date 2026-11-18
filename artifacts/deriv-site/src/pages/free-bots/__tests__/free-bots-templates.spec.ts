@@ -261,10 +261,14 @@ describe('Free Bots template catalog', () => {
         const signalSides = Array.from(document.querySelectorAll('block[type="even_odd_beast_signal"]')).map(
             block => block.querySelector('field[name="SIDE"]')?.textContent?.trim()
         );
+        const signalModes = Array.from(document.querySelectorAll('block[type="even_odd_beast_signal"]')).map(
+            block => block.querySelector('field[name="MODE"]')?.textContent?.trim()
+        );
 
         expect(document.querySelector('parsererror')).toBeNull();
         expect(purchaseTypes).toEqual(['DIGITEVEN', 'DIGITODD']);
         expect(signalSides).toEqual(['EVEN', 'ODD']);
+        expect(signalModes).toEqual(['AUTO', 'AUTO']);
         expect(document.querySelector('field[name="SYMBOL_LIST"]')?.textContent).toBe('1HZ25V');
         expect(document.querySelector('field[name="CANDLEINTERVAL_LIST"]')?.textContent).toBe('60');
         expect(document.querySelector('field[name="DURATIONTYPE_LIST"]')?.textContent).toBe('t');

@@ -280,14 +280,19 @@ registerBoolean({
 
 registerBoolean({
     type: 'even_odd_beast_signal',
-    message0: 'Even Odd Beast %1 setup is ready',
-    args0: [dropdown('SIDE', [['Even', 'EVEN'], ['Odd', 'ODD']])],
+    message0: 'Even Odd Beast %1 setup is ready · %2',
+    args0: [
+        dropdown('SIDE', [['Even', 'EVEN'], ['Odd', 'ODD']]),
+        dropdown('MODE', [['Follow setup side', 'AUTO'], ['Lock signal side', 'LOCKED']]),
+    ],
     category: window.Blockly.Categories.Before_Purchase,
     tooltip:
-        'Checks the matching decimal digit, candle direction, nine-period moving average trend, and MACD histogram before allowing an Even or Odd purchase.',
+        'Checks the one-minute candle direction, nine-period moving average, and MACD histogram. Locked mode waits for the selected setup side.',
     meta: 'Even Odd Beast signal',
     generatorCode: block => [
-        `Bot.getEvenOddBeastSignal('${block.getFieldValue('SIDE') || 'EVEN'}')`,
+        `Bot.getEvenOddBeastSignal('${block.getFieldValue('SIDE') || 'EVEN'}', '${block.getFieldValue(
+            'MODE'
+        ) || 'AUTO'}')`,
         generator().ORDER_FUNCTION_CALL,
     ],
 });

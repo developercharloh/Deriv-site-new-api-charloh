@@ -1785,9 +1785,12 @@ export default Engine =>
                 return false;
             }
         }
-        async getEvenOddBeastSignal(side) {
+        async getEvenOddBeastSignal(side, mode = 'AUTO') {
             const selectedSide = String(side ?? '').trim().toUpperCase();
             if (selectedSide !== 'EVEN' && selectedSide !== 'ODD') return false;
+            const selectionMode = String(mode ?? 'AUTO').trim().toUpperCase() === 'LOCKED'
+                ? 'LOCKED'
+                : 'AUTO';
 
             const tick = this.latestTick;
             const brokerEpoch = Number(this.getPurchaseConditionTick());
@@ -1832,12 +1835,14 @@ export default Engine =>
 
             if (this.latestTick !== tick || Number(this.getPurchaseConditionTick()) !== brokerEpoch) return false;
 
-            if (
-                !this.evenOddBeastActiveSide &&
-                analysis.matchedDigit !== null &&
-                analysis.signal !== 'WAIT'
-            ) {
-                this.evenOddBeastActiveSide = analysis.signal;
+            const selectedSetupIsActive =
+                selectedSide === 'EVEN' ? analysis.evenConditions : analysis.oddConditions;
+            if (!this.evenOddBeastActiveSide && analysis.matchedDigit !== null) {
+                if (selectionMode === 'LOCKED') {
+                    if (selectedSetupIsActive) this.evenOddBeastActiveSide = selectedSide;
+                } else if (analysis.signal !== 'WAIT') {
+                    this.evenOddBeastActiveSide = analysis.signal;
+                }
             }
 
             const activeSide = this.evenOddBeastActiveSide;
@@ -1853,7 +1858,9 @@ export default Engine =>
                 reason =
                     analysis.matchedDigit === null
                         ? 'decimal_digits_do_not_match'
-                        : 'indicator_conditions_not_met';
+                        : selectionMode === 'LOCKED'
+                          ? 'signal_setup_not_active'
+                          : 'indicator_conditions_not_met';
             } else if (activeSide !== selectedSide) {
                 reason = 'other_side_selected';
             } else if (!setupIsActive) {
@@ -1875,6 +1882,7 @@ export default Engine =>
                 activeSide,
                 analysis.evenConditions,
                 analysis.oddConditions,
+                selectionMode,
                 reason,
                 result,
             ].join(':');

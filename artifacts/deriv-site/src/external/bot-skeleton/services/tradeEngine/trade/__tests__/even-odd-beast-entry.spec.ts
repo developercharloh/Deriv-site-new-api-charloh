@@ -42,6 +42,32 @@ const makeBullishCandles = (matchedParity: 'EVEN' | 'ODD' = 'ODD') => {
 };
 
 describe('Even Odd Beast live entry gate', () => {
+    it('waits for the AI-selected setup side when signal-lock mode is enabled', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const engine: any = new Engine();
+        const candles = makeBullishCandles('EVEN');
+        const epoch = candleStart + 30;
+        engine.symbol = '1HZ25V';
+        engine.latestTick = { epoch, quote: '123456.1300' };
+        engine.$scope = { ticksService: { request: jest.fn().mockResolvedValue(candles) } };
+        engine.getPurchaseConditionTick = jest.fn(() => epoch);
+        engine.getPipSize = jest.fn(() => 2);
+        engine.getActiveContractIds = jest.fn(() => []);
+
+        const analysis = analyzeEvenOddBeastCandles({
+            candles,
+            pipSize: 2,
+            expectedCandleTime: candleStart,
+        });
+        expect(analysis.matchedDigit! % 2).toBe(0);
+        expect(analysis.setupSignal).toBe('ODD');
+
+        await expect(engine.getEvenOddBeastSignal('EVEN', 'LOCKED')).resolves.toBe(false);
+        expect(engine.evenOddBeastActiveSide).toBeNull();
+        await expect(engine.getEvenOddBeastSignal('ODD', 'LOCKED')).resolves.toBe(true);
+        expect(engine.evenOddBeastActiveSide).toBe('ODD');
+    });
+
     it('locks the setup side and re-enters without requiring another digit match', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
