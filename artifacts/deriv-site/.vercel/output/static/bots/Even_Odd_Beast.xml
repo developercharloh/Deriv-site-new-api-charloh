@@ -1,0 +1,248 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="eobStake">Stake</variable>
+    <variable id="eobInitialStake">Initial Stake</variable>
+    <variable id="eobMartingale">Martingale</variable>
+    <variable id="eobTakeProfit">Take Profit</variable>
+    <variable id="eobStopLoss">Stop Loss</variable>
+  </variables>
+  <block type="trade_definition" id="eob_trade_definition" deletable="false" x="0" y="90">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="eob_market" deletable="false" movable="false">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" hide_trade_parameters="false" vh_enabled="false" vh_max_steps="1" vh_min_trades="1" vh_stake="0.35"></mutation>
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
+        <field name="HIDE_TRADE_PARAMETERS">FALSE</field>
+        <field name="ALTERNATE_MARKETS">FALSE</field>
+        <field name="ALTERNATE_EVERY">1</field>
+        <field name="MULTI_MARKET">FALSE</field>
+        <field name="VH_ENABLED">FALSE</field>
+        <field name="VH_SETTINGS_BTN">VH Settings</field>
+        <next>
+          <block type="trade_definition_tradetype" id="eob_trade_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="eob_contract_type" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="eob_candle_interval" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="eob_restart_buy_sell" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="eob_restart_on_error" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="eob_set_stake">
+        <field name="VAR" id="eobStake">Stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="eob_stake_value">
+            <field name="NUM">0.7</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="eob_set_initial_stake">
+            <field name="VAR" id="eobInitialStake">Initial Stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="eob_initial_stake_value">
+                <field name="VAR" id="eobStake">Stake</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="eob_set_martingale">
+                <field name="VAR" id="eobMartingale">Martingale</field>
+                <value name="VALUE">
+                  <block type="math_number" id="eob_martingale_value">
+                    <field name="NUM">2</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="eob_set_take_profit">
+                    <field name="VAR" id="eobTakeProfit">Take Profit</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="eob_take_profit_value">
+                        <field name="NUM">10</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="eob_set_stop_loss">
+                        <field name="VAR" id="eobStopLoss">Stop Loss</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="eob_stop_loss_value">
+                            <field name="NUM">50</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="eob_trade_options">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="eob_duration_shadow">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="eob_amount_shadow">
+            <field name="NUM">0.7</field>
+          </shadow>
+          <block type="variables_get" id="eob_stake_for_purchase">
+            <field name="VAR" id="eobStake">Stake</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="eob_after_purchase" x="720" y="90">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="eob_martingale_after_settlement">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="contract_check_result" id="eob_contract_won">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="variables_set" id="eob_reset_stake_after_win">
+            <field name="VAR" id="eobStake">Stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="eob_reset_initial_stake">
+                <field name="VAR" id="eobInitialStake">Initial Stake</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="variables_set" id="eob_increase_stake_after_loss">
+            <field name="VAR" id="eobStake">Stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="eob_multiply_stake">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <block type="variables_get" id="eob_current_stake">
+                    <field name="VAR" id="eobStake">Stake</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="variables_get" id="eob_martingale_factor">
+                    <field name="VAR" id="eobMartingale">Martingale</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <next>
+          <block type="controls_if" id="eob_session_risk_limits">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="eob_profit_at_take_profit">
+                <field name="OP">GTE</field>
+                <value name="A">
+                  <block type="total_profit" id="eob_total_profit_take_profit"></block>
+                </value>
+                <value name="B">
+                  <block type="variables_get" id="eob_take_profit_limit">
+                    <field name="VAR" id="eobTakeProfit">Take Profit</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="text_print" id="eob_take_profit_message">
+                <value name="TEXT">
+                  <shadow type="text" id="eob_take_profit_text">
+                    <field name="TEXT">Even Odd Beast: Take Profit reached. Bot stopped.</field>
+                  </shadow>
+                </value>
+              </block>
+            </statement>
+            <value name="IF1">
+              <block type="logic_compare" id="eob_profit_at_stop_loss">
+                <field name="OP">LTE</field>
+                <value name="A">
+                  <block type="total_profit" id="eob_total_profit_stop_loss"></block>
+                </value>
+                <value name="B">
+                  <block type="math_single" id="eob_negative_stop_loss">
+                    <field name="OP">NEG</field>
+                    <value name="NUM">
+                      <block type="variables_get" id="eob_stop_loss_limit">
+                        <field name="VAR" id="eobStopLoss">Stop Loss</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO1">
+              <block type="text_print" id="eob_stop_loss_message">
+                <value name="TEXT">
+                  <shadow type="text" id="eob_stop_loss_text">
+                    <field name="TEXT">Even Odd Beast: Stop Loss reached. Bot stopped.</field>
+                  </shadow>
+                </value>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="trade_again" id="eob_trade_again"></block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="eob_before_purchase" deletable="false" x="0" y="760">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="eob_select_even_or_odd">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+        <value name="IF0">
+          <block type="even_odd_beast_signal" id="eob_even_signal">
+            <field name="SIDE">EVEN</field>
+            <field name="MODE">AUTO</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="apollo_purchase2" id="eob_purchase_even">
+            <field name="PURCHASE_LIST">DIGITEVEN</field>
+          </block>
+        </statement>
+        <value name="IF1">
+          <block type="even_odd_beast_signal" id="eob_odd_signal">
+            <field name="SIDE">ODD</field>
+            <field name="MODE">AUTO</field>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="apollo_purchase2" id="eob_purchase_odd">
+            <field name="PURCHASE_LIST">DIGITODD</field>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>
