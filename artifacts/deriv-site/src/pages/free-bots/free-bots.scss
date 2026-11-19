@@ -523,6 +523,135 @@
     }
 }
 
+// Adaptive scan evidence: compact, evidence-first market cockpit.
+.matrix-modal {
+    width: min(980px, 100%);
+    max-height: min(94dvh, 980px);
+    background: #f4f7fa;
+    color: #182535;
+
+    &__body { padding: 0 20px 14px; }
+    &__scan {
+        margin: 14px 0 2px;
+        padding: 16px;
+        border: 1px solid #d4dee7;
+        border-radius: 13px;
+        background: #fbfcfd;
+        box-shadow: 0 5px 16px rgba(29, 54, 76, 0.06);
+    }
+
+    &__scan-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    &__eyebrow { color: #587082; font-size: 0.75rem; font-weight: 850; letter-spacing: 0.11em; text-transform: uppercase; }
+    &__scan-head h2 { margin: 3px 0 4px; color: #172c3b; font-size: 1.4rem; line-height: 1.15; }
+    &__scan-head p { margin: 0; color: #657989; font-size: 0.9rem; line-height: 1.4; }
+    &__scan-state {
+        display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px;
+        padding: 7px 9px; border: 1px solid #cbd7df; border-radius: 999px;
+        background: #eef3f6; color: #465d6c; font-size: 0.72rem; font-weight: 850; letter-spacing: 0.045em;
+        &--scanning, &--connecting { border-color: #8ab5bb; background: #e9f5f4; color: #176763; }
+        &--selected { border-color: #8fbdab; background: #e9f5ef; color: #176344; }
+        &--error { border-color: #e5b7b3; background: #fbefee; color: #9d3934; }
+    }
+    &__scan-indicator { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    &__scan-state--scanning &__scan-indicator,
+    &__scan-state--connecting &__scan-indicator { animation: fb-pulse 1.4s ease-in-out infinite; }
+    &__scan-summary {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px;
+        > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 9px 10px; border-left: 2px solid #9eb4c0; background: #f1f5f7; }
+        span { color: #6a7d8a; font-size: 0.72rem; font-weight: 700; }
+        strong { overflow: hidden; color: #1b3445; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
+    }
+    &__scan-message { margin-top: 11px; color: #344c5b; font-size: 0.9rem; font-weight: 750; line-height: 1.4; }
+    &__scan-updated { margin-top: 3px; color: #82919a; font-size: 0.72rem; }
+    &__scan-empty {
+        display: flex; flex-direction: column; gap: 6px; margin-top: 11px; padding: 14px;
+        border: 1px dashed #c6d2da; border-radius: 10px; background: #f6f8fa; color: #758793;
+        font-size: 0.84rem; line-height: 1.4;
+        strong { color: #435969; font-size: 0.92rem; }
+        &.is-loading { border-style: solid; }
+    }
+    &__skeleton { display: block; width: 100%; height: 12px; border-radius: 5px; background: linear-gradient(90deg, #e6edf1, #f2f5f7, #e6edf1); }
+    &__skeleton:nth-child(2) { width: 76%; }
+    &__skeleton:nth-child(3) { width: 88%; }
+    &__market-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
+    &__market {
+        min-width: 0; padding: 11px; border: 1px solid #d8e0e5; border-radius: 10px; background: #fff;
+        &--candidate { border-color: #c7b77b; }
+        &--qualified { border-color: #9dc8b4; }
+        &--unavailable { background: #f7f8f9; }
+        &.is-selected { border-color: #37906f; box-shadow: inset 3px 0 #37906f; }
+    }
+    &__market-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    &__market-name { display: flex; min-width: 0; align-items: baseline; flex-wrap: wrap; gap: 7px; }
+    &__market-name strong { color: #203747; font-size: 0.96rem; }
+    &__market-name code { color: #6d8290; font-size: 0.75rem; }
+    &__market-status { flex: 0 0 auto; padding: 4px 7px; border-radius: 999px; background: #edf1f3; color: #5b6e79; font-size: 0.68rem; font-weight: 800; }
+    &__market-status--qualified { background: #e6f3ec; color: #23704d; }
+    &__market-status--candidate { background: #f6f1df; color: #766123; }
+    &__market-status--scanning { background: #e7f1f4; color: #276576; }
+    &__market-status--unavailable { background: #f2e9e8; color: #875450; }
+    &__market-condition { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; color: #778994; font-size: 0.72rem; }
+    &__market-condition strong { color: #304b5b; font-size: 0.78rem; text-align: right; }
+    &__digits { display: flex; min-height: 26px; align-items: center; gap: 4px; margin-top: 8px; overflow-x: auto; }
+    &__digits > span:not(.matrix-modal__digits-empty) {
+        display: grid; width: 25px; height: 25px; flex: 0 0 25px; place-items: center;
+        border: 1px solid #cdd8df; border-radius: 6px; background: #f3f6f7; color: #284658;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; font-weight: 800;
+    }
+    &__digits-empty { color: #929fa7; font-size: 0.75rem; }
+    &__frequency-wrap { margin-top: 10px; }
+    &__frequency-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; color: #70828d; font-size: 0.7rem; font-weight: 750; }
+    &__frequency-label small { color: #98a3aa; font-size: 0.62rem; font-weight: 550; text-align: right; }
+    &__frequency { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; }
+    &__frequency-digit {
+        display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 2px; padding: 4px 1px;
+        border: 1px solid #e1e7ea; border-radius: 5px; background: #f5f7f8; color: #6c7e88;
+        b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.7rem; }
+        small { font-size: 0.59rem; line-height: 1; }
+        &.is-hot { border-color: #d8b5a1; background: #fcf0e9; color: #9d4c2e; }
+        &.is-cold { border-color: #b5ccd8; background: #edf5f8; color: #3a687c; }
+    }
+    &__evidence { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; margin-top: 9px; }
+    &__evidence > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+    &__evidence span { color: #83929b; font-size: 0.64rem; line-height: 1.2; }
+    &__evidence strong { overflow: hidden; color: #2d4554; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; text-overflow: ellipsis; }
+    &__market-reason { margin-top: 9px; padding-top: 7px; border-top: 1px solid #edf0f2; color: #647984; font-size: 0.74rem; line-height: 1.35; }
+}
+
+.matrix-modal button:focus-visible,
+.matrix-modal input:focus-visible { outline: 3px solid rgba(37, 108, 119, 0.42); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+    .matrix-overlay { align-items: flex-end; padding: 0; }
+    .matrix-modal {
+        width: 100%; max-height: 96dvh; min-height: 72dvh; border-radius: 17px 17px 0 0;
+        &__header { padding: 14px 15px; }
+        &__title { font-size: 1.35rem; }
+        &__badge { font-size: 0.68rem; }
+        &__statusbar { align-items: flex-start; flex-direction: column; gap: 7px; padding: 9px 15px; }
+        &__stats { width: 100%; justify-content: space-between; }
+        &__body { padding: 0 12px 12px; }
+        &__scan { margin-top: 10px; padding: 12px; }
+        &__scan-head { flex-direction: column; gap: 9px; }
+        &__scan-head h2 { font-size: 1.2rem; }
+        &__scan-state { align-self: flex-start; }
+        &__scan-summary { gap: 5px; }
+        &__scan-summary > div { padding: 7px 6px; }
+        &__scan-summary span { font-size: 0.63rem; line-height: 1.2; }
+        &__scan-summary strong { font-size: 0.86rem; }
+        &__market-list { grid-template-columns: minmax(0, 1fr); }
+        &__market { padding: 10px; }
+        &__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        &__blocks { grid-template-columns: minmax(0, 1fr); }
+        &__footer { position: sticky; bottom: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: #fbfcfd; }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .matrix-modal__scan-indicator,
+    .matrix-modal__status-dot { animation: none; }
+}
+
 // ─── Signal badge ─────────────────────────────────────────────────────────────
 
 .fb-signal-badge {

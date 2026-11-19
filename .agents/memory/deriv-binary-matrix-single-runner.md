@@ -3,11 +3,11 @@ name: Binary Matrix single-runner guard
 description: Preventing duplicate Binary Matrix contracts when multiple UI launch paths are available
 ---
 
-Binary Matrix must run through the generated XML/DBot path, enforce one automated contract, and allow only one purchase per market tick. Do not silently divert compatibility blocks to a separate native runner; a browser-global engine lease alone does not stop generated `Bot.purchase()` re-entry or `trade_again` from buying again after settlement.
+Keep the supplied Binary Matrix XML/DBot flow as the normal Builder path. The user-approved adaptive market scanner is a separate, explicitly launched native runner; never silently route existing XML or Blockly runs through it. Both paths must prevent overlapping automated contracts.
 
-**Why:** The separate native path made the visible XML bot behave differently from every other DBot bot and allowed duplicate behavior to persist outside the generated purchase lifecycle. Releasing the active-contract gate at settlement also permits an immediate same-tick repurchase.
+**Why:** Dynamic market selection needs a native scanner, while saved XML behavior must remain compatible. Releasing a runner lock before a pending buy or open contract is confirmed settled can permit overlapping trades.
 
-**How to apply:** Load Binary Matrix into the normal Builder and let the standard Run flow execute it. Mark every observed market tick, preserve that Redux tick epoch across purchase/settlement scope transitions, derive the generated engine's signal key from it when purchasing, reject a signal key already used on the current tick, hold the gate through settlement, and release it on settlement/errors/stops.
+**How to apply:** Keep “Load bot” on the Blockly path and require the separate adaptive-scan action to start the native runner. Mark each observed tick and reject duplicate purchases on that tick. Hold the contract gate through settlement; on Stop, keep the runner lease while a buy is pending or a contract is open, then release it after broker confirmation or a definitive buy rejection.
 
 FAST execution means the generated loop advances on the next live tick, not that it polls the same tick with a shorter timer. SLOW remains the legacy delay behavior.
 

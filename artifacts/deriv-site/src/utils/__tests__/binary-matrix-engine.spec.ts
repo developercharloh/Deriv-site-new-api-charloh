@@ -1,11 +1,44 @@
 type MessageHandler = (message: unknown) => void;
 type SentPayload = Record<string, any>;
 
+class AutoScanSocket {
+    static instance: AutoScanSocket | null = null;
+    readyState = 1;
+    onopen: ((event: Event) => void) | null = null;
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    onerror: ((event: Event) => void) | null = null;
+    onclose: ((event: CloseEvent) => void) | null = null;
+    sent: SentPayload[] = [];
+
+    constructor(_url: string) {
+        AutoScanSocket.instance = this;
+    }
+
+    send(data: string): void {
+        this.sent.push(JSON.parse(data));
+    }
+
+    close(): void {
+        this.readyState = 3;
+    }
+
+    open(): void {
+        this.onopen?.({} as Event);
+    }
+
+    respond(message: SentPayload): void {
+        this.onmessage?.({ data: JSON.stringify(message) } as MessageEvent);
+    }
+}
+
+const nativeWebSocket = global.WebSocket;
+
 jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
     api_base: { api: null, is_authorized: true },
 }));
 
 import { BinaryMatrixEngine } from '@/utils/binary-matrix-engine';
+import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { api_base as mockApiBase } from '@/external/bot-skeleton/services/api/api-base';
 import { observer } from '@/external/bot-skeleton/utils/observer';
 
@@ -17,6 +50,8 @@ describe('BinaryMatrixEngine live purchase path', () => {
 
     afterEach(() => {
         jest.useRealTimers();
+        global.WebSocket = nativeWebSocket;
+        AutoScanSocket.instance = null;
     });
 
     it('publishes one analysis event for every incoming tick, including partial windows', () => {
@@ -83,8 +118,10 @@ describe('BinaryMatrixEngine live purchase path', () => {
             reanalyzeAfterWins: 3,
         });
         const logs: string[] = [];
+        const statuses: string[] = [];
         const positions: Array<{ isOpen: boolean; contractId: string }> = [];
         engine.onLog = log => logs.push(log.message);
+        engine.onStatus = status => statuses.push(status);
         engine.onPosition = position => positions.push({
             isOpen: position.isOpen,
             contractId: position.contractId,
@@ -155,6 +192,10 @@ describe('BinaryMatrixEngine live purchase path', () => {
         expect(logs.some(message => message.includes('Bought #24680'))).toBe(true);
         expect(positions).toContainEqual({ isOpen: true, contractId: '24680' });
 
+        engine.stop();
+        expect(statuses[statuses.length - 1]).toBe('waiting');
+        expect(logs.some(message => message.includes('Stop requested.'))).toBe(true);
+
         const settlement = latest(payload => payload.proposal_open_contract === 1);
         emit({
             msg_type: 'proposal_open_contract',
@@ -170,6 +211,8 @@ describe('BinaryMatrixEngine live purchase path', () => {
             },
         });
         expect(positions).toContainEqual({ isOpen: false, contractId: '24680' });
+        expect(statuses[statuses.length - 1]).toBe('stopped');
+        expect(logs.some(message => message.includes('stopped. No new contracts'))).toBe(true);
 
         engine.stop();
         mockApiBase.api = null;
@@ -299,6 +342,119 @@ describe('BinaryMatrixEngine live purchase path', () => {
         expect(secondBuy.price).toBe(1);
 
         engine.stop();
+        emit({
+            msg_type: 'buy',
+            req_id: secondBuy.req_id,
+            error: { message: 'Purchase cancelled.' },
+        });
+        mockApiBase.api = null;
+    });
+
+    it('requires historical evidence, a passing live payout, and a fresh signal before buying', async () => {
+        const sent: SentPayload[] = [];
+        let handler: MessageHandler | null = null;
+        const api = {
+            send: jest.fn((payload: SentPayload) => sent.push(payload)),
+            forgetAll: jest.fn(() => Promise.resolve()),
+            onMessage: () => ({
+                subscribe: (next: MessageHandler) => {
+                    handler = next;
+                    return { unsubscribe: () => { if (handler === next) handler = null; } };
+                },
+            }),
+        };
+        mockApiBase.api = api as any;
+        (global as any).WebSocket = AutoScanSocket;
+
+        const engine = new BinaryMatrixEngine({
+            symbol: 'R_25',
+            currency: 'USD',
+            initialStake: 0.5,
+            martingale: 2,
+            takeProfit: 10,
+            stopLoss: 50,
+            reanalyzeAfterWins: 3,
+            autoMarketScan: true,
+        });
+        const scanUpdates: any[] = [];
+        engine.onMarketScan = snapshot => scanUpdates.push(snapshot);
+        expect(engine.start()).toBe(true);
+
+        const publicSocket = AutoScanSocket.instance;
+        if (!publicSocket) throw new Error('Expected the public market scan socket.');
+        publicSocket.open();
+        const publicHistoryRequest = publicSocket.sent[0];
+        const selectedSymbol = DERIV_VOLATILITIES[0].code;
+        const historyDigits: number[] = [];
+        for (let index = 0; index < 120; index += 1) historyDigits.push(1, 1, 1, 1, 0);
+        historyDigits.push(1, 1, 1, 1);
+        publicSocket.respond({
+            msg_type: 'history',
+            req_id: publicHistoryRequest.req_id,
+            pip_size: 2,
+            history: {
+                prices: historyDigits.map((digit, index) => `${index + 1}.${digit}${digit}`),
+            },
+            subscription: { id: 'public-selected-market' },
+        });
+
+        await Promise.resolve();
+        await Promise.resolve();
+        jest.advanceTimersByTime(300);
+
+        const emit = (message: SentPayload) => {
+            if (!handler) throw new Error('The authenticated engine message subscription is not active.');
+            handler({ data: message });
+        };
+        const latest = (predicate: (payload: SentPayload) => boolean) => {
+            const payload = [...sent].reverse().find(predicate);
+            if (!payload) throw new Error('Expected a matching authenticated engine request.');
+            return payload;
+        };
+
+        const liveHistoryRequest = latest(payload => payload.ticks_history === selectedSymbol);
+        emit({
+            msg_type: 'history',
+            req_id: liveHistoryRequest.req_id,
+            subscription: { id: 'adaptive-live-ticks' },
+            history: { prices: [] },
+            pip_size: 2,
+        });
+        const proposalRequest = latest(payload => payload.proposal === 1);
+        expect(proposalRequest).toMatchObject({
+            contract_type: 'DIGITEVEN',
+            underlying_symbol: selectedSymbol,
+        });
+        expect(sent.some(payload => payload.buy)).toBe(false);
+        emit({
+            msg_type: 'proposal',
+            req_id: proposalRequest.req_id,
+            subscription: { id: 'adaptive-live-proposal' },
+            proposal: {
+                id: 'adaptive-even-proposal',
+                ask_price: '0.50',
+                payout: '0.90',
+                spot: '1.11',
+                longcode: 'One-tick Even contract',
+            },
+        });
+        expect(sent.some(payload => payload.buy)).toBe(false);
+
+        emit({
+            msg_type: 'tick',
+            subscription: { id: 'adaptive-live-ticks' },
+            tick: { quote: 1.11, pip_size: 2 },
+        });
+        const buy = latest(payload => payload.buy === 'adaptive-even-proposal');
+        expect(buy).toMatchObject({ price: 0.5, buy: 'adaptive-even-proposal' });
+        expect(scanUpdates.some(snapshot =>
+            snapshot.selectedSymbol === selectedSymbol &&
+            snapshot.rows.some((row: any) => row.symbol === selectedSymbol && row.status === 'qualified')
+        )).toBe(true);
+
+        engine.stop();
+        emit({ msg_type: 'buy', req_id: buy.req_id, error: { message: 'Purchase cancelled.' } });
+        expect(scanUpdates[scanUpdates.length - 1].status).toBe('idle');
         mockApiBase.api = null;
     });
 
