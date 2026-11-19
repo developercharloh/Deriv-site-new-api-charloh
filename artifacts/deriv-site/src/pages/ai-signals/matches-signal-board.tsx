@@ -474,7 +474,7 @@ export function MatchesSignalBoard({
                             feed.candles.length ? 'Waiting for live tick' : 'Loading candles';
 
         return {
-            symbol, feed, tsiSeries, macdSeries, macdPoint, tsi, lastCandle,
+            symbol, feed, feedFresh, tsiSeries, macdSeries, macdPoint, tsi, lastCandle,
             secondsToClose, tsiConditions, macdConditions, tradeNow, status,
         };
     }), [active, clockNow, feeds, maintenanceActive, strategy]);
@@ -644,7 +644,7 @@ export function MatchesSignalBoard({
 
             <div className='match-board__grid'>
                 {marketCards.map(({
-                    symbol, feed, tsiSeries, macdSeries, macdPoint, tsi, lastCandle,
+                    symbol, feed, feedFresh, tsiSeries, macdSeries, macdPoint, tsi, lastCandle,
                     secondsToClose, tsiConditions, macdConditions, tradeNow, status,
                 }) => (
                     <article className='match-market' key={symbol.code}>
@@ -663,10 +663,25 @@ export function MatchesSignalBoard({
                             const conditions = mode === 'tsi' ? tsiConditions : macdConditions;
                             const range = mode === 'tsi' ? '0–4' : '6–9';
                             const ready = canEnterMatchesSignal(mode, tsiConditions, macdConditions);
+                            const strategyChecks = mode === 'tsi'
+                                ? [
+                                    { label: 'TSI in target range', met: tsiConditions.tsiInRange },
+                                    { label: 'TSI flat across live updates', met: tsiConditions.tsiFlat },
+                                    { label: 'Green candle', met: tsiConditions.greenCandle },
+                                ]
+                                : [
+                                    { label: 'MACD descends from above', met: macdConditions.enteringFromAbove },
+                                    { label: 'Signal line separated from histogram', met: macdConditions.signalAway },
+                                ];
+                            const passedChecks = strategyChecks.filter(check => check.met).length;
                             return <div className='match-market__setup' key={mode}>
                         <div className={`match-market__setup-status${ready ? ' match-market__setup-status--alert' : ''}`}>
                             <strong>MATCHES {range} · {mode.toUpperCase()}</strong>
-                            <span>{ready ? 'SETUP READY · ENTER WHEN YOU CHOOSE' : status !== 'Live' ? 'Waiting for live data' : 'Waiting for setup'}</span>
+                            <span>{ready
+                                ? `STRONG SETUP · ALL ${strategyChecks.length}/${strategyChecks.length} CHECKS PASS`
+                                : !feedFresh
+                                    ? 'Waiting for fresh live data'
+                                    : `WEAK CONDITIONS · ${passedChecks}/${strategyChecks.length} CHECKS · NOT TRADEABLE`}</span>
                         </div>
                         {mode === 'tsi' ? (
                             <MiniCandleTsiChart
@@ -679,33 +694,17 @@ export function MatchesSignalBoard({
                         )}
 
                         <div className='match-market__metrics'>
-                            {mode === 'tsi' ? (
-                                <>
-                                    <span className={tsiConditions.tsiInRange ? 'is-ready' : ''}>
-                                        Trend Strength Index {tsi === null ? '—' : tsi.toFixed(3)}
-                                    </span>
-                                    <span className={tsiConditions.tsiFlat ? 'is-ready' : ''}>{tsiConditions.tsiFlat ? 'Flat' : 'Not flat'}</span>
-                                    <span className={tsiConditions.greenCandle ? 'is-ready' : ''}>{tsiConditions.greenCandle ? 'Green candle' : 'Not green'}</span>
-                                    <span className={tsiConditions.entryWindow ? 'is-ready' : ''}>
-                                        {formatCandleCountdown(secondsToClose)}
-                                    </span>
-                                </>
-                            ) : (
-                                <>
-                                    <span className={macdConditions.enteringFromAbove ? 'is-ready' : ''}>
-                                        MACD {macdPoint === null ? '—' : macdPoint.macdLine.toFixed(4)}
-                                    </span>
-                                    <span className={macdConditions.enteringFromAbove ? 'is-ready' : ''}>
-                                        {macdConditions.enteringFromAbove ? 'Entering from above' : 'Not entering'}
-                                    </span>
-                                    <span className={macdConditions.signalAway ? 'is-ready' : ''}>
-                                        {macdConditions.signalAway ? 'Signal away' : 'Signal near'}
-                                    </span>
-                                    <span className={macdConditions.entryWindow ? 'is-ready' : ''}>
-                                        {formatCandleCountdown(secondsToClose)}
-                                    </span>
-                                </>
-                            )}
+                            {strategyChecks.map(check => (
+                                <span className={check.met ? 'is-ready' : 'is-weak'} key={check.label}>
+                                    <i aria-hidden='true'>{check.met ? '✓' : '✗'}</i> {check.label}
+                                </span>
+                            ))}
+                            <span className={feedFresh ? 'is-ready' : 'is-weak'}>
+                                <i aria-hidden='true'>{feedFresh ? '✓' : '✗'}</i> Fresh live feed
+                            </span>
+                            <span className={secondsToClose === 2 ? 'is-ready' : ''}>
+                                00:02 timing reference · {formatCandleCountdown(secondsToClose)}
+                            </span>
                         </div>
 
                         {ready ? (

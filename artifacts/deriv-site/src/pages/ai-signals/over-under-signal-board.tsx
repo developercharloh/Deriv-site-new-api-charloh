@@ -308,6 +308,10 @@ export function OverUnderSignalBoard({
                             <div className='ou-board__options'>
                                 {setups.map((setup: OverUnderIndicatorStatus) => {
                                     const label = `${setup.side} ${setup.barrier}`;
+                                    const signalConditions = setup.conditions.filter(condition =>
+                                        condition.key !== 'entry-window' && condition.key !== 'fresh-feed'
+                                    );
+                                    const passedConditions = signalConditions.filter(condition => condition.met).length;
                                     return (
                                         <div
                                             className={`ou-board__option${setup.setupReady ? ' ou-board__option--selected' : ''}`}
@@ -332,11 +336,17 @@ export function OverUnderSignalBoard({
                                                     </span>
                                                 ))}
                                             </div>
-                                            <em>{setup.setupReady
-                                                ? setup.feedFresh
-                                                    ? 'SETUP READY · ENTER WHEN YOU CHOOSE'
-                                                    : 'SETUP READY · WAITING FOR LIVE FEED'
-                                                : 'WAITING FOR INDICATOR CONDITIONS'}</em>
+                                            <em className={setup.setupReady && setup.feedFresh ? 'ou-board__quality--strong' : 'ou-board__quality--weak'}>
+                                                {!active
+                                                    ? 'SCANNER PAUSED'
+                                                    : setup.indicatorValue === null
+                                                        ? 'WAITING FOR INDICATOR DATA'
+                                                        : setup.setupReady
+                                                            ? setup.feedFresh
+                                                                ? `STRONG SETUP · ALL ${signalConditions.length}/${signalConditions.length} CHECKS PASS`
+                                                                : `CONDITIONS MET · ${passedConditions}/${signalConditions.length} · WAITING FOR LIVE DATA`
+                                                            : `WEAK CONDITIONS · ${passedConditions}/${signalConditions.length} CHECKS · NOT TRADEABLE`}
+                                            </em>
                                             {canEnterOverUnderSignal(setup) && onSelectSignal && (
                                                 <button
                                                     type='button'

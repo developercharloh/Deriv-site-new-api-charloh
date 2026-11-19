@@ -20,10 +20,11 @@ describe('Even Odd Beast setup signal board', () => {
     });
 
     it('offers only fresh Even/Odd setups to the handoff', () => {
-        expect(canTradeEvenOddBeastSignal('EVEN', true)).toBe(true);
-        expect(canTradeEvenOddBeastSignal('ODD', true)).toBe(true);
-        expect(canTradeEvenOddBeastSignal('WAIT', true)).toBe(false);
-        expect(canTradeEvenOddBeastSignal('ODD', false)).toBe(false);
+        const analysis = { signal: 'EVEN' } as any;
+        expect(canTradeEvenOddBeastSignal(analysis, true)).toBe(true);
+        expect(canTradeEvenOddBeastSignal({ signal: 'ODD' } as any, true)).toBe(true);
+        expect(canTradeEvenOddBeastSignal({ signal: 'WAIT' } as any, true)).toBe(false);
+        expect(canTradeEvenOddBeastSignal({ signal: 'ODD' } as any, false)).toBe(false);
     });
 
     it('counts down to the next one-minute candle close using server time', () => {
@@ -60,5 +61,8 @@ describe('Even Odd Beast setup signal board', () => {
         expect(screen.getAllByTestId('candle-close-countdown').every(timer => timer.textContent?.includes('Waiting'))).toBe(true);
         expect(screen.queryByText(/match|entry digit/i)).not.toBeInTheDocument();
         expect(within(screen.getAllByRole('article')[0]).getByText('Waiting for live data')).toBeInTheDocument();
+        expect(screen.getAllByText(/Candle and MA9 decimal digits match/)).toHaveLength(DERIV_CONTINUOUS_VOLATILITIES.length);
+        expect(screen.getAllByRole('button', { name: 'Trade with Even Odd Beast' })
+            .every(button => (button as HTMLButtonElement).disabled)).toBe(true);
     });
 });

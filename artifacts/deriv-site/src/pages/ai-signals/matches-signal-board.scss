@@ -499,6 +499,16 @@
         background: rgba(16, 185, 129, 0.1);
         color: #34d399;
     }
+
+    > .is-weak {
+        background: rgba(120, 76, 10, 0.16);
+        color: #fbbf24;
+    }
+
+    i {
+        font-style: normal;
+        font-weight: 900;
+    }
 }
 
 .match-market__waiting {

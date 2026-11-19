@@ -258,6 +258,12 @@
         background: rgba(180, 83, 9, 0.12);
         color: #fcd34d;
     }
+
+    &--weak {
+        border-color: rgba(245, 158, 11, 0.34);
+        background: rgba(120, 76, 10, 0.14);
+        color: #fcd34d;
+    }
 }
 
 .eob-board__signal-dot {
@@ -295,6 +301,33 @@
         font-size: 10px;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+}
+
+.eob-board__quality-checks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 8px;
+}
+
+.eob-board__quality-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    color: #fbbf24;
+    font-size: 8px;
+    line-height: 1.35;
+
+    i {
+        flex: 0 0 auto;
+        color: #f87171;
+        font-style: normal;
+        font-weight: 900;
+    }
+
+    &--met {
+        color: #8de7c1;
+        i { color: #34d399; }
     }
 }
 
