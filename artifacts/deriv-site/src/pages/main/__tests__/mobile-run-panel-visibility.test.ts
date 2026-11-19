@@ -10,7 +10,7 @@ describe('mobile Run panel visibility', () => {
         expect(shouldRenderMobileRunPanel(DBOT_TABS.AI_ANALYSIS, true)).toBe(false);
     });
 
-    it.each([DBOT_TABS.AI_SIGNALS, DBOT_TABS.ADVANCED_DTRADER])(
+    it.each([DBOT_TABS.AI_SIGNALS, DBOT_TABS.ADVANCED_DTRADER, DBOT_TABS.TRADING_VIEW])(
         'keeps the panel hidden for tab %s',
         activeTab => {
             expect(shouldRenderMobileRunPanel(activeTab, false)).toBe(false);

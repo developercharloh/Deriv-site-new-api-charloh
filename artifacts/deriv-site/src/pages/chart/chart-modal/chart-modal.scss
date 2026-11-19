@@ -1,6 +1,7 @@
 @use 'components/shared/styles/mixins' as *;
 
-#id-charts--disabled {
+#id-charts--disabled,
+#id-trading-view--disabled {
     color: var(--fill-normal-1);
     stroke-opacity: 0.3;
     pointer-events: none;

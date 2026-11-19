@@ -51,6 +51,7 @@ const AnalysisTool      = lazy(() => import('../ai-analysis-tool'));
 const FreeBots          = lazy(() => import('../free-bots'));
 const AdvancedDTrader   = lazy(() => import('../advanced-dtrader'));
 const AiSignalsPage     = lazy(() => import('../ai-signals'));
+const TradingViewPage   = lazy(() => import('../trading-view'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -87,6 +88,7 @@ const AppWrapper = observer(() => {
         'dashboard',
         'bot_builder',
         'chart',
+        'trading_view',
         'ai_signals',
         'free_bots',
         'ai_analysis',
@@ -461,6 +463,23 @@ const AppWrapper = observer(() => {
                                             width='24px'
                                             fill='var(--text-general)'
                                         />
+                                        <Localize i18n_default_text='Trading View' />
+                                    </>
+                                }
+                                id={is_trading_view_modal_visible ? 'id-trading-view--disabled' : 'id-trading-view'}
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Trading View...')} />}>
+                                    <TradingViewPage />
+                                </Suspense>
+                            </div>
+                            <div
+                                label={
+                                    <>
+                                        <LabelPairedChartLineCaptionRegularIcon
+                                            height='24px'
+                                            width='24px'
+                                            fill='var(--text-general)'
+                                        />
                                         <Localize i18n_default_text='AI Signals' />
                                     </>
                                 }
@@ -533,6 +552,7 @@ const AppWrapper = observer(() => {
                         DBOT_TABS.AI_SIGNALS,
                         DBOT_TABS.AI_ANALYSIS,
                         DBOT_TABS.ADVANCED_DTRADER,
+                        DBOT_TABS.TRADING_VIEW,
                     ].includes(active_tab) && <RunPanel />}
                 </div>
                 <ChartModal />
