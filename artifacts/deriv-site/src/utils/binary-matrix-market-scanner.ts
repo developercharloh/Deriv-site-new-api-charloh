@@ -96,6 +96,10 @@ export const DEFAULT_BINARY_MATRIX_ROC_PERIOD = 5;
 const HISTORY_REQUEST_TIMEOUT_MS = 8000;
 const NEXT_SYMBOL_DELAY_MS = 250;
 const MAX_DIGITS = 5000;
+const PUBLIC_FEED_KEEPALIVE_INTERVAL_MS = 25_000;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 8000;
 
 const defaultSocketFactory: SocketFactory = url => new WebSocket(url);
 
@@ -283,6 +287,9 @@ export class BinaryMatrixMarketScanner {
     private pendingRequestId: number | null = null;
     private requestTimer: ReturnType<typeof setTimeout> | null = null;
     private nextRequestTimer: ReturnType<typeof setTimeout> | null = null;
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+    private reconnectAttempts = 0;
     private stopped = true;
     private socketFactory: SocketFactory;
     private symbols: DerivVolatility[];
@@ -321,31 +328,101 @@ export class BinaryMatrixMarketScanner {
         this.onError = onError;
         this.emit('connecting', 'Connecting to the public volatility tick feed.');
 
+        this.connect();
+    }
+
+    private connect(): void {
+        if (this.stopped) return;
         try {
             this.socket = this.socketFactory(getPublicWsUrl());
         } catch (error) {
-            this.fail(error instanceof Error ? error.message : 'Could not connect to the volatility tick feed.');
+            this.scheduleReconnect(error instanceof Error ? error.message : 'Could not connect to the volatility tick feed.');
             return;
         }
 
-        this.socket.onopen = () => {
-            if (this.stopped) return;
+        const socket = this.socket;
+        socket.onopen = () => {
+            if (this.stopped || this.socket !== socket) return;
+            this.startKeepAlive(socket);
             this.emit('scanning', 'Loading recent tick history for each volatility market.');
             this.requestNextHistory();
         };
-        this.socket.onmessage = event => this.handleMessage(event.data);
-        this.socket.onerror = () => this.fail('The volatility tick feed reported a connection error.');
-        this.socket.onclose = () => {
-            if (!this.stopped) this.fail('The volatility tick feed disconnected.');
+        socket.onmessage = event => {
+            if (!this.stopped && this.socket === socket) this.handleMessage(event.data);
         };
+        socket.onerror = () => this.scheduleReconnect('The volatility tick feed reported a connection error.', socket);
+        socket.onclose = () => this.scheduleReconnect('The volatility tick feed disconnected.', socket);
+    }
+
+    private startKeepAlive(socket: WebSocketLike): void {
+        this.clearKeepAliveTimer();
+        this.keepAliveTimer = setInterval(() => {
+            if (this.stopped || this.socket !== socket || socket.readyState !== 1) return;
+            try {
+                socket.send(JSON.stringify({ ping: 1 }));
+            } catch {
+                this.scheduleReconnect('The volatility tick feed stopped responding.', socket);
+            }
+        }, PUBLIC_FEED_KEEPALIVE_INTERVAL_MS);
+    }
+
+    private scheduleReconnect(reason: string, failedSocket?: WebSocketLike): void {
+        if (this.stopped || this.reconnectTimer) return;
+        if (failedSocket && this.socket !== failedSocket) return;
+
+        this.clearRequestTimer();
+        if (this.nextRequestTimer) clearTimeout(this.nextRequestTimer);
+        this.nextRequestTimer = null;
+        this.clearKeepAliveTimer();
+        this.pendingRequestId = null;
+        this.subscriptionSymbols.clear();
+
+        const socket = this.socket;
+        this.socket = null;
+        if (socket) {
+            socket.onopen = null;
+            socket.onmessage = null;
+            socket.onerror = null;
+            socket.onclose = null;
+            try {
+                socket.close();
+            } catch {
+                // The failed socket may already be closed by the browser.
+            }
+        }
+
+        if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            this.fail(`${reason} Reconnect stopped after ${MAX_RECONNECT_ATTEMPTS} attempts.`);
+            return;
+        }
+
+        this.reconnectAttempts += 1;
+        const delay = Math.min(
+            RECONNECT_BASE_DELAY_MS * 2 ** (this.reconnectAttempts - 1),
+            RECONNECT_MAX_DELAY_MS,
+        );
+        this.emit(
+            'connecting',
+            `${reason} Reconnecting in ${Math.ceil(delay / 1000)}s (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}).`,
+        );
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            if (this.stopped) return;
+            this.reset();
+            this.connect();
+        }, delay);
     }
 
     stop(): void {
         this.stopped = true;
         if (this.requestTimer) clearTimeout(this.requestTimer);
         if (this.nextRequestTimer) clearTimeout(this.nextRequestTimer);
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         this.requestTimer = null;
         this.nextRequestTimer = null;
+        this.reconnectTimer = null;
+        this.clearKeepAliveTimer();
+        this.reconnectAttempts = 0;
         this.pendingRequestId = null;
         if (this.socket) {
             this.socket.onopen = null;
@@ -359,6 +436,11 @@ export class BinaryMatrixMarketScanner {
             }
         }
         this.socket = null;
+    }
+
+    private clearKeepAliveTimer(): void {
+        if (this.keepAliveTimer) clearInterval(this.keepAliveTimer);
+        this.keepAliveTimer = null;
     }
 
     private reset(): void {
@@ -489,6 +571,7 @@ export class BinaryMatrixMarketScanner {
         this.requestIndex += 1;
         this.emit('scanning', `Loaded ${this.completedMarkets()} of ${this.symbols.length} markets.`);
         if (this.requestIndex >= this.symbols.length) {
+            this.reconnectAttempts = 0;
             this.emit('scanning', 'Market histories loaded; monitoring fresh ticks.');
             return;
         }

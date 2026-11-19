@@ -343,7 +343,7 @@ export class BinaryMatrixEngine {
         }
 
         if (snapshot.status === 'error') {
-            this.failAdaptiveRun(snapshot.message);
+            this.failAdaptiveRun(snapshot.message, false);
             return;
         }
 
@@ -351,7 +351,13 @@ export class BinaryMatrixEngine {
             this.openContractId ? 'waiting' : this.selectedMarket ? 'selected' : snapshot.status,
             this.openContractId ? 'No new entry while the current contract settles.' : snapshot.message,
         );
-        if (this.paused || this.openContractId || this.pendingDecision || this.selectedMarket) return;
+        if (
+            snapshot.status !== 'scanning' ||
+            this.paused ||
+            this.openContractId ||
+            this.pendingDecision ||
+            this.selectedMarket
+        ) return;
 
         const candidates = snapshot.rows
             .filter(row =>
@@ -494,17 +500,19 @@ export class BinaryMatrixEngine {
         this.publishScan('scanning', reason);
     }
 
-    private failAdaptiveRun(reason: string): void {
+    private failAdaptiveRun(reason: string, logReason = true): void {
         if (!this.running) return;
         if (this.openContractId || this.pendingDecision) {
             this.stopRequested = true;
             this.paused = true;
             this.marketScanner.stop();
             this.onStatus('waiting');
-            this.writeLog(
-                `${reason} The runner is retaining the current contract lock until its outcome can be confirmed.`,
-                'error',
-            );
+            if (logReason) {
+                this.writeLog(
+                    `${reason} The runner is retaining the current contract lock until its outcome can be confirmed.`,
+                    'error',
+                );
+            }
             return;
         }
         this.running = false;
@@ -516,7 +524,7 @@ export class BinaryMatrixEngine {
         releaseBotContractGate(this);
         if (activeBinaryMatrixEngine === this) activeBinaryMatrixEngine = null;
         if (getGlobalActiveEngine() === this) setGlobalActiveEngine(null);
-        this.writeLog(reason, 'error');
+        if (logReason) this.writeLog(reason, 'error');
         this.onStatus('error');
         this.publishScan('error', reason);
     }

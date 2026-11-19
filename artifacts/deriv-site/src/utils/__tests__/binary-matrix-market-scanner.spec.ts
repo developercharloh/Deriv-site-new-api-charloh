@@ -28,6 +28,11 @@ class FakeSocket {
         this.readyState = 3;
     }
 
+    disconnect(): void {
+        this.readyState = 3;
+        this.onclose?.({} as CloseEvent);
+    }
+
     open(): void {
         this.onopen?.({} as Event);
     }
@@ -180,6 +185,124 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
 
         scanner.stop();
         expect(socket.closed).toBe(true);
+        jest.useRealTimers();
+    });
+
+    it('keeps the public feed warm and restores market history after a disconnect', () => {
+        jest.useFakeTimers();
+        const sockets: FakeSocket[] = [];
+        const scanner = new BinaryMatrixMarketScanner({
+            socketFactory: () => {
+                const socket = new FakeSocket();
+                sockets.push(socket);
+                return socket;
+            },
+            symbols: [testSymbol],
+        });
+        const updates: any[] = [];
+        const onError = jest.fn();
+        scanner.start(snapshot => updates.push(snapshot), onError);
+
+        sockets[0].open();
+        const digits: number[] = [];
+        for (let index = 0; index < 120; index += 1) digits.push(1, 1, 1, 1, 0);
+        digits.push(1, 1, 1, 1);
+        sockets[0].respond({
+            msg_type: 'history',
+            req_id: 1,
+            pip_size: 2,
+            history: { prices: pricesForDigits(digits) },
+            subscription: { id: 'sub-r25-before-reconnect' },
+        });
+
+        jest.advanceTimersByTime(25_000);
+        expect(sockets[0].sent).toContainEqual({ ping: 1 });
+
+        sockets[0].disconnect();
+        expect(updates[updates.length - 1]).toMatchObject({ status: 'connecting' });
+        expect(onError).not.toHaveBeenCalled();
+        jest.advanceTimersByTime(1000);
+
+        expect(sockets).toHaveLength(2);
+        sockets[1].open();
+        expect(sockets[1].sent[0]).toMatchObject({
+            ticks_history: 'R_25',
+            count: 5000,
+            subscribe: 1,
+            req_id: 1,
+        });
+        sockets[1].respond({
+            msg_type: 'history',
+            req_id: 1,
+            pip_size: 2,
+            history: { prices: pricesForDigits(digits) },
+            subscription: { id: 'sub-r25-after-reconnect' },
+        });
+
+        expect(updates[updates.length - 1]).toMatchObject({
+            status: 'scanning',
+            completedMarkets: 1,
+            rows: [{ symbol: 'R_25', status: 'candidate' }],
+        });
+        sockets[0].respond({
+            msg_type: 'tick',
+            tick: { quote: 999.04, pip_size: 2 },
+            subscription: { id: 'sub-r25-before-reconnect' },
+        });
+        expect(updates[updates.length - 1].rows[0].currentDigits).toEqual([1, 1, 1, 1]);
+
+        scanner.stop();
+        jest.useRealTimers();
+    });
+
+    it('cancels pending reconnect attempts when the scanner is stopped', () => {
+        jest.useFakeTimers();
+        const sockets: FakeSocket[] = [];
+        const scanner = new BinaryMatrixMarketScanner({
+            socketFactory: () => {
+                const socket = new FakeSocket();
+                sockets.push(socket);
+                return socket;
+            },
+            symbols: [testSymbol],
+        });
+        const onError = jest.fn();
+        scanner.start(jest.fn(), onError);
+        sockets[0].disconnect();
+        scanner.stop();
+        jest.advanceTimersByTime(30_000);
+
+        expect(sockets).toHaveLength(1);
+        expect(onError).not.toHaveBeenCalled();
+        jest.useRealTimers();
+    });
+
+    it('reports an error only after bounded reconnect attempts are exhausted', () => {
+        jest.useFakeTimers();
+        const sockets: FakeSocket[] = [];
+        const scanner = new BinaryMatrixMarketScanner({
+            socketFactory: () => {
+                const socket = new FakeSocket();
+                sockets.push(socket);
+                return socket;
+            },
+            symbols: [testSymbol],
+        });
+        const updates: any[] = [];
+        const onError = jest.fn();
+        scanner.start(snapshot => updates.push(snapshot), onError);
+
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+            sockets[sockets.length - 1].disconnect();
+            jest.advanceTimersByTime(10_000);
+        }
+        expect(sockets).toHaveLength(6);
+        sockets[5].disconnect();
+
+        expect(onError).toHaveBeenCalledTimes(1);
+        expect(updates.filter(snapshot => snapshot.status === 'error')).toHaveLength(1);
+        expect(updates[updates.length - 1].message).toContain('Reconnect stopped after 5 attempts');
+        scanner.stop();
         jest.useRealTimers();
     });
 

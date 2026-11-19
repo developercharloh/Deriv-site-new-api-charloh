@@ -13,7 +13,7 @@
 - [Alpha Scan live execution](alpha-scan-live-execution.md) — use reactive auth state and keep explicit Run separate from pattern qualification so trades cannot silently remain disabled.
 - [Nexus session P/L](deriv-nexus-session-pnl.md) — keep settled results cumulative and separate from open P/L; missing live values stay Pending.
 - [Nexus Martingale](deriv-nexus-martingale.md) — stake progression is independent of recovery-market selection; wins reset to base and the session stop-loss budget remains enforced.
-- [Deriv tick subscription recovery](deriv-tick-subscription-recovery.md) — duplicate symbol streams need one-shot forget-all recovery before retrying ticks.
+- [Deriv feed recovery](deriv-tick-subscription-recovery.md) — authenticated duplicates need forget-all; public scans need keepalives and history resubscription after disconnects.
 - [Deriv builder and settlement validation](deriv-builder-settlement-validation.md) — validate bundled Blockly XML and merge partial settlement updates so mobile nodes and spots cannot disappear.
 - [Binary Matrix XML import guard](deriv-binary-matrix-import-guard.md) — keep root validation guarded through async fields; overlapping imports need shared leases, not independent timer clears.
 - [Binary Matrix single-runner guard](deriv-binary-matrix-single-runner.md) — modal and DBot Builder can create separate engines; only one Binary Matrix engine may start at a time.

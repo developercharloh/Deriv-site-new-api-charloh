@@ -22,6 +22,11 @@ class AutoScanSocket {
         this.readyState = 3;
     }
 
+    disconnect(): void {
+        this.readyState = 3;
+        this.onclose?.({} as CloseEvent);
+    }
+
     open(): void {
         this.onopen?.({} as Event);
     }
@@ -445,6 +450,32 @@ describe('BinaryMatrixEngine live purchase path', () => {
                 longcode: 'One-tick Even contract',
             },
         });
+        expect(sent.some(payload => payload.buy)).toBe(false);
+
+        publicSocket.disconnect();
+        expect(scanUpdates[scanUpdates.length - 1].message).toContain('Reconnecting');
+        jest.advanceTimersByTime(1000);
+        const reconnectedPublicSocket = AutoScanSocket.instance;
+        if (!reconnectedPublicSocket || reconnectedPublicSocket === publicSocket) {
+            throw new Error('Expected a fresh public scan connection.');
+        }
+        reconnectedPublicSocket.open();
+        const reconnectHistoryRequest = reconnectedPublicSocket.sent[0];
+        expect(reconnectHistoryRequest).toMatchObject({
+            ticks_history: selectedSymbol,
+            subscribe: 1,
+        });
+        reconnectedPublicSocket.respond({
+            msg_type: 'history',
+            req_id: reconnectHistoryRequest.req_id,
+            pip_size: 2,
+            history: {
+                prices: historyDigits.map((digit, index) => `${index + 1}.${digit}${digit}`),
+            },
+            subscription: { id: 'public-selected-market-after-reconnect' },
+        });
+        expect(sent.filter(payload => payload.ticks_history === selectedSymbol)).toHaveLength(1);
+        expect(sent.filter(payload => payload.proposal === 1)).toHaveLength(1);
         expect(sent.some(payload => payload.buy)).toBe(false);
 
         [1.13, 1.15, 1.17, 1.19].forEach(quote => emit({
