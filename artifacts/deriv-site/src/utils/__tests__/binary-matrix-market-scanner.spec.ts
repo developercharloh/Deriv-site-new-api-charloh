@@ -1,9 +1,13 @@
 import {
     calculateDigitRates,
+    calculateRateOfChange,
     analyzeBinaryMatrixHistory,
     BinaryMatrixMarketScanner,
+    getMomentumState,
+    momentumConfirmsDecision,
     wilsonLowerBound,
 } from '../binary-matrix-market-scanner';
+import { evaluateBinaryMatrix } from '../binary-matrix-strategy';
 import type { DerivVolatility } from '../deriv-volatilities';
 
 class FakeSocket {
@@ -56,6 +60,46 @@ describe('Binary Matrix market scanner evidence', () => {
         expect(rates[0]).toBeCloseTo(2 / 11);
         expect(rates[9]).toBeCloseTo(1 / 11);
         expect(calculateDigitRates([])).toEqual([]);
+    });
+
+    it('calculates ROC direction and only confirms matching Over/Under contracts', () => {
+        const rising = calculateRateOfChange([100, 101, 102, 103, 104, 105], 5);
+        const falling = calculateRateOfChange([105, 104, 103, 102, 101, 100], 5);
+        const evenDecision = evaluateBinaryMatrix([1, 3, 5, 7]);
+        const overDecision = evaluateBinaryMatrix([4, 1, 2, 3]);
+        const underDecision = evaluateBinaryMatrix([9, 6, 7, 8]);
+
+        expect(rising).toBeCloseTo(5);
+        expect(falling).toBeCloseTo(-100 * 5 / 105);
+        expect(calculateRateOfChange([100, 101], 5)).toBeNull();
+        expect(getMomentumState(rising)).toBe('rising');
+        expect(getMomentumState(falling)).toBe('falling');
+        expect(getMomentumState(0)).toBe('neutral');
+        expect(getMomentumState(null)).toBe('unavailable');
+        expect(momentumConfirmsDecision(overDecision!, rising)).toBe(true);
+        expect(momentumConfirmsDecision(overDecision!, falling)).toBe(false);
+        expect(momentumConfirmsDecision(underDecision!, falling)).toBe(true);
+        expect(momentumConfirmsDecision(underDecision!, rising)).toBe(false);
+        expect(momentumConfirmsDecision(evenDecision!, null)).toBe(true);
+    });
+
+    it('scores directional holdout examples only when ROC agrees with Over or Under', () => {
+        const digits: number[] = [];
+        for (let index = 0; index < 120; index += 1) digits.push(4, 1, 2, 3, 5);
+        digits.push(4, 1, 2, 3);
+        const risingPrices = digits.map((_, index) => 100 + index);
+        const fallingPrices = digits.map((_, index) => 1000 - index);
+
+        const risingEvidence = analyzeBinaryMatrixHistory(digits, risingPrices, 5);
+        const fallingEvidence = analyzeBinaryMatrixHistory(digits, fallingPrices, 5);
+
+        expect(risingEvidence.decision?.contractType).toBe('DIGITOVER');
+        expect(risingEvidence.trainingSampleCount).toBeGreaterThan(20);
+        expect(risingEvidence.sampleCount).toBeGreaterThan(30);
+        expect(risingEvidence.winRate).toBe(1);
+        expect(fallingEvidence.decision?.contractType).toBe('DIGITOVER');
+        expect(fallingEvidence.trainingSampleCount).toBe(0);
+        expect(fallingEvidence.sampleCount).toBe(0);
     });
 
     it('scores only the decision-specific chronological holdout results', () => {
@@ -120,7 +164,11 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             symbol: 'R_25',
             currentCondition: 'ALL_ODD',
             status: 'candidate',
+            ruleTriggered: true,
+            momentumState: 'rising',
+            trainingSampleCount: expect.any(Number),
         });
+        expect(completed.rows[0].recentPrices).toHaveLength(6);
 
         socket.respond({
             msg_type: 'tick',

@@ -26,6 +26,9 @@ import {
 } from './bot-contract-gate';
 import {
     BinaryMatrixMarketScanner,
+    calculateRateOfChange,
+    DEFAULT_BINARY_MATRIX_ROC_PERIOD,
+    momentumConfirmsDecision,
     type BinaryMatrixMarketScanRow,
     type BinaryMatrixScanSnapshot,
 } from './binary-matrix-market-scanner';
@@ -44,6 +47,7 @@ export interface BinaryMatrixConfig {
     stopLoss: number;
     reanalyzeAfterWins: number;
     autoMarketScan?: boolean;
+    momentumPeriod?: number;
 }
 
 export type BinaryMatrixStatus =
@@ -83,6 +87,12 @@ interface SelectedMarketEvidence {
 
 let activeBinaryMatrixEngine: BinaryMatrixEngine | null = null;
 const ACTIVE_ENGINE_KEY = '__DERIV_BINARY_MATRIX_ACTIVE_ENGINE__';
+const MAX_ROC_PERIOD = 50;
+
+const normalizeMomentumPeriod = (period: number | undefined): number =>
+    Number.isFinite(period)
+        ? Math.max(1, Math.min(MAX_ROC_PERIOD, Math.floor(period as number)))
+        : DEFAULT_BINARY_MATRIX_ROC_PERIOD;
 
 const getGlobalActiveEngine = (): BinaryMatrixEngine | null =>
     (globalThis as Record<string, unknown>)[ACTIVE_ENGINE_KEY] as BinaryMatrixEngine | null;
@@ -99,6 +109,7 @@ const setGlobalActiveEngine = (engine: BinaryMatrixEngine | null): void => {
 export class BinaryMatrixEngine {
     private readonly trader = new DTraderEngine();
     private readonly execution: BinaryMatrixExecutionCore;
+    private readonly marketScanner: BinaryMatrixMarketScanner;
     private config: BinaryMatrixConfig;
     private running = false;
     private paused = false;
@@ -115,12 +126,12 @@ export class BinaryMatrixEngine {
     private settledContracts = new Set<string>();
     private tickSerial = 0;
     private purchaseTickSerial = 0;
-    private readonly marketScanner = new BinaryMatrixMarketScanner();
     private scanSnapshot: BinaryMatrixScanSnapshot | null = null;
     private selectedMarket: SelectedMarketEvidence | null = null;
     private proposalApproved = false;
     private candidateSignalCurrent = false;
-    private selectedMarketTickCount = 0;
+    private proposalApprovedAtTickSerial = 0;
+    private momentumPrices: number[] = [];
     private rejectedCandidates = new Map<string, string>();
 
     public onLog: (log: DTLog) => void = () => {};
@@ -132,8 +143,9 @@ export class BinaryMatrixEngine {
     public onMarketScan: (snapshot: BinaryMatrixScanSnapshot) => void = () => {};
 
     constructor(config: BinaryMatrixConfig) {
-        this.config = config;
-        this.execution = new BinaryMatrixExecutionCore(config);
+        this.config = { ...config, momentumPeriod: normalizeMomentumPeriod(config.momentumPeriod) };
+        this.marketScanner = new BinaryMatrixMarketScanner({ momentumPeriod: this.config.momentumPeriod });
+        this.execution = new BinaryMatrixExecutionCore(this.config);
         this.currentStake = this.execution.snapshot().currentStake;
         this.bindTrader();
     }
@@ -181,12 +193,13 @@ export class BinaryMatrixEngine {
         this.settledContracts.clear();
         this.tickSerial = 0;
         this.purchaseTickSerial = 0;
+        this.proposalApprovedAtTickSerial = 0;
+        this.momentumPrices = [];
         this.marketScanner.stop();
         this.scanSnapshot = null;
         this.selectedMarket = null;
         this.proposalApproved = false;
         this.candidateSignalCurrent = false;
-        this.selectedMarketTickCount = 0;
         this.rejectedCandidates.clear();
         this.emitStats();
 
@@ -263,7 +276,11 @@ export class BinaryMatrixEngine {
     }
 
     updateConfig(config: Partial<BinaryMatrixConfig>): void {
-        this.config = { ...this.config, ...config };
+        this.config = {
+            ...this.config,
+            ...config,
+            momentumPeriod: normalizeMomentumPeriod(config.momentumPeriod ?? this.config.momentumPeriod),
+        };
         this.execution.updateConfig(config);
         if (!this.openContractId && !this.pendingDecision) {
             this.currentStake = this.execution.snapshot().currentStake;
@@ -272,9 +289,15 @@ export class BinaryMatrixEngine {
     }
 
     private bindTrader(): void {
-        this.trader.onTick = (_spot, digit) => {
+        this.trader.onTick = (spot, digit) => {
             if (!this.running) return;
             this.tickSerial += 1;
+            const quote = Number(spot);
+            if (Number.isFinite(quote)) {
+                this.momentumPrices = [...this.momentumPrices, quote].slice(
+                    -(this.config.momentumPeriod! + 1),
+                );
+            }
             this.digits = [...this.digits, digit].slice(-4);
             this.publishAnalysis();
             if (this.config.autoMarketScan) {
@@ -328,15 +351,6 @@ export class BinaryMatrixEngine {
             this.openContractId ? 'waiting' : this.selectedMarket ? 'selected' : snapshot.status,
             this.openContractId ? 'No new entry while the current contract settles.' : snapshot.message,
         );
-        if (this.selectedMarket && !this.openContractId && !this.pendingDecision) {
-            const selectedRow = snapshot.rows.find(row => row.symbol === this.selectedMarket?.symbol);
-            if (selectedRow?.currentCondition !== this.selectedMarket.condition) {
-                const key = this.candidateKey(this.selectedMarket.symbol, this.selectedMarket.condition);
-                this.rejectedCandidates.set(key, 'The selected market no longer has the same current digit condition.');
-                this.abandonAdaptiveCandidate('The selected market no longer has the same current digit condition.');
-                return;
-            }
-        }
         if (this.paused || this.openContractId || this.pendingDecision || this.selectedMarket) return;
 
         const candidates = snapshot.rows
@@ -384,9 +398,10 @@ export class BinaryMatrixEngine {
         };
         this.config.symbol = row.symbol;
         this.digits = row.currentDigits.slice(-4);
-        this.selectedMarketTickCount = 0;
+        this.momentumPrices = row.recentPrices.slice(-(this.config.momentumPeriod! + 1));
         this.candidateSignalCurrent = false;
         this.proposalApproved = false;
+        this.proposalApprovedAtTickSerial = 0;
         this.onStatus('scanning');
         this.writeLog(
             `Checking ${row.symbol} · ${decision.label} · ${row.sampleCount} holdout observations; requesting a live proposal.`,
@@ -408,20 +423,21 @@ export class BinaryMatrixEngine {
 
     private handleAdaptiveTick(): void {
         if (this.paused || this.openContractId || this.pendingDecision || !this.selectedMarket) return;
-        this.selectedMarketTickCount += 1;
         const analysis = analyzeBinaryMatrix(this.digits, this.activeDecision);
-        const signalMatches = analysis?.decision?.condition === this.selectedMarket.condition;
+        const decision = analysis?.decision;
+        const momentumRoc = calculateRateOfChange(
+            this.momentumPrices,
+            this.config.momentumPeriod,
+        );
+        const signalMatches = decision?.condition === this.selectedMarket.condition &&
+            momentumConfirmsDecision(decision, momentumRoc);
         this.candidateSignalCurrent = signalMatches;
 
-        if (!signalMatches) {
-            if (this.selectedMarketTickCount >= 1) {
-                const key = this.candidateKey(this.selectedMarket.symbol, this.selectedMarket.condition);
-                this.rejectedCandidates.set(key, 'The qualifying digit window changed before a fresh entry tick.');
-                this.abandonAdaptiveCandidate('The qualifying digit window changed before a fresh entry tick.');
-            }
-            return;
-        }
-        if (this.proposalApproved) this.tryPurchaseFromLatestTick();
+        if (
+            signalMatches &&
+            this.proposalApproved &&
+            this.tickSerial > this.proposalApprovedAtTickSerial
+        ) this.tryPurchaseFromLatestTick();
     }
 
     private handleAdaptiveProposal(proposal: DTProposal | null): void {
@@ -454,13 +470,17 @@ export class BinaryMatrixEngine {
             return;
         }
 
+        const wasApproved = this.proposalApproved;
         this.proposalApproved = true;
+        if (!wasApproved) this.proposalApprovedAtTickSerial = this.tickSerial;
         this.writeLog(
             `Live proposal clears break-even for ${this.selectedMarket.symbol} ${this.selectedMarket.condition}.`,
             'system',
         );
-        this.publishScan('selected', `Live payout check passed for ${this.selectedMarket.symbol}.`);
-        if (this.candidateSignalCurrent) this.tryPurchaseFromLatestTick();
+        this.publishScan(
+            'selected',
+            `Live payout check passed for ${this.selectedMarket.symbol}; waiting for a fresh matching tick.`,
+        );
     }
 
     private abandonAdaptiveCandidate(reason: string): void {
@@ -468,7 +488,8 @@ export class BinaryMatrixEngine {
         this.selectedMarket = null;
         this.proposalApproved = false;
         this.candidateSignalCurrent = false;
-        this.selectedMarketTickCount = 0;
+        this.proposalApprovedAtTickSerial = 0;
+        this.momentumPrices = [];
         this.onStatus('scanning');
         this.publishScan('scanning', reason);
     }
@@ -508,7 +529,7 @@ export class BinaryMatrixEngine {
         if (!this.scanSnapshot) return;
         const selected = this.selectedMarket;
         const rows = this.scanSnapshot.rows.map(row => {
-            if (selected?.symbol === row.symbol && selected.condition === row.currentCondition) {
+            if (selected?.symbol === row.symbol) {
                 const breakEven = selected.breakEvenWinRate;
                 return {
                     ...row,
@@ -516,8 +537,12 @@ export class BinaryMatrixEngine {
                     breakEvenWinRate: breakEven,
                     score: breakEven === null ? row.score : selected.lowerConfidenceBound - breakEven,
                     reason: this.proposalApproved
-                        ? 'Holdout confidence bound clears the live break-even rate.'
-                        : 'Historical holdout passed; waiting for a live payout check.',
+                        ? row.currentCondition === selected.condition
+                            ? 'Historical holdout and live payout pass; waiting for a fresh matching tick.'
+                            : `Selected ${selected.condition}; waiting for that rule to trigger again.`
+                        : row.currentCondition === selected.condition
+                            ? 'Historical holdout passed; waiting for a live payout check.'
+                            : `Selected ${selected.condition}; waiting for its live payout check and a fresh matching tick.`,
                 };
             }
 
@@ -707,7 +732,8 @@ export class BinaryMatrixEngine {
                 this.selectedMarket = null;
                 this.proposalApproved = false;
                 this.candidateSignalCurrent = false;
-                this.selectedMarketTickCount = 0;
+                this.proposalApprovedAtTickSerial = 0;
+                this.momentumPrices = [];
                 this.onStatus('scanning');
                 this.publishScan('scanning', 'Contract settled; comparing current volatility-market evidence again.');
                 return;
@@ -808,6 +834,8 @@ export class BinaryMatrixEngine {
         this.selectedMarket = null;
         this.proposalApproved = false;
         this.candidateSignalCurrent = false;
+        this.proposalApprovedAtTickSerial = 0;
+        this.momentumPrices = [];
         releaseBotContractGate(this);
         this.trader.stop();
         this.releaseRunnerLease();

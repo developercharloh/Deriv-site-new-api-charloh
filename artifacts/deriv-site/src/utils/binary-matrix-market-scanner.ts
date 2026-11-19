@@ -7,17 +7,26 @@ export type BinaryMatrixMarketRowStatus =
     | 'scanning'
     | 'candidate'
     | 'qualified'
+    | 'momentum-mismatch'
     | 'no-signal'
     | 'insufficient-data'
     | 'unavailable';
+
+export type BinaryMatrixMomentumState = 'rising' | 'falling' | 'neutral' | 'unavailable';
 
 export interface BinaryMatrixMarketScanRow {
     symbol: string;
     label: string;
     status: BinaryMatrixMarketRowStatus;
+    ruleTriggered: boolean;
     currentCondition: string | null;
     currentDigits: number[];
+    momentumRoc: number | null;
+    momentumState: BinaryMatrixMomentumState;
+    recentPrices: number[];
     digitRates: number[];
+    trainingSampleCount: number;
+    trainingWins: number;
     sampleCount: number;
     validationWins: number;
     validationWinRate: number | null;
@@ -41,9 +50,12 @@ export interface BinaryMatrixScanSnapshot {
 export interface BinaryMatrixHistoricalEvidence {
     decision: BinaryMatrixDecision | null;
     currentDigits: number[];
+    trainingSampleCount: number;
+    trainingWins: number;
     sampleCount: number;
     wins: number;
     winRate: number | null;
+    trainingWinRate: number | null;
     lowerConfidenceBound: number | null;
     score: number | null;
 }
@@ -59,6 +71,7 @@ interface MarketState {
     symbol: DerivVolatility;
     pipSize: number;
     digits: number[];
+    prices: number[];
     ready: boolean;
     unavailableReason?: string;
 }
@@ -79,6 +92,7 @@ const HISTORY_COUNT = 5000;
 const MIN_VALIDATION_SAMPLES = 30;
 const MIN_TRAINING_SAMPLES = 20;
 const FAMILY_WISE_Z = 3.29;
+export const DEFAULT_BINARY_MATRIX_ROC_PERIOD = 5;
 const HISTORY_REQUEST_TIMEOUT_MS = 8000;
 const NEXT_SYMBOL_DELAY_MS = 250;
 const MAX_DIGITS = 5000;
@@ -101,6 +115,41 @@ export function calculateDigitRates(digits: readonly number[], windowSize = 1000
         counts[digit] += 1;
     });
     return counts.map(count => count / window.length);
+}
+
+const calculateRateOfChangeAt = (
+    prices: readonly number[],
+    currentIndex: number,
+    period: number,
+): number | null => {
+    if (
+        !Number.isInteger(period) ||
+        period < 1 ||
+        !Number.isInteger(currentIndex) ||
+        currentIndex < period ||
+        currentIndex >= prices.length
+    ) return null;
+    const current = Number(prices[currentIndex]);
+    const previous = Number(prices[currentIndex - period]);
+    if (!Number.isFinite(current) || !Number.isFinite(previous) || previous === 0) return null;
+    return ((current - previous) / Math.abs(previous)) * 100;
+};
+
+export function calculateRateOfChange(prices: readonly number[], period = DEFAULT_BINARY_MATRIX_ROC_PERIOD): number | null {
+    return calculateRateOfChangeAt(prices, prices.length - 1, period);
+}
+
+export function getMomentumState(roc: number | null): BinaryMatrixMomentumState {
+    if (roc === null || !Number.isFinite(roc)) return 'unavailable';
+    if (roc > 0) return 'rising';
+    if (roc < 0) return 'falling';
+    return 'neutral';
+}
+
+export function momentumConfirmsDecision(decision: BinaryMatrixDecision, roc: number | null): boolean {
+    if (decision.contractType === 'DIGITOVER') return roc !== null && roc > 0;
+    if (decision.contractType === 'DIGITUNDER') return roc !== null && roc < 0;
+    return true;
 }
 
 export function wilsonLowerBound(wins: number, total: number, z = FAMILY_WISE_Z): number | null {
@@ -135,7 +184,11 @@ const didContractWin = (decision: BinaryMatrixDecision, digit: number): boolean 
  * The rule is selected using only the preceding four digits; the following
  * digit is the observed one-tick contract result.
  */
-export function analyzeBinaryMatrixHistory(digits: readonly number[]): BinaryMatrixHistoricalEvidence {
+export function analyzeBinaryMatrixHistory(
+    digits: readonly number[],
+    prices: readonly number[] = [],
+    momentumPeriod = DEFAULT_BINARY_MATRIX_ROC_PERIOD,
+): BinaryMatrixHistoricalEvidence {
     const normalized = digits.filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
     const decision = evaluateBinaryMatrix(normalized.slice(-4));
     const counts = new Map<string, RuleCounts>();
@@ -146,6 +199,17 @@ export function analyzeBinaryMatrixHistory(digits: readonly number[]): BinaryMat
         const priorWindow = normalized.slice(resultIndex - 4, resultIndex);
         const historicalDecision = evaluateBinaryMatrix(priorWindow);
         if (!historicalDecision?.condition) continue;
+        if (
+            historicalDecision.contractType === 'DIGITOVER' ||
+            historicalDecision.contractType === 'DIGITUNDER'
+        ) {
+            const historicalRoc = calculateRateOfChangeAt(
+                prices,
+                resultIndex - 1,
+                momentumPeriod,
+            );
+            if (!momentumConfirmsDecision(historicalDecision, historicalRoc)) continue;
+        }
         const previousResult = lastCountedAt.get(historicalDecision.condition);
         if (previousResult !== undefined && resultIndex - previousResult < 4) continue;
 
@@ -171,24 +235,28 @@ export function analyzeBinaryMatrixHistory(digits: readonly number[]): BinaryMat
         return {
             decision: null,
             currentDigits: normalized.slice(-4),
+            trainingSampleCount: 0,
+            trainingWins: 0,
             sampleCount: 0,
             wins: 0,
             winRate: null,
+            trainingWinRate: null,
             lowerConfidenceBound: null,
             score: null,
         };
     }
 
     const evidence = counts.get(decision.condition);
+    const trainingSampleCount = evidence?.trainingTotal ?? 0;
+    const trainingWins = evidence?.trainingWins ?? 0;
     const sampleCount = evidence?.validationTotal ?? 0;
     const wins = evidence?.validationWins ?? 0;
     const winRate = sampleCount > 0 ? wins / sampleCount : null;
+    const trainingWinRate = trainingSampleCount > 0 ? trainingWins / trainingSampleCount : null;
     const lowerConfidenceBound =
-        evidence && evidence.trainingTotal >= MIN_TRAINING_SAMPLES && sampleCount >= MIN_VALIDATION_SAMPLES
+        trainingSampleCount >= MIN_TRAINING_SAMPLES && sampleCount >= MIN_VALIDATION_SAMPLES
             ? wilsonLowerBound(wins, sampleCount)
             : null;
-    const trainingWinRate =
-        evidence && evidence.trainingTotal > 0 ? evidence.trainingWins / evidence.trainingTotal : null;
     const clearsTrainingCheck = trainingWinRate !== null && trainingWinRate > 0.5;
     const score =
         lowerConfidenceBound !== null && clearsTrainingCheck
@@ -198,9 +266,12 @@ export function analyzeBinaryMatrixHistory(digits: readonly number[]): BinaryMat
     return {
         decision,
         currentDigits: normalized.slice(-4),
+        trainingSampleCount,
+        trainingWins,
         sampleCount,
         wins,
         winRate,
+        trainingWinRate,
         lowerConfidenceBound: clearsTrainingCheck ? lowerConfidenceBound : null,
         score,
     };
@@ -215,20 +286,25 @@ export class BinaryMatrixMarketScanner {
     private stopped = true;
     private socketFactory: SocketFactory;
     private symbols: DerivVolatility[];
+    private readonly momentumPeriod: number;
     private readonly marketStates = new Map<string, MarketState>();
     private readonly subscriptionSymbols = new Map<string, string>();
     private readonly rowsBySymbol = new Map<string, BinaryMatrixMarketScanRow>();
     private onUpdate: (snapshot: BinaryMatrixScanSnapshot) => void = () => {};
     private onError: (message: string) => void = () => {};
 
-    constructor(options: { socketFactory?: SocketFactory; symbols?: DerivVolatility[] } = {}) {
+    constructor(options: { socketFactory?: SocketFactory; symbols?: DerivVolatility[]; momentumPeriod?: number } = {}) {
         this.socketFactory = options.socketFactory ?? defaultSocketFactory;
         this.symbols = options.symbols ?? DERIV_VOLATILITIES;
+        this.momentumPeriod = Number.isInteger(options.momentumPeriod) && options.momentumPeriod! > 0
+            ? options.momentumPeriod!
+            : DEFAULT_BINARY_MATRIX_ROC_PERIOD;
         this.symbols.forEach(symbol => {
             this.marketStates.set(symbol.code, {
                 symbol,
                 pipSize: 2,
                 digits: [],
+                prices: [],
                 ready: false,
             });
         });
@@ -296,6 +372,7 @@ export class BinaryMatrixMarketScanner {
                 symbol,
                 pipSize: 2,
                 digits: [],
+                prices: [],
                 ready: false,
             };
             this.marketStates.set(symbol.code, state);
@@ -376,10 +453,16 @@ export class BinaryMatrixMarketScanner {
         }
 
         state.pipSize = pipSize;
-        state.digits = prices
-            .map((price: unknown) => lastDigitFromQuote(price, pipSize))
-            .filter((digit: number | null): digit is number => digit !== null)
+        const validTicks = prices
+            .map((price: unknown) => {
+                const quote = Number(price);
+                const digit = lastDigitFromQuote(price, pipSize);
+                return Number.isFinite(quote) && digit !== null ? { quote, digit } : null;
+            })
+            .filter((tick: { quote: number; digit: number } | null): tick is { quote: number; digit: number } => tick !== null)
             .slice(-MAX_DIGITS);
+        state.digits = validTicks.map(tick => tick.digit);
+        state.prices = validTicks.map(tick => tick.quote);
         state.ready = state.digits.length >= 100;
         if (!state.ready) {
             state.unavailableReason = `Only ${state.digits.length} valid tick digits were returned.`;
@@ -425,6 +508,7 @@ export class BinaryMatrixMarketScanner {
         if (digit === null) return;
         state.pipSize = pip;
         state.digits = [...state.digits, digit].slice(-MAX_DIGITS);
+        state.prices = [...state.prices, Number(quote)].slice(-MAX_DIGITS);
         this.refreshRow(state);
         this.emit('scanning', 'Monitoring live volatility ticks.');
     }
@@ -464,9 +548,15 @@ export class BinaryMatrixMarketScanner {
                 symbol: state.symbol.code,
                 label: state.symbol.label,
                 status: 'unavailable',
+                ruleTriggered: false,
                 currentCondition: null,
                 currentDigits: state.digits.slice(-4),
+                momentumRoc: calculateRateOfChange(state.prices, this.momentumPeriod),
+                momentumState: getMomentumState(calculateRateOfChange(state.prices, this.momentumPeriod)),
+                recentPrices: state.prices.slice(-(this.momentumPeriod + 1)),
                 digitRates: calculateDigitRates(state.digits),
+                trainingSampleCount: 0,
+                trainingWins: 0,
                 sampleCount: 0,
                 validationWins: 0,
                 validationWinRate: null,
@@ -482,9 +572,15 @@ export class BinaryMatrixMarketScanner {
                 symbol: state.symbol.code,
                 label: state.symbol.label,
                 status: 'scanning',
+                ruleTriggered: false,
                 currentCondition: null,
                 currentDigits: state.digits.slice(-4),
+                momentumRoc: calculateRateOfChange(state.prices, this.momentumPeriod),
+                momentumState: getMomentumState(calculateRateOfChange(state.prices, this.momentumPeriod)),
+                recentPrices: state.prices.slice(-(this.momentumPeriod + 1)),
                 digitRates: calculateDigitRates(state.digits),
+                trainingSampleCount: 0,
+                trainingWins: 0,
                 sampleCount: 0,
                 validationWins: 0,
                 validationWinRate: null,
@@ -495,15 +591,22 @@ export class BinaryMatrixMarketScanner {
             };
         }
 
-        const evidence = analyzeBinaryMatrixHistory(state.digits);
+        const currentRoc = calculateRateOfChange(state.prices, this.momentumPeriod);
+        const evidence = analyzeBinaryMatrixHistory(state.digits, state.prices, this.momentumPeriod);
         if (!evidence.decision) {
             return {
                 symbol: state.symbol.code,
                 label: state.symbol.label,
                 status: 'no-signal',
+                ruleTriggered: false,
                 currentCondition: null,
                 currentDigits: evidence.currentDigits,
+                momentumRoc: currentRoc,
+                momentumState: getMomentumState(currentRoc),
+                recentPrices: state.prices.slice(-(this.momentumPeriod + 1)),
                 digitRates: calculateDigitRates(state.digits),
+                trainingSampleCount: 0,
+                trainingWins: 0,
                 sampleCount: 0,
                 validationWins: 0,
                 validationWinRate: null,
@@ -514,17 +617,29 @@ export class BinaryMatrixMarketScanner {
             };
         }
 
-        const qualified =
+        const historicalQualified =
             evidence.sampleCount >= MIN_VALIDATION_SAMPLES &&
             evidence.lowerConfidenceBound !== null &&
             evidence.lowerConfidenceBound > 0.5;
+        const currentMomentumConfirmed = momentumConfirmsDecision(evidence.decision, currentRoc);
+        const qualified = historicalQualified && currentMomentumConfirmed;
         return {
             symbol: state.symbol.code,
             label: state.symbol.label,
-            status: qualified ? 'candidate' : 'insufficient-data',
+            status: qualified
+                ? 'candidate'
+                : historicalQualified && !currentMomentumConfirmed
+                  ? 'momentum-mismatch'
+                  : 'insufficient-data',
+            ruleTriggered: true,
             currentCondition: evidence.decision.condition ?? null,
             currentDigits: evidence.currentDigits,
+            momentumRoc: currentRoc,
+            momentumState: getMomentumState(currentRoc),
+            recentPrices: state.prices.slice(-(this.momentumPeriod + 1)),
             digitRates: calculateDigitRates(state.digits),
+            trainingSampleCount: evidence.trainingSampleCount,
+            trainingWins: evidence.trainingWins,
             sampleCount: evidence.sampleCount,
             validationWins: evidence.wins,
             validationWinRate: evidence.winRate,
@@ -532,11 +647,23 @@ export class BinaryMatrixMarketScanner {
             breakEvenWinRate: null,
             score: evidence.score,
             reason: qualified
-                ? 'Historical holdout clears the 50% baseline; broker break-even still needs checking.'
-                : evidence.sampleCount < MIN_VALIDATION_SAMPLES
-                  ? 'Not enough matching out-of-sample trades to evaluate this rule.'
-                  : 'The out-of-sample confidence bound does not clear the 50% baseline.',
+                ? `Historical holdout clears the 50% baseline; ROC ${this.momentumLabel(evidence.decision)}; live payout still needs checking.`
+                : historicalQualified && !currentMomentumConfirmed
+                  ? `Rule triggered, but current ROC is ${getMomentumState(currentRoc)}; ${this.momentumLabel(evidence.decision)}.`
+                : evidence.trainingSampleCount < MIN_TRAINING_SAMPLES
+                  ? `Rule triggered, but only ${evidence.trainingSampleCount} training examples; at least ${MIN_TRAINING_SAMPLES} are required.`
+                  : evidence.sampleCount < MIN_VALIDATION_SAMPLES
+                    ? `Rule triggered, but only ${evidence.sampleCount} holdout examples; at least ${MIN_VALIDATION_SAMPLES} are required.`
+                    : evidence.trainingWinRate === null || evidence.trainingWinRate <= 0.5
+                      ? 'Rule triggered, but the training win rate does not clear 50%.'
+                      : 'Rule triggered, but the holdout confidence bound does not clear 50%.',
         };
+    }
+
+    private momentumLabel(decision: BinaryMatrixDecision): string {
+        if (decision.contractType === 'DIGITOVER') return 'confirms rising momentum';
+        if (decision.contractType === 'DIGITUNDER') return 'confirms falling momentum';
+        return 'does not direction-filter Even/Odd';
     }
 
     private emit(status: BinaryMatrixScanSnapshot['status'], message: string): void {

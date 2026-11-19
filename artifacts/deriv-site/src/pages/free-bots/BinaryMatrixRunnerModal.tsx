@@ -25,6 +25,7 @@ interface RunnerSettings {
     stopLoss: string;
     martingale: string;
     reanalyzeAfterWins: string;
+    momentumPeriod: string;
 }
 
 const DEFAULT_SETTINGS: RunnerSettings = {
@@ -33,6 +34,7 @@ const DEFAULT_SETTINGS: RunnerSettings = {
     stopLoss: '50',
     martingale: '2',
     reanalyzeAfterWins: '3',
+    momentumPeriod: '5',
 };
 
 const STATUS_LABELS: Record<BinaryMatrixStatus, string> = {
@@ -68,6 +70,7 @@ const MARKET_STATUS_LABELS: Record<BinaryMatrixMarketScanRow['status'], string> 
     scanning: 'Scanning',
     candidate: 'Payout check pending',
     qualified: 'Qualified',
+    'momentum-mismatch': 'ROC mismatch',
     'no-signal': 'No signal',
     'insufficient-data': 'Insufficient data',
     unavailable: 'Unavailable',
@@ -79,6 +82,11 @@ function formatRate(value: number | null): string {
 
 function formatScore(value: number | null): string {
     return value === null || !Number.isFinite(value) ? '—' : value.toFixed(3);
+}
+
+function formatRoc(value: number | null): string {
+    if (value === null || !Number.isFinite(value)) return '—';
+    return `${value > 0 ? '+' : ''}${value.toFixed(4)}%`;
 }
 
 function getHotColdDigitSets(rates: number[]): { hot: Set<number>; cold: Set<number> } {
@@ -120,6 +128,10 @@ function readSettings(): RunnerSettings {
 function numberSetting(value: string, fallback: number, minimum: number): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed >= minimum ? parsed : fallback;
+}
+
+function momentumPeriodSetting(value: string): number {
+    return Math.max(1, Math.min(50, Math.floor(numberSetting(value, 5, 1))));
 }
 
 const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
@@ -185,6 +197,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
             stopLoss: numberSetting(settings.stopLoss, 50, 0.01),
             martingale: numberSetting(settings.martingale, 2, 1),
             reanalyzeAfterWins: Math.max(1, Math.floor(numberSetting(settings.reanalyzeAfterWins, 3, 1))),
+            momentumPeriod: momentumPeriodSetting(settings.momentumPeriod),
             autoMarketScan: true,
         };
 
@@ -303,6 +316,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                 <div className='matrix-modal__eyebrow'>Adaptive market selection</div>
                                 <h2 id='matrix-scan-title'>Scan evidence</h2>
                                 <p>Only statistically qualified markets are eligible. No profitability is implied.</p>
+                                <p>ROC confirms Over/Under direction; Even/Odd remains independent of price momentum.</p>
                             </div>
                             <div className={`matrix-modal__scan-state matrix-modal__scan-state--${scan.status}`} role='status' aria-live='polite' data-testid='status-market-scan'>
                                 <span className='matrix-modal__scan-indicator' />
@@ -311,15 +325,18 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                         </div>
                         <div className='matrix-modal__scan-summary'>
                             <div><span>Markets reviewed</span><strong data-testid='text-markets-reviewed'>{scan.completedMarkets} / {scan.totalMarkets}</strong></div>
-                            <div><span>Eligible candidates</span><strong data-testid='text-qualified-count'>{scan.rows.filter(row => row.status === 'qualified').length}</strong></div>
+                            <div><span>Current rule triggers</span><strong data-testid='text-triggered-count'>{scan.rows.filter(row => row.ruleTriggered).length}</strong></div>
+                            <div><span>Eligible candidates</span><strong data-testid='text-qualified-count'>{scan.rows.filter(row => row.status === 'candidate' || row.status === 'qualified').length}</strong></div>
                             <div><span>Selected market</span><strong data-testid='text-selected-market'>{scan.selectedSymbol || 'None'}</strong></div>
                         </div>
                         <div className='matrix-modal__scan-message' data-testid='text-scan-message'>
                             {scan.status === 'selected' && scan.selectedSymbol
                                 ? `Selected ${scan.selectedSymbol}${scan.selectedContract ? ` · ${scan.selectedContract}` : ''}`
                                 : scan.status === 'waiting' ? 'No new entry while the current contract settles.'
-                                  : scan.completedMarkets === scan.totalMarkets && scan.totalMarkets > 0 && !scan.rows.some(row => row.status === 'qualified')
-                                    ? 'No trade — no market currently meets the qualification criteria.'
+                                  : scan.completedMarkets === scan.totalMarkets && scan.totalMarkets > 0 && !scan.rows.some(row => row.status === 'candidate' || row.status === 'qualified')
+                                    ? scan.rows.some(row => row.ruleTriggered)
+                                        ? 'Rules triggered, but no market currently passes every entry gate. Check each market’s reason below.'
+                                        : 'No trade — no Binary Matrix rule currently matches the latest digits.'
                                     : scan.message}
                         </div>
                         {scan.updatedAt !== null && (
@@ -349,11 +366,21 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                                 <strong>{row.label}</strong><code>{row.symbol}</code>
                                             </div>
                                             <span className={`matrix-modal__market-status matrix-modal__market-status--${row.status}`} data-testid={`status-market-${row.symbol}`}>
-                                                {scan.selectedSymbol === row.symbol && row.status === 'qualified' ? 'Selected' : MARKET_STATUS_LABELS[row.status]}
+                                                {scan.selectedSymbol === row.symbol
+                                                    ? row.ruleTriggered
+                                                        ? row.status === 'qualified' ? 'Selected · payout cleared' : 'Selected · rule visible'
+                                                        : 'Selected · waiting for rule'
+                                                    : row.ruleTriggered && row.status === 'insufficient-data'
+                                                        ? 'Rule triggered · not qualified'
+                                                        : MARKET_STATUS_LABELS[row.status]}
                                             </span>
                                         </div>
                                         <div className='matrix-modal__market-condition'>
                                             <span>Current condition</span><strong>{row.currentCondition || '—'}</strong>
+                                        </div>
+                                        <div className={`matrix-modal__momentum matrix-modal__momentum--${row.momentumState}`} data-testid={`momentum-${row.symbol}`}>
+                                            <span>{momentumPeriodSetting(settings.momentumPeriod)}-tick ROC</span>
+                                            <strong>{formatRoc(row.momentumRoc)} · {row.momentumState}</strong>
                                         </div>
                                         <div className='matrix-modal__digits' aria-label={`Recent digits for ${row.label}`}>
                                             {row.currentDigits.length ? row.currentDigits.map((digit, index) => (
@@ -384,8 +411,8 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                             )}
                                         </div>
                                         <div className='matrix-modal__evidence'>
-                                            <div><span>Sample</span><strong>{row.sampleCount}</strong></div>
-                                            <div><span>Validation wins</span><strong>{row.validationWins}</strong></div>
+                                            <div><span>Training wins / samples</span><strong>{row.trainingWins} / {row.trainingSampleCount}</strong></div>
+                                            <div><span>Holdout wins / samples</span><strong>{row.validationWins} / {row.sampleCount}</strong></div>
                                             <div><span>Validation rate</span><strong>{formatRate(row.validationWinRate)}</strong></div>
                                             <div><span>Lower bound</span><strong>{formatRate(row.lowerConfidenceBound)}</strong></div>
                                             <div><span>Break-even</span><strong>{formatRate(row.breakEvenWinRate)}</strong></div>
@@ -435,12 +462,14 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                 ['stopLoss', 'Stop Loss ($)', '0.5'],
                                 ['martingale', 'Martingale ×', '0.1'],
                                 ['reanalyzeAfterWins', 'Re-analyse after wins', '1'],
+                                ['momentumPeriod', 'ROC lookback (ticks)', '1'],
                             ] as const).map(([key, label, step]) => (
                                 <label className='matrix-modal__field' key={key}>
                                     <span>{label}</span>
                                     <input
                                         type='number'
-                                        min='0'
+                                        min={key === 'momentumPeriod' ? '1' : '0'}
+                                        max={key === 'momentumPeriod' ? '50' : undefined}
                                         step={step}
                                         value={settings[key]}
                                         disabled={isRunning}

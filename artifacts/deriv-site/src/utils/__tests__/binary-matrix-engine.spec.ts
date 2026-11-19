@@ -427,6 +427,13 @@ describe('BinaryMatrixEngine live purchase path', () => {
         });
         expect(sent.some(payload => payload.buy)).toBe(false);
         emit({
+            msg_type: 'tick',
+            subscription: { id: 'adaptive-live-ticks' },
+            tick: { quote: 1.12, pip_size: 2 },
+        });
+        expect(sent.some(payload => payload.buy)).toBe(false);
+        expect(scanUpdates.some(snapshot => snapshot.selectedSymbol === selectedSymbol)).toBe(true);
+        emit({
             msg_type: 'proposal',
             req_id: proposalRequest.req_id,
             subscription: { id: 'adaptive-live-proposal' },
@@ -440,11 +447,11 @@ describe('BinaryMatrixEngine live purchase path', () => {
         });
         expect(sent.some(payload => payload.buy)).toBe(false);
 
-        emit({
+        [1.13, 1.15, 1.17, 1.19].forEach(quote => emit({
             msg_type: 'tick',
             subscription: { id: 'adaptive-live-ticks' },
-            tick: { quote: 1.11, pip_size: 2 },
-        });
+            tick: { quote, pip_size: 2 },
+        }));
         const buy = latest(payload => payload.buy === 'adaptive-even-proposal');
         expect(buy).toMatchObject({ price: 0.5, buy: 'adaptive-even-proposal' });
         expect(scanUpdates.some(snapshot =>
