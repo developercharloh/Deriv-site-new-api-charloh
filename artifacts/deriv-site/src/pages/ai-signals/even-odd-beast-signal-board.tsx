@@ -50,10 +50,23 @@ interface EvenOddBeastSignalBoardProps {
     onSelectSignal: (selection: EvenOddBeastSignalSelection) => void;
 }
 
+export const hasStrongEvenOddBeastSignal = (
+    analysis: EvenOddBeastAnalysis,
+): analysis is EvenOddBeastAnalysis & { signal: 'EVEN' | 'ODD' } => {
+    if (analysis.signal === 'EVEN') {
+        return analysis.setupSignal === 'EVEN' && analysis.evenConditions && analysis.matchedDigit !== null;
+    }
+    if (analysis.signal === 'ODD') {
+        return analysis.setupSignal === 'ODD' && analysis.oddConditions && analysis.matchedDigit !== null;
+    }
+    return false;
+};
+
 export const canTradeEvenOddBeastSignal = (
-    side: EvenOddBeastAnalysis['setupSignal'],
+    analysis: EvenOddBeastAnalysis,
     feedFresh: boolean,
-): side is 'EVEN' | 'ODD' => feedFresh && (side === 'EVEN' || side === 'ODD');
+): analysis is EvenOddBeastAnalysis & { signal: 'EVEN' | 'ODD' } =>
+    feedFresh && hasStrongEvenOddBeastSignal(analysis);
 
 const makeInitialFeeds = (): Record<string, MarketFeed> => Object.fromEntries(
     DERIV_CONTINUOUS_VOLATILITIES.map(symbol => [symbol.code, {
@@ -121,9 +134,31 @@ function MiniCandleChart({ candles, label }: { candles: Candle[]; label: string 
 function setupStatus(analysis: EvenOddBeastAnalysis, feedFresh: boolean, active: boolean) {
     if (!active) return { label: 'Paused', ready: false };
     if (!feedFresh) return { label: 'Waiting for live data', ready: false };
-    if (analysis.setupSignal === 'EVEN') return { label: 'EVEN setup ready', ready: true };
-    if (analysis.setupSignal === 'ODD') return { label: 'ODD setup ready', ready: true };
-    return { label: 'Waiting for setup', ready: false };
+    if (hasStrongEvenOddBeastSignal(analysis) && analysis.signal === 'EVEN') {
+        return { label: 'STRONG EVEN · ALL 6/6 CHECKS PASS', ready: true };
+    }
+    if (hasStrongEvenOddBeastSignal(analysis) && analysis.signal === 'ODD') {
+        return { label: 'STRONG ODD · ALL 6/6 CHECKS PASS', ready: true };
+    }
+    if (analysis.reason === 'indicator_conditions_not_met' || analysis.reason === 'decimal_digits_do_not_match') {
+        const candidateSide = analysis.candleColor === 'RED' ? 'EVEN' : 'ODD';
+        const checks = getEvenOddSetupChecks(analysis, candidateSide);
+        const passed = checks.filter(check => check.met).length;
+        return { label: `WEAK CONDITIONS · ${passed}/6 ${candidateSide} CHECKS · NOT TRADEABLE`, ready: false };
+    }
+    return { label: 'Waiting for a complete setup', ready: false };
+}
+
+function getEvenOddSetupChecks(analysis: EvenOddBeastAnalysis, side: 'EVEN' | 'ODD') {
+    const even = side === 'EVEN';
+    return [
+        { label: `${even ? 'Red' : 'Green'} candle`, met: analysis.candleColor === (even ? 'RED' : 'GREEN') },
+        { label: `Close ${even ? 'below' : 'above'} MA9`, met: analysis.priceVsMovingAverage === (even ? 'BELOW' : 'ABOVE') },
+        { label: `MA9 ${even ? 'falling' : 'rising'}`, met: analysis.movingAverageTrend === (even ? 'FALLING' : 'RISING') },
+        { label: `MACD histogram ${even ? 'negative' : 'positive'}`, met: analysis.macdHistogram !== null && (even ? analysis.macdHistogram < 0 : analysis.macdHistogram > 0) },
+        { label: `MACD ${even ? 'falling' : 'rising'}`, met: analysis.macdTrend === (even ? 'FALLING' : 'RISING') },
+        { label: 'Candle and MA9 decimal digits match', met: analysis.matchedDigit !== null },
+    ];
 }
 
 export function EvenOddBeastSignalBoard({
@@ -281,12 +316,16 @@ export function EvenOddBeastSignalBoard({
             <div className='eob-board__rule'>
                 ODD: green candle above a rising MA9, with a positive and rising MACD histogram.
                 EVEN: red candle below a falling MA9, with a negative and falling MACD histogram.
+                A strong label also requires matching candle and MA9 decimal digits. Weak setups cannot be traded;
+                strong means the listed checks pass, not that profit is guaranteed.
             </div>
 
             <div className='eob-board__grid'>
                 {markets.map(({ symbol, feed, feedFresh, candleCloseCountdown, analysis, status }) => {
-                    const canTrade = canTradeEvenOddBeastSignal(analysis.setupSignal, feedFresh);
+                    const canTrade = canTradeEvenOddBeastSignal(analysis, feedFresh);
                     const histogram = analysis.macdHistogram;
+                    const candidateSide = analysis.candleColor === 'RED' ? 'EVEN' : 'ODD';
+                    const setupChecks = getEvenOddSetupChecks(analysis, candidateSide);
                     return (
                         <article key={symbol.code} className='eob-board__market'>
                             <div className='eob-board__market-header'>
@@ -316,9 +355,17 @@ export function EvenOddBeastSignalBoard({
                                 <strong>{feedFresh ? formatCandleCloseCountdown(candleCloseCountdown) : 'Waiting'}</strong>
                             </div>
 
-                            <div className={`eob-board__signal${status.ready ? ` eob-board__signal--${analysis.setupSignal.toLowerCase()}` : ''}`}>
+                            <div className={`eob-board__signal${status.ready ? ` eob-board__signal--${analysis.signal.toLowerCase()}` : ' eob-board__signal--weak'}`}>
                                 <span className='eob-board__signal-dot' />
                                 <strong>{status.label}</strong>
+                            </div>
+
+                            <div className='eob-board__quality-checks' aria-label={`${candidateSide} setup conditions`}>
+                                {setupChecks.map(check => (
+                                    <span className={check.met ? 'eob-board__quality-check eob-board__quality-check--met' : 'eob-board__quality-check'} key={check.label}>
+                                        <i aria-hidden='true'>{check.met ? '✓' : '✗'}</i>{check.label}
+                                    </span>
+                                ))}
                             </div>
 
                             <div className='eob-board__conditions'>
@@ -339,9 +386,10 @@ export function EvenOddBeastSignalBoard({
                                 type='button'
                                 className='eob-board__trade'
                                 disabled={!canTrade || maintenanceActive}
+                                title={canTrade ? 'All six Even/Odd checks passed with fresh live data' : 'Trading is disabled until every Even/Odd condition passes on fresh data'}
                                 onClick={() => {
-                                    if (canTradeEvenOddBeastSignal(analysis.setupSignal, feedFresh)) {
-                                        onSelectSignal({ symbol, side: analysis.setupSignal, analysis });
+                                    if (canTradeEvenOddBeastSignal(analysis, feedFresh)) {
+                                        onSelectSignal({ symbol, side: analysis.signal, analysis });
                                     }
                                 }}
                             >

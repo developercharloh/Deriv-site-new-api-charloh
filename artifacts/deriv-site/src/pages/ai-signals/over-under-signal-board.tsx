@@ -270,7 +270,8 @@ export function OverUnderSignalBoard({
                 Signals use the same indicator filters as Matches. Over 4/5 require MACD 12/26/9 descending from above
                 with a contracting positive histogram; Under 6/5 require Trend Strength Index 14 at 0.8–0.9, three flat updates, and a green
                 candle. The Enter Now button stays available whenever an indicator setup and fresh feed are ready.
-                00:02 is a timing reference only; choose your own entry moment.
+                Only setups with every indicator check and fresh live data are marked strong. 00:02 is a timing reference only;
+                strong means the listed conditions pass, not that profit is guaranteed.
             </p>
             <div className='ou-board__grid'>
                 {cards.map(({ symbol, feed, feedFresh, lastCandle, secondsToClose, setups }) => {

@@ -24,7 +24,11 @@ import { MatchesKingConfig, type MatchesKingRunSettings } from './MatchesKingCon
 import type { MatchesKingSignalSelection } from './matches-signal-board';
 import { OverUnderSignalBoard, type OverUnderSignalSelection } from './over-under-signal-board';
 import { OverUnderSecretWeaponConfig, type SecretWeaponRunSettings } from './OverUnderSecretWeaponConfig';
-import { EvenOddBeastSignalBoard, type EvenOddBeastSignalSelection } from './even-odd-beast-signal-board';
+import {
+    EvenOddBeastSignalBoard,
+    hasStrongEvenOddBeastSignal,
+    type EvenOddBeastSignalSelection,
+} from './even-odd-beast-signal-board';
 import { EvenOddBeastConfig, type EvenOddBeastRunSettings } from './EvenOddBeastConfig';
 import {
     getOverUnderSignalOptions,
@@ -1362,6 +1366,9 @@ const AiSignalsPage: React.FC = () => {
         setEvenOddBeastSaving(true);
         setEvenOddBeastError('');
         try {
+            if (selected.side !== selected.analysis.signal || !hasStrongEvenOddBeastSignal(selected.analysis)) {
+                throw new Error('This Even/Odd setup does not pass every required condition. Re-scan and choose a strong signal.');
+            }
             if (!store) throw new Error('DBot Builder is not ready.');
             if (store.run_panel?.is_running) {
                 throw new Error('Stop the currently running bot before loading Even Odd Beast.');

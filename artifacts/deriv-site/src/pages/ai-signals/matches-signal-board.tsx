@@ -537,6 +537,7 @@ export function MatchesSignalBoard({
                     : strategy === 'tsi'
                     ? 'Enter Now appears when the live candle is green, normalized TSI is 0.80–0.90 and flat. 00:02 is a timing reference only.'
                     : 'Enter Now appears when MACD descends toward signal from above and signal-line magnitude exceeds histogram height. 00:02 is a timing reference only.'}
+                {' '}A strong label means all listed strategy checks pass; it is not a profit guarantee.
                 {' '}After you save and run #19, it starts selecting entries from incoming live ticks.
             </div>
 
@@ -680,7 +681,7 @@ export function MatchesSignalBoard({
                             <span>{ready
                                 ? `STRONG SETUP · ALL ${strategyChecks.length}/${strategyChecks.length} CHECKS PASS`
                                 : !feedFresh
-                                    ? 'Waiting for fresh live data'
+                                    ? 'Waiting for live data'
                                     : `WEAK CONDITIONS · ${passedChecks}/${strategyChecks.length} CHECKS · NOT TRADEABLE`}</span>
                         </div>
                         {mode === 'tsi' ? (
@@ -702,8 +703,8 @@ export function MatchesSignalBoard({
                             <span className={feedFresh ? 'is-ready' : 'is-weak'}>
                                 <i aria-hidden='true'>{feedFresh ? '✓' : '✗'}</i> Fresh live feed
                             </span>
-                            <span className={secondsToClose === 2 ? 'is-ready' : ''}>
-                                00:02 timing reference · {formatCandleCountdown(secondsToClose)}
+                            <span className={secondsToClose === 2 ? 'is-ready' : ''} aria-label={`Candle-close timing reference, not a signal gate: ${formatCandleCountdown(secondsToClose)}`}>
+                                {formatCandleCountdown(secondsToClose)}
                             </span>
                         </div>
 

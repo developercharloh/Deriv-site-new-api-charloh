@@ -61,6 +61,7 @@ describe('Matches shared market board', () => {
         expect(screen.getByText('8/8 live')).toBeInTheDocument();
         expect(screen.getAllByRole('img')).toHaveLength(16);
         expect(screen.getAllByText('00:02')).toHaveLength(16);
+        expect(screen.getAllByText(/WEAK CONDITIONS/)).toHaveLength(16);
         expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
         expect(within(container.querySelector('article')!).getByText('MATCHES 0–4 · TSI')).toBeInTheDocument();
         await act(async () => { jest.advanceTimersByTime(3_000); });
@@ -129,7 +130,7 @@ describe('Matches shared market board', () => {
         await liveAt(4198);
         expect(screen.getAllByText('00:02')).toHaveLength(8);
         // Each market has one status plus four digit-specific alerts.
-        expect(screen.getAllByText('SETUP READY · ENTER WHEN YOU CHOOSE')).toHaveLength(8);
+        expect(screen.getAllByText('STRONG SETUP · ALL 2/2 CHECKS PASS')).toHaveLength(8);
         expect(screen.getAllByLabelText(/Ready setup: .* Matches digits six through nine/)).toHaveLength(8);
         // Stop delivering messages, then restore the live feed.
         await act(async () => { jest.advanceTimersByTime(3_000); });
