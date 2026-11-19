@@ -8,6 +8,7 @@ import {
     destroyerBotIdFromDirection,
     fetchAndPatchBot,
     loadPatchedBotIntoWorkspace,
+    prefetchBotXml,
     restoreMatchesKingWorkspaceSymbol,
     restoreEvenOddBeastWorkspace,
     runOverUnderSecretWeapon,
@@ -15,6 +16,7 @@ import {
     type BotSignal,
 } from '@/utils/bot-patch';
 import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
+import { waitForBotBuilderReady } from '@/utils/bot-builder-readiness';
 import { LogTypes, MessageTypes } from '@/external/bot-skeleton';
 import { captureDropdownSelections } from '@/external/bot-skeleton/scratch/utils';
 import { MatchesSignalSection } from './matches-signal-board';
@@ -1002,6 +1004,34 @@ const AiSignalsPage: React.FC = () => {
     const [statusChecked, setStatusChecked] = useState(false);
     const maintenanceActive = derivStatus !== null && derivStatus.indicator !== 'none';
 
+    // Warm the selected bot template while the user reviews its run settings,
+    // so clicking Run does not wait on a cold XML request.
+    useEffect(() => {
+        if (selectedOverUnderSignal) prefetchBotXml('over-under-secret-weapon');
+        if (selectedEvenOddSignal) prefetchBotXml('even-odd-beast');
+        if (selectedMatchesSignal) prefetchBotXml('matches-king');
+
+        if (showRunConfig) {
+            const botId =
+                tradeType === 'matches_differs'
+                    ? editMatchesSide === 'DIFFERS'
+                        ? 'differ-v2'
+                        : 'matches-signal'
+                    : cfgEoRecovery
+                      ? 'even-odd-recovery'
+                      : 'even-odd-scanner';
+            prefetchBotXml(botId);
+        }
+    }, [
+        selectedOverUnderSignal,
+        selectedEvenOddSignal,
+        selectedMatchesSignal,
+        showRunConfig,
+        tradeType,
+        editMatchesSide,
+        cfgEoRecovery,
+    ]);
+
     // Sync editable state when result arrives
     useEffect(() => {
         if (!result) return;
@@ -1309,9 +1339,9 @@ const AiSignalsPage: React.FC = () => {
             } catch { /* retain this run even if browser storage is unavailable */ }
 
             // DBot's Run handler needs the Builder tab mounted as the active
-            // surface. Use the same tab-switch handoff as the other signal launchers.
+            // surface. Start as soon as the tab has rendered.
             store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
-            await new Promise<void>(resolve => window.setTimeout(resolve, 500));
+            await waitForBotBuilderReady();
             try {
                 await runOverUnderSecretWeapon(store.run_panel);
             } catch (error) {
@@ -1381,7 +1411,7 @@ const AiSignalsPage: React.FC = () => {
             store.save_modal.updateBotName('Even Odd Beast');
 
             store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
-            await new Promise<void>(resolve => window.setTimeout(resolve, 500));
+            await waitForBotBuilderReady();
             if (typeof store.run_panel?.onRunButtonClick !== 'function') {
                 throw new Error('DBot Builder could not start Even Odd Beast. Open Builder and try again.');
             }
@@ -1444,7 +1474,7 @@ const AiSignalsPage: React.FC = () => {
             store.save_modal.updateBotName('Matches King');
 
             store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
-            await new Promise<void>(resolve => window.setTimeout(resolve, 500));
+            await waitForBotBuilderReady();
             if (typeof store.run_panel?.onRunButtonClick !== 'function') {
                 throw new Error('DBot Builder could not start Matches King. Open Builder and try again.');
             }
@@ -1536,10 +1566,9 @@ const AiSignalsPage: React.FC = () => {
             loadPatchedBotIntoWorkspace(xmlStr, Blockly.derivWorkspace);
             // Always switch to Bot Builder so the user can watch trades in real-time.
             store.dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
-            setTimeout(() => {
-                if (!store.run_panel.is_running) store.run_panel.onRunButtonClick();
-                setRunState('idle'); setShowRunConfig(false);
-            }, 500);
+            await waitForBotBuilderReady();
+            if (!store.run_panel.is_running) await store.run_panel.onRunButtonClick();
+            setRunState('idle'); setShowRunConfig(false);
         } catch (e: any) { setRunState('error'); setRunErr(e?.message || 'Failed to launch bot.'); }
     }, [result, watchdogMap, tradeType, editDir, editBarrier, editRecoveryBarrier, editRecoveryMode, editMatchesSide, editTargetDigit, editEntryPoint, cfgStake, cfgTakeProfit, cfgStopLoss, cfgMartingale, cfgMartingaleOn, cfgEoRecovery, store]);
 
