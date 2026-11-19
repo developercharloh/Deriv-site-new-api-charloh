@@ -72,3 +72,4 @@
 - [AI Analysis shared connection](ai-analysis-shared-connection.md) — the Analysis Tool should reuse the site's active Deriv session instead of opening a separate socket.
 - [Matches signal presentation](matches-signal-presentation.md) — one Matches tab, both ranges on each market, readable mobile statuses, and the site's shared Deriv connection.
 - [Matches signal historical replay](matches-signal-replay.md) — replay historical ticks into minute candles; candle-only history cannot reproduce intraminute flatness or the two-second entry check.
+- [Deriv TradingView launch](deriv-trading-view-launch.md) — launch Deriv's chart as a top-level page; nesting it in an iframe leaves the plot blank.
