@@ -34,15 +34,15 @@ describe('Matches shared market board', () => {
     });
     afterEach(() => jest.useRealTimers());
 
-    it('shows both ranges on every market without range tabs, using eight shared subscriptions', async () => {
-        const { container } = render(<MatchesSignalSection active onToggle={jest.fn()} maintenanceActive={false} />);
+    it('hides unqualified setups while keeping all shared market feeds active', async () => {
+        render(<MatchesSignalSection active onToggle={jest.fn()} maintenanceActive={false} />);
         expect(screen.getByRole('heading', { name: 'Matches' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Recent Matches 0–4 signals' })).toBeInTheDocument();
         expect(screen.getByText('PAPER RESULTS · NO TRADES')).toBeInTheDocument();
         expect(screen.getByText('No qualifying Matches 0–4 alerts yet.')).toBeInTheDocument();
         expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
-        expect(screen.getAllByText('MATCHES 0–4 · TSI')).toHaveLength(8);
-        expect(screen.getAllByText('MATCHES 6–9 · MACD')).toHaveLength(8);
+        expect(screen.queryAllByRole('article')).toHaveLength(0);
+        expect(screen.getByText('No qualified setups right now. Incomplete setups are hidden.')).toBeInTheDocument();
         await act(async () => { jest.advanceTimersByTime(700); });
         const requests = send.mock.calls.map(([request]) => request).filter(request => request.ticks_history);
         expect(requests).toHaveLength(8);
@@ -59,11 +59,9 @@ describe('Matches shared market board', () => {
             });
         });
         expect(screen.getByText('8/8 live')).toBeInTheDocument();
-        expect(screen.getAllByRole('img')).toHaveLength(16);
-        expect(screen.getAllByText('00:02')).toHaveLength(16);
-        expect(screen.getAllByText(/WEAK CONDITIONS/)).toHaveLength(16);
-        expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
-        expect(within(container.querySelector('article')!).getByText('MATCHES 0–4 · TSI')).toBeInTheDocument();
+        expect(screen.queryAllByRole('article')).toHaveLength(0);
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        expect(screen.queryByText(/WEAK CONDITIONS/)).not.toBeInTheDocument();
         await act(async () => { jest.advanceTimersByTime(3_000); });
         expect(screen.queryByText('8/8 live')).not.toBeInTheDocument();
     });
@@ -113,7 +111,7 @@ describe('Matches shared market board', () => {
                 req_id: request.req_id, candles: history, subscription: { id: `gate-${index}` },
             }));
         });
-        expect(screen.getAllByText('Waiting for live data')).toHaveLength(8);
+        expect(screen.queryAllByRole('article')).toHaveLength(0);
         expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
 
         const liveAt = async (epoch: number) => act(async () => {
@@ -126,15 +124,17 @@ describe('Matches shared market board', () => {
         await liveAt(4197);
         expect(screen.getByText('8/8 live')).toBeInTheDocument();
         expect(screen.getAllByText('00:03')).toHaveLength(8);
+        expect(screen.getAllByText('QUALIFIED SETUP · ALL 2/2 CHECKS PASS')).toHaveLength(8);
         expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
         await liveAt(4198);
         expect(screen.getAllByText('00:02')).toHaveLength(8);
-        // Each market has one status plus four digit-specific alerts.
-        expect(screen.getAllByText('STRONG SETUP · ALL 2/2 CHECKS PASS')).toHaveLength(8);
+        // Only markets with fully qualified MACD conditions remain visible.
+        expect(screen.getAllByText('QUALIFIED SETUP · ALL 2/2 CHECKS PASS')).toHaveLength(8);
         expect(screen.getAllByLabelText(/Ready setup: .* Matches digits six through nine/)).toHaveLength(8);
         // Stop delivering messages, then restore the live feed.
         await act(async () => { jest.advanceTimersByTime(3_000); });
-        expect(screen.getAllByText('Waiting for live data')).toHaveLength(8);
+        expect(screen.queryAllByRole('article')).toHaveLength(0);
+        expect(screen.getByText('No qualified setups right now. Incomplete setups are hidden.')).toBeInTheDocument();
         expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
         await liveAt(4199);
         expect(screen.getAllByText('00:01')).toHaveLength(8);
@@ -209,7 +209,7 @@ describe('MatchesSignalBoard', () => {
         });
     });
 
-    it('subscribes to one-minute candles for every 1-second volatility market and renders live charts', async () => {
+    it('keeps feeds running but hides markets without qualified conditions', async () => {
         render(<MatchesSignalBoard active onToggle={jest.fn()} maintenanceActive={false} />);
         await act(async () => {
             jest.advanceTimersByTime(700);
@@ -235,9 +235,9 @@ describe('MatchesSignalBoard', () => {
         await act(async () => {
             apiMessageHandler?.({ msg_type: 'history', req_id: historyRequest.req_id, candles, subscription: { id: 'sub-1' } });
         });
-        expect(screen.getByRole('img', {
+        expect(screen.queryByRole('img', {
             name: 'Volatility 10 (1s) Index one-minute candlesticks and Trend Strength Index',
-        })).toBeInTheDocument();
+        })).not.toBeInTheDocument();
 
         await act(async () => {
             apiMessageHandler?.({
@@ -246,12 +246,12 @@ describe('MatchesSignalBoard', () => {
                 subscription: { id: 'sub-1' },
             });
         });
-        expect(screen.getByText('Live')).toBeInTheDocument();
-        expect(screen.getAllByText('00:02')).toHaveLength(2);
-        expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
+        expect(screen.getByText('1/8 live')).toBeInTheDocument();
+        expect(screen.queryAllByRole('article')).toHaveLength(0);
+        expect(screen.getByText('No qualified setups right now. Incomplete setups are hidden.')).toBeInTheDocument();
     });
 
-    it('shows the MACD chart and ignores candle color in the MACD setup', async () => {
+    it('hides a MACD setup until all required conditions qualify', async () => {
         render(<MatchesSignalBoard active onToggle={jest.fn()} maintenanceActive={false} strategy='macd' />);
         expect(screen.getByText(/signal-line magnitude exceeds histogram height/)).toBeInTheDocument();
 
@@ -282,9 +282,11 @@ describe('MatchesSignalBoard', () => {
                 subscription: { id: 'sub-macd' },
             });
         });
-        expect(screen.getByRole('img', {
+        expect(screen.queryByRole('img', {
             name: 'Volatility 10 (1s) Index one-minute candlesticks and MACD 12/26/9',
-        })).toBeInTheDocument();
+        })).not.toBeInTheDocument();
+        expect(screen.queryByText(/WEAK CONDITIONS/)).not.toBeInTheDocument();
+        expect(screen.getByText('No qualified setups right now. Incomplete setups are hidden.')).toBeInTheDocument();
         expect(screen.queryByText('TRADE NOW')).not.toBeInTheDocument();
     });
 

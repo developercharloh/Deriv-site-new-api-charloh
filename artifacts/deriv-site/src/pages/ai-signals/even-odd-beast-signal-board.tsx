@@ -316,12 +316,14 @@ export function EvenOddBeastSignalBoard({
             <div className='eob-board__rule'>
                 ODD: green candle above a rising MA9, with a positive and rising MACD histogram.
                 EVEN: red candle below a falling MA9, with a negative and falling MACD histogram.
-                A strong label also requires matching candle and MA9 decimal digits. Weak setups cannot be traded;
-                strong means the listed checks pass, not that profit is guaranteed.
+                Only setups passing every condition, including matching candle and MA9 decimal digits, are shown.
+                Qualification does not guarantee profit.
             </div>
 
             <div className='eob-board__grid'>
-                {markets.map(({ symbol, feed, feedFresh, candleCloseCountdown, analysis, status }) => {
+                {markets.filter(market =>
+                    !maintenanceActive && canTradeEvenOddBeastSignal(market.analysis, market.feedFresh)
+                ).map(({ symbol, feed, feedFresh, candleCloseCountdown, analysis, status }) => {
                     const canTrade = canTradeEvenOddBeastSignal(analysis, feedFresh);
                     const histogram = analysis.macdHistogram;
                     const candidateSide = analysis.candleColor === 'RED' ? 'EVEN' : 'ODD';
@@ -355,15 +357,15 @@ export function EvenOddBeastSignalBoard({
                                 <strong>{feedFresh ? formatCandleCloseCountdown(candleCloseCountdown) : 'Waiting'}</strong>
                             </div>
 
-                            <div className={`eob-board__signal${status.ready ? ` eob-board__signal--${analysis.signal.toLowerCase()}` : ' eob-board__signal--weak'}`}>
+                            <div className={`eob-board__signal eob-board__signal--${analysis.signal.toLowerCase()}`}>
                                 <span className='eob-board__signal-dot' />
                                 <strong>{status.label}</strong>
                             </div>
 
                             <div className='eob-board__quality-checks' aria-label={`${candidateSide} setup conditions`}>
                                 {setupChecks.map(check => (
-                                    <span className={check.met ? 'eob-board__quality-check eob-board__quality-check--met' : 'eob-board__quality-check'} key={check.label}>
-                                        <i aria-hidden='true'>{check.met ? '✓' : '✗'}</i>{check.label}
+                                    <span className='eob-board__quality-check eob-board__quality-check--met' key={check.label}>
+                                        <i aria-hidden='true'>✓</i>{check.label}
                                     </span>
                                 ))}
                             </div>
@@ -386,7 +388,7 @@ export function EvenOddBeastSignalBoard({
                                 type='button'
                                 className='eob-board__trade'
                                 disabled={!canTrade || maintenanceActive}
-                                title={canTrade ? 'All six Even/Odd checks passed with fresh live data' : 'Trading is disabled until every Even/Odd condition passes on fresh data'}
+                                title='All six Even/Odd checks passed with fresh live data'
                                 onClick={() => {
                                     if (canTradeEvenOddBeastSignal(analysis, feedFresh)) {
                                         onSelectSignal({ symbol, side: analysis.signal, analysis });
@@ -398,6 +400,13 @@ export function EvenOddBeastSignalBoard({
                         </article>
                     );
                 })}
+                {markets.every(market =>
+                    maintenanceActive || !canTradeEvenOddBeastSignal(market.analysis, market.feedFresh)
+                ) && (
+                    <p className='eob-board__empty' role='status'>
+                        {active ? 'No qualified setups right now. Incomplete setups are hidden.' : 'Scanner paused. Resume to look for qualified setups.'}
+                    </p>
+                )}
             </div>
         </section>
     );

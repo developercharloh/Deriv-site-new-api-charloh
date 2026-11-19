@@ -479,6 +479,15 @@ export function MatchesSignalBoard({
         };
     }), [active, clockNow, feeds, maintenanceActive, strategy]);
     const liveMarketCount = marketCards.filter(card => card.status === 'Live').length;
+    const enabledModes = strategy === 'both' ? ['tsi', 'macd'] as const : [strategy];
+    const qualifiedMarketCards = marketCards
+        .map(card => ({
+            ...card,
+            qualifiedModes: enabledModes.filter(mode =>
+                canEnterMatchesSignal(mode, card.tsiConditions, card.macdConditions)
+            ),
+        }))
+        .filter(card => card.qualifiedModes.length > 0);
     useEffect(() => {
         setPaperSignals(previous => marketCards.reduce((signals, card) => {
             const rawPipSize = api_base.pip_sizes?.[card.symbol.code];
@@ -537,7 +546,7 @@ export function MatchesSignalBoard({
                     : strategy === 'tsi'
                     ? 'Enter Now appears when the live candle is green, normalized TSI is 0.80–0.90 and flat. 00:02 is a timing reference only.'
                     : 'Enter Now appears when MACD descends toward signal from above and signal-line magnitude exceeds histogram height. 00:02 is a timing reference only.'}
-                {' '}A strong label means all listed strategy checks pass; it is not a profit guarantee.
+                {' '}Only setups passing every required check with fresh live data are shown. Qualification does not guarantee profit.
                 {' '}After you save and run #19, it starts selecting entries from incoming live ticks.
             </div>
 
@@ -644,24 +653,25 @@ export function MatchesSignalBoard({
             </section>
 
             <div className='match-board__grid'>
-                {marketCards.map(({
+                {qualifiedMarketCards.map(({
                     symbol, feed, feedFresh, tsiSeries, macdSeries, macdPoint, tsi, lastCandle,
-                    secondsToClose, tsiConditions, macdConditions, tradeNow, status,
+                    secondsToClose, tsiConditions, macdConditions, status, qualifiedModes,
                 }) => (
                     <article className='match-market' key={symbol.code}>
                         <div className='match-market__header'>
                             <div>
                                 <strong className='match-market__symbol'>{symbol.short}</strong>
                                 <span className='match-market__label'>{symbol.label}</span>
-                                <span className='match-market__range'>{strategy === 'both' ? 'MATCHES 0–4 + 6–9' : strategy === 'tsi' ? 'MATCHES 0–4 · TSI' : 'MATCHES 6–9 · MACD'}</span>
+                                <span className='match-market__range'>
+                                    {qualifiedModes.map(mode => mode === 'tsi' ? 'MATCHES 0–4' : 'MATCHES 6–9').join(' + ')}
+                                </span>
                             </div>
             <span className={`match-market__status match-market__status--${status.toLowerCase().replace(/\s+/g, '-')}`}>
                                 {status}
                             </span>
                         </div>
 
-                        {(strategy === 'both' ? ['tsi', 'macd'] as const : [strategy]).map(mode => {
-                            const conditions = mode === 'tsi' ? tsiConditions : macdConditions;
+                        {qualifiedModes.map(mode => {
                             const range = mode === 'tsi' ? '0–4' : '6–9';
                             const ready = canEnterMatchesSignal(mode, tsiConditions, macdConditions);
                             const strategyChecks = mode === 'tsi'
@@ -674,15 +684,10 @@ export function MatchesSignalBoard({
                                     { label: 'MACD descends from above', met: macdConditions.enteringFromAbove },
                                     { label: 'Signal line separated from histogram', met: macdConditions.signalAway },
                                 ];
-                            const passedChecks = strategyChecks.filter(check => check.met).length;
                             return <div className='match-market__setup' key={mode}>
-                        <div className={`match-market__setup-status${ready ? ' match-market__setup-status--alert' : ''}`}>
+                        <div className='match-market__setup-status match-market__setup-status--alert'>
                             <strong>MATCHES {range} · {mode.toUpperCase()}</strong>
-                            <span>{ready
-                                ? `STRONG SETUP · ALL ${strategyChecks.length}/${strategyChecks.length} CHECKS PASS`
-                                : !feedFresh
-                                    ? 'Waiting for live data'
-                                    : `WEAK CONDITIONS · ${passedChecks}/${strategyChecks.length} CHECKS · NOT TRADEABLE`}</span>
+                            <span>QUALIFIED SETUP · ALL {strategyChecks.length}/{strategyChecks.length} CHECKS PASS</span>
                         </div>
                         {mode === 'tsi' ? (
                             <MiniCandleTsiChart
@@ -696,12 +701,12 @@ export function MatchesSignalBoard({
 
                         <div className='match-market__metrics'>
                             {strategyChecks.map(check => (
-                                <span className={check.met ? 'is-ready' : 'is-weak'} key={check.label}>
-                                    <i aria-hidden='true'>{check.met ? '✓' : '✗'}</i> {check.label}
+                                <span className='is-ready' key={check.label}>
+                                    <i aria-hidden='true'>✓</i> {check.label}
                                 </span>
                             ))}
-                            <span className={feedFresh ? 'is-ready' : 'is-weak'}>
-                                <i aria-hidden='true'>{feedFresh ? '✓' : '✗'}</i> Fresh live feed
+                            <span className='is-ready'>
+                                <i aria-hidden='true'>✓</i> Fresh live feed
                             </span>
                             <span className={secondsToClose === 2 ? 'is-ready' : ''} aria-label={`Candle-close timing reference, not a signal gate: ${formatCandleCountdown(secondsToClose)}`}>
                                 {formatCandleCountdown(secondsToClose)}
@@ -744,6 +749,11 @@ export function MatchesSignalBoard({
                         })}
                     </article>
                 ))}
+                {qualifiedMarketCards.length === 0 && (
+                    <p className='match-market__waiting' role='status'>
+                        {active ? 'No qualified setups right now. Incomplete setups are hidden.' : 'Scanner paused. Resume to look for qualified setups.'}
+                    </p>
+                )}
             </div>
         </section>
     );

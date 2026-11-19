@@ -837,7 +837,7 @@ function runModels(prices: number[], pip: number, sym: DerivVolatility, tradeTyp
 }
 
 // ─── Scan all markets ─────────────────────────────────────────────────────────
-async function scanAllMarkets(tradeType: TradeType, onProgress: (received: number) => void, lastLost = false): Promise<{ best: MarketResult | null; noVotesBest: MarketResult | null; allResults: MarketResult[]; spikedMarkets: SpikeInfo[] }> {
+async function scanAllMarkets(tradeType: TradeType, onProgress: (received: number) => void, lastLost = false): Promise<{ best: MarketResult | null; allResults: MarketResult[]; spikedMarkets: SpikeInfo[] }> {
     return new Promise(resolve => {
         const ws = new WebSocket(DERIV_WS);
         const priceMap = new Map<number, { prices: number[]; times: number[]; pip: number; sym: DerivVolatility }>();
@@ -885,8 +885,7 @@ async function scanAllMarkets(tradeType: TradeType, onProgress: (received: numbe
             });
             const spikedCodes = new Set(detectedSpikes.map(s => s.code));
             const best = results.find(r => !spikedCodes.has(r.sym.code) && !r.gapDetected && r.statsChecks.isSignal && !r.recentDominance.isCold) ?? null;
-            const noVotesBest = best ? null : (results.find(r => !spikedCodes.has(r.sym.code)) ?? results[0] ?? null);
-            resolve({ best, noVotesBest, allResults: results, spikedMarkets: detectedSpikes });
+            resolve({ best, allResults: results, spikedMarkets: detectedSpikes });
         };
         ws.onopen = () => { ALL_SYMS.forEach((sym, i) => setTimeout(() => { if (ws.readyState !== WebSocket.OPEN) return; ws.send(JSON.stringify({ ticks_history: sym.code, count: TICK_COUNT_LONG, end: 'latest', style: 'ticks', req_id: i + 1 })); }, i * 80)); };
         ws.onmessage = (ev: MessageEvent) => {
@@ -951,7 +950,6 @@ const AiSignalsPage: React.FC = () => {
     const [scanState,  setScanState]  = useState<ScanState>('idle');
     const [progress,   setProgress]   = useState(0);
     const [result,     setResult]     = useState<MarketResult | null>(null);
-    const [noSigBest,  setNoSigBest]  = useState<MarketResult | null>(null);
     const [hasSignal,  setHasSignal]  = useState(false);
     const [spikedMarkets, setSpikedMarkets] = useState<SpikeInfo[]>([]);
 
@@ -1067,7 +1065,7 @@ const AiSignalsPage: React.FC = () => {
 
     // Reset on trade type change
     useEffect(() => {
-        setResult(null); setNoSigBest(null); setScanState('idle'); setHasSignal(false);
+        setResult(null); setScanState('idle'); setHasSignal(false);
         setSpikedMarkets([]); setRunState('idle'); setRunErr(''); setShowRunConfig(false);
         setSelectedEvenOddSignal(null); setEvenOddBeastSaving(false); setEvenOddBeastError('');
     }, [tradeType]);
@@ -1222,7 +1220,7 @@ const AiSignalsPage: React.FC = () => {
     // ── Scan ──────────────────────────────────────────────────────────────────
     const handleScan = useCallback(async () => {
         if (maintenanceActive) return;
-        setScanState('scanning'); setProgress(0); setResult(null); setNoSigBest(null);
+        setScanState('scanning'); setProgress(0); setResult(null);
         setHasSignal(false); setSessionCount(0); setSpikedMarkets([]);
         try {
             // Detect if last completed trade was a loss — used to raise the
@@ -1230,7 +1228,7 @@ const AiSignalsPage: React.FC = () => {
             const txs = (store.transactions.transactions as any[]);
             const lastCompleted = txs.find((t: any) => t.type === 'contract' && t.data?.is_completed === true);
             const lastLost = lastCompleted ? (Number(lastCompleted.data?.profit ?? 0) < 0) : false;
-            const { best, noVotesBest, spikedMarkets: spikes } = await scanAllMarkets(tradeType, n => setProgress(n), lastLost);
+            const { best, spikedMarkets: spikes } = await scanAllMarkets(tradeType, n => setProgress(n), lastLost);
             setSpikedMarkets(spikes);
             if (best) {
                 setResult(best); setScanState('done');
@@ -1240,7 +1238,7 @@ const AiSignalsPage: React.FC = () => {
                     const next = [entry, ...prev].slice(0, 5);
                     localStorage.setItem('orb-signal-history', JSON.stringify(next)); setOrbHistory(next);
                 } catch { /* */ }
-            } else { setNoSigBest(noVotesBest); setScanState('no-signal'); }
+            } else { setScanState('no-signal'); }
         } catch { setScanState('idle'); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tradeType, maintenanceActive]);
@@ -1860,10 +1858,8 @@ const AiSignalsPage: React.FC = () => {
                 {/* No signal */}
                 {scanState === 'no-signal' && (
                     <div className='ai-panel__nosig'>
-                        <div className='ai-panel__nosig-hd'><span className='ai-panel__nosig-icon'>⚠️</span><span className='ai-panel__nosig-txt'>No strong signal found</span></div>
-                        {noSigBest && (<div className='ai-panel__nosig-best'><span>Best: <strong>{noSigBest.sym.short}</strong></span><span className='ai-panel__nosig-votes' style={{ color: voteColor(noSigBest.statsChecks.passCount) }}>{noSigBest.statsChecks.passCount}/{noSigBest.statsChecks.totalChecks} checks</span></div>)}
-                        {noSigBest && noSigBest.recentDominance?.isCold && (<div className='ai-panel__nosig-dom-warn'>⛔ Best candidate blocked — last 20 ticks only {noSigBest.recentDominance.winsLast20}/20 on win side. Market recently reversed. Wait for momentum to recover.</div>)}
-                        <span className='ai-panel__nosig-hint'>Try again in a few minutes or switch trade type.</span>
+                        <div className='ai-panel__nosig-hd'><span className='ai-panel__nosig-icon'>⚠️</span><span className='ai-panel__nosig-txt'>No qualified signal found</span></div>
+                        <span className='ai-panel__nosig-hint'>Unqualified candidates are hidden. Scanning continues for a setup that passes every required check.</span>
                     </div>
                 )}
 

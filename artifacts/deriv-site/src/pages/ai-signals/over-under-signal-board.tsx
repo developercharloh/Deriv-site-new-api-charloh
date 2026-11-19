@@ -228,6 +228,12 @@ export function OverUnderSignalBoard({
 
         return { symbol, feed, feedFresh, lastCandle, secondsToClose, setups };
     }), [active, clockNow, feeds]);
+    const qualifiedCards = cards
+        .map(card => ({
+            ...card,
+            qualifiedSetups: card.setups.filter(setup => canEnterOverUnderSignal(setup)),
+        }))
+        .filter(card => card.qualifiedSetups.length > 0);
 
     const liveCount = cards.filter(card => card.feedFresh).length;
     const connectionLabel = maintenanceActive
@@ -270,11 +276,11 @@ export function OverUnderSignalBoard({
                 Signals use the same indicator filters as Matches. Over 4/5 require MACD 12/26/9 descending from above
                 with a contracting positive histogram; Under 6/5 require Trend Strength Index 14 at 0.8–0.9, three flat updates, and a green
                 candle. The Enter Now button stays available whenever an indicator setup and fresh feed are ready.
-                Only setups with every indicator check and fresh live data are marked strong. 00:02 is a timing reference only;
-                strong means the listed conditions pass, not that profit is guaranteed.
+                Only setups with every indicator check and fresh live data are shown. 00:02 is a timing reference only;
+                qualification does not guarantee profit.
             </p>
             <div className='ou-board__grid'>
-                {cards.map(({ symbol, feed, feedFresh, lastCandle, secondsToClose, setups }) => {
+                {qualifiedCards.map(({ symbol, feed, feedFresh, secondsToClose, qualifiedSetups }) => {
                     const status = !active ? 'Paused' :
                         maintenanceActive ? 'Unavailable' :
                             feedFresh ? 'Live' :
@@ -307,12 +313,11 @@ export function OverUnderSignalBoard({
                             </div>
 
                             <div className='ou-board__options'>
-                                {setups.map((setup: OverUnderIndicatorStatus) => {
+                                {qualifiedSetups.map((setup: OverUnderIndicatorStatus) => {
                                     const label = `${setup.side} ${setup.barrier}`;
                                     const signalConditions = setup.conditions.filter(condition =>
                                         condition.key !== 'entry-window' && condition.key !== 'fresh-feed'
                                     );
-                                    const passedConditions = signalConditions.filter(condition => condition.met).length;
                                     return (
                                         <div
                                             className={`ou-board__option${setup.setupReady ? ' ou-board__option--selected' : ''}`}
@@ -337,16 +342,8 @@ export function OverUnderSignalBoard({
                                                     </span>
                                                 ))}
                                             </div>
-                                            <em className={setup.setupReady && setup.feedFresh ? 'ou-board__quality--strong' : 'ou-board__quality--weak'}>
-                                                {!active
-                                                    ? 'SCANNER PAUSED'
-                                                    : setup.indicatorValue === null
-                                                        ? 'WAITING FOR INDICATOR DATA'
-                                                        : setup.setupReady
-                                                            ? setup.feedFresh
-                                                                ? `STRONG SETUP · ALL ${signalConditions.length}/${signalConditions.length} CHECKS PASS`
-                                                                : `CONDITIONS MET · ${passedConditions}/${signalConditions.length} · WAITING FOR LIVE DATA`
-                                                            : `WEAK CONDITIONS · ${passedConditions}/${signalConditions.length} CHECKS · NOT TRADEABLE`}
+                                            <em className='ou-board__quality--strong'>
+                                                STRONG SETUP · ALL {signalConditions.length}/{signalConditions.length} CHECKS PASS
                                             </em>
                                             {canEnterOverUnderSignal(setup) && onSelectSignal && (
                                                 <button
@@ -378,6 +375,11 @@ export function OverUnderSignalBoard({
                         </article>
                     );
                 })}
+                {qualifiedCards.length === 0 && (
+                    <p className='ou-board__waiting' role='status'>
+                        {active ? 'No qualified setups right now. Incomplete setups are hidden.' : 'Scanner paused. Resume to look for qualified setups.'}
+                    </p>
+                )}
             </div>
         </section>
     );
