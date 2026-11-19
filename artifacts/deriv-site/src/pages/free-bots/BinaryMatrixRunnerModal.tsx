@@ -8,6 +8,7 @@ import {
     type BinaryMatrixStats,
     type BinaryMatrixStatus,
 } from '@/utils/binary-matrix-engine';
+import { rankBinaryMatrixCandidates } from '@/utils/binary-matrix-market-scanner';
 import type { DTLog } from '@/utils/dtrader-engine';
 import { APOLLO_BLOCK_REGISTRY } from '@/utils/apollo-block-registry';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
@@ -155,6 +156,16 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
     const logEndRef = useRef<HTMLDivElement>(null);
 
     const isRunning = status === 'scanning' || status === 'buying' || status === 'waiting';
+    const rankedCandidates = rankBinaryMatrixCandidates(
+        scan.rows.filter(row => row.status === 'candidate' || row.status === 'qualified'),
+        'weakest-first',
+    );
+    const rankedCandidateSymbols = new Set(rankedCandidates.map(row => row.symbol));
+    const rowsForDisplay = [
+        ...rankedCandidates,
+        ...scan.rows.filter(row => !rankedCandidateSymbols.has(row.symbol)),
+    ];
+    const candidateRankBySymbol = new Map(rankedCandidates.map((row, index) => [row.symbol, index + 1]));
 
     useEffect(() => {
         const checkAuth = () => setAuthorized(Boolean(api_base.is_authorized));
@@ -329,6 +340,11 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                             <div><span>Eligible candidates</span><strong data-testid='text-qualified-count'>{scan.rows.filter(row => row.status === 'candidate' || row.status === 'qualified').length}</strong></div>
                             <div><span>Selected market</span><strong data-testid='text-selected-market'>{scan.selectedSymbol || 'None'}</strong></div>
                         </div>
+                        {rankedCandidates.length > 0 && (
+                            <div className='matrix-modal__candidate-order' data-testid='text-candidate-order'>
+                                Signal rank: weaker to strongest. Execution stays one at a time, strongest first.
+                            </div>
+                        )}
                         <div className='matrix-modal__scan-message' data-testid='text-scan-message'>
                             {scan.status === 'selected' && scan.selectedSymbol
                                 ? `Selected ${scan.selectedSymbol}${scan.selectedContract ? ` · ${scan.selectedContract}` : ''}`
@@ -352,8 +368,18 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                             </div>
                         ) : (
                             <div className='matrix-modal__market-list' role='list' aria-label='Per-market scan evidence'>
-                                {scan.rows.map(row => {
+                                {rowsForDisplay.map(row => {
                                     const { hot, cold } = getHotColdDigitSets(row.digitRates);
+                                    const signalRank = candidateRankBySymbol.get(row.symbol);
+                                    const rankLabel = signalRank === undefined
+                                        ? null
+                                        : rankedCandidates.length === 1
+                                            ? 'Only ranked candidate'
+                                            : signalRank === 1
+                                                ? `Rank ${signalRank}/${rankedCandidates.length} · weakest`
+                                                : signalRank === rankedCandidates.length
+                                                    ? `Rank ${signalRank}/${rankedCandidates.length} · strongest`
+                                                    : `Rank ${signalRank}/${rankedCandidates.length}`;
                                     return (
                                         <article
                                             className={`matrix-modal__market matrix-modal__market--${row.status}${scan.selectedSymbol === row.symbol ? ' is-selected' : ''}`}
@@ -378,6 +404,15 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                         <div className='matrix-modal__market-condition'>
                                             <span>Current condition</span><strong>{row.currentCondition || '—'}</strong>
                                         </div>
+                                        {rankLabel && (
+                                            <div
+                                                className='matrix-modal__market-rank'
+                                                data-testid={`rank-market-${row.symbol}`}
+                                                aria-label={`Signal rank ${signalRank} of ${rankedCandidates.length}, ordered weaker to stronger`}
+                                            >
+                                                {rankLabel}
+                                            </div>
+                                        )}
                                         <div className={`matrix-modal__momentum matrix-modal__momentum--${row.momentumState}`} data-testid={`momentum-${row.symbol}`}>
                                             <span>{momentumPeriodSetting(settings.momentumPeriod)}-tick ROC</span>
                                             <strong>{formatRoc(row.momentumRoc)} · {row.momentumState}</strong>

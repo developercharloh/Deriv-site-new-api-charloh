@@ -5,10 +5,12 @@ import {
     BinaryMatrixMarketScanner,
     getMomentumState,
     momentumConfirmsDecision,
+    rankBinaryMatrixCandidates,
     wilsonLowerBound,
 } from '../binary-matrix-market-scanner';
 import { evaluateBinaryMatrix } from '../binary-matrix-strategy';
 import type { DerivVolatility } from '../deriv-volatilities';
+import type { BinaryMatrixMarketScanRow } from '../binary-matrix-market-scanner';
 
 class FakeSocket {
     readyState = 1;
@@ -86,6 +88,25 @@ describe('Binary Matrix market scanner evidence', () => {
         expect(momentumConfirmsDecision(underDecision!, falling)).toBe(true);
         expect(momentumConfirmsDecision(underDecision!, rising)).toBe(false);
         expect(momentumConfirmsDecision(evenDecision!, null)).toBe(true);
+    });
+
+    it('ranks the candidate list weak-to-strong while preserving strongest-first execution order', () => {
+        const candidates = [
+            { symbol: 'R_50', score: 0.18, sampleCount: 60 },
+            { symbol: 'R_25', score: 0.04, sampleCount: 30 },
+            { symbol: 'R_75', score: 0.09, sampleCount: 45 },
+        ] as BinaryMatrixMarketScanRow[];
+
+        expect(rankBinaryMatrixCandidates(candidates, 'weakest-first').map(row => row.symbol)).toEqual([
+            'R_25',
+            'R_75',
+            'R_50',
+        ]);
+        expect(rankBinaryMatrixCandidates(candidates, 'strongest-first').map(row => row.symbol)).toEqual([
+            'R_50',
+            'R_75',
+            'R_25',
+        ]);
     });
 
     it('scores directional holdout examples only when ROC agrees with Over or Under', () => {

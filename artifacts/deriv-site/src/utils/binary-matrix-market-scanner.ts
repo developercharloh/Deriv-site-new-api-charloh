@@ -36,6 +36,27 @@ export interface BinaryMatrixMarketScanRow {
     reason: string;
 }
 
+export type BinaryMatrixCandidateOrder = 'weakest-first' | 'strongest-first';
+
+export function rankBinaryMatrixCandidates(
+    rows: readonly BinaryMatrixMarketScanRow[],
+    order: BinaryMatrixCandidateOrder,
+): BinaryMatrixMarketScanRow[] {
+    const direction = order === 'weakest-first' ? 1 : -1;
+    return [...rows].sort((left, right) => {
+        const leftScore = left.score !== null && Number.isFinite(left.score) ? left.score : null;
+        const rightScore = right.score !== null && Number.isFinite(right.score) ? right.score : null;
+        if (leftScore === null && rightScore !== null) return order === 'weakest-first' ? -1 : 1;
+        if (leftScore !== null && rightScore === null) return order === 'weakest-first' ? 1 : -1;
+        if (leftScore !== null && rightScore !== null && leftScore !== rightScore) {
+            return direction * (leftScore - rightScore);
+        }
+        const sampleDifference = left.sampleCount - right.sampleCount;
+        if (sampleDifference !== 0) return direction * sampleDifference;
+        return left.symbol.localeCompare(right.symbol);
+    });
+}
+
 export interface BinaryMatrixScanSnapshot {
     status: 'idle' | 'connecting' | 'scanning' | 'waiting' | 'selected' | 'error';
     completedMarkets: number;

@@ -32,3 +32,9 @@ The generated XML remains the execution path, but Binary Matrix stake progressio
 **Why:** FAST can resume the generated loop on a settlement event before a variable update is reflected in the next broker request, producing a base-stake buy after a loss or a multiplied buy after a win.
 
 **How to apply:** Capture the first requested stake and configured Martingale factor, update the engine state on final settlement, and override only Binary Matrix trade-option amounts for the next buy; leave ordinary DBot strategies unchanged.
+
+When several adaptive markets qualify, show the candidates ranked from weaker to stronger, but execute only one contract at a time and select the strongest available candidate first.
+
+**Why:** The user wants the full signal ranking visible without allowing multiple markets to open overlapping contracts.
+
+**How to apply:** Use the shared signal-strength score for both the weak-to-strong display and strongest-first selection. Keep the single-contract gate and settlement lock unchanged.

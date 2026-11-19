@@ -29,6 +29,7 @@ import {
     calculateRateOfChange,
     DEFAULT_BINARY_MATRIX_ROC_PERIOD,
     momentumConfirmsDecision,
+    rankBinaryMatrixCandidates,
     type BinaryMatrixMarketScanRow,
     type BinaryMatrixScanSnapshot,
 } from './binary-matrix-market-scanner';
@@ -359,8 +360,8 @@ export class BinaryMatrixEngine {
             this.selectedMarket
         ) return;
 
-        const candidates = snapshot.rows
-            .filter(row =>
+        const candidates = rankBinaryMatrixCandidates(
+            snapshot.rows.filter(row =>
                 row.status === 'candidate' &&
                 row.currentCondition &&
                 row.score !== null &&
@@ -368,12 +369,9 @@ export class BinaryMatrixEngine {
                 row.lowerConfidenceBound > 0.5 &&
                 !this.rejectedCandidates.has(this.candidateKey(row.symbol, row.currentCondition)) &&
                 (!this.activeDecision || this.activeDecision.condition === row.currentCondition),
-            )
-            .sort((left, right) =>
-                (right.score ?? -1) - (left.score ?? -1) ||
-                right.sampleCount - left.sampleCount ||
-                left.symbol.localeCompare(right.symbol),
-            );
+            ),
+            'strongest-first',
+        );
         const candidate = candidates[0];
         if (candidate) this.beginAdaptiveCandidate(candidate);
     }
