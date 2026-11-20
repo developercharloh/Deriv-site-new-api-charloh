@@ -67,8 +67,8 @@ const SCAN_STATUS_LABELS: Record<BinaryMatrixScanSnapshot['status'], string> = {
 
 const MARKET_STATUS_LABELS: Record<BinaryMatrixMarketScanRow['status'], string> = {
     scanning: 'Scanning',
-    candidate: 'Payout check pending',
-    qualified: 'Qualified',
+    candidate: 'Qualified · awaiting selection',
+    qualified: 'Qualified · payout cleared',
     'indicator-mismatch': 'MACD/RSI mismatch',
     'no-signal': 'No signal',
     'insufficient-data': 'Insufficient data',
@@ -390,15 +390,15 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                             <span className={`matrix-modal__market-status matrix-modal__market-status--${row.status}`} data-testid={`status-market-${row.symbol}`}>
                                                 {scan.selectedSymbol === row.symbol
                                                     ? row.ruleTriggered
-                                                        ? row.status === 'qualified' ? 'Selected · payout cleared' : 'Selected · rule visible'
-                                                        : 'Selected · waiting for rule'
+                                                        ? row.status === 'qualified' ? 'Qualified · payout cleared' : 'Locked · payout pending'
+                                                        : row.status === 'qualified' ? 'Qualified · waiting for Last X' : 'Locked · waiting for Last X'
                                                     : row.ruleTriggered && row.status === 'insufficient-data'
                                                         ? 'Rule triggered · not qualified'
                                                         : MARKET_STATUS_LABELS[row.status]}
                                             </span>
                                         </div>
                                         <div className='matrix-modal__market-condition'>
-                                            <span>Current condition</span><strong>{row.currentCondition || '—'}</strong>
+                                            <span>Qualified rule</span><strong>{row.currentCondition || '—'}</strong>
                                         </div>
                                         {rankLabel && (
                                             <div

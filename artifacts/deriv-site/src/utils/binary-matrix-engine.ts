@@ -14,6 +14,7 @@ import {
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
 import {
+    binaryMatrixDecisionForCondition,
     analyzeBinaryMatrix,
     type BinaryMatrixAnalysis,
     type BinaryMatrixDecision,
@@ -378,8 +379,7 @@ export class BinaryMatrixEngine {
             return;
         }
 
-        const analysis = analyzeBinaryMatrix(row.currentDigits, this.activeDecision);
-        const decision = analysis?.decision;
+        const decision = binaryMatrixDecisionForCondition(row.currentCondition, row.currentDigits);
         if (!decision || decision.condition !== row.currentCondition) return;
 
         this.activeDecision = this.activeDecision ?? decision;
@@ -398,10 +398,13 @@ export class BinaryMatrixEngine {
         this.proposalApprovedAtTickSerial = 0;
         this.onStatus('scanning');
         this.writeLog(
-            `Checking ${row.symbol} · ${decision.label} · ${row.sampleCount} holdout observations; requesting a live proposal.`,
+            `Locked ${row.symbol} · ${decision.label} · ${row.sampleCount} holdout observations; checking payout and waiting for its configured Last-X pattern.`,
             'system',
         );
-        this.publishScan('selected', `Checking live payout for ${row.symbol} ${decision.label}.`);
+        this.publishScan(
+            'selected',
+            `Locked ${row.symbol} ${decision.label}; checking live payout and waiting for its configured Last-X pattern.`,
+        );
 
         const started = this.trader.start({
             symbol: row.symbol,
@@ -418,10 +421,10 @@ export class BinaryMatrixEngine {
     private handleAdaptiveTick(): void {
         if (this.paused || this.openContractId || this.pendingDecision || !this.selectedMarket) return;
         const analysis = analyzeBinaryMatrix(this.digits, this.activeDecision);
-        const decision = analysis?.decision;
         const indicators = calculateBinaryMatrixIndicators(this.indicatorPrices);
-        const signalMatches = decision?.condition === this.selectedMarket.condition &&
-            indicatorsConfirmDecision(decision, indicators);
+        const signalMatches = analysis?.condition === this.selectedMarket.condition &&
+            analysis.result &&
+            Boolean(this.activeDecision && indicatorsConfirmDecision(this.activeDecision, indicators));
         this.candidateSignalCurrent = signalMatches;
 
         if (
@@ -465,12 +468,12 @@ export class BinaryMatrixEngine {
         this.proposalApproved = true;
         if (!wasApproved) this.proposalApprovedAtTickSerial = this.tickSerial;
         this.writeLog(
-            `Live proposal clears break-even for ${this.selectedMarket.symbol} ${this.selectedMarket.condition}.`,
+            `Live proposal clears break-even for ${this.selectedMarket.symbol} ${this.selectedMarket.condition}; the signal remains locked while waiting for its Last-X pattern.`,
             'system',
         );
         this.publishScan(
             'selected',
-            `Live payout check passed for ${this.selectedMarket.symbol}; waiting for a fresh matching tick.`,
+            `Live payout passed for ${this.selectedMarket.symbol}; locked signal is waiting for its configured Last-X digits.`,
         );
     }
 
@@ -524,18 +527,19 @@ export class BinaryMatrixEngine {
         const rows = this.scanSnapshot.rows.map(row => {
             if (selected?.symbol === row.symbol) {
                 const breakEven = selected.breakEvenWinRate;
+                const liveAnalysis = analyzeBinaryMatrix(this.digits, this.activeDecision);
+                const ruleTriggered = liveAnalysis?.condition === selected.condition && liveAnalysis.result;
                 return {
                     ...row,
                     status: this.proposalApproved ? 'qualified' as const : 'candidate' as const,
+                    currentCondition: selected.condition,
+                    currentDigits: this.digits.slice(-4),
+                    ruleTriggered,
                     breakEvenWinRate: breakEven,
                     score: breakEven === null ? row.score : selected.lowerConfidenceBound - breakEven,
                     reason: this.proposalApproved
-                        ? row.currentCondition === selected.condition
-                            ? 'Historical holdout and live payout pass; waiting for a fresh matching tick.'
-                            : `Selected ${selected.condition}; waiting for that rule to trigger again.`
-                        : row.currentCondition === selected.condition
-                            ? 'Historical holdout passed; waiting for a live payout check.'
-                            : `Selected ${selected.condition}; waiting for its live payout check and a fresh matching tick.`,
+                        ? `Historical holdout and live payout pass; signal locked to ${selected.condition}, waiting for its configured Last-X digits.`
+                        : `Signal locked to ${selected.condition}; checking live payout and waiting for its configured Last-X digits.`,
                 };
             }
 

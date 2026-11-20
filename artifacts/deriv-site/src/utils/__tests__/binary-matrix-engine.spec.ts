@@ -389,7 +389,7 @@ describe('BinaryMatrixEngine live purchase path', () => {
         mockApiBase.api = null;
     });
 
-    it('requires historical evidence, a passing live payout, and a fresh signal before buying', async () => {
+    it('locks the qualified rule before Last-X triggers and waits for a passing payout and fresh pattern', async () => {
         const sent: SentPayload[] = [];
         let handler: MessageHandler | null = null;
         const api = {
@@ -426,7 +426,7 @@ describe('BinaryMatrixEngine live purchase path', () => {
         const selectedSymbol = DERIV_VOLATILITIES[0].code;
         const historyDigits: number[] = [];
         for (let index = 0; index < 120; index += 1) historyDigits.push(1, 1, 1, 1, 0);
-        historyDigits.push(1, 1, 1, 1);
+        historyDigits.push(2, 4, 5, 7);
         publicSocket.respond({
             msg_type: 'history',
             req_id: publicHistoryRequest.req_id,
@@ -464,6 +464,14 @@ describe('BinaryMatrixEngine live purchase path', () => {
             contract_type: 'DIGITEVEN',
             underlying_symbol: selectedSymbol,
         });
+        expect(scanUpdates.some(snapshot =>
+            snapshot.selectedSymbol === selectedSymbol &&
+            snapshot.rows.some((row: any) =>
+                row.symbol === selectedSymbol &&
+                row.currentCondition === 'ALL_ODD' &&
+                row.ruleTriggered === false
+            )
+        )).toBe(true);
         expect(sent.some(payload => payload.buy)).toBe(false);
         emit({
             msg_type: 'tick',

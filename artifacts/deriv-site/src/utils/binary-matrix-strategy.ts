@@ -80,6 +80,9 @@ const MATRIX_CONDITIONS: MatrixCondition[] = [
     },
 ];
 
+export type BinaryMatrixCondition = (typeof MATRIX_CONDITIONS)[number]['condition'];
+export const BINARY_MATRIX_CONDITION_IDS = MATRIX_CONDITIONS.map(condition => condition.condition);
+
 const normalizeDigits = (digits: readonly number[]): number[] =>
     digits
         .map(Number)
@@ -88,8 +91,12 @@ const normalizeDigits = (digits: readonly number[]): number[] =>
 const conditionResult = (digits: number[], condition: MatrixCondition): boolean =>
     lastDigitsMatch(digits, condition.count, condition.predicate);
 
-const makeDecision = (digits: number[], condition: MatrixCondition): BinaryMatrixDecision | null => {
-    if (!condition.purchase || !conditionResult(digits, condition)) return null;
+const makeDecision = (
+    digits: number[],
+    condition: MatrixCondition,
+    requireMatch = true,
+): BinaryMatrixDecision | null => {
+    if (!condition.purchase || (requireMatch && !conditionResult(digits, condition))) return null;
 
     return {
         ...condition.purchase,
@@ -107,6 +114,14 @@ const makeDecision = (digits: number[], condition: MatrixCondition): BinaryMatri
         compareValue: condition.compareValue,
     };
 };
+
+export function binaryMatrixDecisionForCondition(
+    conditionId: string,
+    digits: readonly number[] = [],
+): BinaryMatrixDecision | null {
+    const condition = MATRIX_CONDITIONS.find(item => item.condition === conditionId);
+    return condition ? makeDecision(normalizeDigits(digits), condition, false) : null;
+}
 
 /**
  * Evaluates the matrix for display and execution.

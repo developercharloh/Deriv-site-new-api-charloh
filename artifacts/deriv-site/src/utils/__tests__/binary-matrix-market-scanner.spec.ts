@@ -54,6 +54,21 @@ const pricesForDigits = (digits: number[]): string[] =>
     digits.map((digit, index) => `${(index + 1).toString()}.${digit.toString().padStart(2, '0')}`);
 
 describe('Binary Matrix market scanner evidence', () => {
+    it('qualifies a historical rule before its configured Last-X pattern is present', () => {
+        const digits: number[] = [];
+        for (let index = 0; index < 120; index += 1) digits.push(1, 1, 1, 1, 0);
+        digits.push(2, 4, 5, 7);
+
+        const evidence = analyzeBinaryMatrixHistory(digits, [], 'ALL_ODD');
+
+        expect(evidence.decision).toMatchObject({
+            condition: 'ALL_ODD',
+            contractType: 'DIGITEVEN',
+        });
+        expect(evidence.currentDigits).toEqual([2, 4, 5, 7]);
+        expect(evidence.lowerConfidenceBound).toBeGreaterThan(0.5);
+    });
+
     it('uses a conservative Wilson lower confidence bound', () => {
         expect(wilsonLowerBound(100, 100)).toBeLessThan(1);
         expect(wilsonLowerBound(50, 100)).toBeLessThan(0.5);
@@ -153,6 +168,41 @@ describe('Binary Matrix market scanner evidence', () => {
 });
 
 describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
+    it('shows a qualified rule as waiting when its Last-X digits have not triggered', () => {
+        jest.useFakeTimers();
+        const socket = new FakeSocket();
+        const scanner = new BinaryMatrixMarketScanner({
+            socketFactory: () => socket,
+            symbols: [testSymbol],
+        });
+        const updates: any[] = [];
+        scanner.start(snapshot => updates.push(snapshot), jest.fn());
+        socket.open();
+
+        const digits: number[] = [];
+        for (let index = 0; index < 120; index += 1) digits.push(1, 1, 1, 1, 0);
+        digits.push(2, 4, 5, 7);
+        socket.respond({
+            msg_type: 'history',
+            req_id: 1,
+            pip_size: 2,
+            history: { prices: pricesForDigits(digits) },
+            subscription: { id: 'sub-r25' },
+        });
+
+        expect(updates[updates.length - 1].rows[0]).toMatchObject({
+            status: 'candidate',
+            ruleTriggered: false,
+            currentCondition: 'ALL_ODD',
+        });
+        expect(updates[updates.length - 1].rows[0].reason).toContain(
+            'waiting for its configured Last-X digit pattern',
+        );
+
+        scanner.stop();
+        jest.useRealTimers();
+    });
+
     it('paces history requests and updates live row data from the symbol subscription', () => {
         jest.useFakeTimers();
         const socket = new FakeSocket();

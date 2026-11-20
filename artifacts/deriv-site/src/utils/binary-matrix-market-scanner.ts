@@ -1,8 +1,12 @@
 import { getPublicWsUrl } from '@/external/deriv-core/config/urls';
 import { macdArray } from '@/external/indicators';
 import { DERIV_VOLATILITIES, type DerivVolatility } from './deriv-volatilities';
-import { evaluateBinaryMatrix } from './binary-matrix-strategy';
-import type { BinaryMatrixDecision } from './binary-matrix-strategy';
+import {
+    BINARY_MATRIX_CONDITION_IDS,
+    binaryMatrixDecisionForCondition,
+    evaluateBinaryMatrix,
+} from './binary-matrix-strategy';
+import type { BinaryMatrixCondition, BinaryMatrixDecision } from './binary-matrix-strategy';
 
 export type BinaryMatrixMarketRowStatus =
     | 'scanning'
@@ -274,14 +278,13 @@ const didContractWin = (decision: BinaryMatrixDecision, digit: number): boolean 
  * The rule is selected using only the preceding four digits; the following
  * digit is the observed one-tick contract result.
  */
-export function analyzeBinaryMatrixHistory(
+export function analyzeBinaryMatrixHistories(
     digits: readonly number[],
     prices: readonly number[] = [],
-): BinaryMatrixHistoricalEvidence {
+): BinaryMatrixHistoricalEvidence[] {
     const normalized = digits.filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
     const indicatorSeries = calculateBinaryMatrixIndicatorSeries(prices);
     const indicators = indicatorSeries[normalized.length - 1] ?? emptyIndicators();
-    const decision = evaluateBinaryMatrix(normalized.slice(-4));
     const counts = new Map<string, RuleCounts>();
     const lastCountedAt = new Map<string, number>();
     const splitAt = Math.floor(normalized.length * 0.6);
@@ -313,10 +316,52 @@ export function analyzeBinaryMatrixHistory(
         lastCountedAt.set(historicalDecision.condition, resultIndex);
     }
 
-    if (!decision?.condition) {
+    return BINARY_MATRIX_CONDITION_IDS.map(condition => {
+        const decision = binaryMatrixDecisionForCondition(condition, normalized);
+        const evidence = counts.get(condition);
+        const trainingSampleCount = evidence?.trainingTotal ?? 0;
+        const trainingWins = evidence?.trainingWins ?? 0;
+        const sampleCount = evidence?.validationTotal ?? 0;
+        const wins = evidence?.validationWins ?? 0;
+        const winRate = sampleCount > 0 ? wins / sampleCount : null;
+        const trainingWinRate = trainingSampleCount > 0 ? trainingWins / trainingSampleCount : null;
+        const lowerConfidenceBound =
+            trainingSampleCount >= MIN_TRAINING_SAMPLES && sampleCount >= MIN_VALIDATION_SAMPLES
+                ? wilsonLowerBound(wins, sampleCount)
+                : null;
+        const clearsTrainingCheck = trainingWinRate !== null && trainingWinRate > 0.5;
+        const score =
+            lowerConfidenceBound !== null && clearsTrainingCheck
+                ? lowerConfidenceBound - 0.5
+                : null;
+
         return {
-            decision: null,
+            decision,
             indicators,
+            currentDigits: normalized.slice(-4),
+            trainingSampleCount,
+            trainingWins,
+            sampleCount,
+            wins,
+            winRate,
+            trainingWinRate,
+            lowerConfidenceBound: clearsTrainingCheck ? lowerConfidenceBound : null,
+            score,
+        };
+    });
+}
+
+export function analyzeBinaryMatrixHistory(
+    digits: readonly number[],
+    prices: readonly number[] = [],
+    targetCondition?: BinaryMatrixCondition,
+): BinaryMatrixHistoricalEvidence {
+    const normalized = digits.filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+    const evidences = analyzeBinaryMatrixHistories(normalized, prices);
+    if (targetCondition) {
+        return evidences.find(evidence => evidence.decision?.condition === targetCondition) ?? {
+            decision: null,
+            indicators: evidences[0]?.indicators ?? emptyIndicators(),
             currentDigits: normalized.slice(-4),
             trainingSampleCount: 0,
             trainingWins: 0,
@@ -329,36 +374,22 @@ export function analyzeBinaryMatrixHistory(
         };
     }
 
-    const evidence = counts.get(decision.condition);
-    const trainingSampleCount = evidence?.trainingTotal ?? 0;
-    const trainingWins = evidence?.trainingWins ?? 0;
-    const sampleCount = evidence?.validationTotal ?? 0;
-    const wins = evidence?.validationWins ?? 0;
-    const winRate = sampleCount > 0 ? wins / sampleCount : null;
-    const trainingWinRate = trainingSampleCount > 0 ? trainingWins / trainingSampleCount : null;
-    const lowerConfidenceBound =
-        trainingSampleCount >= MIN_TRAINING_SAMPLES && sampleCount >= MIN_VALIDATION_SAMPLES
-            ? wilsonLowerBound(wins, sampleCount)
-            : null;
-    const clearsTrainingCheck = trainingWinRate !== null && trainingWinRate > 0.5;
-    const score =
-        lowerConfidenceBound !== null && clearsTrainingCheck
-            ? lowerConfidenceBound - 0.5
-            : null;
-
-    return {
-        decision,
-        indicators,
-        currentDigits: normalized.slice(-4),
-        trainingSampleCount,
-        trainingWins,
-        sampleCount,
-        wins,
-        winRate,
-        trainingWinRate,
-        lowerConfidenceBound: clearsTrainingCheck ? lowerConfidenceBound : null,
-        score,
-    };
+    const currentDecision = evaluateBinaryMatrix(normalized.slice(-4));
+    return currentDecision
+        ? evidences.find(evidence => evidence.decision?.condition === currentDecision.condition)!
+        : {
+            decision: null,
+            indicators: evidences[0]?.indicators ?? emptyIndicators(),
+            currentDigits: normalized.slice(-4),
+            trainingSampleCount: 0,
+            trainingWins: 0,
+            sampleCount: 0,
+            wins: 0,
+            winRate: null,
+            trainingWinRate: null,
+            lowerConfidenceBound: null,
+            score: null,
+        };
 }
 
 export class BinaryMatrixMarketScanner {
@@ -754,7 +785,28 @@ export class BinaryMatrixMarketScanner {
             };
         }
 
-        const evidence = analyzeBinaryMatrixHistory(state.digits, state.prices);
+        const triggeredEvidence = analyzeBinaryMatrixHistory(state.digits, state.prices);
+        const evidenceByCondition = BINARY_MATRIX_CONDITION_IDS
+            .map(condition => analyzeBinaryMatrixHistory(state.digits, state.prices, condition))
+            .filter((evidence): evidence is BinaryMatrixHistoricalEvidence & { decision: BinaryMatrixDecision } =>
+                Boolean(evidence.decision),
+            );
+        const qualifiedEvidence = evidenceByCondition
+            .filter(evidence =>
+                evidence.sampleCount >= MIN_VALIDATION_SAMPLES &&
+                evidence.lowerConfidenceBound !== null &&
+                evidence.lowerConfidenceBound > 0.5 &&
+                indicatorsConfirmDecision(evidence.decision, evidence.indicators),
+            )
+            .sort((left, right) => {
+                const scoreDifference = (right.score ?? -Infinity) - (left.score ?? -Infinity);
+                if (scoreDifference !== 0) return scoreDifference;
+                const sampleDifference = right.sampleCount - left.sampleCount;
+                if (sampleDifference !== 0) return sampleDifference;
+                return BINARY_MATRIX_CONDITION_IDS.indexOf(left.decision.condition as BinaryMatrixCondition) -
+                    BINARY_MATRIX_CONDITION_IDS.indexOf(right.decision.condition as BinaryMatrixCondition);
+            });
+        const evidence = qualifiedEvidence[0] ?? triggeredEvidence;
         if (!evidence.decision) {
             return {
                 symbol: state.symbol.code,
@@ -785,6 +837,8 @@ export class BinaryMatrixMarketScanner {
             evidence.lowerConfidenceBound > 0.5;
         const currentIndicatorsConfirmed = indicatorsConfirmDecision(evidence.decision, evidence.indicators);
         const qualified = historicalQualified && currentIndicatorsConfirmed;
+        const ruleTriggered = Boolean(analyzeBinaryMatrixHistory(state.digits, state.prices).decision?.condition ===
+            evidence.decision.condition);
         return {
             symbol: state.symbol.code,
             label: state.symbol.label,
@@ -793,7 +847,7 @@ export class BinaryMatrixMarketScanner {
                 : historicalQualified && !currentIndicatorsConfirmed
                   ? 'indicator-mismatch'
                   : 'insufficient-data',
-            ruleTriggered: true,
+            ruleTriggered,
             currentCondition: evidence.decision.condition ?? null,
             currentDigits: evidence.currentDigits,
             macdHistogram: evidence.indicators.histogram,
@@ -809,16 +863,18 @@ export class BinaryMatrixMarketScanner {
             breakEvenWinRate: null,
             score: evidence.score,
             reason: qualified
-                ? `Historical holdout clears the 50% baseline; MACD and RSI ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
+                ? ruleTriggered
+                    ? `Historical holdout clears the 50% baseline; MACD and RSI ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
+                    : `Historical evidence and indicators qualify ${evidence.decision.label}; waiting for its configured Last-X digit pattern.`
                 : historicalQualified && !currentIndicatorsConfirmed
-                  ? `Rule triggered, but current MACD/RSI are ${evidence.indicators.state}; ${this.indicatorLabel(evidence.decision)}.`
+                  ? `${ruleTriggered ? 'Rule triggered' : 'Signal is waiting'}; current MACD/RSI are ${evidence.indicators.state}, but ${this.indicatorLabel(evidence.decision)}.`
                 : evidence.trainingSampleCount < MIN_TRAINING_SAMPLES
-                  ? `Rule triggered, but only ${evidence.trainingSampleCount} training examples; at least ${MIN_TRAINING_SAMPLES} are required.`
+                  ? `${ruleTriggered ? 'Rule triggered' : 'No Last-X trigger yet'}, but only ${evidence.trainingSampleCount} training examples; at least ${MIN_TRAINING_SAMPLES} are required.`
                   : evidence.sampleCount < MIN_VALIDATION_SAMPLES
-                    ? `Rule triggered, but only ${evidence.sampleCount} holdout examples; at least ${MIN_VALIDATION_SAMPLES} are required.`
+                    ? `${ruleTriggered ? 'Rule triggered' : 'No Last-X trigger yet'}, but only ${evidence.sampleCount} holdout examples; at least ${MIN_VALIDATION_SAMPLES} are required.`
                     : evidence.trainingWinRate === null || evidence.trainingWinRate <= 0.5
-                      ? 'Rule triggered, but the training win rate does not clear 50%.'
-                      : 'Rule triggered, but the holdout confidence bound does not clear 50%.',
+                      ? `${ruleTriggered ? 'Rule triggered' : 'No Last-X trigger yet'}, but the training win rate does not clear 50%.`
+                      : `${ruleTriggered ? 'Rule triggered' : 'No Last-X trigger yet'}, but the holdout confidence bound does not clear 50%.`,
         };
     }
 
