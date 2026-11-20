@@ -1,4 +1,5 @@
 import { getPublicWsUrl } from '@/external/deriv-core/config/urls';
+import { macdArray } from '@/external/indicators';
 import { DERIV_VOLATILITIES, type DerivVolatility } from './deriv-volatilities';
 import { evaluateBinaryMatrix } from './binary-matrix-strategy';
 import type { BinaryMatrixDecision } from './binary-matrix-strategy';
@@ -7,12 +8,20 @@ export type BinaryMatrixMarketRowStatus =
     | 'scanning'
     | 'candidate'
     | 'qualified'
-    | 'momentum-mismatch'
+    | 'indicator-mismatch'
     | 'no-signal'
     | 'insufficient-data'
     | 'unavailable';
 
-export type BinaryMatrixMomentumState = 'rising' | 'falling' | 'neutral' | 'unavailable';
+export type BinaryMatrixIndicatorState = 'bullish' | 'bearish' | 'mixed' | 'unavailable';
+
+export interface BinaryMatrixIndicators {
+    macd: number | null;
+    signal: number | null;
+    histogram: number | null;
+    rsi: number | null;
+    state: BinaryMatrixIndicatorState;
+}
 
 export interface BinaryMatrixMarketScanRow {
     symbol: string;
@@ -21,9 +30,9 @@ export interface BinaryMatrixMarketScanRow {
     ruleTriggered: boolean;
     currentCondition: string | null;
     currentDigits: number[];
-    momentumRoc: number | null;
-    momentumState: BinaryMatrixMomentumState;
-    recentPrices: number[];
+    macdHistogram: number | null;
+    rsi: number | null;
+    indicatorState: BinaryMatrixIndicatorState;
     digitRates: number[];
     trainingSampleCount: number;
     trainingWins: number;
@@ -70,6 +79,7 @@ export interface BinaryMatrixScanSnapshot {
 
 export interface BinaryMatrixHistoricalEvidence {
     decision: BinaryMatrixDecision | null;
+    indicators: BinaryMatrixIndicators;
     currentDigits: number[];
     trainingSampleCount: number;
     trainingWins: number;
@@ -113,10 +123,16 @@ const HISTORY_COUNT = 5000;
 const MIN_VALIDATION_SAMPLES = 30;
 const MIN_TRAINING_SAMPLES = 20;
 const FAMILY_WISE_Z = 3.29;
-export const DEFAULT_BINARY_MATRIX_ROC_PERIOD = 5;
+export const DEFAULT_BINARY_MATRIX_MACD_SETTINGS = {
+    fastEmaPeriod: 12,
+    slowEmaPeriod: 26,
+    signalEmaPeriod: 9,
+    rsiPeriod: 14,
+} as const;
 const HISTORY_REQUEST_TIMEOUT_MS = 8000;
 const NEXT_SYMBOL_DELAY_MS = 250;
-const MAX_DIGITS = 5000;
+export const BINARY_MATRIX_INDICATOR_HISTORY_LIMIT = 5000;
+const MAX_DIGITS = BINARY_MATRIX_INDICATOR_HISTORY_LIMIT;
 const PUBLIC_FEED_KEEPALIVE_INTERVAL_MS = 25_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_BASE_DELAY_MS = 1000;
@@ -142,38 +158,87 @@ export function calculateDigitRates(digits: readonly number[], windowSize = 1000
     return counts.map(count => count / window.length);
 }
 
-const calculateRateOfChangeAt = (
-    prices: readonly number[],
-    currentIndex: number,
-    period: number,
-): number | null => {
-    if (
-        !Number.isInteger(period) ||
-        period < 1 ||
-        !Number.isInteger(currentIndex) ||
-        currentIndex < period ||
-        currentIndex >= prices.length
-    ) return null;
-    const current = Number(prices[currentIndex]);
-    const previous = Number(prices[currentIndex - period]);
-    if (!Number.isFinite(current) || !Number.isFinite(previous) || previous === 0) return null;
-    return ((current - previous) / Math.abs(previous)) * 100;
+const emptyIndicators = (): BinaryMatrixIndicators => ({
+    macd: null,
+    signal: null,
+    histogram: null,
+    rsi: null,
+    state: 'unavailable',
+});
+
+const rsiFromAverages = (averageGain: number, averageLoss: number): number => {
+    if (averageGain === 0 && averageLoss === 0) return 50;
+    if (averageLoss === 0) return 100;
+    if (averageGain === 0) return 0;
+    const relativeStrength = averageGain / averageLoss;
+    return 100 - 100 / (1 + relativeStrength);
 };
 
-export function calculateRateOfChange(prices: readonly number[], period = DEFAULT_BINARY_MATRIX_ROC_PERIOD): number | null {
-    return calculateRateOfChangeAt(prices, prices.length - 1, period);
+export function calculateBinaryMatrixIndicatorSeries(prices: readonly number[]): BinaryMatrixIndicators[] {
+    const series = Array.from({ length: prices.length }, emptyIndicators);
+    const { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, rsiPeriod } =
+        DEFAULT_BINARY_MATRIX_MACD_SETTINGS;
+
+    const firstMacdIndex = slowEmaPeriod + signalEmaPeriod - 2;
+    if (prices.length >= slowEmaPeriod + signalEmaPeriod - 1) {
+        const macdValues = macdArray([...prices], {
+            fastEmaPeriod,
+            slowEmaPeriod,
+            signalEmaPeriod,
+            pipSize: 12,
+        });
+        macdValues.forEach(([histogram, macd, signal], index) => {
+            const target = series[firstMacdIndex + index];
+            if (!target || ![histogram, macd, signal].every(Number.isFinite)) return;
+            target.histogram = histogram;
+            target.macd = macd;
+            target.signal = signal;
+        });
+    }
+
+    if (prices.length > rsiPeriod) {
+        let averageGain = 0;
+        let averageLoss = 0;
+        for (let index = 1; index <= rsiPeriod; index += 1) {
+            const difference = prices[index] - prices[index - 1];
+            averageGain += Math.max(difference, 0);
+            averageLoss += Math.max(-difference, 0);
+        }
+        averageGain /= rsiPeriod;
+        averageLoss /= rsiPeriod;
+        series[rsiPeriod].rsi = rsiFromAverages(averageGain, averageLoss);
+
+        for (let index = rsiPeriod + 1; index < prices.length; index += 1) {
+            const difference = prices[index] - prices[index - 1];
+            averageGain = (averageGain * (rsiPeriod - 1) + Math.max(difference, 0)) / rsiPeriod;
+            averageLoss = (averageLoss * (rsiPeriod - 1) + Math.max(-difference, 0)) / rsiPeriod;
+            series[index].rsi = rsiFromAverages(averageGain, averageLoss);
+        }
+    }
+
+    return series.map(indicators => ({
+        ...indicators,
+        state: indicators.histogram === null || indicators.rsi === null
+            ? 'unavailable'
+            : indicators.histogram > 0 && indicators.rsi > 50
+              ? 'bullish'
+              : indicators.histogram < 0 && indicators.rsi < 50
+                ? 'bearish'
+                : 'mixed',
+    }));
 }
 
-export function getMomentumState(roc: number | null): BinaryMatrixMomentumState {
-    if (roc === null || !Number.isFinite(roc)) return 'unavailable';
-    if (roc > 0) return 'rising';
-    if (roc < 0) return 'falling';
-    return 'neutral';
+export function calculateBinaryMatrixIndicators(prices: readonly number[]): BinaryMatrixIndicators {
+    const series = calculateBinaryMatrixIndicatorSeries(prices);
+    return series[series.length - 1] ?? emptyIndicators();
 }
 
-export function momentumConfirmsDecision(decision: BinaryMatrixDecision, roc: number | null): boolean {
-    if (decision.contractType === 'DIGITOVER') return roc !== null && roc > 0;
-    if (decision.contractType === 'DIGITUNDER') return roc !== null && roc < 0;
+export function indicatorsConfirmDecision(
+    decision: BinaryMatrixDecision,
+    indicators: BinaryMatrixIndicators | null | undefined,
+): boolean {
+    if (decision.contractType === 'DIGITOVER') return indicators?.state === 'bullish';
+    if (decision.contractType === 'DIGITUNDER') return indicators?.state === 'bearish';
     return true;
 }
 
@@ -212,9 +277,10 @@ const didContractWin = (decision: BinaryMatrixDecision, digit: number): boolean 
 export function analyzeBinaryMatrixHistory(
     digits: readonly number[],
     prices: readonly number[] = [],
-    momentumPeriod = DEFAULT_BINARY_MATRIX_ROC_PERIOD,
 ): BinaryMatrixHistoricalEvidence {
     const normalized = digits.filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
+    const indicatorSeries = calculateBinaryMatrixIndicatorSeries(prices);
+    const indicators = indicatorSeries[normalized.length - 1] ?? emptyIndicators();
     const decision = evaluateBinaryMatrix(normalized.slice(-4));
     const counts = new Map<string, RuleCounts>();
     const lastCountedAt = new Map<string, number>();
@@ -224,17 +290,8 @@ export function analyzeBinaryMatrixHistory(
         const priorWindow = normalized.slice(resultIndex - 4, resultIndex);
         const historicalDecision = evaluateBinaryMatrix(priorWindow);
         if (!historicalDecision?.condition) continue;
-        if (
-            historicalDecision.contractType === 'DIGITOVER' ||
-            historicalDecision.contractType === 'DIGITUNDER'
-        ) {
-            const historicalRoc = calculateRateOfChangeAt(
-                prices,
-                resultIndex - 1,
-                momentumPeriod,
-            );
-            if (!momentumConfirmsDecision(historicalDecision, historicalRoc)) continue;
-        }
+        const historicalIndicators = indicatorSeries[resultIndex - 1];
+        if (!indicatorsConfirmDecision(historicalDecision, historicalIndicators)) continue;
         const previousResult = lastCountedAt.get(historicalDecision.condition);
         if (previousResult !== undefined && resultIndex - previousResult < 4) continue;
 
@@ -259,6 +316,7 @@ export function analyzeBinaryMatrixHistory(
     if (!decision?.condition) {
         return {
             decision: null,
+            indicators,
             currentDigits: normalized.slice(-4),
             trainingSampleCount: 0,
             trainingWins: 0,
@@ -290,6 +348,7 @@ export function analyzeBinaryMatrixHistory(
 
     return {
         decision,
+        indicators,
         currentDigits: normalized.slice(-4),
         trainingSampleCount,
         trainingWins,
@@ -314,19 +373,15 @@ export class BinaryMatrixMarketScanner {
     private stopped = true;
     private socketFactory: SocketFactory;
     private symbols: DerivVolatility[];
-    private readonly momentumPeriod: number;
     private readonly marketStates = new Map<string, MarketState>();
     private readonly subscriptionSymbols = new Map<string, string>();
     private readonly rowsBySymbol = new Map<string, BinaryMatrixMarketScanRow>();
     private onUpdate: (snapshot: BinaryMatrixScanSnapshot) => void = () => {};
     private onError: (message: string) => void = () => {};
 
-    constructor(options: { socketFactory?: SocketFactory; symbols?: DerivVolatility[]; momentumPeriod?: number } = {}) {
+    constructor(options: { socketFactory?: SocketFactory; symbols?: DerivVolatility[] } = {}) {
         this.socketFactory = options.socketFactory ?? defaultSocketFactory;
         this.symbols = options.symbols ?? DERIV_VOLATILITIES;
-        this.momentumPeriod = Number.isInteger(options.momentumPeriod) && options.momentumPeriod! > 0
-            ? options.momentumPeriod!
-            : DEFAULT_BINARY_MATRIX_ROC_PERIOD;
         this.symbols.forEach(symbol => {
             this.marketStates.set(symbol.code, {
                 symbol,
@@ -336,6 +391,10 @@ export class BinaryMatrixMarketScanner {
                 ready: false,
             });
         });
+    }
+
+    getPriceHistory(symbol: string): number[] {
+        return [...(this.marketStates.get(symbol)?.prices ?? [])];
     }
 
     start(
@@ -655,9 +714,9 @@ export class BinaryMatrixMarketScanner {
                 ruleTriggered: false,
                 currentCondition: null,
                 currentDigits: state.digits.slice(-4),
-                momentumRoc: calculateRateOfChange(state.prices, this.momentumPeriod),
-                momentumState: getMomentumState(calculateRateOfChange(state.prices, this.momentumPeriod)),
-                recentPrices: state.prices.slice(-(this.momentumPeriod + 1)),
+                macdHistogram: null,
+                rsi: null,
+                indicatorState: 'unavailable',
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
                 trainingWins: 0,
@@ -679,9 +738,9 @@ export class BinaryMatrixMarketScanner {
                 ruleTriggered: false,
                 currentCondition: null,
                 currentDigits: state.digits.slice(-4),
-                momentumRoc: calculateRateOfChange(state.prices, this.momentumPeriod),
-                momentumState: getMomentumState(calculateRateOfChange(state.prices, this.momentumPeriod)),
-                recentPrices: state.prices.slice(-(this.momentumPeriod + 1)),
+                macdHistogram: null,
+                rsi: null,
+                indicatorState: 'unavailable',
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
                 trainingWins: 0,
@@ -695,8 +754,7 @@ export class BinaryMatrixMarketScanner {
             };
         }
 
-        const currentRoc = calculateRateOfChange(state.prices, this.momentumPeriod);
-        const evidence = analyzeBinaryMatrixHistory(state.digits, state.prices, this.momentumPeriod);
+        const evidence = analyzeBinaryMatrixHistory(state.digits, state.prices);
         if (!evidence.decision) {
             return {
                 symbol: state.symbol.code,
@@ -705,9 +763,9 @@ export class BinaryMatrixMarketScanner {
                 ruleTriggered: false,
                 currentCondition: null,
                 currentDigits: evidence.currentDigits,
-                momentumRoc: currentRoc,
-                momentumState: getMomentumState(currentRoc),
-                recentPrices: state.prices.slice(-(this.momentumPeriod + 1)),
+                macdHistogram: evidence.indicators.histogram,
+                rsi: evidence.indicators.rsi,
+                indicatorState: evidence.indicators.state,
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
                 trainingWins: 0,
@@ -725,22 +783,22 @@ export class BinaryMatrixMarketScanner {
             evidence.sampleCount >= MIN_VALIDATION_SAMPLES &&
             evidence.lowerConfidenceBound !== null &&
             evidence.lowerConfidenceBound > 0.5;
-        const currentMomentumConfirmed = momentumConfirmsDecision(evidence.decision, currentRoc);
-        const qualified = historicalQualified && currentMomentumConfirmed;
+        const currentIndicatorsConfirmed = indicatorsConfirmDecision(evidence.decision, evidence.indicators);
+        const qualified = historicalQualified && currentIndicatorsConfirmed;
         return {
             symbol: state.symbol.code,
             label: state.symbol.label,
             status: qualified
                 ? 'candidate'
-                : historicalQualified && !currentMomentumConfirmed
-                  ? 'momentum-mismatch'
+                : historicalQualified && !currentIndicatorsConfirmed
+                  ? 'indicator-mismatch'
                   : 'insufficient-data',
             ruleTriggered: true,
             currentCondition: evidence.decision.condition ?? null,
             currentDigits: evidence.currentDigits,
-            momentumRoc: currentRoc,
-            momentumState: getMomentumState(currentRoc),
-            recentPrices: state.prices.slice(-(this.momentumPeriod + 1)),
+            macdHistogram: evidence.indicators.histogram,
+            rsi: evidence.indicators.rsi,
+            indicatorState: evidence.indicators.state,
             digitRates: calculateDigitRates(state.digits),
             trainingSampleCount: evidence.trainingSampleCount,
             trainingWins: evidence.trainingWins,
@@ -751,9 +809,9 @@ export class BinaryMatrixMarketScanner {
             breakEvenWinRate: null,
             score: evidence.score,
             reason: qualified
-                ? `Historical holdout clears the 50% baseline; ROC ${this.momentumLabel(evidence.decision)}; live payout still needs checking.`
-                : historicalQualified && !currentMomentumConfirmed
-                  ? `Rule triggered, but current ROC is ${getMomentumState(currentRoc)}; ${this.momentumLabel(evidence.decision)}.`
+                ? `Historical holdout clears the 50% baseline; MACD and RSI ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
+                : historicalQualified && !currentIndicatorsConfirmed
+                  ? `Rule triggered, but current MACD/RSI are ${evidence.indicators.state}; ${this.indicatorLabel(evidence.decision)}.`
                 : evidence.trainingSampleCount < MIN_TRAINING_SAMPLES
                   ? `Rule triggered, but only ${evidence.trainingSampleCount} training examples; at least ${MIN_TRAINING_SAMPLES} are required.`
                   : evidence.sampleCount < MIN_VALIDATION_SAMPLES
@@ -764,10 +822,10 @@ export class BinaryMatrixMarketScanner {
         };
     }
 
-    private momentumLabel(decision: BinaryMatrixDecision): string {
-        if (decision.contractType === 'DIGITOVER') return 'confirms rising momentum';
-        if (decision.contractType === 'DIGITUNDER') return 'confirms falling momentum';
-        return 'does not direction-filter Even/Odd';
+    private indicatorLabel(decision: BinaryMatrixDecision): string {
+        if (decision.contractType === 'DIGITOVER') return 'confirm bullish direction for Over 4';
+        if (decision.contractType === 'DIGITUNDER') return 'confirm bearish direction for Under 5';
+        return 'are not required for Even/Odd';
     }
 
     private emit(status: BinaryMatrixScanSnapshot['status'], message: string): void {

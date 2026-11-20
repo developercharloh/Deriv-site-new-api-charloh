@@ -43,6 +43,7 @@ jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
 }));
 
 import { BinaryMatrixEngine } from '@/utils/binary-matrix-engine';
+import { evaluateBinaryMatrix } from '@/utils/binary-matrix-strategy';
 import { DERIV_VOLATILITIES } from '@/utils/deriv-volatilities';
 import { api_base as mockApiBase } from '@/external/bot-skeleton/services/api/api-base';
 import { observer } from '@/external/bot-skeleton/utils/observer';
@@ -96,6 +97,39 @@ describe('BinaryMatrixEngine live purchase path', () => {
 
         emit.mockRestore();
         engine.running = false;
+    });
+
+    it('requires aligned MACD and RSI for a live Over entry', () => {
+        const engine = new BinaryMatrixEngine({
+            symbol: 'R_25',
+            currency: 'USD',
+            initialStake: 0.5,
+            martingale: 2,
+            takeProfit: 10,
+            stopLoss: 50,
+            reanalyzeAfterWins: 3,
+            autoMarketScan: true,
+        }) as any;
+        const decision = evaluateBinaryMatrix([4, 1, 2, 3]);
+        if (!decision) throw new Error('Expected the Binary Matrix Over rule to match.');
+
+        engine.running = true;
+        engine.selectedMarket = { symbol: 'R_25', condition: decision.condition, lowerConfidenceBound: 0.8, sampleCount: 60, breakEvenWinRate: null };
+        engine.activeDecision = decision;
+        engine.digits = [4, 1, 2, 3];
+        engine.indicatorPrices = Array.from({ length: 120 }, (_, index) => 300 - index - index * index * 0.01);
+        engine.proposalApproved = false;
+        engine.tickSerial = 1;
+        engine.proposalApprovedAtTickSerial = 0;
+
+        engine.handleAdaptiveTick();
+        expect(engine.candidateSignalCurrent).toBe(false);
+
+        engine.indicatorPrices = Array.from({ length: 120 }, (_, index) => 100 + index + index * index * 0.01);
+        engine.handleAdaptiveTick();
+        expect(engine.candidateSignalCurrent).toBe(true);
+
+        engine.stop();
     });
 
     it('buys EVEN after four qualifying odd digits', async () => {

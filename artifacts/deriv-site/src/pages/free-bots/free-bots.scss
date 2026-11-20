@@ -582,7 +582,7 @@
         min-width: 0; padding: 11px; border: 1px solid #d8e0e5; border-radius: 10px; background: #fff;
         &--candidate { border-color: #c7b77b; }
         &--qualified { border-color: #9dc8b4; }
-        &--momentum-mismatch { border-color: #c4b0df; }
+        &--indicator-mismatch { border-color: #c4b0df; }
         &--unavailable { background: #f7f8f9; }
         &.is-selected { border-color: #37906f; box-shadow: inset 3px 0 #37906f; }
     }
@@ -593,7 +593,7 @@
     &__market-status { flex: 0 0 auto; padding: 4px 7px; border-radius: 999px; background: #edf1f3; color: #5b6e79; font-size: 0.68rem; font-weight: 800; }
     &__market-status--qualified { background: #e6f3ec; color: #23704d; }
     &__market-status--candidate { background: #f6f1df; color: #766123; }
-    &__market-status--momentum-mismatch { background: #f0eafa; color: #684b91; }
+    &__market-status--indicator-mismatch { background: #f0eafa; color: #684b91; }
     &__market-status--scanning { background: #e7f1f4; color: #276576; }
     &__market-status--unavailable { background: #f2e9e8; color: #875450; }
     &__market-condition { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; color: #778994; font-size: 0.72rem; }
@@ -603,12 +603,12 @@
         border: 1px solid #ddd8ed; border-radius: 999px; background: #f5f3fa;
         color: #5d5188; font-size: 0.68rem; font-weight: 800; line-height: 1.3;
     }
-    &__momentum { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; color: #778994; font-size: 0.72rem; }
-    &__momentum strong { color: #586d79; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; text-transform: capitalize; text-align: right; }
-    &__momentum--rising strong { color: #23704d; }
-    &__momentum--falling strong { color: #a64b46; }
-    &__momentum--neutral strong,
-    &__momentum--unavailable strong { color: #788791; }
+    &__indicators { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; color: #778994; font-size: 0.72rem; }
+    &__indicators strong { color: #586d79; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; text-transform: capitalize; text-align: right; }
+    &__indicators--bullish strong { color: #23704d; }
+    &__indicators--bearish strong { color: #a64b46; }
+    &__indicators--mixed strong,
+    &__indicators--unavailable strong { color: #788791; }
     &__digits { display: flex; min-height: 26px; align-items: center; gap: 4px; margin-top: 8px; overflow-x: auto; }
     &__digits > span:not(.matrix-modal__digits-empty) {
         display: grid; width: 25px; height: 25px; flex: 0 0 25px; place-items: center;

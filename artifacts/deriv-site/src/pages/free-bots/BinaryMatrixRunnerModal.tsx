@@ -26,7 +26,6 @@ interface RunnerSettings {
     stopLoss: string;
     martingale: string;
     reanalyzeAfterWins: string;
-    momentumPeriod: string;
 }
 
 const DEFAULT_SETTINGS: RunnerSettings = {
@@ -35,7 +34,6 @@ const DEFAULT_SETTINGS: RunnerSettings = {
     stopLoss: '50',
     martingale: '2',
     reanalyzeAfterWins: '3',
-    momentumPeriod: '5',
 };
 
 const STATUS_LABELS: Record<BinaryMatrixStatus, string> = {
@@ -71,7 +69,7 @@ const MARKET_STATUS_LABELS: Record<BinaryMatrixMarketScanRow['status'], string> 
     scanning: 'Scanning',
     candidate: 'Payout check pending',
     qualified: 'Qualified',
-    'momentum-mismatch': 'ROC mismatch',
+    'indicator-mismatch': 'MACD/RSI mismatch',
     'no-signal': 'No signal',
     'insufficient-data': 'Insufficient data',
     unavailable: 'Unavailable',
@@ -85,9 +83,12 @@ function formatScore(value: number | null): string {
     return value === null || !Number.isFinite(value) ? '—' : value.toFixed(3);
 }
 
-function formatRoc(value: number | null): string {
-    if (value === null || !Number.isFinite(value)) return '—';
-    return `${value > 0 ? '+' : ''}${value.toFixed(4)}%`;
+function formatMacd(value: number | null): string {
+    return value === null || !Number.isFinite(value) ? '—' : value.toFixed(6);
+}
+
+function formatRsi(value: number | null): string {
+    return value === null || !Number.isFinite(value) ? '—' : value.toFixed(1);
 }
 
 function getHotColdDigitSets(rates: number[]): { hot: Set<number>; cold: Set<number> } {
@@ -129,10 +130,6 @@ function readSettings(): RunnerSettings {
 function numberSetting(value: string, fallback: number, minimum: number): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed >= minimum ? parsed : fallback;
-}
-
-function momentumPeriodSetting(value: string): number {
-    return Math.max(1, Math.min(50, Math.floor(numberSetting(value, 5, 1))));
 }
 
 const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
@@ -208,7 +205,6 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
             stopLoss: numberSetting(settings.stopLoss, 50, 0.01),
             martingale: numberSetting(settings.martingale, 2, 1),
             reanalyzeAfterWins: Math.max(1, Math.floor(numberSetting(settings.reanalyzeAfterWins, 3, 1))),
-            momentumPeriod: momentumPeriodSetting(settings.momentumPeriod),
             autoMarketScan: true,
         };
 
@@ -327,7 +323,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                 <div className='matrix-modal__eyebrow'>Adaptive market selection</div>
                                 <h2 id='matrix-scan-title'>Scan evidence</h2>
                                 <p>Only statistically qualified markets are eligible. No profitability is implied.</p>
-                                <p>ROC confirms Over/Under direction; Even/Odd remains independent of price momentum.</p>
+                                <p>Over 4 needs bullish MACD and RSI above 50; Under 5 needs bearish MACD and RSI below 50. Even/Odd stays digit-only.</p>
                             </div>
                             <div className={`matrix-modal__scan-state matrix-modal__scan-state--${scan.status}`} role='status' aria-live='polite' data-testid='status-market-scan'>
                                 <span className='matrix-modal__scan-indicator' />
@@ -413,9 +409,9 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                                 {rankLabel}
                                             </div>
                                         )}
-                                        <div className={`matrix-modal__momentum matrix-modal__momentum--${row.momentumState}`} data-testid={`momentum-${row.symbol}`}>
-                                            <span>{momentumPeriodSetting(settings.momentumPeriod)}-tick ROC</span>
-                                            <strong>{formatRoc(row.momentumRoc)} · {row.momentumState}</strong>
+                                        <div className={`matrix-modal__indicators matrix-modal__indicators--${row.indicatorState}`} data-testid={`indicators-${row.symbol}`}>
+                                            <span>MACD histogram · RSI(14)</span>
+                                            <strong>MACD {formatMacd(row.macdHistogram)} · RSI {formatRsi(row.rsi)} · {row.indicatorState}</strong>
                                         </div>
                                         <div className='matrix-modal__digits' aria-label={`Recent digits for ${row.label}`}>
                                             {row.currentDigits.length ? row.currentDigits.map((digit, index) => (
@@ -497,14 +493,12 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                 ['stopLoss', 'Stop Loss ($)', '0.5'],
                                 ['martingale', 'Martingale ×', '0.1'],
                                 ['reanalyzeAfterWins', 'Re-analyse after wins', '1'],
-                                ['momentumPeriod', 'ROC lookback (ticks)', '1'],
                             ] as const).map(([key, label, step]) => (
                                 <label className='matrix-modal__field' key={key}>
                                     <span>{label}</span>
                                     <input
                                         type='number'
-                                        min={key === 'momentumPeriod' ? '1' : '0'}
-                                        max={key === 'momentumPeriod' ? '50' : undefined}
+                                        min='0'
                                         step={step}
                                         value={settings[key]}
                                         disabled={isRunning}
@@ -519,7 +513,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
 
                     <section className='matrix-modal__section matrix-modal__section--summary'>
                         <div><span>Market selection</span><strong>All available volatility markets</strong></div>
-                        <div><span>Rules</span><strong>4 odd → Even · 4 even → Odd · 3 low → Over 4 · 3 high → Under 5</strong></div>
+                        <div><span>Rules</span><strong>4 odd → Even · 4 even → Odd · 3 low → Over 4 with bullish MACD/RSI · 3 high → Under 5 with bearish MACD/RSI</strong></div>
                         <div><span>Current stake</span><strong>${stats.currentStake.toFixed(2)}</strong></div>
                         {stats.lastDecision && (
                             <div><span>Last decision</span><strong>{stats.lastDecision.label} · {stats.lastDecision.scannedDigits.join(' ')}</strong></div>

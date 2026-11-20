@@ -26,9 +26,9 @@ import {
 } from './bot-contract-gate';
 import {
     BinaryMatrixMarketScanner,
-    calculateRateOfChange,
-    DEFAULT_BINARY_MATRIX_ROC_PERIOD,
-    momentumConfirmsDecision,
+    BINARY_MATRIX_INDICATOR_HISTORY_LIMIT,
+    calculateBinaryMatrixIndicators,
+    indicatorsConfirmDecision,
     rankBinaryMatrixCandidates,
     type BinaryMatrixMarketScanRow,
     type BinaryMatrixScanSnapshot,
@@ -48,7 +48,6 @@ export interface BinaryMatrixConfig {
     stopLoss: number;
     reanalyzeAfterWins: number;
     autoMarketScan?: boolean;
-    momentumPeriod?: number;
 }
 
 export type BinaryMatrixStatus =
@@ -88,12 +87,6 @@ interface SelectedMarketEvidence {
 
 let activeBinaryMatrixEngine: BinaryMatrixEngine | null = null;
 const ACTIVE_ENGINE_KEY = '__DERIV_BINARY_MATRIX_ACTIVE_ENGINE__';
-const MAX_ROC_PERIOD = 50;
-
-const normalizeMomentumPeriod = (period: number | undefined): number =>
-    Number.isFinite(period)
-        ? Math.max(1, Math.min(MAX_ROC_PERIOD, Math.floor(period as number)))
-        : DEFAULT_BINARY_MATRIX_ROC_PERIOD;
 
 const getGlobalActiveEngine = (): BinaryMatrixEngine | null =>
     (globalThis as Record<string, unknown>)[ACTIVE_ENGINE_KEY] as BinaryMatrixEngine | null;
@@ -132,7 +125,7 @@ export class BinaryMatrixEngine {
     private proposalApproved = false;
     private candidateSignalCurrent = false;
     private proposalApprovedAtTickSerial = 0;
-    private momentumPrices: number[] = [];
+    private indicatorPrices: number[] = [];
     private rejectedCandidates = new Map<string, string>();
 
     public onLog: (log: DTLog) => void = () => {};
@@ -144,8 +137,8 @@ export class BinaryMatrixEngine {
     public onMarketScan: (snapshot: BinaryMatrixScanSnapshot) => void = () => {};
 
     constructor(config: BinaryMatrixConfig) {
-        this.config = { ...config, momentumPeriod: normalizeMomentumPeriod(config.momentumPeriod) };
-        this.marketScanner = new BinaryMatrixMarketScanner({ momentumPeriod: this.config.momentumPeriod });
+        this.config = { ...config };
+        this.marketScanner = new BinaryMatrixMarketScanner();
         this.execution = new BinaryMatrixExecutionCore(this.config);
         this.currentStake = this.execution.snapshot().currentStake;
         this.bindTrader();
@@ -195,7 +188,7 @@ export class BinaryMatrixEngine {
         this.tickSerial = 0;
         this.purchaseTickSerial = 0;
         this.proposalApprovedAtTickSerial = 0;
-        this.momentumPrices = [];
+        this.indicatorPrices = [];
         this.marketScanner.stop();
         this.scanSnapshot = null;
         this.selectedMarket = null;
@@ -280,7 +273,6 @@ export class BinaryMatrixEngine {
         this.config = {
             ...this.config,
             ...config,
-            momentumPeriod: normalizeMomentumPeriod(config.momentumPeriod ?? this.config.momentumPeriod),
         };
         this.execution.updateConfig(config);
         if (!this.openContractId && !this.pendingDecision) {
@@ -295,9 +287,7 @@ export class BinaryMatrixEngine {
             this.tickSerial += 1;
             const quote = Number(spot);
             if (Number.isFinite(quote)) {
-                this.momentumPrices = [...this.momentumPrices, quote].slice(
-                    -(this.config.momentumPeriod! + 1),
-                );
+                this.indicatorPrices = [...this.indicatorPrices, quote].slice(-BINARY_MATRIX_INDICATOR_HISTORY_LIMIT);
             }
             this.digits = [...this.digits, digit].slice(-4);
             this.publishAnalysis();
@@ -402,7 +392,7 @@ export class BinaryMatrixEngine {
         };
         this.config.symbol = row.symbol;
         this.digits = row.currentDigits.slice(-4);
-        this.momentumPrices = row.recentPrices.slice(-(this.config.momentumPeriod! + 1));
+        this.indicatorPrices = this.marketScanner.getPriceHistory(row.symbol);
         this.candidateSignalCurrent = false;
         this.proposalApproved = false;
         this.proposalApprovedAtTickSerial = 0;
@@ -429,12 +419,9 @@ export class BinaryMatrixEngine {
         if (this.paused || this.openContractId || this.pendingDecision || !this.selectedMarket) return;
         const analysis = analyzeBinaryMatrix(this.digits, this.activeDecision);
         const decision = analysis?.decision;
-        const momentumRoc = calculateRateOfChange(
-            this.momentumPrices,
-            this.config.momentumPeriod,
-        );
+        const indicators = calculateBinaryMatrixIndicators(this.indicatorPrices);
         const signalMatches = decision?.condition === this.selectedMarket.condition &&
-            momentumConfirmsDecision(decision, momentumRoc);
+            indicatorsConfirmDecision(decision, indicators);
         this.candidateSignalCurrent = signalMatches;
 
         if (
@@ -493,7 +480,7 @@ export class BinaryMatrixEngine {
         this.proposalApproved = false;
         this.candidateSignalCurrent = false;
         this.proposalApprovedAtTickSerial = 0;
-        this.momentumPrices = [];
+        this.indicatorPrices = [];
         this.onStatus('scanning');
         this.publishScan('scanning', reason);
     }
@@ -739,7 +726,7 @@ export class BinaryMatrixEngine {
                 this.proposalApproved = false;
                 this.candidateSignalCurrent = false;
                 this.proposalApprovedAtTickSerial = 0;
-                this.momentumPrices = [];
+                this.indicatorPrices = [];
                 this.onStatus('scanning');
                 this.publishScan('scanning', 'Contract settled; comparing current volatility-market evidence again.');
                 return;
@@ -841,7 +828,7 @@ export class BinaryMatrixEngine {
         this.proposalApproved = false;
         this.candidateSignalCurrent = false;
         this.proposalApprovedAtTickSerial = 0;
-        this.momentumPrices = [];
+        this.indicatorPrices = [];
         releaseBotContractGate(this);
         this.trader.stop();
         this.releaseRunnerLease();

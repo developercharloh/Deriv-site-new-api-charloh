@@ -1,10 +1,9 @@
 import {
     calculateDigitRates,
-    calculateRateOfChange,
+    calculateBinaryMatrixIndicators,
     analyzeBinaryMatrixHistory,
     BinaryMatrixMarketScanner,
-    getMomentumState,
-    momentumConfirmsDecision,
+    indicatorsConfirmDecision,
     rankBinaryMatrixCandidates,
     wilsonLowerBound,
 } from '../binary-matrix-market-scanner';
@@ -69,25 +68,25 @@ describe('Binary Matrix market scanner evidence', () => {
         expect(calculateDigitRates([])).toEqual([]);
     });
 
-    it('calculates ROC direction and only confirms matching Over/Under contracts', () => {
-        const rising = calculateRateOfChange([100, 101, 102, 103, 104, 105], 5);
-        const falling = calculateRateOfChange([105, 104, 103, 102, 101, 100], 5);
+    it('requires MACD and RSI agreement for Over/Under but leaves Even/Odd independent', () => {
+        const rising = calculateBinaryMatrixIndicators(
+            Array.from({ length: 120 }, (_, index) => 100 + index + index * index * 0.01),
+        );
+        const falling = calculateBinaryMatrixIndicators(
+            Array.from({ length: 120 }, (_, index) => 300 - index - index * index * 0.01),
+        );
         const evenDecision = evaluateBinaryMatrix([1, 3, 5, 7]);
         const overDecision = evaluateBinaryMatrix([4, 1, 2, 3]);
         const underDecision = evaluateBinaryMatrix([9, 6, 7, 8]);
 
-        expect(rising).toBeCloseTo(5);
-        expect(falling).toBeCloseTo(-100 * 5 / 105);
-        expect(calculateRateOfChange([100, 101], 5)).toBeNull();
-        expect(getMomentumState(rising)).toBe('rising');
-        expect(getMomentumState(falling)).toBe('falling');
-        expect(getMomentumState(0)).toBe('neutral');
-        expect(getMomentumState(null)).toBe('unavailable');
-        expect(momentumConfirmsDecision(overDecision!, rising)).toBe(true);
-        expect(momentumConfirmsDecision(overDecision!, falling)).toBe(false);
-        expect(momentumConfirmsDecision(underDecision!, falling)).toBe(true);
-        expect(momentumConfirmsDecision(underDecision!, rising)).toBe(false);
-        expect(momentumConfirmsDecision(evenDecision!, null)).toBe(true);
+        expect(rising).toMatchObject({ state: 'bullish', rsi: 100 });
+        expect(falling).toMatchObject({ state: 'bearish', rsi: 0 });
+        expect(calculateBinaryMatrixIndicators([100, 101]).state).toBe('unavailable');
+        expect(indicatorsConfirmDecision(overDecision!, rising)).toBe(true);
+        expect(indicatorsConfirmDecision(overDecision!, falling)).toBe(false);
+        expect(indicatorsConfirmDecision(underDecision!, falling)).toBe(true);
+        expect(indicatorsConfirmDecision(underDecision!, rising)).toBe(false);
+        expect(indicatorsConfirmDecision(evenDecision!, null)).toBe(true);
     });
 
     it('ranks the candidate list weak-to-strong while preserving strongest-first execution order', () => {
@@ -109,15 +108,15 @@ describe('Binary Matrix market scanner evidence', () => {
         ]);
     });
 
-    it('scores directional holdout examples only when ROC agrees with Over or Under', () => {
+    it('scores directional holdout examples only when MACD and RSI agree with Over or Under', () => {
         const digits: number[] = [];
         for (let index = 0; index < 120; index += 1) digits.push(4, 1, 2, 3, 5);
         digits.push(4, 1, 2, 3);
-        const risingPrices = digits.map((_, index) => 100 + index);
-        const fallingPrices = digits.map((_, index) => 1000 - index);
+        const risingPrices = digits.map((_, index) => 100 + index + index * index * 0.001);
+        const fallingPrices = digits.map((_, index) => 1000 - index - index * index * 0.001);
 
-        const risingEvidence = analyzeBinaryMatrixHistory(digits, risingPrices, 5);
-        const fallingEvidence = analyzeBinaryMatrixHistory(digits, fallingPrices, 5);
+        const risingEvidence = analyzeBinaryMatrixHistory(digits, risingPrices);
+        const fallingEvidence = analyzeBinaryMatrixHistory(digits, fallingPrices);
 
         expect(risingEvidence.decision?.contractType).toBe('DIGITOVER');
         expect(risingEvidence.trainingSampleCount).toBeGreaterThan(20);
@@ -191,10 +190,10 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             currentCondition: 'ALL_ODD',
             status: 'candidate',
             ruleTriggered: true,
-            momentumState: 'rising',
             trainingSampleCount: expect.any(Number),
         });
-        expect(completed.rows[0].recentPrices).toHaveLength(6);
+        expect(completed.rows[0].macdHistogram).toEqual(expect.any(Number));
+        expect(completed.rows[0].rsi).toEqual(expect.any(Number));
 
         socket.respond({
             msg_type: 'tick',
