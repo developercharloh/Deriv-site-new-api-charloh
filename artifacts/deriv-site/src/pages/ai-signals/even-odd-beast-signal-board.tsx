@@ -14,6 +14,11 @@ import { subscribeToMatchesCandleFeed, type MatchesCandleApi } from './matches-c
 import './even-odd-beast-signal-board.scss';
 
 const LIVE_TICK_MAX_AGE_MS = 2_500;
+export const EVEN_ODD_SIGNAL_LOAD_GRACE_MS = 15_000;
+const RETAINABLE_SIGNAL_REASONS = new Set<EvenOddBeastAnalysis['reason']>([
+    'indicator_conditions_not_met',
+    'decimal_digits_do_not_match',
+]);
 type FeedStatus = 'connecting' | 'warming' | 'live' | 'reconnecting' | 'error';
 
 export const getSecondsUntilCandleClose = (serverEpoch: number | null): number | null => {
@@ -43,6 +48,12 @@ export interface EvenOddBeastSignalSelection {
     analysis: EvenOddBeastAnalysis;
 }
 
+interface RetainedEvenOddSignal {
+    selection: EvenOddBeastSignalSelection;
+    candles: Candle[];
+    qualifiedAt: number;
+}
+
 interface EvenOddBeastSignalBoardProps {
     active: boolean;
     onToggle: () => void;
@@ -67,6 +78,28 @@ export const canTradeEvenOddBeastSignal = (
     feedFresh: boolean,
 ): analysis is EvenOddBeastAnalysis & { signal: 'EVEN' | 'ODD' } =>
     feedFresh && hasStrongEvenOddBeastSignal(analysis);
+
+export const shouldKeepEvenOddSignalForLoad = ({
+    signalCandleTime,
+    currentAnalysis,
+    feedFresh,
+    qualifiedAt,
+    now,
+}: {
+    signalCandleTime: number | null;
+    currentAnalysis: EvenOddBeastAnalysis;
+    feedFresh: boolean;
+    qualifiedAt: number;
+    now: number;
+}): boolean => {
+    const age = now - qualifiedAt;
+    return feedFresh &&
+        signalCandleTime !== null &&
+        currentAnalysis.candleTime === signalCandleTime &&
+        RETAINABLE_SIGNAL_REASONS.has(currentAnalysis.reason) &&
+        age >= 0 &&
+        age <= EVEN_ODD_SIGNAL_LOAD_GRACE_MS;
+};
 
 const makeInitialFeeds = (): Record<string, MarketFeed> => Object.fromEntries(
     DERIV_CONTINUOUS_VOLATILITIES.map(symbol => [symbol.code, {
@@ -168,6 +201,7 @@ export function EvenOddBeastSignalBoard({
     onSelectSignal,
 }: EvenOddBeastSignalBoardProps) {
     const [feeds, setFeeds] = useState<Record<string, MarketFeed>>(makeInitialFeeds);
+    const [recentSignals, setRecentSignals] = useState<Record<string, RetainedEvenOddSignal>>({});
     const [clockNow, setClockNow] = useState(Date.now());
     const { connectionStatus } = useApiBase();
     const api = api_base.api as unknown as MatchesCandleApi | null;
@@ -274,6 +308,81 @@ export function EvenOddBeastSignalBoard({
         };
     }), [active, clockNow, feeds]);
 
+    useEffect(() => {
+        setRecentSignals(previous => {
+            let next = previous;
+            const mutable = () => {
+                if (next === previous) next = { ...previous };
+                return next;
+            };
+
+            for (const market of markets) {
+                const code = market.symbol.code;
+                if (!maintenanceActive && canTradeEvenOddBeastSignal(market.analysis, market.feedFresh)) {
+                    mutable()[code] = {
+                        selection: {
+                            symbol: market.symbol,
+                            side: market.analysis.signal,
+                            analysis: market.analysis,
+                        },
+                        candles: market.feed.candles,
+                        qualifiedAt: clockNow,
+                    };
+                    continue;
+                }
+
+                const retained = previous[code];
+                if (
+                    retained &&
+                    !shouldKeepEvenOddSignalForLoad({
+                        signalCandleTime: retained.selection.analysis.candleTime,
+                        currentAnalysis: market.analysis,
+                        feedFresh: market.feedFresh && !maintenanceActive,
+                        qualifiedAt: retained.qualifiedAt,
+                        now: clockNow,
+                    })
+                ) {
+                    delete mutable()[code];
+                }
+            }
+
+            return next;
+        });
+    }, [clockNow, maintenanceActive, markets]);
+
+    const displayMarkets = useMemo(() => markets.flatMap(market => {
+        if (maintenanceActive) return [];
+        if (canTradeEvenOddBeastSignal(market.analysis, market.feedFresh)) {
+            return [{
+                ...market,
+                displayAnalysis: market.analysis,
+                displayCandles: market.feed.candles,
+                isRecent: false,
+                loadSecondsLeft: 0,
+            }];
+        }
+
+        const retained = recentSignals[market.symbol.code];
+        if (!retained || !shouldKeepEvenOddSignalForLoad({
+            signalCandleTime: retained.selection.analysis.candleTime,
+            currentAnalysis: market.analysis,
+            feedFresh: market.feedFresh,
+            qualifiedAt: retained.qualifiedAt,
+            now: clockNow,
+        })) return [];
+
+        return [{
+            ...market,
+            displayAnalysis: retained.selection.analysis,
+            displayCandles: retained.candles,
+            isRecent: true,
+            loadSecondsLeft: Math.max(
+                0,
+                Math.ceil((EVEN_ODD_SIGNAL_LOAD_GRACE_MS - (clockNow - retained.qualifiedAt)) / 1000),
+            ),
+        }];
+    }), [clockNow, maintenanceActive, markets, recentSignals]);
+
     const liveCount = markets.filter(market => market.feedFresh).length;
     const connectionLabel = maintenanceActive
         ? 'Market data is under maintenance'
@@ -321,13 +430,23 @@ export function EvenOddBeastSignalBoard({
             </div>
 
             <div className='eob-board__grid'>
-                {markets.filter(market =>
-                    !maintenanceActive && canTradeEvenOddBeastSignal(market.analysis, market.feedFresh)
-                ).map(({ symbol, feed, feedFresh, candleCloseCountdown, analysis, status }) => {
+                {displayMarkets.map(({
+                    symbol,
+                    feed,
+                    feedFresh,
+                    candleCloseCountdown,
+                    displayAnalysis: analysis,
+                    displayCandles,
+                    isRecent,
+                    loadSecondsLeft,
+                }) => {
                     const canTrade = canTradeEvenOddBeastSignal(analysis, feedFresh);
                     const histogram = analysis.macdHistogram;
                     const candidateSide = analysis.candleColor === 'RED' ? 'EVEN' : 'ODD';
                     const setupChecks = getEvenOddSetupChecks(analysis, candidateSide);
+                    const statusLabel = isRecent
+                        ? `RECENT · LOAD ${loadSecondsLeft}s`
+                        : setupStatus(analysis, feedFresh, active).label;
                     return (
                         <article key={symbol.code} className='eob-board__market'>
                             <div className='eob-board__market-header'>
@@ -340,7 +459,7 @@ export function EvenOddBeastSignalBoard({
                                 </span>
                             </div>
 
-                            <MiniCandleChart candles={feed.candles} label={symbol.label} />
+                            <MiniCandleChart candles={displayCandles} label={symbol.label} />
 
                             <div
                                 className={`eob-board__candle-countdown${feedFresh ? ' eob-board__candle-countdown--live' : ''}`}
@@ -357,9 +476,9 @@ export function EvenOddBeastSignalBoard({
                                 <strong>{feedFresh ? formatCandleCloseCountdown(candleCloseCountdown) : 'Waiting'}</strong>
                             </div>
 
-                            <div className={`eob-board__signal eob-board__signal--${analysis.signal.toLowerCase()}`}>
+                            <div className={`eob-board__signal eob-board__signal--${analysis.signal.toLowerCase()}${isRecent ? ' eob-board__signal--recent' : ''}`}>
                                 <span className='eob-board__signal-dot' />
-                                <strong>{status.label}</strong>
+                                <strong>{statusLabel}</strong>
                             </div>
 
                             <div className='eob-board__quality-checks' aria-label={`${candidateSide} setup conditions`}>
@@ -388,7 +507,9 @@ export function EvenOddBeastSignalBoard({
                                 type='button'
                                 className='eob-board__trade'
                                 disabled={!canTrade || maintenanceActive}
-                                title='All six Even/Odd checks passed with fresh live data'
+                                title={isRecent
+                                    ? `This live setup qualified moments ago. Load it within ${loadSecondsLeft} seconds while the feed stays fresh.`
+                                    : 'All six Even/Odd checks passed with fresh live data'}
                                 onClick={() => {
                                     if (canTradeEvenOddBeastSignal(analysis, feedFresh)) {
                                         onSelectSignal({ symbol, side: analysis.signal, analysis });
@@ -400,9 +521,7 @@ export function EvenOddBeastSignalBoard({
                         </article>
                     );
                 })}
-                {markets.every(market =>
-                    maintenanceActive || !canTradeEvenOddBeastSignal(market.analysis, market.feedFresh)
-                ) && (
+                {displayMarkets.length === 0 && (
                     <p className='eob-board__empty' role='status'>
                         {active ? 'No qualified setups right now. Incomplete setups are hidden.' : 'Scanner paused. Resume to look for qualified setups.'}
                     </p>

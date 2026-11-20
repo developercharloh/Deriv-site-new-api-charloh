@@ -259,6 +259,12 @@
         color: #fcd34d;
     }
 
+    &--recent {
+        border-style: dashed;
+        border-color: rgba(245, 158, 11, 0.55);
+        background: rgba(120, 76, 10, 0.2);
+    }
+
     &--weak {
         border-color: rgba(245, 158, 11, 0.34);
         background: rgba(120, 76, 10, 0.14);

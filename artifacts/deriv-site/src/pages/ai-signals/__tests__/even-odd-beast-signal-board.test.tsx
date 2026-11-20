@@ -5,9 +5,11 @@ import { useApiBase } from '@/hooks/useApiBase';
 import {
     canTradeEvenOddBeastSignal,
     EvenOddBeastSignalBoard,
+    EVEN_ODD_SIGNAL_LOAD_GRACE_MS,
     formatCandleCloseCountdown,
     getSecondsUntilCandleClose,
     hasStrongEvenOddBeastSignal,
+    shouldKeepEvenOddSignalForLoad,
 } from '../even-odd-beast-signal-board';
 
 jest.mock('@/hooks/useApiBase', () => ({ useApiBase: jest.fn() }));
@@ -41,6 +43,44 @@ describe('Even Odd Beast setup signal board', () => {
         expect(canTradeEvenOddBeastSignal({ ...analysis, matchedDigit: null } as any, true)).toBe(false);
         expect(canTradeEvenOddBeastSignal(analysis, false)).toBe(false);
         expect(hasStrongEvenOddBeastSignal(analysis)).toBe(true);
+    });
+
+    it('keeps a briefly invalidated live signal loadable for the same fresh candle', () => {
+        const currentAnalysis = {
+            candleTime: 1_700_000_040,
+            reason: 'decimal_digits_do_not_match',
+        } as any;
+        const retained = {
+            signalCandleTime: 1_700_000_040,
+            currentAnalysis,
+            feedFresh: true,
+            qualifiedAt: 10_000,
+        };
+
+        expect(shouldKeepEvenOddSignalForLoad({ ...retained, now: 10_001 })).toBe(true);
+        expect(shouldKeepEvenOddSignalForLoad({
+            ...retained,
+            now: 10_000 + EVEN_ODD_SIGNAL_LOAD_GRACE_MS,
+        })).toBe(true);
+        expect(shouldKeepEvenOddSignalForLoad({
+            ...retained,
+            now: 10_001 + EVEN_ODD_SIGNAL_LOAD_GRACE_MS,
+        })).toBe(false);
+        expect(shouldKeepEvenOddSignalForLoad({
+            ...retained,
+            feedFresh: false,
+            now: 10_001,
+        })).toBe(false);
+        expect(shouldKeepEvenOddSignalForLoad({
+            ...retained,
+            currentAnalysis: { ...currentAnalysis, candleTime: 1_700_000_100 },
+            now: 10_001,
+        })).toBe(false);
+        expect(shouldKeepEvenOddSignalForLoad({
+            ...retained,
+            currentAnalysis: { ...currentAnalysis, reason: 'stale_candle' },
+            now: 10_001,
+        })).toBe(false);
     });
 
     it('counts down to the next one-minute candle close using server time', () => {
