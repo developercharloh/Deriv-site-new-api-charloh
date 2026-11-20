@@ -319,7 +319,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                 <div className='matrix-modal__eyebrow'>Adaptive market selection</div>
                                 <h2 id='matrix-scan-title'>Scan evidence</h2>
                                 <p>Only statistically qualified markets are eligible. No profitability is implied.</p>
-                                <p>Over 4 needs a bullish MACD histogram; Under 5 needs a bearish MACD histogram. Even/Odd stays digit-only.</p>
+                                <p>Over 4 needs a bullish MACD histogram; Under 5 needs a bearish MACD histogram. Even/Odd also needs the last closed 1-minute candle: green → Even, red → Odd.</p>
                             </div>
                             <div className={`matrix-modal__scan-state matrix-modal__scan-state--${scan.status}`} role='status' aria-live='polite' data-testid='status-market-scan'>
                                 <span className='matrix-modal__scan-indicator' />
@@ -385,8 +385,10 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                             </div>
                                             <span className={`matrix-modal__market-status matrix-modal__market-status--${row.status}`} data-testid={`status-market-${row.symbol}`}>
                                                 {scan.selectedSymbol === row.symbol
-                                                    ? row.ruleTriggered
-                                                        ? row.status === 'qualified' ? 'Qualified · payout cleared' : 'Locked · payout pending'
+                                                ? row.ruleTriggered
+                                                        ? row.candleConfirmed
+                                                            ? row.status === 'qualified' ? 'Qualified · payout cleared' : 'Locked · payout pending'
+                                                            : 'Locked · waiting for candle'
                                                         : row.status === 'qualified' ? 'Qualified · waiting for Last X' : 'Locked · waiting for Last X'
                                                     : row.ruleTriggered && row.status === 'insufficient-data'
                                                         ? 'Last-X matched · gates not passed'
@@ -408,6 +410,17 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                         <div className={`matrix-modal__indicators matrix-modal__indicators--${row.indicatorState}`} data-testid={`indicators-${row.symbol}`}>
                                             <span>MACD histogram (12/26/9)</span>
                                             <strong>MACD {formatMacd(row.macdHistogram)} · {row.indicatorState}</strong>
+                                        </div>
+                                        <div className='matrix-modal__indicators' data-testid={`candle-${row.symbol}`}>
+                                            <span>Last closed 1-minute candle</span>
+                                            <strong>
+                                                {row.lastClosedCandleColor}
+                                                {row.currentCondition === 'ALL_ODD'
+                                                    ? ` · Green → Even ${row.candleConfirmed ? 'confirmed' : 'not confirmed'}`
+                                                    : row.currentCondition === 'ALL_EVEN'
+                                                        ? ` · Red → Odd ${row.candleConfirmed ? 'confirmed' : 'not confirmed'}`
+                                                        : ''}
+                                            </strong>
                                         </div>
                                         <div className='matrix-modal__digits' aria-label={`Recent digits for ${row.label}`}>
                                             {row.currentDigits.length ? row.currentDigits.map((digit, index) => (
@@ -509,7 +522,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
 
                     <section className='matrix-modal__section matrix-modal__section--summary'>
                         <div><span>Market selection</span><strong>All available volatility markets</strong></div>
-                        <div><span>Rules</span><strong>4 odd → Even · 4 even → Odd · 3 low → Over 4 with bullish MACD · 3 high → Under 5 with bearish MACD</strong></div>
+                        <div><span>Rules</span><strong>4 odd → Even + green 1m candle · 4 even → Odd + red 1m candle · 3 low → Over 4 with bullish MACD · 3 high → Under 5 with bearish MACD</strong></div>
                         <div><span>Current stake</span><strong>${stats.currentStake.toFixed(2)}</strong></div>
                         {stats.lastDecision && (
                             <div><span>Last decision</span><strong>{stats.lastDecision.label} · {stats.lastDecision.scannedDigits.join(' ')}</strong></div>

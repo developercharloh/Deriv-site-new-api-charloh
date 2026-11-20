@@ -18,6 +18,7 @@ export type BinaryMatrixMarketRowStatus =
     | 'unavailable';
 
 export type BinaryMatrixIndicatorState = 'bullish' | 'bearish' | 'mixed' | 'unavailable';
+export type BinaryMatrixCandleColor = 'green' | 'red' | 'doji' | 'unavailable';
 
 export interface BinaryMatrixIndicators {
     macd: number | null;
@@ -35,6 +36,8 @@ export interface BinaryMatrixMarketScanRow {
     currentDigits: number[];
     macdHistogram: number | null;
     indicatorState: BinaryMatrixIndicatorState;
+    lastClosedCandleColor: BinaryMatrixCandleColor;
+    candleConfirmed: boolean;
     digitRates: number[];
     trainingSampleCount: number;
     trainingWins: number;
@@ -105,8 +108,17 @@ interface MarketState {
     pipSize: number;
     digits: number[];
     prices: number[];
+    epochs: (number | null)[];
+    minuteCandles: Map<number, MinuteCandle>;
     ready: boolean;
     unavailableReason?: string;
+}
+
+interface MinuteCandle {
+    open: number;
+    close: number;
+    firstEpoch: number;
+    lastEpoch: number;
 }
 
 interface WebSocketLike {
@@ -122,6 +134,7 @@ interface WebSocketLike {
 type SocketFactory = (url: string) => WebSocketLike;
 
 const HISTORY_COUNT = 5000;
+export const BINARY_MATRIX_CANDLE_PERIOD_SECONDS = 60;
 const MIN_VALIDATION_SAMPLES = 30;
 const MIN_TRAINING_SAMPLES = 20;
 const FAMILY_WISE_Z = 3.29;
@@ -148,6 +161,65 @@ const lastDigitFromQuote = (value: unknown, pipSize: number): number | null => {
     const digit = Number.parseInt(fixed[fixed.length - 1] ?? '', 10);
     return Number.isInteger(digit) && digit >= 0 && digit <= 9 ? digit : null;
 };
+
+const addCandleTick = (candles: Map<number, MinuteCandle>, epoch: number, quote: number): void => {
+    if (!Number.isFinite(epoch) || !Number.isFinite(quote)) return;
+    const bucket = Math.floor(epoch / BINARY_MATRIX_CANDLE_PERIOD_SECONDS) * BINARY_MATRIX_CANDLE_PERIOD_SECONDS;
+    const candle = candles.get(bucket);
+    if (!candle) {
+        candles.set(bucket, { open: quote, close: quote, firstEpoch: epoch, lastEpoch: epoch });
+    } else {
+        if (epoch < candle.firstEpoch) {
+            candle.open = quote;
+            candle.firstEpoch = epoch;
+        }
+        if (epoch >= candle.lastEpoch) {
+            candle.close = quote;
+            candle.lastEpoch = epoch;
+        }
+    }
+    if (candles.size > MAX_DIGITS) {
+        const oldestBucket = candles.keys().next().value;
+        if (oldestBucket !== undefined) candles.delete(oldestBucket);
+    }
+};
+
+const candleColor = (candle: MinuteCandle | undefined): BinaryMatrixCandleColor => {
+    if (!candle) return 'unavailable';
+    if (candle.close > candle.open) return 'green';
+    if (candle.close < candle.open) return 'red';
+    return 'doji';
+};
+
+const candleColorAt = (
+    candles: Map<number, MinuteCandle>,
+    epoch: number | null | undefined,
+): BinaryMatrixCandleColor => {
+    if (epoch === null || epoch === undefined || !Number.isFinite(epoch)) return 'unavailable';
+    const currentBucket = Math.floor(epoch / BINARY_MATRIX_CANDLE_PERIOD_SECONDS) * BINARY_MATRIX_CANDLE_PERIOD_SECONDS;
+    return candleColor(candles.get(currentBucket - BINARY_MATRIX_CANDLE_PERIOD_SECONDS));
+};
+
+const buildMinuteCandles = (
+    prices: readonly number[],
+    epochs: readonly (number | null)[],
+): Map<number, MinuteCandle> => {
+    const candles = new Map<number, MinuteCandle>();
+    prices.forEach((price, index) => {
+        const epoch = epochs[index];
+        if (epoch !== null && epoch !== undefined) addCandleTick(candles, epoch, price);
+    });
+    return candles;
+};
+
+export function candleColorConfirmsDecision(
+    decision: BinaryMatrixDecision,
+    color: BinaryMatrixCandleColor,
+): boolean {
+    if (decision.contractType === 'DIGITEVEN') return color === 'green';
+    if (decision.contractType === 'DIGITODD') return color === 'red';
+    return true;
+}
 
 export function calculateDigitRates(digits: readonly number[], windowSize = 1000): number[] {
     const window = digits.slice(-windowSize).filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
@@ -248,9 +320,11 @@ const didContractWin = (decision: BinaryMatrixDecision, digit: number): boolean 
 export function analyzeBinaryMatrixHistories(
     digits: readonly number[],
     prices: readonly number[] = [],
+    epochs: readonly (number | null)[] = [],
 ): BinaryMatrixHistoricalEvidence[] {
     const normalized = digits.filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
     const indicatorSeries = calculateBinaryMatrixIndicatorSeries(prices);
+    const minuteCandles = buildMinuteCandles(prices, epochs);
     const indicators = indicatorSeries[normalized.length - 1] ?? emptyIndicators();
     const counts = new Map<string, RuleCounts>();
     const lastCountedAt = new Map<string, number>();
@@ -262,6 +336,8 @@ export function analyzeBinaryMatrixHistories(
         if (!historicalDecision?.condition) continue;
         const historicalIndicators = indicatorSeries[resultIndex - 1];
         if (!indicatorsConfirmDecision(historicalDecision, historicalIndicators)) continue;
+        const candleColor = candleColorAt(minuteCandles, epochs[resultIndex - 1]);
+        if (!candleColorConfirmsDecision(historicalDecision, candleColor)) continue;
         const previousResult = lastCountedAt.get(historicalDecision.condition);
         if (previousResult !== undefined && resultIndex - previousResult < 4) continue;
 
@@ -322,9 +398,10 @@ export function analyzeBinaryMatrixHistory(
     digits: readonly number[],
     prices: readonly number[] = [],
     targetCondition?: BinaryMatrixCondition,
+    epochs: readonly (number | null)[] = [],
 ): BinaryMatrixHistoricalEvidence {
     const normalized = digits.filter(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9);
-    const evidences = analyzeBinaryMatrixHistories(normalized, prices);
+    const evidences = analyzeBinaryMatrixHistories(normalized, prices, epochs);
     if (targetCondition) {
         return evidences.find(evidence => evidence.decision?.condition === targetCondition) ?? {
             decision: null,
@@ -386,6 +463,8 @@ export class BinaryMatrixMarketScanner {
                 pipSize: 2,
                 digits: [],
                 prices: [],
+                epochs: [],
+                minuteCandles: new Map(),
                 ready: false,
             });
         });
@@ -393,6 +472,11 @@ export class BinaryMatrixMarketScanner {
 
     getPriceHistory(symbol: string): number[] {
         return [...(this.marketStates.get(symbol)?.prices ?? [])];
+    }
+
+    getClosedCandleColorAt(symbol: string, epoch: number | undefined): BinaryMatrixCandleColor {
+        const state = this.marketStates.get(symbol);
+        return state ? candleColorAt(state.minuteCandles, epoch) : 'unavailable';
     }
 
     start(
@@ -533,6 +617,8 @@ export class BinaryMatrixMarketScanner {
                 pipSize: 2,
                 digits: [],
                 prices: [],
+                epochs: [],
+                minuteCandles: new Map(),
                 ready: false,
             };
             this.marketStates.set(symbol.code, state);
@@ -613,16 +699,22 @@ export class BinaryMatrixMarketScanner {
         }
 
         state.pipSize = pipSize;
+        const times = message?.history?.times;
         const validTicks = prices
-            .map((price: unknown) => {
+            .map((price: unknown, index: number) => {
                 const quote = Number(price);
                 const digit = lastDigitFromQuote(price, pipSize);
-                return Number.isFinite(quote) && digit !== null ? { quote, digit } : null;
+                const rawEpoch = Array.isArray(times) ? Number(times[index]) : Number.NaN;
+                const epoch = Number.isFinite(rawEpoch) ? rawEpoch : null;
+                return Number.isFinite(quote) && digit !== null ? { quote, digit, epoch } : null;
             })
-            .filter((tick: { quote: number; digit: number } | null): tick is { quote: number; digit: number } => tick !== null)
+            .filter((tick: { quote: number; digit: number; epoch: number | null } | null):
+                tick is { quote: number; digit: number; epoch: number | null } => tick !== null)
             .slice(-MAX_DIGITS);
         state.digits = validTicks.map(tick => tick.digit);
         state.prices = validTicks.map(tick => tick.quote);
+        state.epochs = validTicks.map(tick => tick.epoch);
+        state.minuteCandles = buildMinuteCandles(state.prices, state.epochs);
         state.ready = state.digits.length >= 100;
         if (!state.ready) {
             state.unavailableReason = `Only ${state.digits.length} valid tick digits were returned.`;
@@ -664,12 +756,17 @@ export class BinaryMatrixMarketScanner {
         const state = this.marketStates.get(symbolCode);
         const quote = message?.tick?.quote;
         const pip = Number(message?.tick?.pip_size ?? state?.pipSize);
+        const epoch = Number(message?.tick?.epoch);
         if (!state || !Number.isInteger(pip)) return;
         const digit = lastDigitFromQuote(quote, pip);
         if (digit === null) return;
         state.pipSize = pip;
         state.digits = [...state.digits, digit].slice(-MAX_DIGITS);
         state.prices = [...state.prices, Number(quote)].slice(-MAX_DIGITS);
+        state.epochs = [...state.epochs, Number.isFinite(epoch) ? epoch : null].slice(-MAX_DIGITS);
+        if (Number.isFinite(epoch)) {
+            addCandleTick(state.minuteCandles, epoch, Number(quote));
+        }
         this.refreshRow(state);
         this.emit('scanning', 'Monitoring live volatility ticks.');
     }
@@ -704,6 +801,10 @@ export class BinaryMatrixMarketScanner {
     }
 
     private rowFor(state: MarketState): BinaryMatrixMarketScanRow {
+        const lastClosedCandleColor = candleColorAt(
+            state.minuteCandles,
+            state.epochs[state.epochs.length - 1],
+        );
         if (state.unavailableReason) {
             return {
                 symbol: state.symbol.code,
@@ -714,6 +815,8 @@ export class BinaryMatrixMarketScanner {
                 currentDigits: state.digits.slice(-4),
                 macdHistogram: null,
                 indicatorState: 'unavailable',
+                lastClosedCandleColor,
+                candleConfirmed: false,
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
                 trainingWins: 0,
@@ -737,6 +840,8 @@ export class BinaryMatrixMarketScanner {
                 currentDigits: state.digits.slice(-4),
                 macdHistogram: null,
                 indicatorState: 'unavailable',
+                lastClosedCandleColor,
+                candleConfirmed: false,
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
                 trainingWins: 0,
@@ -750,7 +855,7 @@ export class BinaryMatrixMarketScanner {
             };
         }
 
-        const evidenceByCondition = analyzeBinaryMatrixHistories(state.digits, state.prices)
+        const evidenceByCondition = analyzeBinaryMatrixHistories(state.digits, state.prices, state.epochs)
             .filter((evidence): evidence is BinaryMatrixHistoricalEvidence & { decision: BinaryMatrixDecision } =>
                 Boolean(evidence.decision),
             );
@@ -787,6 +892,8 @@ export class BinaryMatrixMarketScanner {
                 currentDigits: indicatorEvidence?.currentDigits ?? state.digits.slice(-4),
                 macdHistogram: indicatorEvidence?.indicators.histogram ?? null,
                 indicatorState: indicatorEvidence?.indicators.state ?? 'unavailable',
+                lastClosedCandleColor,
+                candleConfirmed: false,
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
                 trainingWins: 0,
@@ -805,6 +912,7 @@ export class BinaryMatrixMarketScanner {
             evidence.lowerConfidenceBound !== null &&
             evidence.lowerConfidenceBound > 0.5;
         const currentIndicatorsConfirmed = indicatorsConfirmDecision(evidence.decision, evidence.indicators);
+        const currentCandleConfirmed = candleColorConfirmsDecision(evidence.decision, lastClosedCandleColor);
         const qualified = historicalQualified && currentIndicatorsConfirmed;
         const ruleTriggered = triggeredDecision?.condition === evidence.decision.condition;
         return {
@@ -820,6 +928,8 @@ export class BinaryMatrixMarketScanner {
             currentDigits: evidence.currentDigits,
             macdHistogram: evidence.indicators.histogram,
             indicatorState: evidence.indicators.state,
+            lastClosedCandleColor,
+            candleConfirmed: currentCandleConfirmed,
             digitRates: calculateDigitRates(state.digits),
             trainingSampleCount: evidence.trainingSampleCount,
             trainingWins: evidence.trainingWins,
@@ -831,8 +941,10 @@ export class BinaryMatrixMarketScanner {
             score: evidence.score,
             reason: qualified
                 ? ruleTriggered
-                    ? `Historical holdout clears the 50% baseline; MACD is ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
-                    : `Historical evidence and indicators qualify ${evidence.decision.label}; waiting for its configured Last-X digit pattern.`
+                    ? currentCandleConfirmed
+                        ? `Historical holdout clears the 50% baseline; MACD is ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
+                        : `Last-X matches, but the last closed 1-minute candle does not confirm ${evidence.decision.label}.`
+                    : `Historical evidence and indicators qualify ${evidence.decision.label}; waiting for its configured Last-X pattern and candle confirmation.`
                 : historicalQualified && !currentIndicatorsConfirmed
                   ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal is waiting'}; current MACD is ${evidence.indicators.state}, not ${this.indicatorLabel(evidence.decision)}.`
                 : evidence.trainingSampleCount < MIN_TRAINING_SAMPLES

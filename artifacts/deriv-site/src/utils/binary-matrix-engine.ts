@@ -28,9 +28,11 @@ import {
 import {
     BinaryMatrixMarketScanner,
     BINARY_MATRIX_INDICATOR_HISTORY_LIMIT,
+    candleColorConfirmsDecision,
     calculateBinaryMatrixIndicators,
     indicatorsConfirmDecision,
     rankBinaryMatrixCandidates,
+    type BinaryMatrixCandleColor,
     type BinaryMatrixMarketScanRow,
     type BinaryMatrixScanSnapshot,
 } from './binary-matrix-market-scanner';
@@ -127,6 +129,7 @@ export class BinaryMatrixEngine {
     private candidateSignalCurrent = false;
     private proposalApprovedAtTickSerial = 0;
     private indicatorPrices: number[] = [];
+    private lastClosedCandleColor: BinaryMatrixCandleColor = 'unavailable';
     private rejectedCandidates = new Map<string, string>();
 
     public onLog: (log: DTLog) => void = () => {};
@@ -190,6 +193,7 @@ export class BinaryMatrixEngine {
         this.purchaseTickSerial = 0;
         this.proposalApprovedAtTickSerial = 0;
         this.indicatorPrices = [];
+        this.lastClosedCandleColor = 'unavailable';
         this.marketScanner.stop();
         this.scanSnapshot = null;
         this.selectedMarket = null;
@@ -283,7 +287,7 @@ export class BinaryMatrixEngine {
     }
 
     private bindTrader(): void {
-        this.trader.onTick = (spot, digit) => {
+        this.trader.onTick = (spot, digit, epoch) => {
             if (!this.running) return;
             this.tickSerial += 1;
             const quote = Number(spot);
@@ -293,7 +297,7 @@ export class BinaryMatrixEngine {
             this.digits = [...this.digits, digit].slice(-4);
             this.publishAnalysis();
             if (this.config.autoMarketScan) {
-                this.handleAdaptiveTick();
+                this.handleAdaptiveTick(epoch);
                 return;
             }
             if (this.paused) return;
@@ -393,6 +397,7 @@ export class BinaryMatrixEngine {
         this.config.symbol = row.symbol;
         this.digits = row.currentDigits.slice(-4);
         this.indicatorPrices = this.marketScanner.getPriceHistory(row.symbol);
+        this.lastClosedCandleColor = row.lastClosedCandleColor;
         this.candidateSignalCurrent = false;
         this.proposalApproved = false;
         this.proposalApprovedAtTickSerial = 0;
@@ -418,25 +423,30 @@ export class BinaryMatrixEngine {
         if (!started) this.failAdaptiveRun(`Could not start the live feed for ${row.symbol}.`);
     }
 
-    private handleAdaptiveTick(): void {
+    private handleAdaptiveTick(epoch?: number): void {
         if (this.paused || this.openContractId || this.pendingDecision || !this.selectedMarket) return;
         const analysis = analyzeBinaryMatrix(this.digits, this.activeDecision);
         const indicators = calculateBinaryMatrixIndicators(this.indicatorPrices);
+        this.lastClosedCandleColor = this.marketScanner.getClosedCandleColorAt(this.selectedMarket.symbol, epoch);
         const signalMatches = analysis?.condition === this.selectedMarket.condition &&
             analysis.result &&
-            Boolean(this.activeDecision && indicatorsConfirmDecision(this.activeDecision, indicators));
+            Boolean(
+                this.activeDecision &&
+                indicatorsConfirmDecision(this.activeDecision, indicators) &&
+                candleColorConfirmsDecision(this.activeDecision, this.lastClosedCandleColor),
+            );
         const wasSignalCurrent = this.candidateSignalCurrent;
         this.candidateSignalCurrent = signalMatches;
         if (signalMatches !== wasSignalCurrent) {
             if (signalMatches && !this.proposalApproved) {
                 this.writeLog(
-                    `Locked Last-X pattern matched for ${this.selectedMarket.symbol} ${this.selectedMarket.condition}; requesting a live payout check.`,
+                    `Locked Last-X pattern and ${this.lastClosedCandleColor} 1-minute candle matched for ${this.selectedMarket.symbol} ${this.selectedMarket.condition}; requesting a live payout check.`,
                     'system',
                 );
                 this.trader.updateConfig({});
                 this.publishScan(
                     'selected',
-                    `Last-X pattern matched; checking live payout for ${this.selectedMarket.symbol}.`,
+                    `Last-X and candle conditions matched; checking live payout for ${this.selectedMarket.symbol}.`,
                 );
             } else if (!signalMatches) {
                 this.proposalApproved = false;
@@ -444,7 +454,7 @@ export class BinaryMatrixEngine {
                 this.selectedMarket.breakEvenWinRate = null;
                 this.publishScan(
                     'selected',
-                    `Signal remains locked to ${this.selectedMarket.symbol} ${this.selectedMarket.condition}; waiting for its Last-X pattern and indicator conditions.`,
+                    `Signal remains locked to ${this.selectedMarket.symbol} ${this.selectedMarket.condition}; waiting for Last-X and required confirmation conditions.`,
                 );
             }
         }
@@ -491,12 +501,12 @@ export class BinaryMatrixEngine {
         this.proposalApproved = true;
         if (!wasApproved) this.proposalApprovedAtTickSerial = this.tickSerial;
         this.writeLog(
-            `Live proposal clears break-even for ${this.selectedMarket.symbol} ${this.selectedMarket.condition}; the signal remains locked while waiting for its Last-X pattern.`,
+            `Live proposal clears break-even for ${this.selectedMarket.symbol} ${this.selectedMarket.condition}; waiting for a fresh tick while the Last-X and candle conditions remain matched.`,
             'system',
         );
         this.publishScan(
             'selected',
-            `Live payout passed for ${this.selectedMarket.symbol}; locked signal is waiting for its configured Last-X digits.`,
+            `Live payout passed for ${this.selectedMarket.symbol}; waiting for a fresh matching tick.`,
         );
     }
 
@@ -558,15 +568,19 @@ export class BinaryMatrixEngine {
                     currentCondition: selected.condition,
                     currentDigits: this.digits.slice(-4),
                     ruleTriggered,
+                    lastClosedCandleColor: this.lastClosedCandleColor,
+                    candleConfirmed: this.activeDecision
+                        ? candleColorConfirmsDecision(this.activeDecision, this.lastClosedCandleColor)
+                        : false,
                     breakEvenWinRate: breakEven,
                     score: breakEven === null ? row.score : selected.lowerConfidenceBound - breakEven,
                     reason: this.proposalApproved
                         ? this.candidateSignalCurrent
-                            ? `Historical holdout and live payout pass; Last-X matched and waiting for a fresh matching tick.`
-                            : `Signal locked to ${selected.condition}; live payout passed and it is waiting for Last-X digits.`
+                            ? `Historical holdout and live payout pass; Last-X and required candle conditions matched, waiting for a fresh tick.`
+                            : `Signal locked to ${selected.condition}; payout passed and it is waiting for Last-X and required candle conditions.`
                         : this.candidateSignalCurrent
-                            ? `Last-X matched for locked ${selected.condition}; checking live payout.`
-                            : `Signal locked to ${selected.condition}; waiting for its configured Last-X digits before the payout check.`,
+                            ? `Last-X and required candle conditions matched for locked ${selected.condition}; checking live payout.`
+                            : `Signal locked to ${selected.condition}; waiting for its Last-X and required candle conditions before the payout check.`,
                 };
             }
 

@@ -3,6 +3,7 @@ import {
     calculateBinaryMatrixIndicators,
     analyzeBinaryMatrixHistory,
     BinaryMatrixMarketScanner,
+    candleColorConfirmsDecision,
     indicatorsConfirmDecision,
     rankBinaryMatrixCandidates,
     wilsonLowerBound,
@@ -53,13 +54,26 @@ const testSymbol: DerivVolatility = {
 const pricesForDigits = (digits: number[]): string[] =>
     digits.map((digit, index) => `${(index + 1).toString()}.${digit.toString().padStart(2, '0')}`);
 
+const numericPricesForDigits = (digits: number[]): number[] => pricesForDigits(digits).map(Number);
+
+const decreasingPricesForDigits = (digits: number[]): number[] =>
+    digits.map((digit, index) => Number(`${(digits.length - index).toString()}.${digit.toString().padStart(2, '0')}`));
+
+const epochsForTicks = (count: number, start = 1_700_000_000): number[] =>
+    Array.from({ length: count }, (_, index) => start + index);
+
 describe('Binary Matrix market scanner evidence', () => {
     it('qualifies a historical rule before its configured Last-X pattern is present', () => {
         const digits: number[] = [];
         for (let index = 0; index < 120; index += 1) digits.push(1, 1, 1, 1, 0);
         digits.push(2, 4, 5, 7);
 
-        const evidence = analyzeBinaryMatrixHistory(digits, [], 'ALL_ODD');
+        const evidence = analyzeBinaryMatrixHistory(
+            digits,
+            numericPricesForDigits(digits),
+            'ALL_ODD',
+            epochsForTicks(digits.length),
+        );
 
         expect(evidence.decision).toMatchObject({
             condition: 'ALL_ODD',
@@ -106,6 +120,43 @@ describe('Binary Matrix market scanner evidence', () => {
         expect(indicatorsConfirmDecision(evenDecision!, null)).toBe(true);
     });
 
+    it('confirms EVEN with a green closed candle and ODD with a red closed candle', () => {
+        const evenDecision = evaluateBinaryMatrix([1, 3, 5, 7]);
+        const oddDecision = evaluateBinaryMatrix([2, 4, 6, 8]);
+        const overDecision = evaluateBinaryMatrix([4, 1, 2, 3]);
+
+        expect(candleColorConfirmsDecision(evenDecision!, 'green')).toBe(true);
+        expect(candleColorConfirmsDecision(evenDecision!, 'red')).toBe(false);
+        expect(candleColorConfirmsDecision(oddDecision!, 'red')).toBe(true);
+        expect(candleColorConfirmsDecision(oddDecision!, 'green')).toBe(false);
+        expect(candleColorConfirmsDecision(evenDecision!, 'doji')).toBe(false);
+        expect(candleColorConfirmsDecision(overDecision!, 'unavailable')).toBe(true);
+    });
+
+    it('counts parity history only when the previous closed candle confirms that side', () => {
+        const digits: number[] = [];
+        for (let index = 0; index < 120; index += 1) digits.push(2, 2, 2, 2, 1);
+        digits.push(2, 2, 2, 2);
+        const epochs = epochsForTicks(digits.length);
+        const falling = analyzeBinaryMatrixHistory(
+            digits,
+            decreasingPricesForDigits(digits),
+            'ALL_EVEN',
+            epochs,
+        );
+        const rising = analyzeBinaryMatrixHistory(
+            digits,
+            numericPricesForDigits(digits),
+            'ALL_EVEN',
+            epochs,
+        );
+
+        expect(falling.decision?.contractType).toBe('DIGITODD');
+        expect(falling.sampleCount).toBeGreaterThan(30);
+        expect(falling.winRate).toBe(1);
+        expect(rising.sampleCount).toBe(0);
+    });
+
     it('ranks the candidate list weak-to-strong while preserving strongest-first execution order', () => {
         const candidates = [
             { symbol: 'R_50', score: 0.18, sampleCount: 60 },
@@ -149,7 +200,12 @@ describe('Binary Matrix market scanner evidence', () => {
         for (let index = 0; index < 240; index += 1) digits.push(1, 1, 1, 1, 0);
         digits.push(1, 1, 1, 1);
 
-        const evidence = analyzeBinaryMatrixHistory(digits);
+        const evidence = analyzeBinaryMatrixHistory(
+            digits,
+            numericPricesForDigits(digits),
+            undefined,
+            epochsForTicks(digits.length),
+        );
 
         expect(evidence.decision).toMatchObject({
             condition: 'ALL_ODD',
@@ -188,7 +244,7 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             msg_type: 'history',
             req_id: 1,
             pip_size: 2,
-            history: { prices: pricesForDigits(digits) },
+            history: { prices: pricesForDigits(digits), times: epochsForTicks(digits.length) },
             subscription: { id: 'sub-r25' },
         });
 
@@ -196,9 +252,11 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             status: 'candidate',
             ruleTriggered: false,
             currentCondition: 'ALL_ODD',
+            lastClosedCandleColor: 'green',
+            candleConfirmed: true,
         });
         expect(updates[updates.length - 1].rows[0].reason).toContain(
-            'waiting for its configured Last-X digit pattern',
+            'waiting for its configured Last-X pattern and candle confirmation',
         );
 
         scanner.stop();
@@ -231,7 +289,7 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             msg_type: 'history',
             req_id: 1,
             pip_size: 2,
-            history: { prices: pricesForDigits(digits) },
+            history: { prices: pricesForDigits(digits), times: epochsForTicks(digits.length) },
             subscription: { id: 'sub-r25' },
         });
 
@@ -243,13 +301,15 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             status: 'candidate',
             ruleTriggered: true,
             trainingSampleCount: expect.any(Number),
+            lastClosedCandleColor: 'green',
+            candleConfirmed: true,
         });
         expect(completed.rows[0].macdHistogram).toEqual(expect.any(Number));
         expect(completed.rows[0]).not.toHaveProperty('rsi');
 
         socket.respond({
             msg_type: 'tick',
-            tick: { quote: 999.04, pip_size: 2 },
+            tick: { quote: 999.04, pip_size: 2, epoch: 1_700_000_700 },
             subscription: { id: 'sub-r25' },
         });
         expect(updates[updates.length - 1].rows[0].currentDigits).toEqual([1, 1, 1, 4]);
@@ -287,7 +347,7 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             msg_type: 'history',
             req_id: 1,
             pip_size: 2,
-            history: { prices: pricesForDigits(digits) },
+            history: { prices: pricesForDigits(digits), times: epochsForTicks(digits.length) },
             subscription: { id: 'sub-r25-before-reconnect' },
         });
 
@@ -311,7 +371,7 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             msg_type: 'history',
             req_id: 1,
             pip_size: 2,
-            history: { prices: pricesForDigits(digits) },
+            history: { prices: pricesForDigits(digits), times: epochsForTicks(digits.length) },
             subscription: { id: 'sub-r25-after-reconnect' },
         });
 

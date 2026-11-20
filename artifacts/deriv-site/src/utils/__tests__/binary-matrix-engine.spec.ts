@@ -132,6 +132,38 @@ describe('BinaryMatrixEngine live purchase path', () => {
         engine.stop();
     });
 
+    it('requires a green closed candle before confirming the adaptive EVEN signal', () => {
+        const engine = new BinaryMatrixEngine({
+            symbol: 'R_25',
+            currency: 'USD',
+            initialStake: 0.5,
+            martingale: 2,
+            takeProfit: 10,
+            stopLoss: 50,
+            reanalyzeAfterWins: 3,
+            autoMarketScan: true,
+        }) as any;
+        const decision = evaluateBinaryMatrix([1, 3, 5, 7]);
+        if (!decision) throw new Error('Expected the Binary Matrix EVEN rule to match.');
+
+        engine.running = true;
+        engine.selectedMarket = { symbol: 'R_25', condition: decision.condition, lowerConfidenceBound: 0.8, sampleCount: 60, breakEvenWinRate: null };
+        engine.activeDecision = decision;
+        engine.digits = [1, 3, 5, 7];
+        engine.proposalApproved = false;
+        engine.tickSerial = 2;
+        engine.marketScanner.getClosedCandleColorAt = jest.fn().mockReturnValue('red');
+
+        engine.handleAdaptiveTick(1_700_000_001);
+        expect(engine.candidateSignalCurrent).toBe(false);
+
+        engine.marketScanner.getClosedCandleColorAt.mockReturnValue('green');
+        engine.handleAdaptiveTick(1_700_000_002);
+        expect(engine.candidateSignalCurrent).toBe(true);
+
+        engine.stop();
+    });
+
     it('buys EVEN after four qualifying odd digits', async () => {
         const sent: SentPayload[] = [];
         let handler: MessageHandler | null = null;
@@ -433,6 +465,7 @@ describe('BinaryMatrixEngine live purchase path', () => {
             pip_size: 2,
             history: {
                 prices: historyDigits.map((digit, index) => `${index + 1}.${digit}${digit}`),
+                times: historyDigits.map((_, index) => 1_700_000_000 + index),
             },
             subscription: { id: 'public-selected-market' },
         });
@@ -456,7 +489,7 @@ describe('BinaryMatrixEngine live purchase path', () => {
             msg_type: 'history',
             req_id: liveHistoryRequest.req_id,
             subscription: { id: 'adaptive-live-ticks' },
-            history: { prices: [] },
+            history: { prices: [], times: [] },
             pip_size: 2,
         });
         const proposalRequest = latest(payload => payload.proposal === 1);
@@ -476,7 +509,7 @@ describe('BinaryMatrixEngine live purchase path', () => {
         emit({
             msg_type: 'tick',
             subscription: { id: 'adaptive-live-ticks' },
-            tick: { quote: 1.12, pip_size: 2 },
+            tick: { quote: 1.12, pip_size: 2, epoch: 1_700_000_604 },
         });
         expect(sent.some(payload => payload.buy)).toBe(false);
         expect(scanUpdates.some(snapshot => snapshot.selectedSymbol === selectedSymbol)).toBe(true);
@@ -514,6 +547,7 @@ describe('BinaryMatrixEngine live purchase path', () => {
             pip_size: 2,
             history: {
                 prices: historyDigits.map((digit, index) => `${index + 1}.${digit}${digit}`),
+                times: historyDigits.map((_, index) => 1_700_000_000 + index),
             },
             subscription: { id: 'public-selected-market-after-reconnect' },
         });
@@ -521,10 +555,10 @@ describe('BinaryMatrixEngine live purchase path', () => {
         expect(sent.filter(payload => payload.proposal === 1)).toHaveLength(1);
         expect(sent.some(payload => payload.buy)).toBe(false);
 
-        [1.13, 1.15, 1.17, 1.19].forEach(quote => emit({
+        [1.13, 1.15, 1.17, 1.19].forEach((quote, index) => emit({
             msg_type: 'tick',
             subscription: { id: 'adaptive-live-ticks' },
-            tick: { quote, pip_size: 2 },
+            tick: { quote, pip_size: 2, epoch: 1_700_000_605 + index },
         }));
         expect(sent.some(payload => payload.buy)).toBe(false);
         jest.advanceTimersByTime(300);
@@ -548,7 +582,7 @@ describe('BinaryMatrixEngine live purchase path', () => {
         emit({
             msg_type: 'tick',
             subscription: { id: 'adaptive-live-ticks' },
-            tick: { quote: 1.11, pip_size: 2 },
+            tick: { quote: 1.11, pip_size: 2, epoch: 1_700_000_609 },
         });
 
         const buy = latest(payload => payload.buy === 'adaptive-even-proposal-after-trigger');
