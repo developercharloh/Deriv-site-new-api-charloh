@@ -23,7 +23,6 @@ export interface BinaryMatrixIndicators {
     macd: number | null;
     signal: number | null;
     histogram: number | null;
-    rsi: number | null;
     state: BinaryMatrixIndicatorState;
 }
 
@@ -35,7 +34,6 @@ export interface BinaryMatrixMarketScanRow {
     currentCondition: string | null;
     currentDigits: number[];
     macdHistogram: number | null;
-    rsi: number | null;
     indicatorState: BinaryMatrixIndicatorState;
     digitRates: number[];
     trainingSampleCount: number;
@@ -131,7 +129,6 @@ export const DEFAULT_BINARY_MATRIX_MACD_SETTINGS = {
     fastEmaPeriod: 12,
     slowEmaPeriod: 26,
     signalEmaPeriod: 9,
-    rsiPeriod: 14,
 } as const;
 const HISTORY_REQUEST_TIMEOUT_MS = 8000;
 const NEXT_SYMBOL_DELAY_MS = 250;
@@ -166,22 +163,12 @@ const emptyIndicators = (): BinaryMatrixIndicators => ({
     macd: null,
     signal: null,
     histogram: null,
-    rsi: null,
     state: 'unavailable',
 });
 
-const rsiFromAverages = (averageGain: number, averageLoss: number): number => {
-    if (averageGain === 0 && averageLoss === 0) return 50;
-    if (averageLoss === 0) return 100;
-    if (averageGain === 0) return 0;
-    const relativeStrength = averageGain / averageLoss;
-    return 100 - 100 / (1 + relativeStrength);
-};
-
 export function calculateBinaryMatrixIndicatorSeries(prices: readonly number[]): BinaryMatrixIndicators[] {
     const series = Array.from({ length: prices.length }, emptyIndicators);
-    const { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod, rsiPeriod } =
-        DEFAULT_BINARY_MATRIX_MACD_SETTINGS;
+    const { fastEmaPeriod, slowEmaPeriod, signalEmaPeriod } = DEFAULT_BINARY_MATRIX_MACD_SETTINGS;
 
     const firstMacdIndex = slowEmaPeriod + signalEmaPeriod - 2;
     if (prices.length >= slowEmaPeriod + signalEmaPeriod - 1) {
@@ -200,33 +187,13 @@ export function calculateBinaryMatrixIndicatorSeries(prices: readonly number[]):
         });
     }
 
-    if (prices.length > rsiPeriod) {
-        let averageGain = 0;
-        let averageLoss = 0;
-        for (let index = 1; index <= rsiPeriod; index += 1) {
-            const difference = prices[index] - prices[index - 1];
-            averageGain += Math.max(difference, 0);
-            averageLoss += Math.max(-difference, 0);
-        }
-        averageGain /= rsiPeriod;
-        averageLoss /= rsiPeriod;
-        series[rsiPeriod].rsi = rsiFromAverages(averageGain, averageLoss);
-
-        for (let index = rsiPeriod + 1; index < prices.length; index += 1) {
-            const difference = prices[index] - prices[index - 1];
-            averageGain = (averageGain * (rsiPeriod - 1) + Math.max(difference, 0)) / rsiPeriod;
-            averageLoss = (averageLoss * (rsiPeriod - 1) + Math.max(-difference, 0)) / rsiPeriod;
-            series[index].rsi = rsiFromAverages(averageGain, averageLoss);
-        }
-    }
-
     return series.map(indicators => ({
         ...indicators,
-        state: indicators.histogram === null || indicators.rsi === null
+        state: indicators.histogram === null
             ? 'unavailable'
-            : indicators.histogram > 0 && indicators.rsi > 50
+            : indicators.histogram > 0
               ? 'bullish'
-              : indicators.histogram < 0 && indicators.rsi < 50
+              : indicators.histogram < 0
                 ? 'bearish'
                 : 'mixed',
     }));
@@ -746,7 +713,6 @@ export class BinaryMatrixMarketScanner {
                 currentCondition: null,
                 currentDigits: state.digits.slice(-4),
                 macdHistogram: null,
-                rsi: null,
                 indicatorState: 'unavailable',
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
@@ -770,7 +736,6 @@ export class BinaryMatrixMarketScanner {
                 currentCondition: null,
                 currentDigits: state.digits.slice(-4),
                 macdHistogram: null,
-                rsi: null,
                 indicatorState: 'unavailable',
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
@@ -821,7 +786,6 @@ export class BinaryMatrixMarketScanner {
                 currentCondition: null,
                 currentDigits: indicatorEvidence?.currentDigits ?? state.digits.slice(-4),
                 macdHistogram: indicatorEvidence?.indicators.histogram ?? null,
-                rsi: indicatorEvidence?.indicators.rsi ?? null,
                 indicatorState: indicatorEvidence?.indicators.state ?? 'unavailable',
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
@@ -855,7 +819,6 @@ export class BinaryMatrixMarketScanner {
             currentCondition: evidence.decision.condition ?? null,
             currentDigits: evidence.currentDigits,
             macdHistogram: evidence.indicators.histogram,
-            rsi: evidence.indicators.rsi,
             indicatorState: evidence.indicators.state,
             digitRates: calculateDigitRates(state.digits),
             trainingSampleCount: evidence.trainingSampleCount,
@@ -868,10 +831,10 @@ export class BinaryMatrixMarketScanner {
             score: evidence.score,
             reason: qualified
                 ? ruleTriggered
-                    ? `Historical holdout clears the 50% baseline; MACD and RSI ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
+                    ? `Historical holdout clears the 50% baseline; MACD is ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
                     : `Historical evidence and indicators qualify ${evidence.decision.label}; waiting for its configured Last-X digit pattern.`
                 : historicalQualified && !currentIndicatorsConfirmed
-                  ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal is waiting'}; current MACD/RSI are ${evidence.indicators.state}, but ${this.indicatorLabel(evidence.decision)}.`
+                  ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal is waiting'}; current MACD is ${evidence.indicators.state}, not ${this.indicatorLabel(evidence.decision)}.`
                 : evidence.trainingSampleCount < MIN_TRAINING_SAMPLES
                   ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal not qualified'}, but only ${evidence.trainingSampleCount} training examples; at least ${MIN_TRAINING_SAMPLES} are required.`
                   : evidence.sampleCount < MIN_VALIDATION_SAMPLES
@@ -883,8 +846,8 @@ export class BinaryMatrixMarketScanner {
     }
 
     private indicatorLabel(decision: BinaryMatrixDecision): string {
-        if (decision.contractType === 'DIGITOVER') return 'confirm bullish direction for Over 4';
-        if (decision.contractType === 'DIGITUNDER') return 'confirm bearish direction for Under 5';
+        if (decision.contractType === 'DIGITOVER') return 'bullish for Over 4';
+        if (decision.contractType === 'DIGITUNDER') return 'bearish for Under 5';
         return 'are not required for Even/Odd';
     }
 

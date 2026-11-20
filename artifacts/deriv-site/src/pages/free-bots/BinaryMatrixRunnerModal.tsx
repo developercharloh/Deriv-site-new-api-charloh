@@ -69,7 +69,7 @@ const MARKET_STATUS_LABELS: Record<BinaryMatrixMarketScanRow['status'], string> 
     scanning: 'Scanning',
     candidate: 'Qualified · awaiting selection',
     qualified: 'Qualified · payout cleared',
-    'indicator-mismatch': 'MACD/RSI mismatch',
+    'indicator-mismatch': 'MACD mismatch',
     'no-signal': 'No signal',
     'insufficient-data': 'Insufficient data',
     unavailable: 'Unavailable',
@@ -85,10 +85,6 @@ function formatScore(value: number | null): string {
 
 function formatMacd(value: number | null): string {
     return value === null || !Number.isFinite(value) ? '—' : value.toFixed(6);
-}
-
-function formatRsi(value: number | null): string {
-    return value === null || !Number.isFinite(value) ? '—' : value.toFixed(1);
 }
 
 function getHotColdDigitSets(rates: number[]): { hot: Set<number>; cold: Set<number> } {
@@ -323,7 +319,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                 <div className='matrix-modal__eyebrow'>Adaptive market selection</div>
                                 <h2 id='matrix-scan-title'>Scan evidence</h2>
                                 <p>Only statistically qualified markets are eligible. No profitability is implied.</p>
-                                <p>Over 4 needs bullish MACD and RSI above 50; Under 5 needs bearish MACD and RSI below 50. Even/Odd stays digit-only.</p>
+                                <p>Over 4 needs a bullish MACD histogram; Under 5 needs a bearish MACD histogram. Even/Odd stays digit-only.</p>
                             </div>
                             <div className={`matrix-modal__scan-state matrix-modal__scan-state--${scan.status}`} role='status' aria-live='polite' data-testid='status-market-scan'>
                                 <span className='matrix-modal__scan-indicator' />
@@ -410,8 +406,8 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                             </div>
                                         )}
                                         <div className={`matrix-modal__indicators matrix-modal__indicators--${row.indicatorState}`} data-testid={`indicators-${row.symbol}`}>
-                                            <span>MACD histogram · RSI(14)</span>
-                                            <strong>MACD {formatMacd(row.macdHistogram)} · RSI {formatRsi(row.rsi)} · {row.indicatorState}</strong>
+                                            <span>MACD histogram (12/26/9)</span>
+                                            <strong>MACD {formatMacd(row.macdHistogram)} · {row.indicatorState}</strong>
                                         </div>
                                         <div className='matrix-modal__digits' aria-label={`Recent digits for ${row.label}`}>
                                             {row.currentDigits.length ? row.currentDigits.map((digit, index) => (
@@ -513,7 +509,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
 
                     <section className='matrix-modal__section matrix-modal__section--summary'>
                         <div><span>Market selection</span><strong>All available volatility markets</strong></div>
-                        <div><span>Rules</span><strong>4 odd → Even · 4 even → Odd · 3 low → Over 4 with bullish MACD/RSI · 3 high → Under 5 with bearish MACD/RSI</strong></div>
+                        <div><span>Rules</span><strong>4 odd → Even · 4 even → Odd · 3 low → Over 4 with bullish MACD · 3 high → Under 5 with bearish MACD</strong></div>
                         <div><span>Current stake</span><strong>${stats.currentStake.toFixed(2)}</strong></div>
                         {stats.lastDecision && (
                             <div><span>Last decision</span><strong>{stats.lastDecision.label} · {stats.lastDecision.scannedDigits.join(' ')}</strong></div>

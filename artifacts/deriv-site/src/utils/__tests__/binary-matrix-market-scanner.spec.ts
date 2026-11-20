@@ -83,7 +83,7 @@ describe('Binary Matrix market scanner evidence', () => {
         expect(calculateDigitRates([])).toEqual([]);
     });
 
-    it('requires MACD and RSI agreement for Over/Under but leaves Even/Odd independent', () => {
+    it('uses only MACD direction for Over/Under and leaves Even/Odd independent', () => {
         const rising = calculateBinaryMatrixIndicators(
             Array.from({ length: 120 }, (_, index) => 100 + index + index * index * 0.01),
         );
@@ -94,8 +94,10 @@ describe('Binary Matrix market scanner evidence', () => {
         const overDecision = evaluateBinaryMatrix([4, 1, 2, 3]);
         const underDecision = evaluateBinaryMatrix([9, 6, 7, 8]);
 
-        expect(rising).toMatchObject({ state: 'bullish', rsi: 100 });
-        expect(falling).toMatchObject({ state: 'bearish', rsi: 0 });
+        expect(rising.state).toBe('bullish');
+        expect(rising.histogram).toBeGreaterThan(0);
+        expect(falling.state).toBe('bearish');
+        expect(falling.histogram).toBeLessThan(0);
         expect(calculateBinaryMatrixIndicators([100, 101]).state).toBe('unavailable');
         expect(indicatorsConfirmDecision(overDecision!, rising)).toBe(true);
         expect(indicatorsConfirmDecision(overDecision!, falling)).toBe(false);
@@ -123,7 +125,7 @@ describe('Binary Matrix market scanner evidence', () => {
         ]);
     });
 
-    it('scores directional holdout examples only when MACD and RSI agree with Over or Under', () => {
+    it('scores directional holdout examples only when MACD agrees with Over or Under', () => {
         const digits: number[] = [];
         for (let index = 0; index < 120; index += 1) digits.push(4, 1, 2, 3, 5);
         digits.push(4, 1, 2, 3);
@@ -243,7 +245,7 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             trainingSampleCount: expect.any(Number),
         });
         expect(completed.rows[0].macdHistogram).toEqual(expect.any(Number));
-        expect(completed.rows[0].rsi).toEqual(expect.any(Number));
+        expect(completed.rows[0]).not.toHaveProperty('rsi');
 
         socket.respond({
             msg_type: 'tick',

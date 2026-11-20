@@ -99,7 +99,7 @@ describe('BinaryMatrixEngine live purchase path', () => {
         engine.running = false;
     });
 
-    it('requires aligned MACD and RSI for a live Over entry', () => {
+    it('requires aligned MACD momentum for a live Over entry', () => {
         const engine = new BinaryMatrixEngine({
             symbol: 'R_25',
             currency: 'USD',

@@ -92,11 +92,11 @@ const BOTS: BotConfig[] = [
         name: 'Binary Matrix AI',
         emoji: '🧮',
         description:
-            'The adaptive runner compares volatility markets using the existing Even, Odd, Over 4, and Under 5 rules. MACD and RSI confirm Over/Under only; Even/Odd stays digit-only. Once qualified, it locks the market and rule, waits for that rule’s configured Last-X digits, then checks live payout before a one-tick trade. The original Blockly template remains available.',
+            'The adaptive runner compares volatility markets using the existing Even, Odd, Over 4, and Under 5 rules. MACD confirms Over/Under only; Even/Odd stays digit-only. Once qualified, it locks the market and rule, waits for that rule’s configured Last-X digits, then checks live payout before a one-tick trade. The original Blockly template remains available.',
         market: 'Volatility 25 Index (R_25)',
-        strategy: 'Digit Even / Odd · Over / Under · MACD + RSI · Matrix Scanner · Martingale',
+        strategy: 'Digit Even / Odd · Over / Under · MACD · Matrix Scanner · Martingale',
         params: [
-            { label: 'Over / Under confirmation', value: 'Over: MACD > signal + RSI > 50; Under: reverse (12/26/9, RSI 14)' },
+            { label: 'Over / Under confirmation', value: 'Over: MACD histogram > 0; Under: MACD histogram < 0 (12/26/9)' },
             { label: 'Initial Stake', value: '$0.50' },
             { label: 'Take Profit', value: '$10' },
             { label: 'Stop Loss', value: '$50' },
