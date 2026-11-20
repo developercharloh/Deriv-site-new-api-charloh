@@ -398,12 +398,12 @@ export class BinaryMatrixEngine {
         this.proposalApprovedAtTickSerial = 0;
         this.onStatus('scanning');
         this.writeLog(
-            `Locked ${row.symbol} · ${decision.label} · ${row.sampleCount} holdout observations; checking payout and waiting for its configured Last-X pattern.`,
+            `Locked ${row.symbol} · ${decision.label} · ${row.sampleCount} holdout observations; waiting for its configured Last-X pattern.`,
             'system',
         );
         this.publishScan(
             'selected',
-            `Locked ${row.symbol} ${decision.label}; checking live payout and waiting for its configured Last-X pattern.`,
+            `Locked ${row.symbol} ${decision.label}; waiting for its configured Last-X pattern before checking live payout.`,
         );
 
         const started = this.trader.start({
@@ -425,7 +425,29 @@ export class BinaryMatrixEngine {
         const signalMatches = analysis?.condition === this.selectedMarket.condition &&
             analysis.result &&
             Boolean(this.activeDecision && indicatorsConfirmDecision(this.activeDecision, indicators));
+        const wasSignalCurrent = this.candidateSignalCurrent;
         this.candidateSignalCurrent = signalMatches;
+        if (signalMatches !== wasSignalCurrent) {
+            if (signalMatches && !this.proposalApproved) {
+                this.writeLog(
+                    `Locked Last-X pattern matched for ${this.selectedMarket.symbol} ${this.selectedMarket.condition}; requesting a live payout check.`,
+                    'system',
+                );
+                this.trader.updateConfig({});
+                this.publishScan(
+                    'selected',
+                    `Last-X pattern matched; checking live payout for ${this.selectedMarket.symbol}.`,
+                );
+            } else if (!signalMatches) {
+                this.proposalApproved = false;
+                this.proposalApprovedAtTickSerial = 0;
+                this.selectedMarket.breakEvenWinRate = null;
+                this.publishScan(
+                    'selected',
+                    `Signal remains locked to ${this.selectedMarket.symbol} ${this.selectedMarket.condition}; waiting for its Last-X pattern and indicator conditions.`,
+                );
+            }
+        }
 
         if (
             signalMatches &&
@@ -439,6 +461,7 @@ export class BinaryMatrixEngine {
             !this.config.autoMarketScan ||
             !this.running ||
             !this.selectedMarket ||
+            !this.candidateSignalCurrent ||
             !proposal ||
             this.openContractId ||
             this.pendingDecision
@@ -538,8 +561,12 @@ export class BinaryMatrixEngine {
                     breakEvenWinRate: breakEven,
                     score: breakEven === null ? row.score : selected.lowerConfidenceBound - breakEven,
                     reason: this.proposalApproved
-                        ? `Historical holdout and live payout pass; signal locked to ${selected.condition}, waiting for its configured Last-X digits.`
-                        : `Signal locked to ${selected.condition}; checking live payout and waiting for its configured Last-X digits.`,
+                        ? this.candidateSignalCurrent
+                            ? `Historical holdout and live payout pass; Last-X matched and waiting for a fresh matching tick.`
+                            : `Signal locked to ${selected.condition}; live payout passed and it is waiting for Last-X digits.`
+                        : this.candidateSignalCurrent
+                            ? `Last-X matched for locked ${selected.condition}; checking live payout.`
+                            : `Signal locked to ${selected.condition}; waiting for its configured Last-X digits before the payout check.`,
                 };
             }
 
@@ -572,7 +599,7 @@ export class BinaryMatrixEngine {
                 this.onStatus('scanning');
                 return;
             }
-            const decision = this.activeDecision ?? analysis.decision;
+            const decision = analysis.decision;
             this.activeDecision = decision;
 
             if (!tryAcquireBotContractGate(this)) {

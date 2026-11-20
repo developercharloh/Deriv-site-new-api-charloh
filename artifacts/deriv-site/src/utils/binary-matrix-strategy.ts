@@ -154,13 +154,20 @@ export function analyzeBinaryMatrix(
         );
         if (lockedCondition) {
             const result = conditionResult(normalized, lockedCondition);
+            const triggeredDecision = result ? makeDecision(normalized, lockedCondition) : null;
             return {
                 condition: lockedCondition.condition,
                 count: lockedCondition.count,
                 compareValue: lockedCondition.compareValue,
                 digits: normalized.slice(-lockedCondition.count),
                 result,
-                decision: result ? lockedDecision : null,
+                decision: result && triggeredDecision
+                    ? {
+                        ...lockedDecision,
+                        reason: triggeredDecision.reason,
+                        scannedDigits: triggeredDecision.scannedDigits,
+                    }
+                    : null,
             };
         }
     }

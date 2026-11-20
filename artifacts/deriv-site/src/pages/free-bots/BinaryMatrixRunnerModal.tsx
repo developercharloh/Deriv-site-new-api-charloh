@@ -332,8 +332,8 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                         </div>
                         <div className='matrix-modal__scan-summary'>
                             <div><span>Markets reviewed</span><strong data-testid='text-markets-reviewed'>{scan.completedMarkets} / {scan.totalMarkets}</strong></div>
-                            <div><span>Current rule triggers</span><strong data-testid='text-triggered-count'>{scan.rows.filter(row => row.ruleTriggered).length}</strong></div>
-                            <div><span>Eligible candidates</span><strong data-testid='text-qualified-count'>{scan.rows.filter(row => row.status === 'candidate' || row.status === 'qualified').length}</strong></div>
+                            <div><span>Last-X matches now</span><strong data-testid='text-triggered-count'>{scan.rows.filter(row => row.ruleTriggered).length}</strong></div>
+                            <div><span>Qualified signals</span><strong data-testid='text-qualified-count'>{scan.rows.filter(row => row.status === 'candidate' || row.status === 'qualified').length}</strong></div>
                             <div><span>Selected market</span><strong data-testid='text-selected-market'>{scan.selectedSymbol || 'None'}</strong></div>
                         </div>
                         {rankedCandidates.length > 0 && (
@@ -347,7 +347,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                 : scan.status === 'waiting' ? 'No new entry while the current contract settles.'
                                   : scan.completedMarkets === scan.totalMarkets && scan.totalMarkets > 0 && !scan.rows.some(row => row.status === 'candidate' || row.status === 'qualified')
                                     ? scan.rows.some(row => row.ruleTriggered)
-                                        ? 'Rules triggered, but no market currently passes every entry gate. Check each market’s reason below.'
+                                        ? 'A Last-X pattern matched, but no market currently passes every entry gate. Check each market’s reason below.'
                                         : 'No trade — no Binary Matrix rule currently matches the latest digits.'
                                     : scan.message}
                         </div>
@@ -393,7 +393,7 @@ const BinaryMatrixRunnerModal: React.FC<Props> = ({ bot, onClose }) => {
                                                         ? row.status === 'qualified' ? 'Qualified · payout cleared' : 'Locked · payout pending'
                                                         : row.status === 'qualified' ? 'Qualified · waiting for Last X' : 'Locked · waiting for Last X'
                                                     : row.ruleTriggered && row.status === 'insufficient-data'
-                                                        ? 'Rule triggered · not qualified'
+                                                        ? 'Last-X matched · gates not passed'
                                                         : MARKET_STATUS_LABELS[row.status]}
                                             </span>
                                         </div>

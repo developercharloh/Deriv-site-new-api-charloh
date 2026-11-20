@@ -251,7 +251,11 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             subscription: { id: 'sub-r25' },
         });
         expect(updates[updates.length - 1].rows[0].currentDigits).toEqual([1, 1, 1, 4]);
-        expect(updates[updates.length - 1].rows[0].currentCondition).toBeNull();
+        expect(updates[updates.length - 1].rows[0]).toMatchObject({
+            currentCondition: 'ALL_ODD',
+            ruleTriggered: false,
+            status: 'candidate',
+        });
 
         scanner.stop();
         expect(socket.closed).toBe(true);

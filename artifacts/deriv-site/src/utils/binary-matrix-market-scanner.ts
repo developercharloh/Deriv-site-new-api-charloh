@@ -785,18 +785,19 @@ export class BinaryMatrixMarketScanner {
             };
         }
 
-        const triggeredEvidence = analyzeBinaryMatrixHistory(state.digits, state.prices);
-        const evidenceByCondition = BINARY_MATRIX_CONDITION_IDS
-            .map(condition => analyzeBinaryMatrixHistory(state.digits, state.prices, condition))
+        const evidenceByCondition = analyzeBinaryMatrixHistories(state.digits, state.prices)
             .filter((evidence): evidence is BinaryMatrixHistoricalEvidence & { decision: BinaryMatrixDecision } =>
                 Boolean(evidence.decision),
             );
-        const qualifiedEvidence = evidenceByCondition
+        const triggeredDecision = evaluateBinaryMatrix(state.digits);
+        const triggeredEvidence = triggeredDecision
+            ? evidenceByCondition.find(evidence => evidence.decision.condition === triggeredDecision.condition)
+            : undefined;
+        const historicallyQualifiedEvidence = evidenceByCondition
             .filter(evidence =>
                 evidence.sampleCount >= MIN_VALIDATION_SAMPLES &&
                 evidence.lowerConfidenceBound !== null &&
-                evidence.lowerConfidenceBound > 0.5 &&
-                indicatorsConfirmDecision(evidence.decision, evidence.indicators),
+                evidence.lowerConfidenceBound > 0.5,
             )
             .sort((left, right) => {
                 const scoreDifference = (right.score ?? -Infinity) - (left.score ?? -Infinity);
@@ -806,18 +807,22 @@ export class BinaryMatrixMarketScanner {
                 return BINARY_MATRIX_CONDITION_IDS.indexOf(left.decision.condition as BinaryMatrixCondition) -
                     BINARY_MATRIX_CONDITION_IDS.indexOf(right.decision.condition as BinaryMatrixCondition);
             });
-        const evidence = qualifiedEvidence[0] ?? triggeredEvidence;
-        if (!evidence.decision) {
+        const qualifiedEvidence = historicallyQualifiedEvidence.filter(evidence =>
+            indicatorsConfirmDecision(evidence.decision, evidence.indicators),
+        );
+        const evidence = qualifiedEvidence[0] ?? historicallyQualifiedEvidence[0] ?? triggeredEvidence;
+        if (!evidence?.decision) {
+            const indicatorEvidence = evidenceByCondition[0];
             return {
                 symbol: state.symbol.code,
                 label: state.symbol.label,
                 status: 'no-signal',
                 ruleTriggered: false,
                 currentCondition: null,
-                currentDigits: evidence.currentDigits,
-                macdHistogram: evidence.indicators.histogram,
-                rsi: evidence.indicators.rsi,
-                indicatorState: evidence.indicators.state,
+                currentDigits: indicatorEvidence?.currentDigits ?? state.digits.slice(-4),
+                macdHistogram: indicatorEvidence?.indicators.histogram ?? null,
+                rsi: indicatorEvidence?.indicators.rsi ?? null,
+                indicatorState: indicatorEvidence?.indicators.state ?? 'unavailable',
                 digitRates: calculateDigitRates(state.digits),
                 trainingSampleCount: 0,
                 trainingWins: 0,
@@ -837,8 +842,7 @@ export class BinaryMatrixMarketScanner {
             evidence.lowerConfidenceBound > 0.5;
         const currentIndicatorsConfirmed = indicatorsConfirmDecision(evidence.decision, evidence.indicators);
         const qualified = historicalQualified && currentIndicatorsConfirmed;
-        const ruleTriggered = Boolean(analyzeBinaryMatrixHistory(state.digits, state.prices).decision?.condition ===
-            evidence.decision.condition);
+        const ruleTriggered = triggeredDecision?.condition === evidence.decision.condition;
         return {
             symbol: state.symbol.code,
             label: state.symbol.label,
@@ -867,14 +871,14 @@ export class BinaryMatrixMarketScanner {
                     ? `Historical holdout clears the 50% baseline; MACD and RSI ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
                     : `Historical evidence and indicators qualify ${evidence.decision.label}; waiting for its configured Last-X digit pattern.`
                 : historicalQualified && !currentIndicatorsConfirmed
-                  ? `${ruleTriggered ? 'Rule triggered' : 'Signal is waiting'}; current MACD/RSI are ${evidence.indicators.state}, but ${this.indicatorLabel(evidence.decision)}.`
+                  ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal is waiting'}; current MACD/RSI are ${evidence.indicators.state}, but ${this.indicatorLabel(evidence.decision)}.`
                 : evidence.trainingSampleCount < MIN_TRAINING_SAMPLES
-                  ? `${ruleTriggered ? 'Rule triggered' : 'No Last-X trigger yet'}, but only ${evidence.trainingSampleCount} training examples; at least ${MIN_TRAINING_SAMPLES} are required.`
+                  ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal not qualified'}, but only ${evidence.trainingSampleCount} training examples; at least ${MIN_TRAINING_SAMPLES} are required.`
                   : evidence.sampleCount < MIN_VALIDATION_SAMPLES
-                    ? `${ruleTriggered ? 'Rule triggered' : 'No Last-X trigger yet'}, but only ${evidence.sampleCount} holdout examples; at least ${MIN_VALIDATION_SAMPLES} are required.`
+                    ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal not qualified'}, but only ${evidence.sampleCount} holdout examples; at least ${MIN_VALIDATION_SAMPLES} are required.`
                     : evidence.trainingWinRate === null || evidence.trainingWinRate <= 0.5
-                      ? `${ruleTriggered ? 'Rule triggered' : 'No Last-X trigger yet'}, but the training win rate does not clear 50%.`
-                      : `${ruleTriggered ? 'Rule triggered' : 'No Last-X trigger yet'}, but the holdout confidence bound does not clear 50%.`,
+                      ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal not qualified'}, but the training win rate does not clear 50%.`
+                      : `${ruleTriggered ? 'Last-X pattern matched' : 'Signal not qualified'}, but the holdout confidence bound does not clear 50%.`,
         };
     }
 

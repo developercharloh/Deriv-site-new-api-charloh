@@ -49,6 +49,17 @@ describe('Binary Matrix AI Apollo adapters', () => {
             decision: null,
             digits: [1, 3, 5, 2],
         });
+
+        const requalified = analyzeBinaryMatrix([3, 5, 7, 9], initial);
+        expect(requalified).toMatchObject({
+            condition: 'ALL_ODD',
+            result: true,
+            decision: {
+                condition: 'ALL_ODD',
+                scannedDigits: [3, 5, 7, 9],
+                reason: 'Last 4 digits are all odd → EVEN',
+            },
+        });
     });
 
     it('publishes a false analysis for a complete window with no signal', () => {

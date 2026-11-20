@@ -492,6 +492,7 @@ describe('BinaryMatrixEngine live purchase path', () => {
                 longcode: 'One-tick Even contract',
             },
         });
+        expect(scanUpdates[scanUpdates.length - 1].selectedSymbol).toBe(selectedSymbol);
         expect(sent.some(payload => payload.buy)).toBe(false);
 
         publicSocket.disconnect();
@@ -525,8 +526,33 @@ describe('BinaryMatrixEngine live purchase path', () => {
             subscription: { id: 'adaptive-live-ticks' },
             tick: { quote, pip_size: 2 },
         }));
-        const buy = latest(payload => payload.buy === 'adaptive-even-proposal');
-        expect(buy).toMatchObject({ price: 0.5, buy: 'adaptive-even-proposal' });
+        expect(sent.some(payload => payload.buy)).toBe(false);
+        jest.advanceTimersByTime(300);
+
+        const freshProposalRequest = latest(
+            payload => payload.proposal === 1 && payload.req_id !== proposalRequest.req_id,
+        );
+        emit({
+            msg_type: 'proposal',
+            req_id: freshProposalRequest.req_id,
+            subscription: { id: 'adaptive-live-proposal-after-trigger' },
+            proposal: {
+                id: 'adaptive-even-proposal-after-trigger',
+                ask_price: '0.50',
+                payout: '0.90',
+                spot: '1.19',
+                longcode: 'One-tick Even contract',
+            },
+        });
+        expect(sent.some(payload => payload.buy)).toBe(false);
+        emit({
+            msg_type: 'tick',
+            subscription: { id: 'adaptive-live-ticks' },
+            tick: { quote: 1.11, pip_size: 2 },
+        });
+
+        const buy = latest(payload => payload.buy === 'adaptive-even-proposal-after-trigger');
+        expect(buy).toMatchObject({ price: 0.5, buy: 'adaptive-even-proposal-after-trigger' });
         expect(scanUpdates.some(snapshot =>
             snapshot.selectedSymbol === selectedSymbol &&
             snapshot.rows.some((row: any) => row.symbol === selectedSymbol && row.status === 'qualified')
