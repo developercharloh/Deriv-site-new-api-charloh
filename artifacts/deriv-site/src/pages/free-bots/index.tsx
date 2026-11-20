@@ -27,7 +27,6 @@ import { setWorkspaceBotTemplateIdentity } from '@/utils/bot-template-scope';
 import type { BotConfig, FreeBotSection } from './types';
 import { isBotBuilderWorkspaceReady } from './workspace-readiness';
 import FreeBotCategoryTabs from './FreeBotCategoryTabs';
-import BinaryMatrixRunnerModal from './BinaryMatrixRunnerModal';
 import './free-bots.scss';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -92,9 +91,9 @@ const BOTS: BotConfig[] = [
         name: 'Binary Matrix AI',
         emoji: '🧮',
         description:
-            'The adaptive runner scans all supported volatility indices, ranks their holdout evidence, and locks the strongest setup. It trades one selected index at a time and switches to a stronger setup after any open contract settles. MACD confirms Over/Under only; the last closed 1-minute candle confirms Even/Odd (green → Even, red → Odd). Last-X, live payout, and fresh-tick checks still apply. The original Blockly template remains available.',
+            'XML-based digit strategy with configurable stake, Martingale recovery, Take Profit, Stop Loss, and re-analysis settings. Load it into Builder to review or edit its conditions and trade mapping.',
         market: 'All supported volatility markets',
-        strategy: 'Adaptive market rotation · Even / Odd · Candle confirmation · Over / Under · MACD · Martingale',
+        strategy: 'XML digit rules · Even / Odd · Over / Under · Martingale',
         params: [
             { label: 'Over / Under confirmation', value: 'Over: MACD histogram > 0; Under: MACD histogram < 0 (12/26/9)' },
             { label: 'Even / Odd confirmation', value: 'Green closed 1m candle → Even; red → Odd' },
@@ -1135,11 +1134,9 @@ const BotCard: React.FC<{
     const [errorMsg,   setErrorMsg]   = useState('');
     const [showSignal, setShowSignal] = useState(false);
     const [showOverUnderConfig, setShowOverUnderConfig] = useState(false);
-    const [showBinaryMatrixRunner, setShowBinaryMatrixRunner] = useState(false);
 
     const signal = useSignal(bot.signalKey);
     const isSecretWeaponBot = bot.id === 'over-under-secret-weapon';
-    const isBinaryMatrixBot = bot.id === 'binary-matrix-ai';
     const signalCanRun = Boolean(signal);
 
     const loadBot = async (overUnderSettings?: OverUnderBotSettings): Promise<boolean> => {
@@ -1382,15 +1379,6 @@ const BotCard: React.FC<{
                     )}
 
                     <div className='free-bots__card-actions'>
-                        {isBinaryMatrixBot && (
-                            <button
-                                className='free-bots__card-btn free-bots__card-btn--signal'
-                                onClick={() => setShowBinaryMatrixRunner(true)}
-                                data-testid='button-open-binary-matrix-scanner'
-                            >
-                                Adaptive scan &amp; trade
-                            </button>
-                        )}
                         <button
                             className={`free-bots__card-btn free-bots__card-btn--load ${status === 'loading' ? 'free-bots__card-btn--busy' : ''}`}
                             onClick={() => { void loadBot(); }}
@@ -1431,13 +1419,6 @@ const BotCard: React.FC<{
                     xmlPath={bot.xmlPath}
                     signal={signal}
                     onClose={() => setShowSignal(false)}
-                />
-            )}
-
-            {showBinaryMatrixRunner && (
-                <BinaryMatrixRunnerModal
-                    bot={bot}
-                    onClose={() => setShowBinaryMatrixRunner(false)}
                 />
             )}
 

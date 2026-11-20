@@ -16,9 +16,8 @@
 - [Deriv feed recovery](deriv-tick-subscription-recovery.md) — authenticated duplicates need forget-all; public scans need keepalives and history resubscription after disconnects.
 - [Deriv builder and settlement validation](deriv-builder-settlement-validation.md) — validate bundled Blockly XML and merge partial settlement updates so mobile nodes and spots cannot disappear.
 - [Binary Matrix XML import guard](deriv-binary-matrix-import-guard.md) — keep root validation guarded through async fields; overlapping imports need shared leases, not independent timer clears.
-- [Binary Matrix single-runner guard](deriv-binary-matrix-single-runner.md) — modal and DBot Builder can create separate engines; only one Binary Matrix engine may start at a time.
-- [Binary Matrix adaptive market rotation](deriv-binary-matrix-indicators.md) — rank all volatility indices relatively, switch only at safe contract boundaries, and preserve entry checks.
-- [Binary Matrix stake settings](deriv-binary-matrix-stake-settings.md) — Blockly stores variable fields as IDs; resolve the model name before reading the configured numeric stake.
+- [Binary Matrix bot scope](deriv-binary-matrix-scope.md) — keep the XML bot and Blockly execution; the native adaptive runner stays removed.
+- [Binary Matrix XML execution](deriv-binary-matrix-single-runner.md) — preserve the XML strategy’s Blockly execution, purchase mapping, and settlement behavior.
 - [Binary Matrix browser regression](deriv-binary-matrix-browser-regression.md) — Node 20 needs a dependency-free CDP client and mobile Blockly metrics include document offset.
 - [Mobile Blockly reveal](deriv-mobile-blockly-reveal.md) — reset the workspace with `workspace.scroll(0, 0)` after import; scrollbar ratios can leave long layouts scrolled below the first roots.
 - [Bot condition analysis status](deriv-bot-analysis-status.md) — shared tick evaluation emits the latest condition, digits, market, and true/false result for robot reporting.

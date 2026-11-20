@@ -12,11 +12,9 @@ import { handleBackendError, isBackendError } from '@/utils/error-handler';
 import GTM from '@/utils/gtm';
 import { helpers } from '@/utils/store-helpers';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
-import { BinaryMatrixEngine, type BinaryMatrixConfig, type BinaryMatrixStatus } from '@/utils/binary-matrix-engine';
 import { EdgingProEngine, type EdgingProStatus } from '@/utils/edging-pro-engine';
 import { MatchesKingEngine, type MatchesKingStatus } from '@/utils/matches-king-engine';
 import { parseMatchesKingDigits } from '@/utils/matches-king-strategy';
-import { readBlocklyNumberVariable } from '@/utils/binary-matrix-settings';
 import { getSmartOver2JournalScope, isRiseFallMasterBotIdentity } from '@/utils/bot-template-scope';
 import type { EvenOddBeastAnalysis } from '@/utils/even-odd-beast-strategy';
 import type { DTPosition } from '@/utils/dtrader-engine';
@@ -183,7 +181,6 @@ export default class RunPanelStore {
              registerNativeBot: action,
              updateNativeBot: action,
              unregisterNativeBot: action,
-             startNativeApolloBot: action,
              startNativeEdgingProBot: action,
             startNativeMatchesKingBot: action,
              onEdgingProJournalLog: action.bound,
@@ -211,7 +208,6 @@ export default class RunPanelStore {
     is_native_bot_stopping = false;
     native_bot_stop_handler: (() => void) | null = null;
     native_bot_pause_handler: ((paused: boolean) => void) | null = null;
-    native_apollo_engine: BinaryMatrixEngine | null = null;
     native_edging_pro_engine: EdgingProEngine | null = null;
     native_matches_king_engine: MatchesKingEngine | null = null;
     last_digits_analysis: TLastDigitsAnalysis | null = null;
@@ -977,11 +973,6 @@ export default class RunPanelStore {
         this.core.ui?.setAccountSwitcherDisabledMessage();
     };
 
-    hasNativeApolloBlocks = () => {
-        const blocks = window.Blockly?.derivWorkspace?.getAllBlocks?.(true) ?? [];
-        return blocks.some(block => ['last_digits_condition', 'apollo_purchase2'].includes(block.type));
-    };
-
     nativePositionToContractInfo = (position: DTPosition) => {
         const numericContractId = Number(position.contractId);
         const contractId = Number.isFinite(numericContractId) ? numericContractId : position.contractId;
@@ -1011,72 +1002,6 @@ export default class RunPanelStore {
             barrier: position.barrier ?? undefined,
             longcode: position.longcode,
         };
-    };
-
-    startNativeApolloBot = () => {
-        const workspace = window.Blockly?.derivWorkspace;
-        if (!workspace) return;
-        // A double Run event can arrive before the first engine has emitted
-        // its initial status. Do not stop a live native runner and create a
-        // second engine for the same R_25 stream.
-        if (this.native_apollo_engine) return;
-
-        const marketBlock = workspace
-            .getAllBlocks(true)
-            .find(block => block.type === 'trade_definition_market');
-        const config: BinaryMatrixConfig = {
-            symbol: marketBlock?.getFieldValue?.('SYMBOL_LIST') || 'R_25',
-            currency: this.core.client.currency || 'USD',
-            initialStake: readBlocklyNumberVariable(workspace, 'Stake', 0.5),
-            takeProfit: readBlocklyNumberVariable(workspace, 'Take Profit', 10),
-            stopLoss: readBlocklyNumberVariable(workspace, 'Stop Loss', 50),
-            martingale: readBlocklyNumberVariable(workspace, 'Martingale', 2),
-            reanalyzeAfterWins: Math.max(
-                1,
-                Math.floor(readBlocklyNumberVariable(workspace, 'Re Analyse After', 3))
-            ),
-        };
-
-        this.native_apollo_engine?.stop();
-        const engine = new BinaryMatrixEngine(config);
-        this.native_apollo_engine = engine;
-
-        const syncStatus = (status: BinaryMatrixStatus) => {
-            if (status === 'stopped' || status === 'idle') {
-                // A replaced engine must not clear the state owned by the
-                // current runner.
-                if (this.native_apollo_engine !== engine) return;
-                this.native_apollo_engine = null;
-                this.unregisterNativeBot();
-                return;
-            }
-
-            const stage = status === 'buying'
-                ? contract_stages.PURCHASE_SENT
-                : status === 'waiting'
-                  ? contract_stages.PURCHASE_RECEIVED
-                  : contract_stages.RUNNING;
-            this.updateNativeBot(stage, status === 'waiting');
-        };
-
-        engine.onStatus = syncStatus;
-        // Binary Matrix log and settlement events are routed through the
-        // shared observer so native Builder runs and the standalone runner
-        // produce the same single Journal entry.
-        engine.onLog = () => {};
-        engine.onTrade = () => {};
-        engine.onPosition = position => {
-            this.root_store.transactions.onBotContractEvent(this.nativePositionToContractInfo(position));
-        };
-
-        if (!engine.start()) {
-            this.native_apollo_engine = null;
-            return;
-        }
-        this.registerNativeBot(
-            () => engine.stop(),
-            paused => (paused ? engine.pause() : engine.resume())
-        );
     };
 
     startNativeEdgingProBot = () => {
@@ -1526,25 +1451,6 @@ export default class RunPanelStore {
             `Purchase mapping: ${mapping.label} ` +
                 `(contract ${mapping.contractType}${mapping.prediction !== null ? `, prediction ${mapping.prediction}` : ''})`,
             MessageTypes.NOTIFY,
-            'journal__text'
-        );
-    };
-
-    onBinaryMatrixJournalLog = (log: { message?: string; type?: string }) => {
-        const message = String(log?.message || '');
-
-        // Analysis events have their own shared journal handler so generated
-        // Builder runs and native Matrix runs produce one identical row.
-        if (
-            message.startsWith('Last Digits Analysis Market:') ||
-            message.startsWith('Re-analysis threshold reached')
-        ) {
-            return;
-        }
-
-        this.root_store.journal.pushMessage(
-            `[Binary Matrix] ${message}`,
-            log?.type === 'error' ? MessageTypes.ERROR : MessageTypes.NOTIFY,
             'journal__text'
         );
     };
@@ -2046,7 +1952,6 @@ export default class RunPanelStore {
         observer.register('bot.analysis.parity', this.onParityAnalysis);
         observer.register('bot.purchase.mapping', this.onPurchaseMapping);
         observer.register('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);
-        observer.register('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.register('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.register('bot.volatility.scan', this.onVolatilityScan);
         observer.register('client.invalid_token', this.handleInvalidToken);
@@ -2073,7 +1978,6 @@ export default class RunPanelStore {
         observer.unregister('bot.analysis.parity', this.onParityAnalysis);
         observer.unregister('bot.purchase.mapping', this.onPurchaseMapping);
         observer.unregister('bot.adaptive_momentum.log', this.onAdaptiveMomentumJournalLog);
-        observer.unregister('bot.binary_matrix.log', this.onBinaryMatrixJournalLog);
         observer.unregister('bot.analysis.reanalysis', this.onBinaryMatrixReanalysis);
         observer.unregister('bot.volatility.scan', this.onVolatilityScan);
         observer.unregisterAll('client.invalid_token');

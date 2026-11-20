@@ -3,11 +3,11 @@ name: Binary Matrix single-runner guard
 description: Preventing duplicate Binary Matrix contracts when multiple UI launch paths are available
 ---
 
-Keep the supplied Binary Matrix XML/DBot flow as the normal Builder path. The user-approved adaptive market scanner is a separate, explicitly launched native runner; never silently route existing XML or Blockly runs through it. Both paths must prevent overlapping automated contracts.
+Keep the supplied Binary Matrix XML/DBot flow on the normal Builder path. The native adaptive scanner and runner were removed at the user's request; XML loading and execution must not depend on them.
 
-**Why:** Dynamic market selection needs a native scanner, while saved XML behavior must remain compatible. Releasing a runner lock before a pending buy or open contract is confirmed settled can permit overlapping trades.
+**Why:** The user asked to remove the native runner while leaving the XML bot intact.
 
-**How to apply:** Keep “Load bot” on the Blockly path and require the separate adaptive-scan action to start the native runner. Mark each observed tick and reject duplicate purchases on that tick. Hold the contract gate through settlement; on Stop, keep the runner lease while a buy is pending or a contract is open, then release it after broker confirmation or a definitive buy rejection.
+**How to apply:** Preserve the XML template, custom Blockly blocks, generated purchase mapping, stake progression, and settlement behavior. Do not restore a native adaptive runner without an explicit request.
 
 FAST execution means the generated loop advances on the next live tick, not that it polls the same tick with a shorter timer. SLOW remains the legacy delay behavior.
 
@@ -31,10 +31,4 @@ The generated XML remains the execution path, but Binary Matrix stake progressio
 
 **Why:** FAST can resume the generated loop on a settlement event before a variable update is reflected in the next broker request, producing a base-stake buy after a loss or a multiplied buy after a win.
 
-**How to apply:** Capture the first requested stake and configured Martingale factor, update the engine state on final settlement, and override only Binary Matrix trade-option amounts for the next buy; leave ordinary DBot strategies unchanged.
-
-When several adaptive markets qualify, show the candidates ranked from weaker to stronger, but execute only one contract at a time and select the strongest available candidate first.
-
-**Why:** The user wants the full signal ranking visible without allowing multiple markets to open overlapping contracts.
-
-**How to apply:** Use the shared signal-strength score for both the weak-to-strong display and strongest-first selection. Keep the single-contract gate and settlement lock unchanged.
+**How to apply:** Capture the first requested stake and configured Martingale factor, update the engine state on final settlement, and override only Binary Matrix trade-option amounts for the next buy; leave ordinary DBot strategies unchanged and keep the XML bot as the only Binary Matrix execution path.
