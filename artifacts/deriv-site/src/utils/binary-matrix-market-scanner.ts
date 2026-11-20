@@ -135,8 +135,6 @@ type SocketFactory = (url: string) => WebSocketLike;
 
 const HISTORY_COUNT = 5000;
 export const BINARY_MATRIX_CANDLE_PERIOD_SECONDS = 60;
-const MIN_VALIDATION_SAMPLES = 30;
-const MIN_TRAINING_SAMPLES = 20;
 const FAMILY_WISE_Z = 3.29;
 export const DEFAULT_BINARY_MATRIX_MACD_SETTINGS = {
     fastEmaPeriod: 12,
@@ -368,15 +366,11 @@ export function analyzeBinaryMatrixHistories(
         const wins = evidence?.validationWins ?? 0;
         const winRate = sampleCount > 0 ? wins / sampleCount : null;
         const trainingWinRate = trainingSampleCount > 0 ? trainingWins / trainingSampleCount : null;
-        const lowerConfidenceBound =
-            trainingSampleCount >= MIN_TRAINING_SAMPLES && sampleCount >= MIN_VALIDATION_SAMPLES
-                ? wilsonLowerBound(wins, sampleCount)
-                : null;
-        const clearsTrainingCheck = trainingWinRate !== null && trainingWinRate > 0.5;
-        const score =
-            lowerConfidenceBound !== null && clearsTrainingCheck
-                ? lowerConfidenceBound - 0.5
-                : null;
+        const lowerConfidenceBound = sampleCount > 0 ? wilsonLowerBound(wins, sampleCount) : null;
+        // This is a comparative ranking score, not an eligibility threshold.
+        // A negative score can still be the strongest available setup; live
+        // Last-X, indicator/candle, payout, and fresh-tick checks remain gates.
+        const score = lowerConfidenceBound === null ? null : lowerConfidenceBound - 0.5;
 
         return {
             decision,
@@ -388,7 +382,7 @@ export function analyzeBinaryMatrixHistories(
             wins,
             winRate,
             trainingWinRate,
-            lowerConfidenceBound: clearsTrainingCheck ? lowerConfidenceBound : null,
+            lowerConfidenceBound,
             score,
         };
     });
@@ -863,12 +857,8 @@ export class BinaryMatrixMarketScanner {
         const triggeredEvidence = triggeredDecision
             ? evidenceByCondition.find(evidence => evidence.decision.condition === triggeredDecision.condition)
             : undefined;
-        const historicallyQualifiedEvidence = evidenceByCondition
-            .filter(evidence =>
-                evidence.sampleCount >= MIN_VALIDATION_SAMPLES &&
-                evidence.lowerConfidenceBound !== null &&
-                evidence.lowerConfidenceBound > 0.5,
-            )
+        const rankedEvidence = evidenceByCondition
+            .filter(evidence => evidence.score !== null)
             .sort((left, right) => {
                 const scoreDifference = (right.score ?? -Infinity) - (left.score ?? -Infinity);
                 if (scoreDifference !== 0) return scoreDifference;
@@ -877,10 +867,10 @@ export class BinaryMatrixMarketScanner {
                 return BINARY_MATRIX_CONDITION_IDS.indexOf(left.decision.condition as BinaryMatrixCondition) -
                     BINARY_MATRIX_CONDITION_IDS.indexOf(right.decision.condition as BinaryMatrixCondition);
             });
-        const qualifiedEvidence = historicallyQualifiedEvidence.filter(evidence =>
+        const indicatorAlignedEvidence = rankedEvidence.filter(evidence =>
             indicatorsConfirmDecision(evidence.decision, evidence.indicators),
         );
-        const evidence = qualifiedEvidence[0] ?? historicallyQualifiedEvidence[0] ?? triggeredEvidence;
+        const evidence = indicatorAlignedEvidence[0] ?? rankedEvidence[0] ?? triggeredEvidence;
         if (!evidence?.decision) {
             const indicatorEvidence = evidenceByCondition[0];
             return {
@@ -907,20 +897,17 @@ export class BinaryMatrixMarketScanner {
             };
         }
 
-        const historicalQualified =
-            evidence.sampleCount >= MIN_VALIDATION_SAMPLES &&
-            evidence.lowerConfidenceBound !== null &&
-            evidence.lowerConfidenceBound > 0.5;
+        const hasRelativeEvidence = evidence.score !== null;
         const currentIndicatorsConfirmed = indicatorsConfirmDecision(evidence.decision, evidence.indicators);
         const currentCandleConfirmed = candleColorConfirmsDecision(evidence.decision, lastClosedCandleColor);
-        const qualified = historicalQualified && currentIndicatorsConfirmed;
+        const qualified = hasRelativeEvidence && currentIndicatorsConfirmed;
         const ruleTriggered = triggeredDecision?.condition === evidence.decision.condition;
         return {
             symbol: state.symbol.code,
             label: state.symbol.label,
             status: qualified
                 ? 'candidate'
-                : historicalQualified && !currentIndicatorsConfirmed
+                : hasRelativeEvidence && !currentIndicatorsConfirmed
                   ? 'indicator-mismatch'
                   : 'insufficient-data',
             ruleTriggered,
@@ -942,18 +929,12 @@ export class BinaryMatrixMarketScanner {
             reason: qualified
                 ? ruleTriggered
                     ? currentCandleConfirmed
-                        ? `Historical holdout clears the 50% baseline; MACD is ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
+                        ? `Relative holdout score ${(evidence.score! * 100).toFixed(1)} points; MACD is ${this.indicatorLabel(evidence.decision)}; live payout still needs checking.`
                         : `Last-X matches, but the last closed 1-minute candle does not confirm ${evidence.decision.label}.`
-                    : `Historical evidence and indicators qualify ${evidence.decision.label}; waiting for its configured Last-X pattern and candle confirmation.`
-                : historicalQualified && !currentIndicatorsConfirmed
+                    : `Relative holdout score ${(evidence.score! * 100).toFixed(1)} points; waiting for ${evidence.decision.label}'s Last-X pattern and required live confirmation.`
+                : hasRelativeEvidence && !currentIndicatorsConfirmed
                   ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal is waiting'}; current MACD is ${evidence.indicators.state}, not ${this.indicatorLabel(evidence.decision)}.`
-                : evidence.trainingSampleCount < MIN_TRAINING_SAMPLES
-                  ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal not qualified'}, but only ${evidence.trainingSampleCount} training examples; at least ${MIN_TRAINING_SAMPLES} are required.`
-                  : evidence.sampleCount < MIN_VALIDATION_SAMPLES
-                    ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal not qualified'}, but only ${evidence.sampleCount} holdout examples; at least ${MIN_VALIDATION_SAMPLES} are required.`
-                    : evidence.trainingWinRate === null || evidence.trainingWinRate <= 0.5
-                      ? `${ruleTriggered ? 'Last-X pattern matched' : 'Signal not qualified'}, but the training win rate does not clear 50%.`
-                      : `${ruleTriggered ? 'Last-X pattern matched' : 'Signal not qualified'}, but the holdout confidence bound does not clear 50%.`,
+                  : `${ruleTriggered ? 'Last-X pattern matched' : 'No current matrix entry pattern'}, and no holdout results are available to rank this setup yet.`,
         };
     }
 

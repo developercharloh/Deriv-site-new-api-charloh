@@ -83,6 +83,20 @@ describe('Binary Matrix market scanner evidence', () => {
         expect(evidence.lowerConfidenceBound).toBeGreaterThan(0.5);
     });
 
+    it('keeps below-baseline setups rankable so markets can be compared relatively', () => {
+        const digits = Array.from({ length: 604 }, () => 1);
+        const evidence = analyzeBinaryMatrixHistory(
+            digits,
+            digits.map((_, index) => 100 + index * 0.01),
+            'ALL_ODD',
+            epochsForTicks(digits.length),
+        );
+
+        expect(evidence.sampleCount).toBeGreaterThan(0);
+        expect(evidence.lowerConfidenceBound).toBeLessThan(0.5);
+        expect(evidence.score).toBeLessThan(0);
+    });
+
     it('uses a conservative Wilson lower confidence bound', () => {
         expect(wilsonLowerBound(100, 100)).toBeLessThan(1);
         expect(wilsonLowerBound(50, 100)).toBeLessThan(0.5);
@@ -256,7 +270,7 @@ describe('BinaryMatrixMarketScanner websocket lifecycle', () => {
             candleConfirmed: true,
         });
         expect(updates[updates.length - 1].rows[0].reason).toContain(
-            'waiting for its configured Last-X pattern and candle confirmation',
+            'waiting for EVEN',
         );
 
         scanner.stop();

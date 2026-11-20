@@ -164,6 +164,98 @@ describe('BinaryMatrixEngine live purchase path', () => {
         engine.stop();
     });
 
+    it('waits for every market, follows the strongest relative score, and switches only at a safe boundary', () => {
+        const engine = new BinaryMatrixEngine({
+            symbol: 'R_25',
+            currency: 'USD',
+            initialStake: 0.5,
+            martingale: 2,
+            takeProfit: 10,
+            stopLoss: 50,
+            reanalyzeAfterWins: 3,
+            autoMarketScan: true,
+        }) as any;
+        engine.running = true;
+        engine.marketScanner.getPriceHistory = jest.fn(() => []);
+        const startFeed = jest.spyOn(engine.trader, 'start').mockReturnValue(true);
+        const stopFeed = jest.spyOn(engine.trader, 'stop');
+        const makeRow = (symbol: string, condition: string, score: number) => ({
+            symbol,
+            label: symbol,
+            status: 'candidate',
+            ruleTriggered: false,
+            currentCondition: condition,
+            currentDigits: [1, 3, 5, 7],
+            macdHistogram: null,
+            indicatorState: 'unavailable',
+            lastClosedCandleColor: 'green',
+            candleConfirmed: true,
+            digitRates: [],
+            trainingSampleCount: 10,
+            trainingWins: 4,
+            sampleCount: 12,
+            validationWins: 5,
+            validationWinRate: 5 / 12,
+            lowerConfidenceBound: score + 0.5,
+            breakEvenWinRate: null,
+            score,
+            reason: 'Relative candidate.',
+        });
+        const snapshot = (completedMarkets: number, firstScore: number, secondScore: number) => ({
+            status: 'scanning',
+            completedMarkets,
+            totalMarkets: 2,
+            selectedSymbol: null,
+            selectedContract: null,
+            rows: [
+                makeRow('R_25', 'ALL_ODD', firstScore),
+                makeRow('R_50', 'ALL_ODD', secondScore),
+            ],
+            updatedAt: 1,
+            message: 'Scanning.',
+        });
+
+        engine.handleMarketScan(snapshot(1, -0.12, -0.04));
+        expect(startFeed).not.toHaveBeenCalled();
+        expect(engine.selectedMarket).toBeNull();
+
+        engine.handleMarketScan(snapshot(2, -0.12, -0.04));
+        expect(engine.selectedMarket.symbol).toBe('R_50');
+        expect(startFeed).toHaveBeenCalledTimes(1);
+
+        engine.handleMarketScan(snapshot(2, -0.01, -0.04));
+        expect(engine.selectedMarket.symbol).toBe('R_25');
+        expect(startFeed).toHaveBeenCalledTimes(2);
+        expect(stopFeed).toHaveBeenCalled();
+
+        engine.openContractId = 'contract-open';
+        engine.handleMarketScan(snapshot(2, -0.01, 0.05));
+        expect(engine.selectedMarket.symbol).toBe('R_25');
+
+        engine.scanSnapshot = snapshot(2, -0.01, 0.05);
+        engine.execution.settle = jest.fn(() => ({ accepted: true, shouldStop: false }));
+        engine.execution.snapshot = jest.fn(() => ({
+            totalProfit: 0,
+            currentStake: 0.5,
+            wins: 1,
+            losses: 0,
+        }));
+        engine.handlePosition({
+            contractId: 'contract-open',
+            contractType: 'DIGITEVEN',
+            barrier: null,
+            symbol: 'R_25',
+            stake: 0.5,
+            profit: 0,
+            isWin: true,
+            isOpen: false,
+        });
+        expect(engine.selectedMarket.symbol).toBe('R_50');
+
+        engine.running = false;
+        engine.stop();
+    });
+
     it('buys EVEN after four qualifying odd digits', async () => {
         const sent: SentPayload[] = [];
         let handler: MessageHandler | null = null;
@@ -469,6 +561,18 @@ describe('BinaryMatrixEngine live purchase path', () => {
             },
             subscription: { id: 'public-selected-market' },
         });
+
+        for (let index = 1; index < DERIV_VOLATILITIES.length; index += 1) {
+            jest.advanceTimersByTime(250);
+            const market = DERIV_VOLATILITIES[index];
+            const request = publicSocket.sent.find(payload => payload.ticks_history === market.code);
+            if (!request) throw new Error(`Expected a paced history request for ${market.code}.`);
+            publicSocket.respond({
+                msg_type: 'history',
+                req_id: request.req_id,
+                error: { message: 'No test fixture for this market.' },
+            });
+        }
 
         await Promise.resolve();
         await Promise.resolve();

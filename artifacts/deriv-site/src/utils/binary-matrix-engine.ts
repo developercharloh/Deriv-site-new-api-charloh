@@ -83,6 +83,7 @@ export interface BinaryMatrixTrade {
 interface SelectedMarketEvidence {
     symbol: string;
     condition: string;
+    score: number;
     lowerConfidenceBound: number;
     sampleCount: number;
     breakEvenWinRate: number | null;
@@ -131,6 +132,7 @@ export class BinaryMatrixEngine {
     private indicatorPrices: number[] = [];
     private lastClosedCandleColor: BinaryMatrixCandleColor = 'unavailable';
     private rejectedCandidates = new Map<string, string>();
+    private adaptiveFeedStarted = false;
 
     public onLog: (log: DTLog) => void = () => {};
     public onStatus: (status: BinaryMatrixStatus) => void = () => {};
@@ -200,13 +202,14 @@ export class BinaryMatrixEngine {
         this.proposalApproved = false;
         this.candidateSignalCurrent = false;
         this.rejectedCandidates.clear();
+        this.adaptiveFeedStarted = false;
         this.emitStats();
 
         activeBinaryMatrixEngine = this;
         setGlobalActiveEngine(this);
         if (this.config.autoMarketScan) {
             this.onStatus('scanning');
-            this.writeLog('Scanning all available volatility markets for validated Binary Matrix conditions.', 'system');
+            this.writeLog('Scanning all supported volatility indices and comparing relative Binary Matrix setup strength.', 'system');
             this.marketScanner.start(
                 snapshot => this.handleMarketScan(snapshot),
                 message => this.writeLog(message, 'error'),
@@ -270,6 +273,15 @@ export class BinaryMatrixEngine {
         if (!this.running || !this.paused || this.stopRequested) return;
         this.paused = false;
         this.writeLog('Binary Matrix AI resumed.', 'system');
+        if (
+            this.config.autoMarketScan &&
+            !this.openContractId &&
+            !this.pendingDecision &&
+            this.scanSnapshot
+        ) {
+            this.reconcileAdaptiveCandidate(this.scanSnapshot);
+            return;
+        }
         this.onStatus(this.openContractId ? 'waiting' : 'scanning');
         this.publishScan(this.openContractId ? 'waiting' : 'scanning', 'Runner resumed.');
     }
@@ -343,17 +355,36 @@ export class BinaryMatrixEngine {
             return;
         }
 
+        if (
+            snapshot.status === 'scanning' &&
+            !this.paused &&
+            !this.openContractId &&
+            !this.pendingDecision &&
+            snapshot.totalMarkets > 0 &&
+            snapshot.completedMarkets === snapshot.totalMarkets
+        ) {
+            this.reconcileAdaptiveCandidate(snapshot);
+            return;
+        }
+
         this.publishScan(
             this.openContractId ? 'waiting' : this.selectedMarket ? 'selected' : snapshot.status,
             this.openContractId ? 'No new entry while the current contract settles.' : snapshot.message,
         );
+    }
+
+    private reconcileAdaptiveCandidate(snapshot: BinaryMatrixScanSnapshot): void {
         if (
             snapshot.status !== 'scanning' ||
-            this.paused ||
-            this.openContractId ||
-            this.pendingDecision ||
-            this.selectedMarket
-        ) return;
+            snapshot.totalMarkets === 0 ||
+            snapshot.completedMarkets !== snapshot.totalMarkets
+        ) {
+            this.publishScan(
+                'scanning',
+                'Waiting for the full volatility-index scan before selecting or switching markets.',
+            );
+            return;
+        }
 
         const candidates = rankBinaryMatrixCandidates(
             snapshot.rows.filter(row =>
@@ -361,24 +392,75 @@ export class BinaryMatrixEngine {
                 row.currentCondition &&
                 row.score !== null &&
                 row.lowerConfidenceBound !== null &&
-                row.lowerConfidenceBound > 0.5 &&
-                !this.rejectedCandidates.has(this.candidateKey(row.symbol, row.currentCondition)) &&
-                (!this.activeDecision || this.activeDecision.condition === row.currentCondition),
+                Number.isFinite(row.score) &&
+                !this.rejectedCandidates.has(this.candidateKey(row.symbol, row.currentCondition)),
             ),
             'strongest-first',
         );
-        const candidate = candidates[0];
-        if (candidate) this.beginAdaptiveCandidate(candidate);
+        const selected = this.selectedMarket;
+        const selectedRow = selected
+            ? snapshot.rows.find(row =>
+                row.symbol === selected.symbol &&
+                row.currentCondition === selected.condition &&
+                row.status === 'candidate' &&
+                row.score !== null &&
+                row.lowerConfidenceBound !== null,
+            )
+            : undefined;
+
+        if (selected && selectedRow) {
+            selected.score = selectedRow.score!;
+            selected.lowerConfidenceBound = selectedRow.lowerConfidenceBound!;
+            selected.sampleCount = selectedRow.sampleCount;
+            const challenger = candidates.find(row =>
+                row.symbol !== selected.symbol || row.currentCondition !== selected.condition,
+            );
+            if (challenger?.score !== null && challenger?.score !== undefined && challenger.score > selected.score) {
+                this.beginAdaptiveCandidate(challenger, true);
+                return;
+            }
+            this.publishScan(
+                'selected',
+                `Holding ${selected.symbol} ${this.activeDecision?.label ?? selected.condition}, the strongest current setup. Monitoring all volatility indices for a stronger candidate.`,
+            );
+            return;
+        }
+
+        const previousSelection = Boolean(selected);
+        if (selected) {
+            this.trader.stop();
+            this.adaptiveFeedStarted = false;
+            this.selectedMarket = null;
+            this.proposalApproved = false;
+            this.candidateSignalCurrent = false;
+            this.proposalApprovedAtTickSerial = 0;
+            this.indicatorPrices = [];
+        }
+
+        const strongest = candidates[0];
+        if (strongest) {
+            this.beginAdaptiveCandidate(strongest, previousSelection);
+            return;
+        }
+
+        this.onStatus('scanning');
+        this.publishScan(
+            'scanning',
+            previousSelection
+                ? 'The previous setup is no longer eligible; comparing all volatility indices for the next ranked setup.'
+                : 'Comparing holdout evidence across all volatility indices; no rankable setup is available yet.',
+        );
     }
 
-    private beginAdaptiveCandidate(row: BinaryMatrixMarketScanRow): void {
+    private beginAdaptiveCandidate(row: BinaryMatrixMarketScanRow, replacing = false): void {
         if (
             !this.running ||
             this.paused ||
-            this.selectedMarket ||
+            (this.selectedMarket && !replacing) ||
             this.openContractId ||
             !row.currentCondition ||
-            row.lowerConfidenceBound === null
+            row.lowerConfidenceBound === null ||
+            row.score === null
         ) {
             return;
         }
@@ -386,10 +468,14 @@ export class BinaryMatrixEngine {
         const decision = binaryMatrixDecisionForCondition(row.currentCondition, row.currentDigits);
         if (!decision || decision.condition !== row.currentCondition) return;
 
-        this.activeDecision = this.activeDecision ?? decision;
+        const previousSelection = this.selectedMarket;
+        if (previousSelection) this.trader.stop();
+        this.adaptiveFeedStarted = false;
+        this.activeDecision = decision;
         this.selectedMarket = {
             symbol: row.symbol,
             condition: decision.condition ?? row.currentCondition,
+            score: row.score,
             lowerConfidenceBound: row.lowerConfidenceBound,
             sampleCount: row.sampleCount,
             breakEvenWinRate: null,
@@ -403,12 +489,16 @@ export class BinaryMatrixEngine {
         this.proposalApprovedAtTickSerial = 0;
         this.onStatus('scanning');
         this.writeLog(
-            `Locked ${row.symbol} · ${decision.label} · ${row.sampleCount} holdout observations; waiting for its configured Last-X pattern.`,
-            'system',
+            previousSelection
+                ? `Switching from ${previousSelection.symbol} to stronger setup ${row.symbol} · ${decision.label} · relative holdout score ${(row.score * 100).toFixed(1)} points. No open contract is interrupted; only ${row.symbol} will receive new trades.`
+                : `Locked strongest available setup ${row.symbol} · ${decision.label} · relative holdout score ${(row.score * 100).toFixed(1)} points from ${row.sampleCount} holdout observations. Monitoring competitors and waiting for its configured Last-X pattern.`,
+            previousSelection ? 'info' : 'system',
         );
         this.publishScan(
             'selected',
-            `Locked ${row.symbol} ${decision.label}; waiting for its configured Last-X pattern before checking live payout.`,
+            previousSelection
+                ? `Switched to stronger setup ${row.symbol} ${decision.label}; waiting for its configured Last-X pattern before checking live payout.`
+                : `Selected strongest available setup ${row.symbol} ${decision.label}; waiting for its configured Last-X pattern before checking live payout.`,
         );
 
         const started = this.trader.start({
@@ -420,7 +510,12 @@ export class BinaryMatrixEngine {
             barrier: decision.barrier,
             currency: this.config.currency,
         });
-        if (!started) this.failAdaptiveRun(`Could not start the live feed for ${row.symbol}.`);
+        this.adaptiveFeedStarted = started;
+        if (!started) {
+            const reason = `Could not start the live feed for ${row.symbol}; skipping it and comparing the remaining volatility indices.`;
+            this.rejectedCandidates.set(this.candidateKey(row.symbol, decision.condition ?? row.currentCondition), reason);
+            this.abandonAdaptiveCandidate(reason);
+        }
     }
 
     private handleAdaptiveTick(epoch?: number): void {
@@ -512,12 +607,25 @@ export class BinaryMatrixEngine {
 
     private abandonAdaptiveCandidate(reason: string): void {
         this.trader.stop();
+        this.adaptiveFeedStarted = false;
         this.selectedMarket = null;
         this.proposalApproved = false;
         this.candidateSignalCurrent = false;
         this.proposalApprovedAtTickSerial = 0;
         this.indicatorPrices = [];
         this.onStatus('scanning');
+        const snapshot = this.scanSnapshot;
+        if (
+            snapshot &&
+            snapshot.totalMarkets > 0 &&
+            snapshot.completedMarkets === snapshot.totalMarkets &&
+            !this.paused &&
+            !this.openContractId &&
+            !this.pendingDecision
+        ) {
+            this.reconcileAdaptiveCandidate(snapshot);
+            return;
+        }
         this.publishScan('scanning', reason);
     }
 
@@ -539,6 +647,7 @@ export class BinaryMatrixEngine {
         this.running = false;
         this.marketScanner.stop();
         this.trader.stop();
+        this.adaptiveFeedStarted = false;
         this.selectedMarket = null;
         this.proposalApproved = false;
         this.candidateSignalCurrent = false;
@@ -576,11 +685,11 @@ export class BinaryMatrixEngine {
                     score: breakEven === null ? row.score : selected.lowerConfidenceBound - breakEven,
                     reason: this.proposalApproved
                         ? this.candidateSignalCurrent
-                            ? `Historical holdout and live payout pass; Last-X and required candle conditions matched, waiting for a fresh tick.`
-                            : `Signal locked to ${selected.condition}; payout passed and it is waiting for Last-X and required candle conditions.`
+                            ? `Relative holdout ranking and live payout pass; Last-X and required confirmation matched, waiting for a fresh tick.`
+                            : `Selected ${selected.condition} setup; payout passed and it is waiting for Last-X and required confirmation.`
                         : this.candidateSignalCurrent
-                            ? `Last-X and required candle conditions matched for locked ${selected.condition}; checking live payout.`
-                            : `Signal locked to ${selected.condition}; waiting for its Last-X and required candle conditions before the payout check.`,
+                            ? `Last-X and required confirmation matched for selected ${selected.condition}; checking live payout.`
+                            : `Selected ${selected.condition} setup; waiting for its Last-X and required confirmation before the payout check.`,
                 };
             }
 
@@ -647,8 +756,17 @@ export class BinaryMatrixEngine {
 
     private handleTraderStatus(status: DTStatus): void {
         if (!this.running) return;
-        if (status === 'error' && this.config.autoMarketScan) {
-            this.failAdaptiveRun('The selected market feed returned an error; scanning was stopped safely.');
+        if (status === 'error' && this.config.autoMarketScan && this.adaptiveFeedStarted) {
+            const selected = this.selectedMarket;
+            if (selected) {
+                const reason = `The ${selected.symbol} live feed failed; skipping this setup and comparing the other volatility indices.`;
+                this.rejectedCandidates.set(this.candidateKey(selected.symbol, selected.condition), reason);
+                this.abandonAdaptiveCandidate(reason);
+            } else {
+                this.failAdaptiveRun('The selected market feed returned an error; scanning was stopped safely.');
+            }
+        } else if (status === 'error' && this.config.autoMarketScan && (this.paused || this.stopRequested)) {
+            this.failAdaptiveRun('The selected market feed returned an error while the runner was paused.');
         } else if (status === 'error') this.onStatus('error');
         else if (status === 'ready' && !this.openContractId && !this.pendingDecision) this.onStatus('scanning');
     }
@@ -767,13 +885,18 @@ export class BinaryMatrixEngine {
         if (this.running) {
             if (this.config.autoMarketScan) {
                 this.trader.stop();
+                this.adaptiveFeedStarted = false;
                 this.selectedMarket = null;
                 this.proposalApproved = false;
                 this.candidateSignalCurrent = false;
                 this.proposalApprovedAtTickSerial = 0;
                 this.indicatorPrices = [];
                 this.onStatus('scanning');
-                this.publishScan('scanning', 'Contract settled; comparing current volatility-market evidence again.');
+                if (this.scanSnapshot) {
+                    this.reconcileAdaptiveCandidate(this.scanSnapshot);
+                } else {
+                    this.publishScan('scanning', 'Contract settled; comparing current volatility-market evidence again.');
+                }
                 return;
             }
 
@@ -872,6 +995,7 @@ export class BinaryMatrixEngine {
         this.selectedMarket = null;
         this.proposalApproved = false;
         this.candidateSignalCurrent = false;
+        this.adaptiveFeedStarted = false;
         this.proposalApprovedAtTickSerial = 0;
         this.indicatorPrices = [];
         releaseBotContractGate(this);
