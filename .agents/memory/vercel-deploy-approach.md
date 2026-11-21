@@ -144,3 +144,11 @@ Inline Node scripts run from the artifact directory may be treated as ES modules
 **Why:** A deployment script using `require` failed before making any network request because Node treated stdin as an ES module.
 
 **How to apply:** For temporary deployment scripts passed through stdin, set the input mode explicitly and use Node's built-in ESM imports.
+
+## Verify production API rewrites
+
+After a prebuilt production deployment, check `/api/healthz` and the exact API route through the custom domain. A locally correct `.vercel/output/config.json` does not prove the currently served deployment has the rewrite; a Vercel 404 means the request never reached the API.
+
+**Why:** The custom domain returned Vercel `NOT_FOUND` for both API routes even though the local prebuilt config contained the rewrite. A fresh prebuilt deployment restored the route.
+
+**How to apply:** Verify health through the custom domain, then POST an intentionally invalid payload to confirm the strategy route reaches Express without invoking AI generation.
