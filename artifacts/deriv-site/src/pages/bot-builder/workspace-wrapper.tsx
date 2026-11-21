@@ -35,7 +35,7 @@ const WorkspaceWrapper = observer(() => {
                 throw new Error('The Blockly workspace is not ready.');
             }
 
-            validateGeneratedBotXml(xml);
+            validateGeneratedBotXml(xml, { verifyWorkspace: true });
             toolbar.setResetButtonState(true);
             try {
                 const result = await load({

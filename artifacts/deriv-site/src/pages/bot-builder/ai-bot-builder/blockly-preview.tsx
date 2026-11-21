@@ -4,10 +4,20 @@ import { localize } from '@deriv-com/translations';
 type BlocklyApi = {
     Blocks: Record<string, unknown>;
     Themes?: Record<string, unknown>;
-    derivWorkspace?: unknown;
+  Workspace?: new () => any;
+  Events?: {
+      disable?: () => void;
+      enable?: () => void;
+  };
+  derivWorkspace?: {
+      options?: {
+          languageTree?: Element;
+      };
+  };
     inject: (container: HTMLElement, options: Record<string, unknown>) => any;
     Xml: {
         domToWorkspace: (xml: Element | Document, workspace: any) => unknown;
+    domToText?: (xml: Element | Document) => string;
     };
     utils: {
         xml: {
@@ -19,8 +29,118 @@ type BlocklyApi = {
 
 const REQUIRED_TOP_LEVEL_BLOCKS = ['trade_definition', 'before_purchase', 'after_purchase'];
 const MAX_BLOCKS = 250;
+const BLOCK_CATALOG_CATEGORIES = new Set([
+    'analysis_logics',
+    'binary_matrix_ai',
+    'trade_parameters',
+    'purchase_conditions',
+    'sell_conditions',
+    'trade_results',
+    'indicators',
+    'tick_analysis',
+    'contract_details',
+    'stats',
+    'notifications',
+    'time',
+    'math',
+    'text',
+    'logic',
+    'strategy_controls',
+    'virtual_hook_switcher',
+    'custom_notification',
+    'binarytools',
+    'contract_modifiers',
+    'barrier_settings',
+    'edging_bots',
+]);
+const MAX_BLOCK_CATALOG_LENGTH = 75000;
 
-export function validateGeneratedBotXml(xml: string): Element {
+type ValidateOptions = {
+    verifyWorkspace?: boolean;
+};
+
+function getBlockNodes(root: Element): Element[] {
+    return Array.from(root.getElementsByTagName('*')).filter(node =>
+        node.localName === 'block' || node.localName === 'shadow'
+    );
+}
+
+function verifyBlocklyWorkspaceImport(root: Element, Blockly: BlocklyApi) {
+    if (!Blockly.Workspace) {
+        throw new Error(localize('The workspace cannot verify this strategy yet. Try again in a moment.'));
+    }
+
+    const validationRoot = root.cloneNode(true) as Element;
+    const xmlBlocks = getBlockNodes(validationRoot);
+    xmlBlocks.forEach((node, index) => node.setAttribute('id', `ai-builder-check-${index}`));
+    const workspace = new Blockly.Workspace();
+    let eventsDisabled = false;
+
+    try {
+        Blockly.Events?.disable?.();
+        eventsDisabled = Boolean(Blockly.Events?.enable);
+        Blockly.Xml.domToWorkspace(validationRoot, workspace);
+
+        const imported = workspace.getAllBlocks(false);
+        if (imported.length !== xmlBlocks.length) {
+            throw new Error(
+                localize('Blockly could not create every block from the generated XML. Regenerate the strategy.'),
+            );
+        }
+
+        for (const node of xmlBlocks) {
+            const type = node.getAttribute('type') || '';
+            const block = workspace.getBlockById(node.getAttribute('id'));
+            if (!block || block.type !== type) {
+                throw new Error(localize('Blockly could not register one of the generated blocks.'));
+            }
+
+            for (const fieldNode of Array.from(node.children).filter(child => child.localName === 'field')) {
+                const fieldName = fieldNode.getAttribute('name') || '';
+                if (!fieldName || !block.getField(fieldName)) {
+                    throw new Error(localize(`Block "${type}" does not support its "${fieldName}" field.`));
+                }
+            }
+
+            for (const inputNode of Array.from(node.children).filter(
+                child => child.localName === 'value' || child.localName === 'statement',
+            )) {
+                const inputName = inputNode.getAttribute('name') || '';
+                const input = inputName && block.getInput(inputName);
+                if (!input) {
+                    throw new Error(localize(`Block "${type}" does not support its "${inputName}" input.`));
+                }
+                const hasChildBlock = Array.from(inputNode.children).some(
+                    child => child.localName === 'block' || child.localName === 'shadow',
+                );
+                if (hasChildBlock && !block.getInputTargetBlock(inputName)) {
+                    throw new Error(
+                        localize(`A block could not connect to "${inputName}" on "${type}". Regenerate the strategy.`),
+                    );
+                }
+            }
+
+            const nextNode = Array.from(node.children).find(child => child.localName === 'next');
+            const hasNextBlock = Boolean(
+                nextNode &&
+                    Array.from(nextNode.children).some(
+                        child => child.localName === 'block' || child.localName === 'shadow',
+                    ),
+            );
+            if (hasNextBlock && !block.getNextBlock()) {
+                throw new Error(localize(`A following block could not connect to "${type}". Regenerate the strategy.`));
+            }
+        }
+    } catch (error) {
+        if (error instanceof Error && error.message) throw error;
+        throw new Error(localize('Blockly could not validate this strategy. Regenerate it before loading.'));
+    } finally {
+        if (eventsDisabled) Blockly.Events?.enable?.();
+        workspace.dispose?.();
+    }
+}
+
+export function validateGeneratedBotXml(xml: string, options: ValidateOptions = {}): Element {
     if (xml.length > 60000 || /<!DOCTYPE|<!ENTITY|<script\b/i.test(xml)) {
         throw new Error(localize('The generated Blockly document is not allowed.'));
     }
@@ -41,10 +161,7 @@ export function validateGeneratedBotXml(xml: string): Element {
         throw new Error(localize('The generated strategy is not valid Blockly XML.'));
     }
 
-    const allBlockNodes = [
-        ...Array.from(root.getElementsByTagName('block')),
-        ...Array.from(root.getElementsByTagName('shadow')),
-    ];
+    const allBlockNodes = getBlockNodes(root);
     if (allBlockNodes.length < 4 || allBlockNodes.length > MAX_BLOCKS) {
         throw new Error(localize('The generated strategy has an invalid number of blocks.'));
     }
@@ -71,7 +188,57 @@ export function validateGeneratedBotXml(xml: string): Element {
         throw new Error(localize('The strategy is missing a required trade, purchase, or settlement section.'));
     }
 
+    if (options.verifyWorkspace) verifyBlocklyWorkspaceImport(root, Blockly);
+
     return root;
+}
+
+export function getBotBuilderBlockCatalog(): string {
+    const Blockly = window.Blockly as unknown as BlocklyApi;
+    const toolbox = Blockly?.derivWorkspace?.options?.languageTree;
+    if (!toolbox || !Blockly.Xml.domToText) {
+        throw new Error(localize('The Bot Builder block toolbox is not ready yet. Open the builder and try again.'));
+    }
+
+    const candidates = new Map<string, { categoryId: string; node: Element; score: number }>();
+    for (const category of Array.from(toolbox.getElementsByTagName('*')).filter(
+        node => node.localName === 'category' && BLOCK_CATALOG_CATEGORIES.has(node.getAttribute('id') || ''),
+    )) {
+        const categoryId = category.getAttribute('id') || '';
+        for (const node of Array.from(category.children).filter(child => child.localName === 'block')) {
+            const type = node.getAttribute('type') || '';
+            if (!type || !Blockly.Blocks[type]) continue;
+            const score = node.getElementsByTagName('*').length;
+            const previous = candidates.get(type);
+            if (!previous || score > previous.score) {
+                candidates.set(type, { categoryId, node, score });
+            }
+        }
+    }
+
+    if (candidates.size === 0) {
+        throw new Error(localize('No usable Blockly blocks were found in the active toolbox.'));
+    }
+
+    const root = document.createElement('xml');
+    root.setAttribute('xmlns', 'https://developers.google.com/blockly/xml');
+    const categories = new Map<string, Element>();
+    for (const { categoryId, node } of candidates.values()) {
+        let category = categories.get(categoryId);
+        if (!category) {
+            category = document.createElement('category');
+            category.setAttribute('id', categoryId);
+            categories.set(categoryId, category);
+            root.appendChild(category);
+        }
+        category.appendChild(node.cloneNode(true));
+    }
+
+    const catalog = Blockly.Xml.domToText(root);
+    if (catalog.length > MAX_BLOCK_CATALOG_LENGTH) {
+        throw new Error(localize('The available block catalog is too large to verify safely.'));
+    }
+    return catalog;
 }
 
 export function BlocklyPreview({ xml }: { xml: string }) {

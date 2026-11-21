@@ -1,4 +1,7 @@
 const mockMutateAsync = jest.fn();
+const mockValidateGeneratedBotXml = jest.fn();
+const mockBlockCatalog =
+    '<xml><block type="trade_definition"/><block type="before_purchase"/><block type="after_purchase"/><block type="purchase"/></xml>';
 
 jest.mock('@workspace/api-client-react', () => ({
     useGenerateOpenaiBotStrategy: () => ({
@@ -7,6 +10,11 @@ jest.mock('@workspace/api-client-react', () => ({
         isError: false,
         error: null,
     }),
+}));
+
+jest.mock('../blockly-preview', () => ({
+    getBotBuilderBlockCatalog: () => mockBlockCatalog,
+    validateGeneratedBotXml: (...args: unknown[]) => mockValidateGeneratedBotXml(...args),
 }));
 
 jest.mock('@deriv-com/translations', () => ({
@@ -27,6 +35,7 @@ const generatedStrategy = {
 describe('AiBotBuilder', () => {
     beforeEach(() => {
         mockMutateAsync.mockReset();
+        mockValidateGeneratedBotXml.mockReset();
         localStorage.removeItem('deriv-ai-bot-builder-history:CR12345');
         localStorage.removeItem('deriv-ai-bot-builder-history:CR98765');
         localStorage.removeItem('deriv-ai-bot-builder-history:guest');
@@ -80,7 +89,10 @@ describe('AiBotBuilder', () => {
         fireEvent.click(screen.getByTestId('button-generate-ai-strategy'));
         expect(await screen.findByTestId('result-ai-bot-builder')).toBeInTheDocument();
         expect(mockMutateAsync).toHaveBeenNthCalledWith(1, {
-            data: { prompt: 'Buy one Rise contract and stop after settlement.' },
+            data: {
+                prompt: 'Buy one Rise contract and stop after settlement.',
+                blockCatalog: mockBlockCatalog,
+            },
         });
 
         fireEvent.click(screen.getByTestId('button-toggle-ai-bot-history'));
@@ -96,6 +108,7 @@ describe('AiBotBuilder', () => {
                 data: {
                     prompt: 'Change the stake to 0.50 and keep one trade.',
                     existingXml: generatedStrategy.xml,
+                    blockCatalog: mockBlockCatalog,
                 },
             })
         );
@@ -141,5 +154,25 @@ describe('AiBotBuilder', () => {
         fireEvent.keyDown(screen.getByTestId('button-move-ai-bot-builder'), { key: 'ArrowRight' });
         expect(localStorage.getItem('deriv-ai-bot-builder-launcher-position')).toBeTruthy();
         expect(screen.queryByTestId('panel-ai-bot-builder')).not.toBeInTheDocument();
+    });
+
+    it('does not show or save a strategy that fails workspace verification', async () => {
+        mockMutateAsync.mockResolvedValue(generatedStrategy);
+        mockValidateGeneratedBotXml.mockImplementation(() => {
+            throw new Error('A generated block does not support this input.');
+        });
+        render(<AiBotBuilder onLoad={jest.fn()} renderPreview={() => <div>Block preview</div>} />);
+
+        fireEvent.click(screen.getByTestId('button-open-ai-bot-builder'));
+        fireEvent.change(screen.getByTestId('input-ai-bot-builder-prompt'), {
+            target: { value: 'Buy one Rise contract and stop after settlement.' },
+        });
+        fireEvent.click(screen.getByTestId('button-generate-ai-strategy'));
+
+        expect(await screen.findByTestId('status-ai-bot-builder-error')).toHaveTextContent(
+            'A generated block does not support this input.',
+        );
+        expect(screen.queryByTestId('result-ai-bot-builder')).not.toBeInTheDocument();
+        expect(localStorage.getItem('deriv-ai-bot-builder-history:guest')).toBeNull();
     });
 });

@@ -1,5 +1,6 @@
 import {
     inferStrategyIntent,
+    validateBlocklyBlocksAvailable,
     validateDigitRuleSupport,
     validateStrategyMatchesIntent,
 } from '../../../../../../api-server/src/routes/openai/strategy-intent';
@@ -83,5 +84,15 @@ describe('AI strategy intent validation', () => {
         expect(() => validateStrategyMatchesIntent(requestedStrategy, wrongContract)).toThrow(
             'requested digit Over/Under',
         );
+    });
+
+    it('rejects blocks and shadow blocks missing from the active toolbox catalog', () => {
+        const catalog = '<xml><block type="trade_definition"/><shadow type="math_number"/></xml>';
+        expect(() =>
+            validateBlocklyBlocksAvailable(
+                '<xml><block type="trade_definition"/><shadow type="invented_shadow"/></xml>',
+                catalog,
+            ),
+        ).toThrow('not in the active Bot Builder toolbox: invented_shadow');
     });
 });

@@ -94,8 +94,14 @@ components:
           type: string
           maxLength: 60000
           description: Existing generated strategy XML to refine with the new prompt
+        blockCatalog:
+          type: string
+          minLength: 1
+          maxLength: 75000
+          description: Verified Blockly block templates from the active Bot Builder toolbox
       required:
         - prompt
+        - blockCatalog
     OpenaiBotStrategy:
       type: object
       properties:

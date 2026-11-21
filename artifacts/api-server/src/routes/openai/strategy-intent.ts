@@ -31,6 +31,24 @@ export class StrategyValidationError extends Error {
   }
 }
 
+export function validateBlocklyBlocksAvailable(xml: string, blockCatalog: string): void {
+  const availableTypes = new Set(
+    [...blockCatalog.matchAll(/<(?:block|shadow)\b[^>]*\btype=(["'])([^"']+)\1/gi)].map(
+      match => match[2],
+    ),
+  );
+  const requestedTypes = [
+    ...xml.matchAll(/<(?:block|shadow)\b[^>]*\btype=(["'])([^"']+)\1/gi),
+  ].map(match => match[2]);
+  const unsupported = [...new Set(requestedTypes.filter(type => !availableTypes.has(type)))];
+
+  if (unsupported.length > 0) {
+    throw new StrategyValidationError(
+      `The strategy used block types that are not in the active Bot Builder toolbox: ${unsupported.slice(0, 6).join(", ")}.`,
+    );
+  }
+}
+
 const NUMBER_WORDS: Record<string, number> = {
   zero: 0,
   one: 1,

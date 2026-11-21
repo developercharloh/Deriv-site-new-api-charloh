@@ -25,11 +25,14 @@ export const generateOpenaiBotStrategyBodyPromptMax = 1400;
 
 export const generateOpenaiBotStrategyBodyExistingXmlMax = 60000;
 
+export const generateOpenaiBotStrategyBodyBlockCatalogMax = 75000;
+
 
 
 export const GenerateOpenaiBotStrategyBody = zod.object({
   "prompt": zod.string().min(generateOpenaiBotStrategyBodyPromptMin).max(generateOpenaiBotStrategyBodyPromptMax),
-  "existingXml": zod.string().max(generateOpenaiBotStrategyBodyExistingXmlMax).optional().describe('Existing generated strategy XML to refine with the new prompt')
+  "existingXml": zod.string().max(generateOpenaiBotStrategyBodyExistingXmlMax).optional().describe('Existing generated strategy XML to refine with the new prompt'),
+  "blockCatalog": zod.string().min(1).max(generateOpenaiBotStrategyBodyBlockCatalogMax).describe('Verified Blockly block templates from the active Bot Builder toolbox')
 })
 
 export const generateOpenaiBotStrategyResponseTitleMax = 80;

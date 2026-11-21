@@ -61,7 +61,11 @@ router.post("/openai/bot-builder/generate", async (req, res): Promise<void> => {
   }
 
   try {
-    const strategy = await generateBotStrategy(prompt, parsed.data.existingXml);
+    const strategy = await generateBotStrategy(
+      prompt,
+      parsed.data.existingXml,
+      parsed.data.blockCatalog,
+    );
     res.json(strategy);
   } catch (error) {
     req.log.error(

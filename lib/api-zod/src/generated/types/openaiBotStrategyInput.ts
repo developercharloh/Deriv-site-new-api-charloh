@@ -17,4 +17,10 @@ export interface OpenaiBotStrategyInput {
      * @maxLength 60000
      */
   existingXml?: string;
+  /**
+     * Verified Blockly block templates from the active Bot Builder toolbox
+     * @minLength 1
+     * @maxLength 75000
+     */
+  blockCatalog: string;
 }

@@ -2,7 +2,7 @@ jest.mock('@deriv-com/translations', () => ({
     localize: (text: string) => text,
 }));
 
-import { validateGeneratedBotXml } from '../blockly-preview';
+import { getBotBuilderBlockCatalog, validateGeneratedBotXml } from '../blockly-preview';
 
 const validXml = `<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
     <block type="trade_definition">
@@ -70,6 +70,9 @@ describe('validateGeneratedBotXml', () => {
     beforeEach(() => {
         (window as any).Blockly = {
             Blocks: Object.fromEntries(availableBlocks.map(type => [type, {}])),
+            Xml: {
+                domToText: (xml: Element) => new XMLSerializer().serializeToString(xml),
+            },
             utils: {
                 xml: {
                     textToDom: (xml: string) => {
@@ -100,5 +103,84 @@ describe('validateGeneratedBotXml', () => {
         const xml = validXml.replace('<block type="after_purchase" />', '');
 
         expect(() => validateGeneratedBotXml(xml)).toThrow('missing a required trade');
+    });
+
+    it('exports registered blocks and their real toolbox templates for generation', () => {
+        const toolbox = new DOMParser().parseFromString(
+            `<xml>
+                <category id="trade_parameters"><block type="trade_definition"><statement name="TRADE_OPTIONS"><block type="trade_definition_market"/></statement></block></category>
+                <category id="indicators"><block type="macd_value"><value name="INPUT"><shadow type="math_number"/></value></block></category>
+                <category id="not-used"><block type="unknown_block"/></category>
+            </xml>`,
+            'application/xml',
+        ).documentElement;
+        (window as any).Blockly.derivWorkspace = { options: { languageTree: toolbox } };
+        (window as any).Blockly.Xml.domToText = (xml: Element) => new XMLSerializer().serializeToString(xml);
+        (window as any).Blockly.Blocks.macd_value = {};
+        (window as any).Blockly.Blocks.unknown_block = {};
+
+        const catalog = getBotBuilderBlockCatalog();
+
+        expect(catalog).toContain('trade_definition_market');
+        expect(catalog).toContain('macd_value');
+        expect(catalog).not.toContain('unknown_block');
+    });
+
+    it('verifies that generated fields and input connections load into a real workspace', () => {
+        class TestWorkspace {
+            blocks: any[] = [];
+            getAllBlocks() {
+                return this.blocks;
+            }
+            getBlockById(id: string) {
+                return this.blocks.find(block => block.id === id);
+            }
+            dispose() {}
+        }
+
+        (window as any).Blockly.Workspace = TestWorkspace;
+        (window as any).Blockly.Events = { disable: jest.fn(), enable: jest.fn() };
+        (window as any).Blockly.Xml.domToWorkspace = (xml: Element, workspace: TestWorkspace) => {
+            const nodes = Array.from(xml.getElementsByTagName('*')).filter(
+                node => node.localName === 'block' || node.localName === 'shadow',
+            );
+            const supportedFields: Record<string, string[]> = { math_number: ['NUM'] };
+            const supportedInputs: Record<string, string[]> = {
+                trade_definition: ['TRADE_OPTIONS'],
+                before_purchase: ['BEFOREPURCHASE_STACK'],
+                after_purchase: ['AFTERPURCHASE_STACK'],
+            };
+            workspace.blocks = nodes.map(node => ({
+                id: node.getAttribute('id'),
+                type: node.getAttribute('type'),
+                getField: (name: string) => (supportedFields[node.getAttribute('type') || ''] || []).includes(name) ? {} : null,
+                getInput: (name: string) => (supportedInputs[node.getAttribute('type') || ''] || []).includes(name) ? {} : null,
+                getInputTargetBlock: (name: string) => {
+                    const input = Array.from(node.children).find(
+                        child =>
+                            (child.localName === 'value' || child.localName === 'statement') &&
+                            child.getAttribute('name') === name,
+                    );
+                    return input && Array.from(input.children).some(
+                        child => child.localName === 'block' || child.localName === 'shadow',
+                    )
+                        ? {}
+                        : null;
+                },
+                getNextBlock: () => null,
+            }));
+        };
+
+        expect(() => validateGeneratedBotXml(validXml, { verifyWorkspace: true })).not.toThrow();
+
+        const invalidFieldXml = validXml.replace(
+            '<block type="trade_definition">',
+            '<block type="trade_definition"><field name="UNKNOWN">x</field>',
+        );
+        expect(() => validateGeneratedBotXml(invalidFieldXml, { verifyWorkspace: true })).toThrow(
+            'does not support its "UNKNOWN" field',
+        );
+        expect((window as any).Blockly.Events.disable).toHaveBeenCalled();
+        expect((window as any).Blockly.Events.enable).toHaveBeenCalled();
     });
 });

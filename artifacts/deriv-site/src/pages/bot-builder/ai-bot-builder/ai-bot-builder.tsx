@@ -13,6 +13,7 @@ import {
     AI_BOT_BUILDER_HISTORY_STORAGE_PREFIX,
     AI_BOT_BUILDER_LAUNCHER_STORAGE_KEY,
 } from './storage';
+import { getBotBuilderBlockCatalog, validateGeneratedBotXml } from './blockly-preview';
 import './ai-bot-builder.scss';
 
 type StrategyResult = {
@@ -38,6 +39,7 @@ type AiBotBuilderProps = {
 const MIN_PROMPT_LENGTH = 12;
 const MAX_PROMPT_LENGTH = 1400;
 const MAX_HISTORY_ITEMS = 20;
+type BuildStage = 'checking' | 'building' | 'validating';
 
 const getSavedStrategies = (storageKey: string): SavedStrategy[] => {
     try {
@@ -117,9 +119,12 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
     const [loadedHistoryStorageKey, setLoadedHistoryStorageKey] = useState(historyStorageKey);
     const [editingBase, setEditingBase] = useState<SavedStrategy | null>(null);
     const [showHistory, setShowHistory] = useState(false);
+    const [resultVerified, setResultVerified] = useState(false);
     const [launcherPosition, setLauncherPosition] = useState<{ left: number; bottom: number } | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const [loadError, setLoadError] = useState('');
+    const [requestError, setRequestError] = useState('');
+    const [buildStage, setBuildStage] = useState<BuildStage | null>(null);
     const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
     const generateStrategy = useGenerateOpenaiBotStrategy();
     const historyStorageKeyRef = useRef(historyStorageKey);
@@ -156,6 +161,7 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
         setPrompt('');
         setResult(null);
         setEditingBase(null);
+        setResultVerified(false);
         setShowHistory(false);
     }, [historyStorageKey]);
 
@@ -206,15 +212,24 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
         setResult(null);
         setIsConfirming(false);
         setLoadError('');
+        setRequestError('');
+        setResultVerified(false);
+        setBuildStage('checking');
         try {
             const requestStorageKey = historyStorageKey;
+            const blockCatalog = getBotBuilderBlockCatalog();
+            setBuildStage('building');
             const generated = await generateStrategy.mutateAsync({
                 data: {
                     prompt: trimmedPrompt,
                     ...(editingBase ? { existingXml: editingBase.xml } : {}),
+                    blockCatalog,
                 },
             });
             if (historyStorageKeyRef.current !== requestStorageKey) return;
+            setBuildStage('validating');
+            validateGeneratedBotXml(generated.xml, { verifyWorkspace: true });
+            setResultVerified(true);
             setResult(generated);
             const saved: SavedStrategy = {
                 ...generated,
@@ -232,8 +247,13 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                 return next;
             });
             setEditingBase(saved);
-        } catch {
-            // React Query exposes the mutation error below so the error remains visible in the form.
+        } catch (error) {
+            setRequestError(
+                getErrorMessage(error) ||
+                    localize('The generated blocks did not pass workspace verification. Your current bot was not changed.'),
+            );
+        } finally {
+            setBuildStage(null);
         }
     };
 
@@ -243,6 +263,7 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
         setLoadError('');
         try {
             await onLoad(result.xml);
+            setResultVerified(true);
             setIsConfirming(false);
             setIsOpen(false);
         } catch (error) {
@@ -327,6 +348,7 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
 
     const openSavedStrategy = (strategy: SavedStrategy, refine: boolean) => {
         setResult(strategy);
+        setResultVerified(false);
         setEditingBase(refine ? strategy : null);
         setPrompt(refine ? '' : strategy.prompt);
         setShowHistory(false);
@@ -472,11 +494,12 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                             </span>
                         </div>
 
-                        {generateStrategy.isError && (
+                        {(requestError || generateStrategy.isError) && (
                             <div className='ai-bot-builder__error' role='alert' data-testid='status-ai-bot-builder-error'>
                                 <strong>{localize('Strategy not generated')}</strong>
                                 <span>
-                                    {getErrorMessage(generateStrategy.error) ||
+                                    {requestError ||
+                                        getErrorMessage(generateStrategy.error) ||
                                         localize('Something went wrong. Check your connection and try again.')}
                                 </span>
                             </div>
@@ -486,16 +509,20 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                             type='submit'
                             className='ai-bot-builder__generate'
                             disabled={
-                                generateStrategy.isPending ||
+                                generateStrategy.isPending || buildStage !== null ||
                                 trimmedPrompt.length < MIN_PROMPT_LENGTH ||
                                 trimmedPrompt.length > MAX_PROMPT_LENGTH
                             }
                             data-testid='button-generate-ai-strategy'
                         >
-                            {generateStrategy.isPending ? (
+                            {generateStrategy.isPending || buildStage !== null ? (
                                 <>
                                     <span className='ai-bot-builder__progress' aria-hidden='true' />
-                                    {localize('Building your strategy…')}
+                                    {buildStage === 'checking'
+                                        ? localize('Checking available blocks…')
+                                        : buildStage === 'validating'
+                                          ? localize('Verifying blocks and connections…')
+                                          : localize('Building from registered blocks…')}
                                 </>
                             ) : (
                                 <>
@@ -509,12 +536,18 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                         </p>
                     </form>}
 
-                    {generateStrategy.isPending && (
+                    {(generateStrategy.isPending || buildStage !== null) && (
                         <div className='ai-bot-builder__loading' role='status' aria-live='polite' data-testid='status-ai-bot-builder-loading'>
                             <span className='ai-bot-builder__skeleton ai-bot-builder__skeleton--title' />
                             <span className='ai-bot-builder__skeleton' />
                             <span className='ai-bot-builder__skeleton ai-bot-builder__skeleton--short' />
-                            <span className='ai-bot-builder__loading-label'>{localize('Turning your rules into editable blocks…')}</span>
+                            <span className='ai-bot-builder__loading-label'>
+                                {buildStage === 'checking'
+                                    ? localize('Checking the active toolbox and its real block definitions…')
+                                    : buildStage === 'validating'
+                                      ? localize('Importing every block into a test workspace and checking its connections…')
+                                      : localize('Building your strategy from verified, registered blocks…')}
+                            </span>
                         </div>
                     )}
 
@@ -529,6 +562,11 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                                     {localize('{{count}} blocks', { count: result.blockCount })}
                                 </span>
                             </div>
+                            <p className='ai-bot-builder__verified' role='status' data-testid='status-ai-bot-builder-verified'>
+                                {resultVerified
+                                    ? localize('Verification complete: every block imported and its connections passed. Review the strategy before loading.')
+                                    : localize('Saved strategy: it will be checked against the current block library before replacing your workspace.')}
+                            </p>
                             <p className='ai-bot-builder__summary'>{result.summary}</p>
                             {result.warnings.length > 0 && (
                                 <div className='ai-bot-builder__warnings' role='note' data-testid='list-ai-bot-builder-warnings'>
