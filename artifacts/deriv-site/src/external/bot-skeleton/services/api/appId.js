@@ -1,4 +1,5 @@
 import { getSocketURL } from '@/components/shared';
+import { getLocalStorageRecord } from '@/utils/safe-local-storage';
 import DerivAPIBasic from '@deriv/deriv-api/dist/DerivAPIBasic';
 import APIMiddleware from './api-middleware';
 
@@ -132,7 +133,7 @@ export const V2GetActiveAccountId = () => {
 
 export const getToken = () => {
     const active_loginid = getLoginId();
-    const client_accounts = JSON.parse(localStorage.getItem('accountsList')) ?? undefined;
+    const client_accounts = getLocalStorageRecord('accountsList');
     const active_account = (client_accounts && client_accounts[active_loginid]) || {};
     return {
         token: active_account ?? undefined,

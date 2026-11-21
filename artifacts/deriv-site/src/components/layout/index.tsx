@@ -5,6 +5,7 @@ import { observer } from 'mobx-react-lite';
 import { Outlet } from 'react-router-dom';
 import { api_base } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
+import { getLocalStorageRecord } from '@/utils/safe-local-storage';
 import { useDevice } from '@deriv-com/ui';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '../shared';
 import LandingPage from '../../pages/landing';
@@ -19,10 +20,10 @@ const Layout = observer(() => {
     const is_quick_strategy_active = store?.quick_strategy?.is_open;
     const isCallbackPage = window.location.pathname === '/callback';
 
-    const checkClientAccount = JSON.parse(localStorage.getItem('clientAccounts') ?? '{}');
+    const checkClientAccount = getLocalStorageRecord('clientAccounts');
     const getQueryParams = new URLSearchParams(window.location.search);
     const currency = getQueryParams.get('account') ?? '';
-    const accountsList = JSON.parse(localStorage.getItem('accountsList') ?? '{}');
+    const accountsList = getLocalStorageRecord('accountsList');
     const isClientAccountsPopulated = Object.keys(accountsList).length > 0;
     const ifClientAccountHasCurrency =
         Object.values(checkClientAccount).some((account: any) => account.currency === currency) ||

@@ -1,4 +1,5 @@
 import { isPreviewMode, PREVIEW_BASE_PATH } from './utils/is-preview-mode';
+import { getLocalStorageRecord } from './utils/safe-local-storage';
 
 export const getUrlBase = (path = '') => {
     const l = window.location;
@@ -57,7 +58,7 @@ const initSurvicate = () => {
     if (initSurvicateCalled) return;
     setSurvicateCalledValue(true);
     const active_loginid = localStorage.getItem('active_loginid');
-    const client_accounts = JSON.parse(localStorage.getItem('accountsList') as string) || undefined;
+    const client_accounts = getLocalStorageRecord('accountsList');
     const setAttributesIfAvailable = () => {
         if (active_loginid && client_accounts) {
             const { residence, account_type, created_at } = client_accounts[active_loginid] || {};

@@ -1,5 +1,6 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
 import { action, computed, makeObservable, observable } from 'mobx';
+import { getLocalStorageRecord } from '@/utils/safe-local-storage';
 /* [AI] - Analytics removed - utility functions moved to @/utils/account-helpers */
 import { getAccountId } from '@/utils/account-helpers';
 /* [/AI] */
@@ -217,12 +218,12 @@ export default class ClientStore {
     };
 
     getCurrency = () => {
-        const clientAccounts = JSON.parse(localStorage.getItem('clientAccounts') ?? '{}');
+        const clientAccounts = getLocalStorageRecord('clientAccounts');
         return clientAccounts[this.loginid]?.currency ?? '';
     };
 
     getToken = () => {
-        const accountList = JSON.parse(localStorage.getItem('accountsList') ?? '{}');
+        const accountList = getLocalStorageRecord('accountsList');
         return accountList[this.loginid] ?? '';
     };
 

@@ -1,6 +1,6 @@
-const getSettingsFromLocal = () => {
-    return JSON.parse(localStorage.getItem('dbot_settings'));
-};
+import { getLocalStorageRecord } from './safe-local-storage';
+
+const getSettingsFromLocal = () => getLocalStorageRecord('dbot_settings');
 
 export const getSetting = (key: string) => {
     const settings = getSettingsFromLocal();
