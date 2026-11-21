@@ -250,6 +250,9 @@ const browserApiMock = String.raw`
     });
     localStorage.setItem('active_loginid', accountId);
     localStorage.setItem('account_type', 'demo');
+    if (new URL(location.href).searchParams.get('startup_storage_regression') === '1') {
+        localStorage.setItem('bot-announcements', '{broken');
+    }
     sessionStorage.setItem('deriv_accounts', JSON.stringify([{
         account_id: accountId,
         account_type: 'demo',
@@ -1927,15 +1930,23 @@ const run = async () => {
         await cdp.send('Page.enable');
         await cdp.send('Runtime.enable');
         await cdp.send('Log.enable');
-        await cdp.send('Page.navigate', { url: `${appUrl}/#free_bots` });
+        const startupStorageRegression = process.env.STARTUP_STORAGE_REGRESSION === '1';
+        const targetUrl = startupStorageRegression
+            ? `${appUrl}/?startup_storage_regression=1`
+            : `${appUrl}/#free_bots`;
+        await cdp.send('Page.navigate', { url: targetUrl });
         await waitFor(cdp, `document.readyState === 'complete'`, 'Deriv Site page');
         await waitFor(
             cdp,
-            `Array.from(document.querySelectorAll('button')).some(
-                button => button.getClientRects().length > 0 &&
-                    (button.textContent.includes('Continue to App') || button.textContent.includes('Load bot'))
-            )`,
-            'app gate or Free Bots loader',
+            startupStorageRegression
+                ? `Array.from(document.querySelectorAll('button')).some(
+                    button => button.getClientRects().length > 0 && button.textContent.includes('Continue to App')
+                ) || Boolean(document.querySelector('#id-dbot-dashboard, .unhandled-error'))`
+                : `Array.from(document.querySelectorAll('button')).some(
+                    button => button.getClientRects().length > 0 &&
+                        (button.textContent.includes('Continue to App') || button.textContent.includes('Load bot'))
+                )`,
+            startupStorageRegression ? 'dashboard startup or error boundary' : 'app gate or Free Bots loader',
             90_000
         );
 
@@ -1966,6 +1977,30 @@ const run = async () => {
                     })()`
                 );
             }
+        }
+
+        if (startupStorageRegression) {
+            await waitFor(
+                cdp,
+                `Boolean(document.querySelector('#id-dbot-dashboard, .unhandled-error'))`,
+                'dashboard startup result',
+                90_000
+            );
+            await sleep(1_000);
+            const startupResult = await evaluate(
+                cdp,
+                `({
+                    dashboardVisible: Boolean(document.querySelector('.dc-tabs__content-panel#id-dbot-dashboard')),
+                    interruptionVisible: Boolean(document.querySelector('.unhandled-error')),
+                    headerText: document.querySelector('header')?.innerText || '',
+                    bodyText: document.body?.innerText?.slice(0, 900) || '',
+                })`
+            );
+            if (!startupResult.dashboardVisible || startupResult.interruptionVisible) {
+                throw new Error(`Authenticated dashboard failed with corrupt announcement storage: ${JSON.stringify(startupResult)}`);
+            }
+            console.log('✓ Authenticated mobile dashboard starts with malformed announcement storage.');
+            return;
         }
 
         await waitFor(
