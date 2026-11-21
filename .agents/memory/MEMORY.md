@@ -6,6 +6,7 @@
 - [Alpha Scan cockpit regression surface](alpha-scan-cockpit-regression.md) — visual replacements must preserve the settled browser markers and validate coverage against the discovered symbol universe.
 - [Alpha Scan risk regression](alpha-scan-risk-regression.md) — assert durable runner state and an uncapped trade counter; feedback and the visible journal are transient/capped.
 - [Deriv-site Jest ESM dependency handling](deriv-site-jest-esm.md) — pnpm’s `.pnpm/@deriv-com+ui@…` path needs an explicit transform exception for Jest.
+- [Deriv toolbox test rendering](deriv-toolbox-test-rendering.md) — toolbox catalog tests must serialize the JSX tree; Jest’s global server-renderer mock returns invalid placeholder XML.
 - [Alpha Scan research gate](alpha-scan-research-scope.md) — Alpha Scan starts as a descriptive public-data cockpit; keep decisions at SKIP until OOS validation exists.
 - [Deriv symbol metadata](deriv-active-symbols-discovery.md) — public active_symbols labels vary; use full metadata plus symbol-family matching for Synthetic Index discovery.
 - [Alpha Scan adaptive execution](alpha-scan-adaptive-execution.md) — pace public history reads and preserve momentum confirmation separately from adaptive digit contracts.

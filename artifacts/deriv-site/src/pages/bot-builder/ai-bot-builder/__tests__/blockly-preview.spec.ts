@@ -145,26 +145,29 @@ describe('validateGeneratedBotXml', () => {
     });
 
     it('keeps the full current strategy toolbox catalog within the API request limit', () => {
-        console.log('server module', jest.requireMock('react-dom/server'), ReactDomServer);
-        (ReactDomServer as any).renderToStaticMarkup.mockImplementation(renderToolboxElement);
-        const toolboxMarkup = ToolboxItems();
-        const toolbox = new DOMParser().parseFromString(toolboxMarkup, 'text/xml').documentElement;
-        console.log(toolboxMarkup.slice(0, 400), toolbox.localName, toolbox.getElementsByTagName('*').length);
-        const registeredTypes = Array.from(toolbox.getElementsByTagName('*'))
-            .filter(node => node.localName === 'block' || node.localName === 'shadow')
-            .map(node => node.getAttribute('type') || '')
-            .filter(Boolean);
-        (window as any).Blockly.Blocks = Object.fromEntries(registeredTypes.map(type => [type, {}]));
-        (window as any).Blockly.derivWorkspace = { options: { languageTree: toolbox } };
+        const server = ReactDomServer as any;
+        const originalRenderer = server.renderToStaticMarkup.getMockImplementation();
+        server.renderToStaticMarkup.mockImplementation(renderToolboxElement);
+        try {
+            const toolbox = new DOMParser().parseFromString(ToolboxItems(), 'text/xml').documentElement;
+            const registeredTypes = Array.from(toolbox.getElementsByTagName('*'))
+                .filter(node => node.localName === 'block' || node.localName === 'shadow')
+                .map(node => node.getAttribute('type') || '')
+                .filter(Boolean);
+            (window as any).Blockly.Blocks = Object.fromEntries(registeredTypes.map(type => [type, {}]));
+            (window as any).Blockly.derivWorkspace = { options: { languageTree: toolbox } };
 
-        const catalog = getBotBuilderBlockCatalog();
+            const catalog = getBotBuilderBlockCatalog();
 
-        expect(catalog.length).toBeGreaterThan(0);
-        expect(catalog.length).toBeLessThanOrEqual(75000);
-        expect(catalog).toContain('trade_definition_market');
-        expect(catalog).toContain('last_digits_condition');
-        expect(catalog).toContain('macd_value');
-        expect(catalog).toContain('controls_if');
+            expect(catalog.length).toBeGreaterThan(0);
+            expect(catalog.length).toBeLessThanOrEqual(75000);
+            expect(catalog).toContain('trade_definition_market');
+            expect(catalog).toContain('last_digits_condition');
+            expect(catalog).toContain('macd_value');
+            expect(catalog).toContain('controls_if');
+        } finally {
+            server.renderToStaticMarkup.mockImplementation(originalRenderer);
+        }
     });
 
     it('verifies that generated fields and input connections load into a real workspace', () => {
