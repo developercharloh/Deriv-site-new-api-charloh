@@ -4,6 +4,7 @@ jest.mock('@deriv-com/translations', () => ({
 
 import { getBotBuilderBlockCatalog, validateGeneratedBotXml } from '../blockly-preview';
 import { ToolboxItems } from '../../toolbox/toolbox-items';
+import ReactDomServer from 'react-dom/server';
 
 const validXml = `<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
     <block type="trade_definition">
@@ -67,6 +68,22 @@ const generatedDigitXml = validXml.replace(
     </block>`
 );
 
+const renderToolboxElement = (node: any): string => {
+    if (node === null || node === undefined || typeof node === 'boolean') return '';
+    if (typeof node === 'string' || typeof node === 'number') {
+        return String(node).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    if (Array.isArray(node)) return node.map(renderToolboxElement).join('');
+
+    const element = typeof node.type === 'function' ? node.type(node.props) : node;
+    if (element !== node) return renderToolboxElement(element);
+    const attributes = Object.entries(node.props || {})
+        .filter(([name, value]) => name !== 'children' && value !== undefined && value !== null)
+        .map(([name, value]) => ` ${name}="${String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`)
+        .join('');
+    return `<${node.type}${attributes}>${renderToolboxElement(node.props?.children)}</${node.type}>`;
+};
+
 describe('validateGeneratedBotXml', () => {
     beforeEach(() => {
         (window as any).Blockly = {
@@ -128,8 +145,11 @@ describe('validateGeneratedBotXml', () => {
     });
 
     it('keeps the full current strategy toolbox catalog within the API request limit', () => {
-        const toolbox = new DOMParser().parseFromString(ToolboxItems(), 'text/xml').documentElement;
-        console.log(ToolboxItems().slice(0, 1200));
+        console.log('server module', jest.requireMock('react-dom/server'), ReactDomServer);
+        (ReactDomServer as any).renderToStaticMarkup.mockImplementation(renderToolboxElement);
+        const toolboxMarkup = ToolboxItems();
+        const toolbox = new DOMParser().parseFromString(toolboxMarkup, 'text/xml').documentElement;
+        console.log(toolboxMarkup.slice(0, 400), toolbox.localName, toolbox.getElementsByTagName('*').length);
         const registeredTypes = Array.from(toolbox.getElementsByTagName('*'))
             .filter(node => node.localName === 'block' || node.localName === 'shadow')
             .map(node => node.getAttribute('type') || '')
