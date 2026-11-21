@@ -14,7 +14,7 @@ import './workspace.scss';
 const ai_bot_builder_query_client = new QueryClient();
 
 const WorkspaceWrapper = observer(() => {
-    const { blockly_store, run_panel, toolbar } = useStore();
+    const { blockly_store, client, run_panel, toolbar } = useStore();
     const { onMount, onUnmount, is_loading } = blockly_store;
 
     React.useEffect(() => {
@@ -68,8 +68,10 @@ const WorkspaceWrapper = observer(() => {
                 <StopBotModal />
                 <QueryClientProvider client={ai_bot_builder_query_client}>
                     <AiBotBuilder
+                        key={client.loginid || 'guest'}
                         onLoad={handleLoadGeneratedBot}
                         renderPreview={xml => <BlocklyPreview xml={xml} />}
+                        accountId={client.loginid ?? ''}
                     />
                 </QueryClientProvider>
             </React.Fragment>

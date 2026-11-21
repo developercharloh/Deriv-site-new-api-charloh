@@ -1,11 +1,31 @@
 import Cookies from 'js-cookie';
 import { BOT_VERSION_CONFIG } from '@/constants/bot-version';
+import {
+    AI_BOT_BUILDER_HISTORY_STORAGE_PREFIX,
+    AI_BOT_BUILDER_LAUNCHER_STORAGE_KEY,
+} from '@/pages/bot-builder/ai-bot-builder/storage';
 
 /**
- * Clears all localStorage data except for the bot_version
+ * Clears localStorage while preserving the bot version and AI builder preferences.
  */
 const clearLocalStorage = (): void => {
     try {
+        // Keep the AI builder's account-scoped history and launcher position
+        // when the Blockly workspace version changes. Old XML is still checked
+        // by the preview/load validator before it can replace the workspace.
+        const preservedEntries: Array<[string, string]> = [];
+        for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index);
+            if (
+                key &&
+                (key.startsWith(`${AI_BOT_BUILDER_HISTORY_STORAGE_PREFIX}:`) ||
+                    key === AI_BOT_BUILDER_LAUNCHER_STORAGE_KEY)
+            ) {
+                const value = localStorage.getItem(key);
+                if (value !== null) preservedEntries.push([key, value]);
+            }
+        }
+
         // Get the current bot_version before clearing
         const currentBotVersion = localStorage.getItem(BOT_VERSION_CONFIG.STORAGE_KEY);
 
@@ -16,6 +36,7 @@ const clearLocalStorage = (): void => {
         if (currentBotVersion) {
             localStorage.setItem(BOT_VERSION_CONFIG.STORAGE_KEY, currentBotVersion);
         }
+        preservedEntries.forEach(([key, value]) => localStorage.setItem(key, value));
     } catch (error) {
         console.error('Error clearing localStorage:', error);
     }

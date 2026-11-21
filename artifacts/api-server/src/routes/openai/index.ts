@@ -4,6 +4,7 @@ import {
   type OpenaiError,
 } from "@workspace/api-zod";
 import { generateBotStrategy } from "./strategy-generator";
+import { StrategyValidationError } from "./strategy-intent";
 
 const router: IRouter = Router();
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
@@ -60,13 +61,17 @@ router.post("/openai/bot-builder/generate", async (req, res): Promise<void> => {
   }
 
   try {
-    const strategy = await generateBotStrategy(prompt);
+    const strategy = await generateBotStrategy(prompt, parsed.data.existingXml);
     res.json(strategy);
   } catch (error) {
     req.log.error(
       { errorName: error instanceof Error ? error.name : "UnknownError" },
       "OpenAI strategy generation failed",
     );
+    if (error instanceof StrategyValidationError) {
+      sendError(res, 422, error.message);
+      return;
+    }
     sendError(res, 502, "The strategy could not be generated. Please try again.");
   }
 });

@@ -23,10 +23,13 @@ export const HealthCheckResponse = zod.object({
 export const generateOpenaiBotStrategyBodyPromptMin = 12;
 export const generateOpenaiBotStrategyBodyPromptMax = 1400;
 
+export const generateOpenaiBotStrategyBodyExistingXmlMax = 60000;
+
 
 
 export const GenerateOpenaiBotStrategyBody = zod.object({
-  "prompt": zod.string().min(generateOpenaiBotStrategyBodyPromptMin).max(generateOpenaiBotStrategyBodyPromptMax)
+  "prompt": zod.string().min(generateOpenaiBotStrategyBodyPromptMin).max(generateOpenaiBotStrategyBodyPromptMax),
+  "existingXml": zod.string().max(generateOpenaiBotStrategyBodyExistingXmlMax).optional().describe('Existing generated strategy XML to refine with the new prompt')
 })
 
 export const generateOpenaiBotStrategyResponseTitleMax = 80;

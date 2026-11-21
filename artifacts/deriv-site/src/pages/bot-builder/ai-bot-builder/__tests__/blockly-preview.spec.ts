@@ -21,10 +21,50 @@ const validXml = `<xml xmlns="https://developers.google.com/blockly/xml" is_dbot
 const availableBlocks = [
     'trade_definition',
     'trade_definition_market',
+    'trade_definition_tradetype',
+    'trade_definition_contracttype',
     'before_purchase',
+    'controls_if',
+    'last_digits_condition',
+    'apollo_purchase2',
+    'math_number',
+    'math_number_positive',
     'purchase',
     'after_purchase',
 ];
+
+const generatedDigitXml = validXml.replace(
+    '<block type="purchase" />',
+    `<block type="controls_if">
+        <mutation elseif="1" />
+        <value name="IF0">
+            <block type="last_digits_condition">
+                <field name="CONDITION">LESS_THAN</field>
+                <value name="N"><shadow type="math_number"><field name="NUM">4</field></shadow></value>
+                <value name="COMPARE_VALUE"><shadow type="math_number"><field name="NUM">4</field></shadow></value>
+            </block>
+        </value>
+        <statement name="DO0">
+            <block type="apollo_purchase2">
+                <field name="PURCHASE_LIST">DIGITOVER</field>
+                <value name="PREDICTION"><shadow type="math_number_positive"><field name="NUM">4</field></shadow></value>
+            </block>
+        </statement>
+        <value name="IF1">
+            <block type="last_digits_condition">
+                <field name="CONDITION">GREATER_THAN</field>
+                <value name="N"><shadow type="math_number"><field name="NUM">3</field></shadow></value>
+                <value name="COMPARE_VALUE"><shadow type="math_number"><field name="NUM">5</field></shadow></value>
+            </block>
+        </value>
+        <statement name="DO1">
+            <block type="apollo_purchase2">
+                <field name="PURCHASE_LIST">DIGITUNDER</field>
+                <value name="PREDICTION"><shadow type="math_number_positive"><field name="NUM">5</field></shadow></value>
+            </block>
+        </statement>
+    </block>`
+);
 
 describe('validateGeneratedBotXml', () => {
     beforeEach(() => {
@@ -44,6 +84,10 @@ describe('validateGeneratedBotXml', () => {
 
     it('accepts a valid Deriv bot document with required root sections', () => {
         expect(validateGeneratedBotXml(validXml).localName).toBe('xml');
+    });
+
+    it('accepts a generated Over/Under strategy with strict digit blocks', () => {
+        expect(validateGeneratedBotXml(generatedDigitXml).localName).toBe('xml');
     });
 
     it('rejects an unknown block before preview or loading', () => {

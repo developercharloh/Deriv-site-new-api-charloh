@@ -200,7 +200,9 @@ window.Blockly.Blocks.last_digits_condition = {
                     options: [
                         [localize('all odd'), 'ALL_ODD'],
                         [localize('all even'), 'ALL_EVEN'],
+                        [localize('<'), 'LESS_THAN'],
                         [localize('≤'), 'LESS_OR_EQUAL'],
+                        [localize('>'), 'GREATER_THAN'],
                         [localize('≥'), 'GREATER_OR_EQUAL'],
                     ],
                 },

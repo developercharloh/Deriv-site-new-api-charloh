@@ -12,4 +12,9 @@ export interface OpenaiBotStrategyInput {
      * @maxLength 1400
      */
   prompt: string;
+  /**
+     * Existing generated strategy XML to refine with the new prompt
+     * @maxLength 60000
+     */
+  existingXml?: string;
 }

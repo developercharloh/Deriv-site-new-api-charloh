@@ -393,8 +393,14 @@ export default Engine =>
                         case 'ALL_EVEN':
                             result = recent.every(digit => digit % 2 === 0);
                             break;
+                        case 'LESS_THAN':
+                            result = recent.every(digit => digit < Number(compareValue));
+                            break;
                         case 'LESS_OR_EQUAL':
                             result = recent.every(digit => digit <= Number(compareValue));
+                            break;
+                        case 'GREATER_THAN':
+                            result = recent.every(digit => digit > Number(compareValue));
                             break;
                         case 'GREATER_OR_EQUAL':
                             result = recent.every(digit => digit >= Number(compareValue));

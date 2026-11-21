@@ -56,6 +56,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OpenaiError"
+        "422":
+          description: Generated strategy did not satisfy the requested contract or conditions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiError"
         "502":
           description: OpenAI could not generate a valid strategy
           content:
@@ -84,6 +90,10 @@ components:
           type: string
           minLength: 12
           maxLength: 1400
+        existingXml:
+          type: string
+          maxLength: 60000
+          description: Existing generated strategy XML to refine with the new prompt
       required:
         - prompt
     OpenaiBotStrategy:

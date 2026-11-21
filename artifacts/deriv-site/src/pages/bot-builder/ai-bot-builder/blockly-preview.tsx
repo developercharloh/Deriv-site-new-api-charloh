@@ -63,7 +63,9 @@ export function validateGeneratedBotXml(xml: string): Element {
     const hasRequiredRoots = REQUIRED_TOP_LEVEL_BLOCKS.every(
         type => topLevelTypes.filter(rootType => rootType === type).length === 1,
     );
-    const hasPurchase = blockTypes.includes('purchase');
+    const hasPurchase = blockTypes.some(type =>
+        ['purchase', 'apollo_purchase', 'apollo_purchase2'].includes(type)
+    );
 
     if (!hasRequiredRoots || !hasPurchase) {
         throw new Error(localize('The strategy is missing a required trade, purchase, or settlement section.'));

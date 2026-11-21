@@ -348,6 +348,30 @@ describe('Ticks last-digit analysis events', () => {
         emit.mockRestore();
     });
 
+    it('supports strict less-than and greater-than last-digit conditions', async () => {
+        const Engine = Ticks(BaseEngine as any);
+        const belowEngine: any = new Engine();
+        belowEngine.getPipSize = () => 2;
+        belowEngine.$scope = {
+            ticksService: {
+                request: jest.fn().mockResolvedValue([{ quote: 12.13 }, { quote: 12.24 }, { quote: 12.34 }]),
+            },
+        };
+
+        const aboveEngine: any = new Engine();
+        aboveEngine.getPipSize = () => 2;
+        aboveEngine.$scope = {
+            ticksService: {
+                request: jest.fn().mockResolvedValue([{ quote: 12.67 }, { quote: 12.76 }, { quote: 12.86 }]),
+            },
+        };
+
+        await expect(belowEngine.checkLastDigitsCondition('LESS_THAN', 3, 5)).resolves.toBe(true);
+        await expect(aboveEngine.checkLastDigitsCondition('GREATER_THAN', 3, 5)).resolves.toBe(true);
+        await expect(belowEngine.checkLastDigitsCondition('LESS_THAN', 3, 4)).resolves.toBe(false);
+        await expect(aboveEngine.checkLastDigitsCondition('GREATER_THAN', 3, 6)).resolves.toBe(false);
+    });
+
     it('allows Smart Over 2 only when the full selected window is 3–7', async () => {
         const Engine = Ticks(BaseEngine as any);
         const engine: any = new Engine();
