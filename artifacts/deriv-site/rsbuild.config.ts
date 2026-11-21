@@ -56,6 +56,10 @@ export default defineConfig({
       // the repo root, so a cwd-relative './node_modules/react' fails in CI).
       react: path.dirname(require.resolve('react/package.json')),
       'react-dom': path.dirname(require.resolve('react-dom/package.json')),
+      // The shared API client resolves React Query through a different pnpm
+      // peer-context (React 19), which creates a second QueryClient context.
+      // Force its hooks and the app's provider to use the same React 18 copy.
+      '@tanstack/react-query': path.dirname(require.resolve('@tanstack/react-query/package.json')),
       '@/external': path.resolve(__dirname, './src/external'),
       '@/components': path.resolve(__dirname, './src/components'),
       '@/hooks': path.resolve(__dirname, './src/hooks'),

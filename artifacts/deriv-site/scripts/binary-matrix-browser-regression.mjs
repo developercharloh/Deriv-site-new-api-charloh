@@ -248,6 +248,9 @@ const browserApiMock = String.raw`
         characterData: true,
         subtree: true,
     });
+    // Keep the app's startup version guard from clearing the simulated account
+    // and corrupt announcement value before the regression reaches the dashboard.
+    localStorage.setItem('bot_version', '2');
     localStorage.setItem('active_loginid', accountId);
     localStorage.setItem('account_type', 'demo');
     if (new URL(location.href).searchParams.get('startup_storage_regression') === '1') {
