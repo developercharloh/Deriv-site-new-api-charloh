@@ -35,7 +35,17 @@ if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
   rm -rf artifacts/deriv-site/.vercel/output
   mkdir -p artifacts/deriv-site/.vercel/output/static
   cp -r artifacts/deriv-site/dist/. artifacts/deriv-site/.vercel/output/static/
-  echo '{"version":3}' > artifacts/deriv-site/.vercel/output/config.json
+  cat > artifacts/deriv-site/.vercel/output/config.json <<'EOF'
+{
+  "version": 3,
+  "routes": [
+    {
+      "src": "^/api/(.*)$",
+      "dest": "https://deriv-site-new-api-charloh.replit.app/api/$1"
+    }
+  ]
+}
+EOF
   mkdir -p artifacts/deriv-site/.vercel
   echo "{\"orgId\":\"team_BQWnsBcAsW4szAjxsE8X2my1\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" \
     > artifacts/deriv-site/.vercel/project.json

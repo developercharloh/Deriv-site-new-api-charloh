@@ -2,5 +2,11 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
   "installCommand": "pnpm install",
-  "framework": null
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://deriv-site-new-api-charloh.replit.app/api/:path*"
+    }
+  ]
 }
