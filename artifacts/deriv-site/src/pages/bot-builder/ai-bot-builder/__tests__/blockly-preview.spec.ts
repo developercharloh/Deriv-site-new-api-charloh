@@ -3,6 +3,7 @@ jest.mock('@deriv-com/translations', () => ({
 }));
 
 import { getBotBuilderBlockCatalog, validateGeneratedBotXml } from '../blockly-preview';
+import { ToolboxItems } from '../../toolbox/toolbox-items';
 
 const validXml = `<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
     <block type="trade_definition">
@@ -124,6 +125,26 @@ describe('validateGeneratedBotXml', () => {
         expect(catalog).toContain('trade_definition_market');
         expect(catalog).toContain('macd_value');
         expect(catalog).not.toContain('unknown_block');
+    });
+
+    it('keeps the full current strategy toolbox catalog within the API request limit', () => {
+        const toolbox = new DOMParser().parseFromString(ToolboxItems(), 'text/xml').documentElement;
+        console.log(ToolboxItems().slice(0, 1200));
+        const registeredTypes = Array.from(toolbox.getElementsByTagName('*'))
+            .filter(node => node.localName === 'block' || node.localName === 'shadow')
+            .map(node => node.getAttribute('type') || '')
+            .filter(Boolean);
+        (window as any).Blockly.Blocks = Object.fromEntries(registeredTypes.map(type => [type, {}]));
+        (window as any).Blockly.derivWorkspace = { options: { languageTree: toolbox } };
+
+        const catalog = getBotBuilderBlockCatalog();
+
+        expect(catalog.length).toBeGreaterThan(0);
+        expect(catalog.length).toBeLessThanOrEqual(75000);
+        expect(catalog).toContain('trade_definition_market');
+        expect(catalog).toContain('last_digits_condition');
+        expect(catalog).toContain('macd_value');
+        expect(catalog).toContain('controls_if');
     });
 
     it('verifies that generated fields and input connections load into a real workspace', () => {
