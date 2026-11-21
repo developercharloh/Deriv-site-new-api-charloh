@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunk_workspace_deriv_site=self.webpackChunk_workspace_deriv_site||[]).push([["86"],{8333(e,a,s){s.r(a),s.d(a,{default:()=>c});var i=s(5723),r=s(7621);let c=()=>(0,i.jsx)("section",{className:"trading-view-page","aria-label":"TradingView advanced charts and tools",children:(0,i.jsx)(r.A,{})})}}]);

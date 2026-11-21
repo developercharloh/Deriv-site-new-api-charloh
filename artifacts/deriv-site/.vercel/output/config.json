@@ -1,1 +1,9 @@
-{"version":3}
+{
+  "version": 3,
+  "routes": [
+    {
+      "src": "^/api/(.*)$",
+      "dest": "https://deriv-site-new-api-charloh.replit.app/api/$1"
+    }
+  ]
+}
