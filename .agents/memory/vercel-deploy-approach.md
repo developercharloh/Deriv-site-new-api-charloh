@@ -1,6 +1,6 @@
 ---
 name: Vercel deployment approach for deriv-site
-description: How to deploy artifacts/deriv-site to Vercel (mrcharlohfx.site) — git integration is off, use CLI prebuilt
+description: How to deploy artifacts/deriv-site to Vercel (smart-fx-tool.site) — git integration is off, use CLI prebuilt
 ---
 
 # Vercel Deployment for Trader Charloh FX
@@ -27,7 +27,8 @@ npx vercel@latest deploy --prebuilt --prod --yes --token=$VERCEL_TOKEN
 ```
 
 ## Key facts
-- Vercel project name: `traderharlo`, org: `team_BQWnsBcAsW4szAjxsE8X2my1`
+- Vercel project name: `traderharlo`, org: `team_BQWnsBcAsW4szAjxsE8X2my1`; `smart-fx-tool.site` redirects to `www.smart-fx-tool.site`
+- The production API is `deriv-site-new-api-charloh.replit.app`; keep the `/api/*` rewrite in the Vercel prebuilt output configuration
 - A main-branch push triggered a Vercel production build on 2026-10-08; the previous note that Git integration was disconnected may be stale.
 - Custom domain: `mrcharlohfx.site` → `www.mrcharlohfx.site`
 - The root `package.json` preinstall was removed from GitHub repo to allow npm
