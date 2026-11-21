@@ -15,6 +15,7 @@ import { performButtonAction } from './utils/accumulator-helper-functions';
 import { MessageAnnounce, TitleAnnounce } from './announcement-components';
 import AnnouncementDialog from './announcement-dialog';
 import { BOT_ANNOUNCEMENTS_LIST, TAnnouncement, TNotifications } from './config';
+import { getAnnouncementReadState, getClientAccountDetails } from './announcement-storage';
 import './announcements.scss';
 
 type TAnnouncements = {
@@ -44,8 +45,7 @@ const Announcements = observer(({ is_mobile, is_tablet, handleTabChange }: TAnno
     };
 
     const updateLocalStorage = (announce_id: string) => {
-        let data: Record<string, boolean> | null = null;
-        data = JSON.parse(localStorage.getItem('bot-announcements') ?? '{}');
+        const data = getAnnouncementReadState();
         storeDataInLocalStorage({ ...data, [announce_id]: false });
         const temp_notifications = updateNotifications();
         setReadAnnouncementsMap(temp_notifications);
@@ -67,17 +67,17 @@ const Announcements = observer(({ is_mobile, is_tablet, handleTabChange }: TAnno
     };
 
     const updateNotifications = () => {
-        let data: Record<string, boolean> | null = null;
-        data = JSON.parse(localStorage.getItem('bot-announcements') ?? '{}');
+        const data = getAnnouncementReadState();
         const tmp_notifications: TNotifications[] = [];
         const temp_localstorage_data: Record<string, boolean> | null = {};
         const loggedInAccountId = localStorage.getItem('active_loginid');
-        let allUserAccounts = localStorage.getItem('client_account_details');
         let accountDate = null;
-        if (allUserAccounts) {
-            allUserAccounts = JSON.parse(allUserAccounts);
-            const currentAccount = allUserAccounts?.find(account => account.loginid == loggedInAccountId);
-            accountDate = new Date(currentAccount.created_at * 1000);
+        const allUserAccounts = getClientAccountDetails();
+        if (allUserAccounts.length > 0) {
+            const currentAccount = allUserAccounts.find(account => account.loginid === loggedInAccountId);
+            if (typeof currentAccount?.created_at === 'number' && Number.isFinite(currentAccount.created_at)) {
+                accountDate = new Date(currentAccount.created_at * 1000);
+            }
         }
 
         BOT_ANNOUNCEMENTS_LIST.map(item => {
