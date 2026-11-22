@@ -29,7 +29,7 @@ npx vercel@latest deploy --prebuilt --prod --yes --token=$VERCEL_TOKEN
 ## Key facts
 - Vercel project name: `traderharlo`, org: `team_BQWnsBcAsW4szAjxsE8X2my1`; `smart-fx-tool.site` redirects to `www.smart-fx-tool.site`
 - The production API is `deriv-site-new-api-charloh.replit.app`; keep the `/api/*` rewrite in the Vercel prebuilt output configuration
-- A main-branch push triggered a Vercel production build on 2026-10-08; the previous note that Git integration was disconnected may be stale.
+- Vercel's GitHub integration can be active even when the intended release path is CLI prebuilt; a Git-triggered production deployment replaced a working prebuilt deployment and dropped the API rewrite in November 2026.
 - Custom domain: `mrcharlohfx.site` → `www.mrcharlohfx.site`
 - The root `package.json` preinstall was removed from GitHub repo to allow npm
 - `scripts/push-to-github.sh` stages all changes and force-pushes `main`; avoid it for routine publishing
@@ -152,3 +152,9 @@ After a prebuilt production deployment, check `/api/healthz` and the exact API r
 **Why:** The custom domain returned Vercel `NOT_FOUND` for both API routes even though the local prebuilt config contained the rewrite. A fresh prebuilt deployment restored the route.
 
 **How to apply:** Verify health through the custom domain, then POST an intentionally invalid payload to confirm the strategy route reaches Express without invoking AI generation.
+
+When the Vercel project must use CLI-prebuilt releases, disconnect its Git repository link before relying on the prebuilt deployment. A later Git-triggered production build can take over the custom-domain aliases and omit the rewrite even though the prebuilt deployment was correct.
+
+**Why:** The GitHub integration created a newer Ready deployment from `main` after the prebuilt release; that deployment served Vercel 404s for API routes. Disconnecting the project link and redeploying prebuilt restored API routing.
+
+**How to apply:** Check the Vercel project's repository link before deployment, disconnect it if CLI-prebuilt is the intended path, deploy the synced `.vercel/output` directory, and verify the custom domains plus API health and invalid-payload behavior.
