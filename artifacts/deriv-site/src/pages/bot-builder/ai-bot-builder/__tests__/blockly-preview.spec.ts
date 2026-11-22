@@ -189,11 +189,19 @@ describe('validateGeneratedBotXml', () => {
         (window as any).Blockly.Xml.domToWorkspace = (xml: Element, workspace: TestWorkspace) => {
             if (!workspace.isRendered) throw new TypeError('this.initSvg is not a function');
             const nodes = Array.from(xml.getElementsByTagName('*')).filter(
-                node => node.localName === 'block' || node.localName === 'shadow',
+                node =>
+                    (node.localName === 'block' || node.localName === 'shadow') &&
+                    !(
+                        node.localName === 'shadow' &&
+                        node.parentElement &&
+                        ['value', 'statement'].includes(node.parentElement.localName) &&
+                        Array.from(node.parentElement.children).some(child => child.localName === 'block')
+                    ),
             );
             const supportedFields: Record<string, string[]> = { math_number: ['NUM'] };
             const supportedInputs: Record<string, string[]> = {
                 trade_definition: ['TRADE_OPTIONS'],
+                trade_definition_market: ['AMOUNT'],
                 before_purchase: ['BEFOREPURCHASE_STACK'],
                 after_purchase: ['AFTERPURCHASE_STACK'],
             };
@@ -233,5 +241,70 @@ describe('validateGeneratedBotXml', () => {
         );
         expect((window as any).Blockly.Events.disable).toHaveBeenCalled();
         expect((window as any).Blockly.Events.enable).toHaveBeenCalled();
+    });
+
+    it('accepts a shadow fallback when Blockly imports the real block instead', () => {
+        const xmlWithShadowFallback = validXml.replace(
+            '<block type="trade_definition_market" />',
+            `<block type="trade_definition_market">
+                <value name="AMOUNT">
+                    <shadow type="math_number"><field name="NUM">1</field></shadow>
+                    <block type="math_number"><field name="NUM">2</field></block>
+                </value>
+            </block>`,
+        );
+        class TestWorkspace {
+            blocks: any[] = [];
+            getAllBlocks() {
+                return this.blocks;
+            }
+            getBlockById(id: string) {
+                return this.blocks.find(block => block.id === id);
+            }
+            dispose() {}
+        }
+        (window as any).Blockly.inject = jest.fn(() => new TestWorkspace());
+        (window as any).Blockly.Xml.domToWorkspace = (xml: Element, workspace: TestWorkspace) => {
+            const activeNodes = Array.from(xml.getElementsByTagName('*')).filter(
+                node =>
+                    (node.localName === 'block' || node.localName === 'shadow') &&
+                    !(
+                        node.localName === 'shadow' &&
+                        node.parentElement &&
+                        ['value', 'statement'].includes(node.parentElement.localName) &&
+                        Array.from(node.parentElement.children).some(child => child.localName === 'block')
+                    ),
+            );
+            const supportedInputs: Record<string, string[]> = {
+                trade_definition: ['TRADE_OPTIONS'],
+                trade_definition_market: ['AMOUNT'],
+                before_purchase: ['BEFOREPURCHASE_STACK'],
+                after_purchase: [],
+            };
+            workspace.blocks = activeNodes.map(node => ({
+                id: node.getAttribute('id'),
+                type: node.getAttribute('type'),
+                getField: (name: string) => name === 'NUM' ? {} : null,
+                getInput: (name: string) =>
+                    (supportedInputs[node.getAttribute('type') || ''] || []).includes(name) ? {} : null,
+                getInputTargetBlock: (name: string) => {
+                    const input = Array.from(node.children).find(
+                        child =>
+                            (child.localName === 'value' || child.localName === 'statement') &&
+                            child.getAttribute('name') === name,
+                    );
+                    return input && Array.from(input.children).some(
+                        child => child.localName === 'block' || child.localName === 'shadow',
+                    )
+                        ? {}
+                        : null;
+                },
+                getNextBlock: () => null,
+            }));
+        };
+
+        expect(() =>
+            validateGeneratedBotXml(xmlWithShadowFallback, { verifyWorkspace: true }),
+        ).not.toThrow();
     });
 });

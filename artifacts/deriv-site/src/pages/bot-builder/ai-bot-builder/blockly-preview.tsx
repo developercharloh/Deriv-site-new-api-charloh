@@ -64,9 +64,25 @@ function getBlockNodes(root: Element): Element[] {
     );
 }
 
+function isOverriddenShadow(node: Element): boolean {
+    if (node.localName !== 'shadow') return false;
+    const input = node.parentElement;
+    return Boolean(
+        input &&
+            (input.localName === 'value' || input.localName === 'statement') &&
+            Array.from(input.children).some(child => child.localName === 'block')
+    );
+}
+
+function getImportableBlockNodes(root: Element): Element[] {
+    return getBlockNodes(root).filter(node => !isOverriddenShadow(node));
+}
+
 function verifyBlocklyWorkspaceImport(root: Element, Blockly: BlocklyApi) {
     const validationRoot = root.cloneNode(true) as Element;
-    const xmlBlocks = getBlockNodes(validationRoot);
+    // Blockly XML can include both a shadow fallback and a real block under
+    // one input. Blockly imports the real block and does not create the shadow.
+    const xmlBlocks = getImportableBlockNodes(validationRoot);
     xmlBlocks.forEach((node, index) => node.setAttribute('id', `ai-builder-check-${index}`));
     const host = document.createElement('div');
     host.setAttribute('aria-hidden', 'true');
