@@ -69,7 +69,9 @@ function assertBlockDefinitions(value: unknown): AiGeneratedBlock[] {
             !/^ai_[a-z0-9_]{1,48}$/.test(definition.type) ||
             types.has(definition.type) ||
             typeof definition.message !== 'string' ||
+            definition.message.length > 120 ||
             typeof definition.tooltip !== 'string' ||
+            definition.tooltip.length > 240 ||
             !Array.isArray(definition.arguments) ||
             !Array.isArray(definition.bindings)
         ) {
@@ -78,7 +80,13 @@ function assertBlockDefinitions(value: unknown): AiGeneratedBlock[] {
         types.add(definition.type);
 
         const method = METHODS[definition.method];
-        if (!method || method.outputType !== definition.outputType || definition.arguments.length > 6) {
+        if (
+            !method ||
+            method.outputType !== definition.outputType ||
+            definition.arguments.length > 6 ||
+            definition.arguments.length !== method.parameters.length ||
+            definition.bindings.length !== method.parameters.length
+        ) {
             throw new Error(`The custom block "${definition.type}" uses an unsupported operation.`);
         }
 
@@ -93,7 +101,12 @@ function assertBlockDefinitions(value: unknown): AiGeneratedBlock[] {
 
         const argsByName = new Map<string, AiGeneratedBlock['arguments'][number]>();
         for (const argument of definition.arguments) {
-            if (!/^[A-Z][A-Z0-9_]{0,31}$/.test(argument.name) || argsByName.has(argument.name)) {
+            if (
+                !argument ||
+                !/^[A-Z][A-Z0-9_]{0,31}$/.test(argument.name) ||
+                argsByName.has(argument.name) ||
+                !Array.isArray(argument.options)
+            ) {
                 throw new Error(`The custom block "${definition.type}" has invalid input names.`);
             }
             argsByName.set(argument.name, argument);
@@ -117,6 +130,17 @@ function assertBlockDefinitions(value: unknown): AiGeneratedBlock[] {
                 if (
                     argument.check !== null ||
                     typeof argument.defaultValue !== 'string' ||
+                    argument.options.length > 8 ||
+                    argument.options.some(
+                        option =>
+                            !option ||
+                            typeof option.label !== 'string' ||
+                            option.label.length < 1 ||
+                            option.label.length > 40 ||
+                            typeof option.value !== 'string' ||
+                            option.value.length < 1 ||
+                            option.value.length > 40,
+                    ) ||
                     argument.options.length < 2 ||
                     new Set(options).size !== options.length ||
                     !options.includes(argument.defaultValue)
@@ -128,7 +152,11 @@ function assertBlockDefinitions(value: unknown): AiGeneratedBlock[] {
             }
         }
 
+        const boundNames = new Set<string>();
         definition.bindings.forEach((binding, index) => {
+            if (!binding || typeof binding.name !== 'string' || boundNames.has(binding.name)) {
+                throw new Error(`The custom block "${definition.type}" has invalid argument bindings.`);
+            }
             const argument = argsByName.get(binding.name);
             const parameterType =
                 argument?.kind === 'value' || argument?.kind === 'number'
@@ -137,9 +165,14 @@ function assertBlockDefinitions(value: unknown): AiGeneratedBlock[] {
                       ? 'string'
                       : undefined;
             const source = argument?.kind === 'value' ? 'input' : 'field';
-            if (!argument || binding.source !== source || parameterType !== method.parameters[index]) {
+            if (
+                !argument ||
+                binding.source !== source ||
+                parameterType !== method.parameters[index]
+            ) {
                 throw new Error(`The custom block "${definition.type}" has an unsafe operation binding.`);
             }
+            boundNames.add(binding.name);
             if (argument.kind === 'dropdown') {
                 const allowedOptions = METHOD_OPTIONS[definition.method]?.[index] || [];
                 if (argument.options.some(option => !allowedOptions.includes(option.value))) {

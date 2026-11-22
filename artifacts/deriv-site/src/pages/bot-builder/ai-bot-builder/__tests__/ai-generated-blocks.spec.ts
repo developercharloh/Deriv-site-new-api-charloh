@@ -43,7 +43,7 @@ const definition = {
 
 describe('AI-generated Blockly blocks', () => {
     it('registers a safe block and generates only its allowlisted Bot operation', () => {
-        const Blockly = (BlocklyNamespace.default ?? BlocklyNamespace) as any;
+        const Blockly = BlocklyNamespace as any;
         const javascriptGenerator = BlocklyJavaScriptNamespace.javascriptGenerator;
         Blockly.Colours = {
             Base: {

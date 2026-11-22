@@ -1,5 +1,6 @@
 const mockMutateAsync = jest.fn();
 const mockValidateGeneratedBotXml = jest.fn();
+const mockRegisterAiGeneratedBlocks = jest.fn(() => jest.fn());
 const mockBlockCatalog =
     '<xml><block type="trade_definition"/><block type="before_purchase"/><block type="after_purchase"/><block type="purchase"/></xml>';
 
@@ -15,6 +16,11 @@ jest.mock('@workspace/api-client-react', () => ({
 jest.mock('../blockly-preview', () => ({
     getBotBuilderBlockCatalog: () => mockBlockCatalog,
     validateGeneratedBotXml: (...args: unknown[]) => mockValidateGeneratedBotXml(...args),
+}));
+
+jest.mock('../ai-generated-blocks', () => ({
+    registerAiGeneratedBlocks: (...args: unknown[]) => mockRegisterAiGeneratedBlocks(...args),
+    validateAiGeneratedBlocks: (value: unknown) => value,
 }));
 
 jest.mock('@deriv-com/translations', () => ({
@@ -37,6 +43,7 @@ describe('AiBotBuilder', () => {
     beforeEach(() => {
         mockMutateAsync.mockReset();
         mockValidateGeneratedBotXml.mockReset();
+        mockRegisterAiGeneratedBlocks.mockClear();
         localStorage.removeItem('deriv-ai-bot-builder-history:CR12345');
         localStorage.removeItem('deriv-ai-bot-builder-history:CR98765');
         localStorage.removeItem('deriv-ai-bot-builder-history:guest');
@@ -114,6 +121,59 @@ describe('AiBotBuilder', () => {
             })
         );
         expect(JSON.parse(localStorage.getItem('deriv-ai-bot-builder-history:CR12345') || '[]')).toHaveLength(2);
+    });
+
+    it('saves, displays, reloads, and sends custom block definitions when refining', async () => {
+        const customBlock = {
+            type: 'ai_last_digit',
+            message: 'Latest digit',
+            tooltip: 'Reads the latest digit.',
+            method: 'getLastDigit',
+            outputType: 'Number',
+            arguments: [],
+            bindings: [],
+        };
+        const strategyWithCustomBlock = { ...generatedStrategy, customBlocks: [customBlock] };
+        mockMutateAsync.mockResolvedValue(strategyWithCustomBlock);
+        render(
+            <AiBotBuilder
+                accountId='CR12345'
+                onLoad={jest.fn()}
+                renderPreview={() => <div>Block preview</div>}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('button-open-ai-bot-builder'));
+        fireEvent.change(screen.getByTestId('input-ai-bot-builder-prompt'), {
+            target: { value: 'Build a strategy that reads the latest digit.' },
+        });
+        fireEvent.click(screen.getByTestId('button-generate-ai-strategy'));
+
+        expect(await screen.findByTestId('status-ai-bot-builder-custom-blocks')).toHaveTextContent(
+            'Created and registered {{count}} safe custom blocks',
+        );
+        expect(JSON.parse(localStorage.getItem('deriv-ai-bot-builder-history:CR12345') || '[]')[0].customBlocks)
+            .toEqual([customBlock]);
+
+        fireEvent.click(screen.getByTestId('button-toggle-ai-bot-history'));
+        fireEvent.click(screen.getByRole('button', { name: 'Refine', exact: true }));
+        fireEvent.change(screen.getByTestId('input-ai-bot-builder-prompt'), {
+            target: { value: 'Keep the strategy and use the latest digit.' },
+        });
+        mockMutateAsync.mockResolvedValueOnce(strategyWithCustomBlock);
+        fireEvent.click(screen.getByTestId('button-generate-ai-strategy'));
+
+        await waitFor(() =>
+            expect(mockMutateAsync).toHaveBeenLastCalledWith({
+                data: {
+                    prompt: 'Keep the strategy and use the latest digit.',
+                    existingXml: strategyWithCustomBlock.xml,
+                    existingBlocks: [customBlock],
+                    blockCatalog: mockBlockCatalog,
+                },
+            }),
+        );
+        expect(mockRegisterAiGeneratedBlocks).toHaveBeenCalledWith([customBlock]);
     });
 
     it('keeps bot history isolated when the active account changes', async () => {

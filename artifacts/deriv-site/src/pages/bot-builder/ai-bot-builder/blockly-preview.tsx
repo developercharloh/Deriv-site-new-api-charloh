@@ -243,7 +243,7 @@ export function validateGeneratedBotXml(xml: string, options: ValidateOptions = 
     const missingTypes = [...new Set(blockTypes.filter(type => !type || !Blockly.Blocks[type]))];
     if (missingTypes.length > 0) {
         throw new Error(
-            localize('A required block is not registered in this workspace. The strategy cannot be loaded until its block definition is available.'),
+            localize('This strategy uses Blockly blocks that are not available in this workspace. Their definitions must be registered before loading.'),
         );
     }
 

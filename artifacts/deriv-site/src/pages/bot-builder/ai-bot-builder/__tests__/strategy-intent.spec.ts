@@ -124,6 +124,7 @@ describe('AI strategy intent validation', () => {
         const catalog = `<xml>
             <category>
                 <block type="trade_definition"><statement name="TRADE_OPTIONS"><block type="trade_definition_market"/></statement></block>
+                <block type="trade_definition_tradeoptions"><value name="AMOUNT"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block>
                 <block type="before_purchase"/>
                 <block type="after_purchase"/>
             </category>
@@ -132,6 +133,7 @@ describe('AI strategy intent validation', () => {
         const scaffold = buildBotScaffold(catalog);
         expect(scaffold).toContain('is_dbot="true"');
         expect(scaffold).toContain('<block type="trade_definition">');
+        expect(scaffold).toContain('<statement name="SUBMARKET"><block type="trade_definition_tradeoptions">');
         expect(scaffold).toContain('<block type="before_purchase"/>');
         expect(scaffold).toContain('<block type="after_purchase"/>');
     });
@@ -184,7 +186,7 @@ describe('AI strategy intent validation', () => {
     it('rejects custom block code, unsafe operations, and unapproved dropdown values', () => {
         const safeBlock = {
             type: 'ai_last_digit_test',
-            message: 'Last digit %1',
+            message: 'Latest digit',
             tooltip: 'Checks the latest digit.',
             method: 'getLastDigit',
             outputType: 'Number',
@@ -201,5 +203,82 @@ describe('AI strategy intent validation', () => {
         expect(() => validateStrategyBlockDefinitions(malformedXml, [], [])).toThrow(
             'missing definitions for AI-generated blocks',
         );
+    });
+
+    it('checks requested digit rules and barriers when they use AI-created blocks', () => {
+        const customCondition = {
+            type: 'ai_last_digits_condition',
+            message: 'Check %1 digits %2 %3',
+            tooltip: 'Checks a condition across recent digits.',
+            method: 'checkLastDigitsCondition',
+            outputType: 'Boolean',
+            arguments: [
+                {
+                    kind: 'dropdown',
+                    name: 'CONDITION',
+                    check: null,
+                    defaultValue: 'GREATER_THAN',
+                    options: [{ label: 'over', value: 'GREATER_THAN' }, { label: 'below', value: 'LESS_THAN' }],
+                },
+                { kind: 'number', name: 'COUNT', check: null, defaultValue: 3, options: [] },
+                { kind: 'number', name: 'THRESHOLD', check: null, defaultValue: 5, options: [] },
+            ],
+            bindings: [
+                { source: 'field', name: 'CONDITION' },
+                { source: 'field', name: 'COUNT' },
+                { source: 'field', name: 'THRESHOLD' },
+            ],
+        } as const;
+        const customPurchase = {
+            type: 'ai_digit_under',
+            message: 'Buy %1 at %2',
+            tooltip: 'Places a one-tick digit contract.',
+            method: 'purchase',
+            outputType: 'Statement',
+            arguments: [
+                {
+                    kind: 'dropdown',
+                    name: 'CONTRACT',
+                    check: null,
+                    defaultValue: 'DIGITUNDER',
+                    options: [{ label: 'Under', value: 'DIGITUNDER' }, { label: 'Over', value: 'DIGITOVER' }],
+                },
+                { kind: 'number', name: 'PREDICTION', check: null, defaultValue: 6, options: [] },
+            ],
+            bindings: [
+                { source: 'field', name: 'CONTRACT' },
+                { source: 'field', name: 'PREDICTION' },
+            ],
+        } as const;
+        const xml = `<xml is_dbot="true">
+            <block type="trade_definition"><statement name="TRADE_OPTIONS">
+                <block type="trade_definition_market"><next>
+                    <block type="trade_definition_tradetype">
+                        <field name="TRADETYPECAT_LIST">digits</field>
+                        <field name="TRADETYPE_LIST">overunder</field>
+                        <next><block type="trade_definition_contracttype">
+                            <field name="TYPE_LIST">DIGITUNDER</field>
+                        </block></next>
+                    </block>
+                </next></block>
+            </statement></block>
+            <block type="before_purchase"><statement name="BEFOREPURCHASE_STACK">
+                <block type="ai_last_digits_condition">
+                    <field name="CONDITION">GREATER_THAN</field>
+                    <field name="COUNT">3</field>
+                    <field name="THRESHOLD">5</field>
+                    <next><block type="ai_digit_under">
+                        <field name="CONTRACT">DIGITUNDER</field>
+                        <field name="PREDICTION">6</field>
+                    </block></next>
+                </block>
+            </statement></block>
+            <block type="after_purchase"/>
+        </xml>`;
+        const definitions = validateAiGeneratedBlocks([customCondition, customPurchase]);
+
+        expect(() =>
+            validateStrategyMatchesIntent('Under 6 when the last 3 digits are over 5', xml, definitions),
+        ).not.toThrow();
     });
 });
