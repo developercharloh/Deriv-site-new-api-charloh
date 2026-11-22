@@ -6,6 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './aiGeneratedBlock';
+export * from './aiGeneratedBlockArgumentsItem';
+export * from './aiGeneratedBlockArgumentsItemCheck';
+export * from './aiGeneratedBlockArgumentsItemKind';
+export * from './aiGeneratedBlockArgumentsItemOptionsItem';
+export * from './aiGeneratedBlockBindingsItem';
+export * from './aiGeneratedBlockBindingsItemSource';
+export * from './aiGeneratedBlockMethod';
+export * from './aiGeneratedBlockOutputType';
 export * from './healthStatus';
 export * from './openaiBotStrategy';
 export * from './openaiBotStrategyInput';

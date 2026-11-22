@@ -99,6 +99,11 @@ components:
           minLength: 1
           maxLength: 75000
           description: Verified Blockly block templates from the active Bot Builder toolbox
+        existingBlocks:
+          type: array
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/AiGeneratedBlock"
       required:
         - prompt
         - blockCatalog
@@ -126,12 +131,106 @@ components:
           items:
             type: string
             maxLength: 200
+        customBlocks:
+          type: array
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/AiGeneratedBlock"
       required:
         - title
         - summary
         - xml
         - blockCount
         - warnings
+        - customBlocks
+    AiGeneratedBlock:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          pattern: "^ai_[a-z0-9_]{1,48}$"
+        message:
+          type: string
+          minLength: 1
+          maxLength: 120
+        tooltip:
+          type: string
+          minLength: 1
+          maxLength: 240
+        method:
+          type: string
+          enum:
+            - checkLastDigitsCondition
+            - checkLastNTicksDirection
+            - getDigitPercentage
+            - getDirectionPercentage
+            - getLastDigit
+            - getMostFrequentDigit
+            - getNthLastDigit
+            - getParityPercentage
+            - getSignalConfidence
+            - purchase
+        outputType:
+          type: string
+          enum: [Number, Boolean, Statement]
+        arguments:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              kind:
+                type: string
+                enum: [value, number, dropdown]
+              name:
+                type: string
+                pattern: "^[A-Z][A-Z0-9_]{0,31}$"
+              check:
+                type: ["string", "null"]
+                enum: [Number, null]
+              defaultValue:
+                type: ["number", "string", "null"]
+              options:
+                type: array
+                maxItems: 8
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    label:
+                      type: string
+                      minLength: 1
+                      maxLength: 40
+                    value:
+                      type: string
+                      minLength: 1
+                      maxLength: 40
+                  required: [label, value]
+            required: [kind, name, check, defaultValue, options]
+        bindings:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              source:
+                type: string
+                enum: [input, field]
+              name:
+                type: string
+                pattern: "^[A-Z][A-Z0-9_]{0,31}$"
+            required: [source, name]
+      required:
+        - type
+        - message
+        - tooltip
+        - method
+        - outputType
+        - arguments
+        - bindings
     OpenaiError:
       type: object
       properties:

@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AiGeneratedBlock } from './aiGeneratedBlock';
 
 export interface OpenaiBotStrategy {
   /** @maxLength 80 */
@@ -24,4 +25,6 @@ export interface OpenaiBotStrategy {
      * @items.maxLength 200
      */
   warnings: string[];
+  /** @maxItems 8 */
+  customBlocks: AiGeneratedBlock[];
 }

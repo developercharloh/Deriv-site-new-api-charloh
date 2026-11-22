@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { localize } from '@deriv-com/translations';
+import { getAiGeneratedBlockDefinition } from './ai-generated-blocks';
 
 type BlocklyApi = {
     Blocks: Record<string, unknown>;
@@ -51,6 +52,7 @@ const BLOCK_CATALOG_CATEGORIES = new Set([
     'contract_modifiers',
     'barrier_settings',
     'edging_bots',
+    'ai_generated',
 ]);
 const MAX_BLOCK_CATALOG_LENGTH = 75000;
 
@@ -138,6 +140,39 @@ function verifyBlocklyWorkspaceImport(root: Element, Blockly: BlocklyApi) {
                 }
             }
 
+            const customDefinition = getAiGeneratedBlockDefinition(type);
+            if (customDefinition) {
+                for (const argument of customDefinition.arguments) {
+                    if (argument.kind === 'value') {
+                        const input = block.getInput(argument.name);
+                        if (!input || !block.getInputTargetBlock(argument.name)) {
+                            throw new Error(
+                                localize(`The AI-created block "${type}" is missing its "${argument.name}" value.`),
+                            );
+                        }
+                    } else {
+                        const fieldNode = Array.from(node.children).find(
+                            child =>
+                                child.localName === 'field' &&
+                                child.getAttribute('name') === argument.name,
+                        );
+                        if (!fieldNode) {
+                            throw new Error(
+                                localize(`The AI-created block "${type}" is missing its "${argument.name}" field.`),
+                            );
+                        }
+                        if (
+                            argument.kind === 'dropdown' &&
+                            !argument.options.some(option => option.value === fieldNode.textContent?.trim())
+                        ) {
+                            throw new Error(
+                                localize(`The AI-created block "${type}" has an unsupported "${argument.name}" value.`),
+                            );
+                        }
+                    }
+                }
+            }
+
             for (const inputNode of Array.from(node.children).filter(
                 child => child.localName === 'value' || child.localName === 'statement',
             )) {
@@ -208,7 +243,7 @@ export function validateGeneratedBotXml(xml: string, options: ValidateOptions = 
     const missingTypes = [...new Set(blockTypes.filter(type => !type || !Blockly.Blocks[type]))];
     if (missingTypes.length > 0) {
         throw new Error(
-            localize('This strategy uses Blockly blocks that are not available in this workspace. Generate it again with simpler rules.'),
+            localize('A required block is not registered in this workspace. The strategy cannot be loaded until its block definition is available.'),
         );
     }
 
@@ -218,8 +253,10 @@ export function validateGeneratedBotXml(xml: string, options: ValidateOptions = 
     const hasRequiredRoots = REQUIRED_TOP_LEVEL_BLOCKS.every(
         type => topLevelTypes.filter(rootType => rootType === type).length === 1,
     );
-    const hasPurchase = blockTypes.some(type =>
-        ['purchase', 'apollo_purchase', 'apollo_purchase2'].includes(type)
+    const hasPurchase = blockTypes.some(
+        type =>
+            ['purchase', 'apollo_purchase', 'apollo_purchase2'].includes(type) ||
+            getAiGeneratedBlockDefinition(type)?.method === 'purchase',
     );
 
     if (!hasRequiredRoots || !hasPurchase) {

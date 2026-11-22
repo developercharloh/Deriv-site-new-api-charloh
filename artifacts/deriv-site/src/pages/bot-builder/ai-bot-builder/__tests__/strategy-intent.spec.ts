@@ -2,8 +2,11 @@ import {
     inferStrategyIntent,
     validateBlocklyBlocksAvailable,
     validateDigitRuleSupport,
+    validateAiGeneratedBlocks,
     validateRequiredBotSections,
+    validateStrategyBlockDefinitions,
     validateStrategyMatchesIntent,
+    buildBotScaffold,
 } from '../../../../../../api-server/src/routes/openai/strategy-intent';
 
 const requestedStrategy =
@@ -115,5 +118,88 @@ describe('AI strategy intent validation', () => {
                 catalog,
             ),
         ).toThrow('not in the active Bot Builder toolbox: invented_shadow');
+    });
+
+    it('builds a complete root scaffold from the active toolbox templates', () => {
+        const catalog = `<xml>
+            <category>
+                <block type="trade_definition"><statement name="TRADE_OPTIONS"><block type="trade_definition_market"/></statement></block>
+                <block type="before_purchase"/>
+                <block type="after_purchase"/>
+            </category>
+        </xml>`;
+
+        const scaffold = buildBotScaffold(catalog);
+        expect(scaffold).toContain('is_dbot="true"');
+        expect(scaffold).toContain('<block type="trade_definition">');
+        expect(scaffold).toContain('<block type="before_purchase"/>');
+        expect(scaffold).toContain('<block type="after_purchase"/>');
+    });
+
+    it('validates and recognizes safe AI-generated purchase blocks', () => {
+        const customPurchase = {
+            type: 'ai_digit_under',
+            message: 'Buy %1 with prediction %2',
+            tooltip: 'Places the selected one-tick contract.',
+            method: 'purchase',
+            outputType: 'Statement',
+            arguments: [
+                {
+                    kind: 'dropdown',
+                    name: 'CONTRACT',
+                    check: null,
+                    defaultValue: 'DIGITUNDER',
+                    options: [
+                        { label: 'Under', value: 'DIGITUNDER' },
+                        { label: 'Over', value: 'DIGITOVER' },
+                    ],
+                },
+                { kind: 'number', name: 'PREDICTION', check: null, defaultValue: 6, options: [] },
+            ],
+            bindings: [
+                { source: 'field', name: 'CONTRACT' },
+                { source: 'field', name: 'PREDICTION' },
+            ],
+        } as const;
+        const xml = `<xml is_dbot="true">
+            <block type="trade_definition"/>
+            <block type="before_purchase">
+                <statement name="BEFOREPURCHASE_STACK"><block type="ai_digit_under"/></statement>
+            </block>
+            <block type="after_purchase"/>
+        </xml>`;
+        const definitions = validateAiGeneratedBlocks([customPurchase]);
+
+        expect(() => validateRequiredBotSections(xml, definitions)).not.toThrow();
+        expect(() =>
+            validateStrategyBlockDefinitions(xml, definitions, [
+                'trade_definition',
+                'before_purchase',
+                'after_purchase',
+            ]),
+        ).not.toThrow();
+        expect(() => validateRequiredBotSections(xml)).toThrow('missing required bot sections');
+    });
+
+    it('rejects custom block code, unsafe operations, and unapproved dropdown values', () => {
+        const safeBlock = {
+            type: 'ai_last_digit_test',
+            message: 'Last digit %1',
+            tooltip: 'Checks the latest digit.',
+            method: 'getLastDigit',
+            outputType: 'Number',
+            arguments: [],
+            bindings: [],
+        };
+
+        expect(validateAiGeneratedBlocks([safeBlock])).toHaveLength(1);
+        expect(() =>
+            validateAiGeneratedBlocks([{ ...safeBlock, method: 'eval', outputType: 'Number' }]),
+        ).toThrow('unsupported operation');
+
+        const malformedXml = '<xml><block type="ai_not_defined"/></xml>';
+        expect(() => validateStrategyBlockDefinitions(malformedXml, [], [])).toThrow(
+            'missing definitions for AI-generated blocks',
+        );
     });
 });

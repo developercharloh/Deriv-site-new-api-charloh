@@ -1,3 +1,5 @@
+import type { AiGeneratedBlock } from "@workspace/api-zod";
+
 export type DigitTradeType = "DIGITOVER" | "DIGITUNDER";
 
 export type DigitRuleIntent = {
@@ -22,6 +24,7 @@ type ParsedBlock = {
   type: string;
   fields: Record<string, string>;
   parent?: ParsedBlock;
+  parentInput?: string;
 };
 
 export class StrategyValidationError extends Error {
@@ -29,6 +32,167 @@ export class StrategyValidationError extends Error {
     super(message);
     this.name = "StrategyValidationError";
   }
+}
+
+type AiBlockParameterType = "number" | "string";
+type AiBlockMethodSpec = {
+  outputType: AiGeneratedBlock["outputType"];
+  parameters: AiBlockParameterType[];
+};
+
+const AI_BLOCK_METHODS: Record<AiGeneratedBlock["method"], AiBlockMethodSpec> = {
+  checkLastDigitsCondition: { outputType: "Boolean", parameters: ["string", "number", "number"] },
+  checkLastNTicksDirection: { outputType: "Boolean", parameters: ["string", "number"] },
+  getDigitPercentage: { outputType: "Number", parameters: ["number", "number", "string"] },
+  getDirectionPercentage: { outputType: "Number", parameters: ["string", "number"] },
+  getLastDigit: { outputType: "Number", parameters: [] },
+  getMostFrequentDigit: { outputType: "Number", parameters: ["number", "string"] },
+  getNthLastDigit: { outputType: "Number", parameters: ["number"] },
+  getParityPercentage: { outputType: "Number", parameters: ["string", "number"] },
+  getSignalConfidence: { outputType: "Number", parameters: ["string", "number"] },
+  purchase: { outputType: "Statement", parameters: ["string", "number"] },
+};
+
+const AI_BLOCK_METHOD_OPTIONS: Partial<Record<AiGeneratedBlock["method"], Record<number, string[]>>> = {
+  checkLastDigitsCondition: {
+    0: ["ALL_ODD", "ALL_EVEN", "LESS_THAN", "LESS_OR_EQUAL", "GREATER_THAN", "GREATER_OR_EQUAL"],
+  },
+  checkLastNTicksDirection: { 0: ["rise", "fall"] },
+  getDigitPercentage: { 2: ["match", "differ"] },
+  getDirectionPercentage: { 0: ["rise", "fall"] },
+  getMostFrequentDigit: { 1: ["most", "second_most", "least", "second_least"] },
+  getParityPercentage: { 0: ["even", "odd"] },
+  getSignalConfidence: { 0: ["CALL", "PUT"] },
+  purchase: {
+    0: ["CALL", "PUT", "DIGITOVER", "DIGITUNDER", "DIGITMATCH", "DIGITDIFF", "DIGITEVEN", "DIGITODD"],
+  },
+};
+
+/**
+ * AI-created blocks are declarative wrappers over a small, audited Bot API.
+ * Model output never supplies JavaScript source or Blockly mutation callbacks.
+ */
+export function validateAiGeneratedBlocks(value: unknown): AiGeneratedBlock[] {
+  if (!Array.isArray(value) || value.length > 8) {
+    throw new StrategyValidationError("The strategy returned an invalid custom block list.");
+  }
+
+  const definitions = value as AiGeneratedBlock[];
+  const seenTypes = new Set<string>();
+  for (const definition of definitions) {
+    if (!definition || typeof definition !== "object") {
+      throw new StrategyValidationError("The strategy returned an invalid custom block definition.");
+    }
+    if (
+      typeof definition.type !== "string" ||
+      typeof definition.message !== "string" ||
+      typeof definition.tooltip !== "string" ||
+      !Array.isArray(definition.arguments) ||
+      !Array.isArray(definition.bindings) ||
+      !/^ai_[a-z0-9_]{1,48}$/.test(definition.type) ||
+      seenTypes.has(definition.type)
+    ) {
+      throw new StrategyValidationError("AI-generated block types must be unique and use the ai_ prefix.");
+    }
+    seenTypes.add(definition.type);
+
+    const method = AI_BLOCK_METHODS[definition.method];
+    if (!method || definition.outputType !== method.outputType) {
+      throw new StrategyValidationError(`The custom block "${definition.type}" has an unsupported operation.`);
+    }
+    if (
+      !Array.isArray(definition.arguments) ||
+      !Array.isArray(definition.bindings) ||
+      definition.arguments.length > 6 ||
+      definition.bindings.length !== method.parameters.length ||
+      definition.arguments.length !== method.parameters.length
+    ) {
+      throw new StrategyValidationError(`The custom block "${definition.type}" has invalid inputs.`);
+    }
+
+    const placeholderIndexes = [...definition.message.matchAll(/%(\d+)/g)].map(match => Number(match[1]));
+    if (
+      placeholderIndexes.length !== definition.arguments.length ||
+      placeholderIndexes.some((index, position) => index !== position + 1)
+    ) {
+      throw new StrategyValidationError(`The custom block "${definition.type}" has invalid message placeholders.`);
+    }
+
+    const argumentsByName = new Map<string, AiGeneratedBlock["arguments"][number]>();
+    for (const argument of definition.arguments) {
+      if (argumentsByName.has(argument.name)) {
+        throw new StrategyValidationError(`The custom block "${definition.type}" has duplicate input names.`);
+      }
+      argumentsByName.set(argument.name, argument);
+
+      if (argument.kind === "value") {
+        if (argument.check !== "Number" || argument.defaultValue !== null || argument.options.length !== 0) {
+          throw new StrategyValidationError(`The custom block "${definition.type}" has an unsafe value input.`);
+        }
+      } else if (argument.kind === "number") {
+        if (
+          argument.check !== null ||
+          typeof argument.defaultValue !== "number" ||
+          !Number.isFinite(argument.defaultValue) ||
+          argument.defaultValue < 0 ||
+          argument.defaultValue > 10000 ||
+          argument.options.length !== 0
+        ) {
+          throw new StrategyValidationError(`The custom block "${definition.type}" has an invalid number field.`);
+        }
+      } else if (argument.kind === "dropdown") {
+        const optionValues = argument.options.map(option => option.value);
+        if (
+          argument.check !== null ||
+          typeof argument.defaultValue !== "string" ||
+          argument.options.length < 2 ||
+          new Set(optionValues).size !== optionValues.length ||
+          !optionValues.includes(argument.defaultValue)
+        ) {
+          throw new StrategyValidationError(`The custom block "${definition.type}" has an invalid dropdown.`);
+        }
+      } else {
+        throw new StrategyValidationError(`The custom block "${definition.type}" uses an unsupported input type.`);
+      }
+    }
+
+    const boundNames = new Set<string>();
+    definition.bindings.forEach((binding, index) => {
+      if (!binding || typeof binding.name !== "string" || boundNames.has(binding.name)) {
+        throw new StrategyValidationError(`The custom block "${definition.type}" has duplicate argument bindings.`);
+      }
+      boundNames.add(binding.name);
+      const argument = argumentsByName.get(binding.name);
+      const expectedType = method.parameters[index];
+      const actualType =
+        argument?.kind === "value" || argument?.kind === "number"
+          ? "number"
+          : argument?.kind === "dropdown"
+            ? "string"
+            : undefined;
+      const expectedSource = argument?.kind === "value" ? "input" : "field";
+      if (!argument || binding.source !== expectedSource || actualType !== expectedType) {
+        throw new StrategyValidationError(`The custom block "${definition.type}" has an invalid operation binding.`);
+      }
+
+      if (argument.kind === "dropdown") {
+        const allowedOptions = AI_BLOCK_METHOD_OPTIONS[definition.method]?.[index] || [];
+        if (argument.options.some(option => !allowedOptions.includes(option.value))) {
+          throw new StrategyValidationError(`The custom block "${definition.type}" has unsupported dropdown values.`);
+        }
+      }
+    });
+
+    if (
+      definition.method === "purchase" &&
+      (!definition.arguments.some(argument => argument.kind === "dropdown") ||
+        !definition.arguments.some(argument => argument.kind === "value" || argument.kind === "number"))
+    ) {
+      throw new StrategyValidationError(`The custom purchase block "${definition.type}" is missing its contract inputs.`);
+    }
+  }
+
+  return definitions;
 }
 
 export function validateBlocklyBlocksAvailable(xml: string, blockCatalog: string): void {
@@ -84,8 +248,10 @@ function getAttribute(tag: string, name: string): string | undefined {
 function parseBlocklyBlocks(xml: string): ParsedBlock[] {
   const blocks: ParsedBlock[] = [];
   const stack: ParsedBlock[] = [];
+  const inputContexts: Array<string | undefined> = [];
+  let activeInputName: string | undefined;
   const tokenPattern =
-    /<\/?(?:block|shadow)\b[^>]*>|<field\b[^>]*>[\s\S]*?<\/field>/gi;
+    /<\/?(?:block|shadow|value|statement)\b[^>]*>|<field\b[^>]*>[\s\S]*?<\/field>/gi;
 
   for (const match of xml.matchAll(tokenPattern)) {
     const token = match[0];
@@ -94,11 +260,24 @@ function parseBlocklyBlocks(xml: string): ParsedBlock[] {
       continue;
     }
 
+    if (/^<\/(?:value|statement)\b/i.test(token)) {
+      activeInputName = inputContexts.pop();
+      continue;
+    }
+
+    if (/^<(?:value|statement)\b/i.test(token)) {
+      if (/\/\s*>$/.test(token)) continue;
+      inputContexts.push(activeInputName);
+      activeInputName = getAttribute(token, "name");
+      continue;
+    }
+
     if (/^<(?:block|shadow)\b/i.test(token)) {
       const block = {
         type: getAttribute(token, "type") || "",
         fields: {},
         parent: stack[stack.length - 1],
+        parentInput: activeInputName,
       };
       blocks.push(block);
       if (!/\/>$/.test(token)) stack.push(block);
@@ -117,7 +296,74 @@ function parseBlocklyBlocks(xml: string): ParsedBlock[] {
   return blocks;
 }
 
-export function validateRequiredBotSections(xml: string): void {
+function extractCatalogBlockTemplate(catalog: string, targetType: string): string | undefined {
+  const blockTags = /<\/?block\b[^>]*>/gi;
+  let depth = 0;
+  let start = -1;
+
+  for (const match of catalog.matchAll(blockTags)) {
+    const tag = match[0];
+    const offset = match.index ?? 0;
+    if (/^<\//.test(tag)) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) return catalog.slice(start, offset + tag.length);
+      continue;
+    }
+
+    const type = getAttribute(tag, "type");
+    if (start < 0 && type === targetType) {
+      start = offset;
+      if (/\/\s*>$/.test(tag)) return tag;
+      depth = 1;
+      continue;
+    }
+    if (start >= 0 && !/\/\s*>$/.test(tag)) depth += 1;
+  }
+
+  return undefined;
+}
+
+/**
+ * Start every generation from the live toolbox's complete root-block templates.
+ * The model fills this scaffold with the requested trade logic instead of having
+ * to invent mandatory DBot sections from scratch.
+ */
+export function buildBotScaffold(blockCatalog: string): string {
+  const roots = ["trade_definition", "before_purchase", "after_purchase"].map(type => {
+    const template = extractCatalogBlockTemplate(blockCatalog, type);
+    if (!template) {
+      throw new StrategyValidationError(
+        `The active Bot Builder toolbox is missing the required "${type}" root block.`,
+      );
+    }
+    return template;
+  });
+
+  const tradeOptions = extractCatalogBlockTemplate(blockCatalog, "trade_definition_tradeoptions");
+  if (!tradeOptions) {
+    throw new StrategyValidationError(
+      'The active Bot Builder toolbox is missing the required "trade_definition_tradeoptions" block.',
+    );
+  }
+  const tradeDefinition = roots[0].replace(
+    /<\/block>\s*$/,
+    `<statement name="SUBMARKET">${tradeOptions}</statement></block>`,
+  );
+  if (tradeDefinition === roots[0]) {
+    throw new StrategyValidationError("The active trade_definition template could not be completed.");
+  }
+
+  return `<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">${[
+    tradeDefinition,
+    roots[1],
+    roots[2],
+  ].join("")}</xml>`;
+}
+
+export function validateRequiredBotSections(
+  xml: string,
+  customBlocks: AiGeneratedBlock[] = [],
+): void {
   const root = xml.match(/^\s*<xml\b([^>]*)>/i);
   if (!root || !/\bis_dbot\s*=\s*(["'])true\1/i.test(root[1])) {
     throw new StrategyValidationError("The generated Blockly document is missing required bot sections.");
@@ -146,13 +392,44 @@ export function validateRequiredBotSections(xml: string): void {
   const hasExactlyOneOfEach = requiredTypes.every(
     type => blockTypes.filter(blockType => blockType === type).length === 1,
   );
-  const hasPurchase = blockTypes.some(type =>
-    ["purchase", "apollo_purchase", "apollo_purchase2"].includes(type),
+  const customPurchaseTypes = new Set(
+    customBlocks.filter(block => block.method === "purchase").map(block => block.type),
+  );
+  const hasPurchase = blockTypes.some(
+    type =>
+      ["purchase", "apollo_purchase", "apollo_purchase2"].includes(type) ||
+      customPurchaseTypes.has(type),
   );
 
   if (!hasExactlyOneTopLevelOfEach || !hasExactlyOneOfEach || !hasPurchase) {
     throw new StrategyValidationError("The generated Blockly document is missing required bot sections.");
   }
+}
+
+export function validateStrategyBlockDefinitions(
+  xml: string,
+  customBlocks: AiGeneratedBlock[],
+  availableTypes: Iterable<string>,
+): void {
+  const customTypesInXml = new Set(
+    [...xml.matchAll(/<(?:block|shadow)\b[^>]*\btype=(["'])(ai_[a-z0-9_]{1,48})\1/gi)].map(
+      match => match[2],
+    ),
+  );
+  const definedCustomTypes = new Set(customBlocks.map(block => block.type));
+  const missingDefinitions = [...customTypesInXml].filter(type => !definedCustomTypes.has(type));
+  if (missingDefinitions.length > 0) {
+    throw new StrategyValidationError(
+      `The strategy is missing definitions for AI-generated blocks: ${missingDefinitions.slice(0, 4).join(", ")}.`,
+    );
+  }
+
+  const typeSet = new Set(availableTypes);
+  for (const block of customBlocks) typeSet.add(block.type);
+  validateBlocklyBlocksAvailable(
+    xml,
+    [...typeSet].map(type => `<block type="${type}"/>`).join(""),
+  );
 }
 
 function toNumber(value: string): number | undefined {
@@ -236,6 +513,7 @@ export function inferStrategyIntent(prompt: string): StrategyIntent {
 export function validateStrategyMatchesIntent(
   prompt: string,
   xml: string,
+  customBlocks: AiGeneratedBlock[] = [],
 ): void {
   const intent = inferStrategyIntent(prompt);
   if (!intent.usesDigitOverUnder) return;
@@ -275,10 +553,35 @@ export function validateStrategyMatchesIntent(
     );
   }
 
+  const customBlocksByType = new Map(customBlocks.map(block => [block.type, block]));
   const purchaseBlocks = blocks.filter(
-    block => block.type === "apollo_purchase2" || block.type === "apollo_purchase",
+    block =>
+      block.type === "apollo_purchase2" ||
+      block.type === "apollo_purchase" ||
+      customBlocksByType.get(block.type)?.method === "purchase",
   );
+  const customBindingValue = (
+    block: ParsedBlock,
+    binding: AiGeneratedBlock["bindings"][number],
+  ): string | number | undefined => {
+    if (binding.source === "field") return block.fields[binding.name];
+    const child = blocks.find(
+      candidate => candidate.parent === block && candidate.parentInput === binding.name,
+    );
+    const value = child?.fields.NUM;
+    const numericValue = value === undefined ? undefined : Number(value);
+    return numericValue !== undefined && Number.isFinite(numericValue) ? numericValue : undefined;
+  };
   const actualPurchases = purchaseBlocks.map(block => {
+    const customDefinition = customBlocksByType.get(block.type);
+    if (customDefinition?.method === "purchase") {
+      const contractType = customBindingValue(block, customDefinition.bindings[0]);
+      const prediction = Number(customBindingValue(block, customDefinition.bindings[1]));
+      return {
+        type: typeof contractType === "string" ? contractType.toUpperCase() : undefined,
+        prediction: Number.isFinite(prediction) ? prediction : undefined,
+      };
+    }
     const numericInputs = blocks
       .filter(child => child.parent === block)
       .map(child => Number(child.fields.NUM))
@@ -304,9 +607,22 @@ export function validateStrategyMatchesIntent(
 
   if (intent.digitRules.length > 0) {
     const conditionBlocks = blocks.filter(
-      block => block.type === "last_digits_condition",
+      block =>
+        block.type === "last_digits_condition" ||
+        customBlocksByType.get(block.type)?.method === "checkLastDigitsCondition",
     );
     const actualRules = conditionBlocks.map(block => {
+      const customDefinition = customBlocksByType.get(block.type);
+      if (customDefinition?.method === "checkLastDigitsCondition") {
+        const condition = customBindingValue(block, customDefinition.bindings[0]);
+        const count = Number(customBindingValue(block, customDefinition.bindings[1]));
+        const threshold = Number(customBindingValue(block, customDefinition.bindings[2]));
+        return {
+          count: Number.isFinite(count) ? count : undefined,
+          condition: typeof condition === "string" ? condition : undefined,
+          threshold: Number.isFinite(threshold) ? threshold : undefined,
+        };
+      }
       const numericInputs = blocks
         .filter(child => child.parent === block)
         .map(child => Number(child.fields.NUM))

@@ -27,12 +27,52 @@ export const generateOpenaiBotStrategyBodyExistingXmlMax = 60000;
 
 export const generateOpenaiBotStrategyBodyBlockCatalogMax = 75000;
 
+export const generateOpenaiBotStrategyBodyExistingBlocksItemTypeRegExp = new RegExp('^ai_[a-z0-9_]{1,48}$');
+export const generateOpenaiBotStrategyBodyExistingBlocksItemMessageMax = 120;
+
+export const generateOpenaiBotStrategyBodyExistingBlocksItemTooltipMax = 240;
+
+export const generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsItemNameRegExp = new RegExp('^[A-Z][A-Z0-9_]{0,31}$');
+export const generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsItemOptionsItemLabelMax = 40;
+
+export const generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsItemOptionsItemValueMax = 40;
+
+export const generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsItemOptionsMax = 8;
+
+export const generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsMax = 6;
+
+export const generateOpenaiBotStrategyBodyExistingBlocksItemBindingsItemNameRegExp = new RegExp('^[A-Z][A-Z0-9_]{0,31}$');
+export const generateOpenaiBotStrategyBodyExistingBlocksItemBindingsMax = 6;
+
+export const generateOpenaiBotStrategyBodyExistingBlocksMax = 8;
+
 
 
 export const GenerateOpenaiBotStrategyBody = zod.object({
   "prompt": zod.string().min(generateOpenaiBotStrategyBodyPromptMin).max(generateOpenaiBotStrategyBodyPromptMax),
   "existingXml": zod.string().max(generateOpenaiBotStrategyBodyExistingXmlMax).optional().describe('Existing generated strategy XML to refine with the new prompt'),
-  "blockCatalog": zod.string().min(1).max(generateOpenaiBotStrategyBodyBlockCatalogMax).describe('Verified Blockly block templates from the active Bot Builder toolbox')
+  "blockCatalog": zod.string().min(1).max(generateOpenaiBotStrategyBodyBlockCatalogMax).describe('Verified Blockly block templates from the active Bot Builder toolbox'),
+  "existingBlocks": zod.array(zod.object({
+  "type": zod.string().regex(generateOpenaiBotStrategyBodyExistingBlocksItemTypeRegExp),
+  "message": zod.string().min(1).max(generateOpenaiBotStrategyBodyExistingBlocksItemMessageMax),
+  "tooltip": zod.string().min(1).max(generateOpenaiBotStrategyBodyExistingBlocksItemTooltipMax),
+  "method": zod.enum(['checkLastDigitsCondition', 'checkLastNTicksDirection', 'getDigitPercentage', 'getDirectionPercentage', 'getLastDigit', 'getMostFrequentDigit', 'getNthLastDigit', 'getParityPercentage', 'getSignalConfidence', 'purchase']),
+  "outputType": zod.enum(['Number', 'Boolean', 'Statement']),
+  "arguments": zod.array(zod.object({
+  "kind": zod.enum(['value', 'number', 'dropdown']),
+  "name": zod.string().regex(generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsItemNameRegExp),
+  "check": zod.union([zod.literal('Number'),zod.literal(null)]).nullable(),
+  "defaultValue": zod.union([zod.number(),zod.string()]).nullable(),
+  "options": zod.array(zod.object({
+  "label": zod.string().min(1).max(generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsItemOptionsItemLabelMax),
+  "value": zod.string().min(1).max(generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsItemOptionsItemValueMax)
+})).max(generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsItemOptionsMax)
+})).max(generateOpenaiBotStrategyBodyExistingBlocksItemArgumentsMax),
+  "bindings": zod.array(zod.object({
+  "source": zod.enum(['input', 'field']),
+  "name": zod.string().regex(generateOpenaiBotStrategyBodyExistingBlocksItemBindingsItemNameRegExp)
+})).max(generateOpenaiBotStrategyBodyExistingBlocksItemBindingsMax)
+})).max(generateOpenaiBotStrategyBodyExistingBlocksMax).optional()
 })
 
 export const generateOpenaiBotStrategyResponseTitleMax = 80;
@@ -48,6 +88,25 @@ export const generateOpenaiBotStrategyResponseWarningsItemMax = 200;
 
 export const generateOpenaiBotStrategyResponseWarningsMax = 6;
 
+export const generateOpenaiBotStrategyResponseCustomBlocksItemTypeRegExp = new RegExp('^ai_[a-z0-9_]{1,48}$');
+export const generateOpenaiBotStrategyResponseCustomBlocksItemMessageMax = 120;
+
+export const generateOpenaiBotStrategyResponseCustomBlocksItemTooltipMax = 240;
+
+export const generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsItemNameRegExp = new RegExp('^[A-Z][A-Z0-9_]{0,31}$');
+export const generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsItemOptionsItemLabelMax = 40;
+
+export const generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsItemOptionsItemValueMax = 40;
+
+export const generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsItemOptionsMax = 8;
+
+export const generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsMax = 6;
+
+export const generateOpenaiBotStrategyResponseCustomBlocksItemBindingsItemNameRegExp = new RegExp('^[A-Z][A-Z0-9_]{0,31}$');
+export const generateOpenaiBotStrategyResponseCustomBlocksItemBindingsMax = 6;
+
+export const generateOpenaiBotStrategyResponseCustomBlocksMax = 8;
+
 
 
 export const GenerateOpenaiBotStrategyResponse = zod.object({
@@ -55,7 +114,28 @@ export const GenerateOpenaiBotStrategyResponse = zod.object({
   "summary": zod.string().max(generateOpenaiBotStrategyResponseSummaryMax),
   "xml": zod.string().max(generateOpenaiBotStrategyResponseXmlMax),
   "blockCount": zod.number().min(1).max(generateOpenaiBotStrategyResponseBlockCountMax).multipleOf(generateOpenaiBotStrategyResponseBlockCountMultipleOf),
-  "warnings": zod.array(zod.string().max(generateOpenaiBotStrategyResponseWarningsItemMax)).min(1).max(generateOpenaiBotStrategyResponseWarningsMax)
+  "warnings": zod.array(zod.string().max(generateOpenaiBotStrategyResponseWarningsItemMax)).min(1).max(generateOpenaiBotStrategyResponseWarningsMax),
+  "customBlocks": zod.array(zod.object({
+  "type": zod.string().regex(generateOpenaiBotStrategyResponseCustomBlocksItemTypeRegExp),
+  "message": zod.string().min(1).max(generateOpenaiBotStrategyResponseCustomBlocksItemMessageMax),
+  "tooltip": zod.string().min(1).max(generateOpenaiBotStrategyResponseCustomBlocksItemTooltipMax),
+  "method": zod.enum(['checkLastDigitsCondition', 'checkLastNTicksDirection', 'getDigitPercentage', 'getDirectionPercentage', 'getLastDigit', 'getMostFrequentDigit', 'getNthLastDigit', 'getParityPercentage', 'getSignalConfidence', 'purchase']),
+  "outputType": zod.enum(['Number', 'Boolean', 'Statement']),
+  "arguments": zod.array(zod.object({
+  "kind": zod.enum(['value', 'number', 'dropdown']),
+  "name": zod.string().regex(generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsItemNameRegExp),
+  "check": zod.union([zod.literal('Number'),zod.literal(null)]).nullable(),
+  "defaultValue": zod.union([zod.number(),zod.string()]).nullable(),
+  "options": zod.array(zod.object({
+  "label": zod.string().min(1).max(generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsItemOptionsItemLabelMax),
+  "value": zod.string().min(1).max(generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsItemOptionsItemValueMax)
+})).max(generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsItemOptionsMax)
+})).max(generateOpenaiBotStrategyResponseCustomBlocksItemArgumentsMax),
+  "bindings": zod.array(zod.object({
+  "source": zod.enum(['input', 'field']),
+  "name": zod.string().regex(generateOpenaiBotStrategyResponseCustomBlocksItemBindingsItemNameRegExp)
+})).max(generateOpenaiBotStrategyResponseCustomBlocksItemBindingsMax)
+})).max(generateOpenaiBotStrategyResponseCustomBlocksMax)
 })
 
 

@@ -9,10 +9,12 @@ import {
 } from 'react';
 import { localize } from '@deriv-com/translations';
 import { useGenerateOpenaiBotStrategy } from '@workspace/api-client-react';
+import type { AiGeneratedBlock } from '@workspace/api-client-react';
 import {
     AI_BOT_BUILDER_HISTORY_STORAGE_PREFIX,
     AI_BOT_BUILDER_LAUNCHER_STORAGE_KEY,
 } from './storage';
+import { registerAiGeneratedBlocks, validateAiGeneratedBlocks } from './ai-generated-blocks';
 import { getBotBuilderBlockCatalog, validateGeneratedBotXml } from './blockly-preview';
 import './ai-bot-builder.scss';
 
@@ -22,6 +24,7 @@ type StrategyResult = {
     xml: string;
     blockCount: number;
     warnings: string[];
+    customBlocks: AiGeneratedBlock[];
 };
 
 type SavedStrategy = StrategyResult & {
@@ -44,7 +47,7 @@ type BuildStage = 'checking' | 'building' | 'validating';
 const getSavedStrategies = (storageKey: string): SavedStrategy[] => {
     try {
         const parsed: unknown = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) return [];
         return parsed.filter(
             (item): item is SavedStrategy =>
                 item &&
@@ -57,9 +60,13 @@ const getSavedStrategies = (storageKey: string): SavedStrategy[] => {
                 item.xml.length <= 60000 &&
                 typeof item.blockCount === 'number' &&
                 typeof item.savedAt === 'number' &&
+                (item.customBlocks === undefined || Array.isArray(item.customBlocks)) &&
                 Array.isArray(item.warnings) &&
                 item.warnings.every((warning: unknown) => typeof warning === 'string'),
-        ).slice(0, MAX_HISTORY_ITEMS);
+        ).map(item => ({
+            ...item,
+            customBlocks: Array.isArray(item.customBlocks) ? item.customBlocks : [],
+        })).slice(0, MAX_HISTORY_ITEMS);
     } catch {
         return [];
     }
@@ -215,6 +222,7 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
         setRequestError('');
         setResultVerified(false);
         setBuildStage('checking');
+        let rollbackGeneratedBlocks = () => {};
         try {
             const requestStorageKey = historyStorageKey;
             const blockCatalog = getBotBuilderBlockCatalog();
@@ -223,16 +231,22 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                 data: {
                     prompt: trimmedPrompt,
                     ...(editingBase ? { existingXml: editingBase.xml } : {}),
+                    ...(editingBase?.customBlocks?.length
+                        ? { existingBlocks: editingBase.customBlocks }
+                        : {}),
                     blockCatalog,
                 },
             });
             if (historyStorageKeyRef.current !== requestStorageKey) return;
             setBuildStage('validating');
-            validateGeneratedBotXml(generated.xml, { verifyWorkspace: true });
+            const customBlocks = validateAiGeneratedBlocks(generated.customBlocks ?? []);
+            rollbackGeneratedBlocks = registerAiGeneratedBlocks(customBlocks);
+            const verifiedStrategy = { ...generated, customBlocks };
+            validateGeneratedBotXml(verifiedStrategy.xml, { verifyWorkspace: true });
             setResultVerified(true);
-            setResult(generated);
+            setResult(verifiedStrategy);
             const saved: SavedStrategy = {
-                ...generated,
+                ...verifiedStrategy,
                 id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 prompt: trimmedPrompt,
                 savedAt: Date.now(),
@@ -248,6 +262,7 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
             });
             setEditingBase(saved);
         } catch (error) {
+            rollbackGeneratedBlocks();
             setRequestError(
                 getErrorMessage(error) ||
                     localize('The generated blocks did not pass workspace verification. Your current bot was not changed.'),
@@ -262,6 +277,7 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
         setIsLoadingWorkspace(true);
         setLoadError('');
         try {
+            registerAiGeneratedBlocks(result.customBlocks ?? []);
             await onLoad(result.xml);
             setResultVerified(true);
             setIsConfirming(false);
@@ -347,6 +363,12 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
     };
 
     const openSavedStrategy = (strategy: SavedStrategy, refine: boolean) => {
+        try {
+            registerAiGeneratedBlocks(strategy.customBlocks ?? []);
+        } catch (error) {
+            setRequestError(getErrorMessage(error) || localize('The saved strategy has invalid custom blocks.'));
+            return;
+        }
         setResult(strategy);
         setResultVerified(false);
         setEditingBase(refine ? strategy : null);
@@ -522,7 +544,7 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                                         ? localize('Checking available blocks…')
                                         : buildStage === 'validating'
                                           ? localize('Verifying blocks and connections…')
-                                          : localize('Building from registered blocks…')}
+                                          : localize('Creating and registering missing blocks…')}
                                 </>
                             ) : (
                                 <>
@@ -546,7 +568,7 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                                     ? localize('Checking the active toolbox and its real block definitions…')
                                     : buildStage === 'validating'
                                       ? localize('Importing every block into a test workspace and checking its connections…')
-                                      : localize('Building your strategy from verified, registered blocks…')}
+                                      : localize('Creating missing safe blocks and completing the strategy…')}
                             </span>
                         </div>
                     )}
@@ -568,6 +590,13 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                                     : localize('Saved strategy: it will be checked against the current block library before replacing your workspace.')}
                             </p>
                             <p className='ai-bot-builder__summary'>{result.summary}</p>
+                            {result.customBlocks?.length > 0 && (
+                                <p className='ai-bot-builder__verified' role='status' data-testid='status-ai-bot-builder-custom-blocks'>
+                                    {localize('Created and registered {{count}} safe custom blocks for this strategy.', {
+                                        count: result.customBlocks.length,
+                                    })}
+                                </p>
+                            )}
                             {result.warnings.length > 0 && (
                                 <div className='ai-bot-builder__warnings' role='note' data-testid='list-ai-bot-builder-warnings'>
                                     <strong>{localize('Check before loading')}</strong>

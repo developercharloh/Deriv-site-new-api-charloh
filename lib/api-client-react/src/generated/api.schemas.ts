@@ -9,6 +9,110 @@ export interface HealthStatus {
   status: string;
 }
 
+export type AiGeneratedBlockMethod = typeof AiGeneratedBlockMethod[keyof typeof AiGeneratedBlockMethod];
+
+
+export const AiGeneratedBlockMethod = {
+  checkLastDigitsCondition: 'checkLastDigitsCondition',
+  checkLastNTicksDirection: 'checkLastNTicksDirection',
+  getDigitPercentage: 'getDigitPercentage',
+  getDirectionPercentage: 'getDirectionPercentage',
+  getLastDigit: 'getLastDigit',
+  getMostFrequentDigit: 'getMostFrequentDigit',
+  getNthLastDigit: 'getNthLastDigit',
+  getParityPercentage: 'getParityPercentage',
+  getSignalConfidence: 'getSignalConfidence',
+  purchase: 'purchase',
+} as const;
+
+export type AiGeneratedBlockOutputType = typeof AiGeneratedBlockOutputType[keyof typeof AiGeneratedBlockOutputType];
+
+
+export const AiGeneratedBlockOutputType = {
+  Number: 'Number',
+  Boolean: 'Boolean',
+  Statement: 'Statement',
+} as const;
+
+export type AiGeneratedBlockArgumentsItemKind = typeof AiGeneratedBlockArgumentsItemKind[keyof typeof AiGeneratedBlockArgumentsItemKind];
+
+
+export const AiGeneratedBlockArgumentsItemKind = {
+  value: 'value',
+  number: 'number',
+  dropdown: 'dropdown',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AiGeneratedBlockArgumentsItemCheck = typeof AiGeneratedBlockArgumentsItemCheck[keyof typeof AiGeneratedBlockArgumentsItemCheck] | null;
+
+
+export const AiGeneratedBlockArgumentsItemCheck = {
+  Number: 'Number',
+} as const;
+
+export type AiGeneratedBlockBindingsItemSource = typeof AiGeneratedBlockBindingsItemSource[keyof typeof AiGeneratedBlockBindingsItemSource];
+
+
+export const AiGeneratedBlockBindingsItemSource = {
+  input: 'input',
+  field: 'field',
+} as const;
+
+export type AiGeneratedBlockArgumentsItemOptionsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 40
+     */
+  label: string;
+  /**
+     * @minLength 1
+     * @maxLength 40
+     */
+  value: string;
+};
+
+export type AiGeneratedBlockArgumentsItem = {
+  kind: AiGeneratedBlockArgumentsItemKind;
+  /** @pattern ^[A-Z][A-Z0-9_]{0,31}$ */
+  name: string;
+  /** @nullable */
+  check: AiGeneratedBlockArgumentsItemCheck;
+  /** @nullable */
+  defaultValue: number | string | null;
+  /** @maxItems 8 */
+  options: AiGeneratedBlockArgumentsItemOptionsItem[];
+};
+
+export type AiGeneratedBlockBindingsItem = {
+  source: AiGeneratedBlockBindingsItemSource;
+  /** @pattern ^[A-Z][A-Z0-9_]{0,31}$ */
+  name: string;
+};
+
+export interface AiGeneratedBlock {
+  /** @pattern ^ai_[a-z0-9_]{1,48}$ */
+  type: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  message: string;
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  tooltip: string;
+  method: AiGeneratedBlockMethod;
+  outputType: AiGeneratedBlockOutputType;
+  /** @maxItems 6 */
+  arguments: AiGeneratedBlockArgumentsItem[];
+  /** @maxItems 6 */
+  bindings: AiGeneratedBlockBindingsItem[];
+}
+
 export interface OpenaiBotStrategyInput {
   /**
      * @minLength 12
@@ -26,6 +130,8 @@ export interface OpenaiBotStrategyInput {
      * @maxLength 75000
      */
   blockCatalog: string;
+  /** @maxItems 8 */
+  existingBlocks?: AiGeneratedBlock[];
 }
 
 export interface OpenaiBotStrategy {
@@ -46,6 +152,8 @@ export interface OpenaiBotStrategy {
      * @items.maxLength 200
      */
   warnings: string[];
+  /** @maxItems 8 */
+  customBlocks: AiGeneratedBlock[];
 }
 
 export interface OpenaiError {

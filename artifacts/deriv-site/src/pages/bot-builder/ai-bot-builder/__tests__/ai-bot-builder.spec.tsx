@@ -30,6 +30,7 @@ const generatedStrategy = {
     xml: '<xml is_dbot="true"></xml>',
     blockCount: 5,
     warnings: ['Review before use.'],
+    customBlocks: [],
 };
 
 describe('AiBotBuilder', () => {
