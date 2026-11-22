@@ -366,7 +366,9 @@ export function validateRequiredBotSections(
 ): void {
   const root = xml.match(/^\s*<xml\b([^>]*)>/i);
   if (!root || !/\bis_dbot\s*=\s*(["'])true\1/i.test(root[1])) {
-    throw new StrategyValidationError("The generated Blockly document is missing required bot sections.");
+    throw new StrategyValidationError(
+      'The generated Blockly document is missing required bot sections: the <xml> root must set is_dbot="true".',
+    );
   }
 
   const topLevelTypes: string[] = [];
@@ -386,9 +388,10 @@ export function validateRequiredBotSections(
 
   const blockTypes = parseBlocklyBlocks(xml).map(block => block.type);
   const requiredTypes = ["trade_definition", "before_purchase", "after_purchase"];
-  const hasExactlyOneTopLevelOfEach = requiredTypes.every(
-    type => topLevelTypes.filter(topLevelType => topLevelType === type).length === 1,
+  const topLevelCounts = new Map(
+    requiredTypes.map(type => [type, topLevelTypes.filter(topLevelType => topLevelType === type).length]),
   );
+  const hasExactlyOneTopLevelOfEach = requiredTypes.every(type => topLevelCounts.get(type) === 1);
   const hasExactlyOneOfEach = requiredTypes.every(
     type => blockTypes.filter(blockType => blockType === type).length === 1,
   );
@@ -401,8 +404,16 @@ export function validateRequiredBotSections(
       customPurchaseTypes.has(type),
   );
 
-  if (!hasExactlyOneTopLevelOfEach || !hasExactlyOneOfEach || !hasPurchase) {
-    throw new StrategyValidationError("The generated Blockly document is missing required bot sections.");
+  if (!hasExactlyOneTopLevelOfEach || !hasExactlyOneOfEach) {
+    const counts = requiredTypes.map(type => `${type}=${topLevelCounts.get(type)}`).join(", ");
+    throw new StrategyValidationError(
+      `The generated Blockly document is missing required bot sections: expected exactly one top-level trade_definition, before_purchase, and after_purchase block (${counts}).`,
+    );
+  }
+  if (!hasPurchase) {
+    throw new StrategyValidationError(
+      "The generated Blockly document is missing required bot sections: no purchase block was included in the strategy.",
+    );
   }
 }
 
@@ -478,7 +489,11 @@ function inferDigitRules(text: string): DigitRuleIntent[] {
  */
 export function inferStrategyIntent(prompt: string): StrategyIntent {
   const text = prompt.replace(/[’']/g, "'").toLowerCase();
-  const hasDigitContext = /\b(?:digits?|last\s+(?:\d+|[a-z]+)\s+digits?)\b/.test(text);
+  const explicitlyMentionsDigits = /\b(?:digits?|last\s+(?:\d+|[a-z]+)\s+digits?)\b/.test(text);
+  const namesOverUnderBot = new RegExp(
+    `\\b(?:over|under)\\s+${numberPattern}\\s+(?:digit\\s+)?bot\\b`,
+  ).test(text);
+  const hasDigitContext = explicitlyMentionsDigits || namesOverUnderBot;
   if (!hasDigitContext) {
     return {
       digitTradeTypes: [],
