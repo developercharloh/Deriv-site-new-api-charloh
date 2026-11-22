@@ -34,6 +34,9 @@ describe('AnalysisMarketCard', () => {
         expect(screen.getByTestId('status-over-under-entry-volatility-25-1s-sequence')).toHaveTextContent('Ov Ov Ov Ov Ov Ov Ov Ov Ov');
         expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s-sequence')).toHaveTextContent('RRRRRRRRR');
         expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s-sequence')).toHaveTextContent('EOOOOOOOOOO');
+        expect(screen.getByTestId('status-over-under-entry-volatility-25-1s-sequence').querySelectorAll('.aat-market-card__entry-token--over')).toHaveLength(9);
+        expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s-sequence').querySelector('.aat-market-card__entry-token--odd')).toBeInTheDocument();
+        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s-sequence').querySelector('.aat-market-card__entry-token--rise')).toBeInTheDocument();
         expect(screen.queryByText(/^Target:/)).not.toBeInTheDocument();
         expect(screen.queryByText('Wait')).not.toBeInTheDocument();
     });
@@ -57,6 +60,7 @@ describe('AnalysisMarketCard', () => {
         );
 
         expect(screen.getByTestId('status-over-under-entry-volatility-25-1s')).toHaveTextContent('Entry');
+        expect(screen.getByTestId('pointer-current-digit-volatility-25-1s')).toHaveClass('aat-market-card__pointer--down');
         expect(screen.getByTestId('status-over-under-entry-volatility-25-1s-sequence')).toHaveTextContent('Ov Ov Ov U U Ov U U U');
         expect(screen.queryByText('Wait')).not.toBeInTheDocument();
         expect(screen.queryByText(/^Target:/)).not.toBeInTheDocument();

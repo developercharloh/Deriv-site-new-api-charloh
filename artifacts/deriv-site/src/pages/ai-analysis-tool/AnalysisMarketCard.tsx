@@ -144,12 +144,28 @@ function ShareBar({ label, leftLabel, leftValue, rightLabel, rightValue, testId 
     );
 }
 
-function MovementSequence({ label, sequence, valid, testId }: {
+type MovementKind = 'over-under' | 'even-odd' | 'rise-fall';
+
+function getMovementTokenClass(kind: MovementKind, token: string): string {
+    if (kind === 'over-under') {
+        if (token === 'Ov') return 'over';
+        if (token === 'U') return 'under';
+        return 'equal';
+    }
+    if (kind === 'even-odd') return token === 'E' ? 'even' : 'odd';
+    if (token === 'R') return 'rise';
+    if (token === 'F') return 'fall';
+    return 'flat';
+}
+
+function MovementSequence({ label, sequence, valid, testId, kind }: {
     label: string;
     sequence: string;
     valid: boolean;
     testId: string;
+    kind: MovementKind;
 }) {
+    const tokens = kind === 'over-under' ? sequence.split(' ') : Array.from(sequence);
     return (
         <div
             className={`aat-market-card__entry${valid ? ' aat-market-card__entry--valid' : ''}`}
@@ -158,7 +174,20 @@ function MovementSequence({ label, sequence, valid, testId }: {
             data-testid={testId}
         >
             <span className="aat-market-card__entry-label">{label}</span>
-            <code data-testid={`${testId}-sequence`}>{sequence || '—'}</code>
+            <code aria-label={sequence || 'No movement yet'} data-testid={`${testId}-sequence`}>
+                {sequence
+                    ? tokens.map((token, index) => (
+                        <span
+                            key={`${index}-${token}`}
+                            aria-hidden="true"
+                            className={`aat-market-card__entry-token aat-market-card__entry-token--${getMovementTokenClass(kind, token)}`}
+                        >
+                            {index > 0 && kind === 'over-under' ? ' ' : null}
+                            {token}
+                        </span>
+                    ))
+                    : '—'}
+            </code>
             {valid && <span className="aat-market-card__entry-state">Entry</span>}
         </div>
     );
@@ -231,7 +260,7 @@ export default function AnalysisMarketCard({
                                 data-testid={`digit-frequency-${marketId}-${digit}`}
                                 aria-label={`Digit ${digit}, ${percentage.toFixed(1)} percent${active ? ', current digit' : ''}`}
                             >
-                                {active && <span className="aat-market-card__pointer" aria-hidden="true" />}
+                                {active && <span className="aat-market-card__pointer aat-market-card__pointer--down" aria-hidden="true" data-testid={`pointer-current-digit-${marketId}`} />}
                                 <span className="aat-market-card__digit-number">{digit}</span>
                                 <span className="aat-market-card__digit-percent">{percentage.toFixed(1)}%</span>
                             </div>
@@ -313,18 +342,21 @@ export default function AnalysisMarketCard({
                         sequence={overUnderSequence}
                         valid={overUnderEntryValid}
                         testId={`status-over-under-entry-${marketId}`}
+                        kind="over-under"
                     />
                     <MovementSequence
                         label="Even / Odd"
                         sequence={evenOddSequence}
                         valid={evenOddEntryValid}
                         testId={`status-even-odd-entry-${marketId}`}
+                        kind="even-odd"
                     />
                     <MovementSequence
                         label="Rise / Fall"
                         sequence={riseFallSequence}
                         valid={riseFallEntryValid}
                         testId={`status-rise-fall-entry-${marketId}`}
+                        kind="rise-fall"
                     />
                 </div>
             </section>
