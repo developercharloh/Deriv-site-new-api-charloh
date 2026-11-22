@@ -88,7 +88,7 @@ describe('AI Analysis site-session lifecycle', () => {
         expect(screen.queryByText(/Statistical analysis only/)).not.toBeInTheDocument();
         expect(screen.getByTestId('input-tick-window')).toHaveValue(120);
         expect(screen.getByTestId('button-barrier-4')).toBeInTheDocument();
-        expect(screen.getByText('Over 0–8 · Under 1–9')).toBeInTheDocument();
+        expect(screen.queryByText('Over 0–8 · Under 1–9')).not.toBeInTheDocument();
         const makePrices = (count: number, decimals: number) =>
             Array.from({ length: count }, (_, index) => `100.${String(index % 10).padStart(decimals, '0')}`);
         site.load('market-one', makePrices(1000, 2), 2, '100.03', 2);

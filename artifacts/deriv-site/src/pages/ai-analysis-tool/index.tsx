@@ -565,7 +565,6 @@ const AiAnalysisTool: React.FC = observer(() => {
                             </button>
                         ))}
                     </div>
-                    <span className='aat__barrier-range'>Over 0–8 · Under 1–9</span>
             </div>
 
             {analysisView === 'normal' ? (

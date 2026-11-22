@@ -7,8 +7,10 @@ Use the selected Over/Under barrier to classify recent last digits: Over is a la
 
 Even/Odd comes from the final decimal digit. Rise/Fall comes from comparing consecutive prices; a flat comparison is neither. The displayed patterns are advisory entry-point signals only and must never start trades automatically.
 
-The Over/Under entry pattern reuses the nine-step Rise/Fall shape, translating R to Ov and F to U; the user confirmed this target.
+The Over/Under entry pattern reuses the nine-step Rise/Fall shape, translating R to Ov and F to U; the user confirmed this target. In the live UI, show only the actual recent classifications; do not display the target pattern or a "Wait" state when it does not match. Keep an "Entry" label only when the live sequence matches.
 
-**Why:** The user asked for explicit barrier-based symbol streams and percentages, correct even/odd classification, recent Rise/Fall, and non-automatic entry signals, then confirmed reusing the existing nine-step pattern for Over/Under.
+Do not display the explanatory Over/Under barrier-range caption. Keep the barrier selector and selected-barrier readings without the 0–8 / 1–9 range text.
 
-**How to apply:** Keep the selected barrier and tick window consistent across Normal and Wide Eye cards. If the user supplies a dedicated Over/Under target sequence, replace the derived shape without changing digit classification or percentage semantics.
+**Why:** The user asked for explicit barrier-based symbol streams and percentages, correct even/odd classification, recent Rise/Fall, and non-automatic entry signals, then clarified that target/wait labels and the barrier-range caption obscure the actual movement.
+
+**How to apply:** Keep the selected barrier and tick window consistent across Normal and Wide Eye cards. Render live `Ov`/`U`, `E`/`O`, and `R`/`F` movement streams without target or no-match labels. If a sequence matches the confirmed shape, the Entry label can remain.

@@ -7,7 +7,7 @@ const makePrices = (counts: number[]) => counts.flatMap((count, digit) =>
 );
 
 describe('AnalysisMarketCard', () => {
-    it('uses color-only frequency ranks and displays both entry pattern checks', () => {
+    it('shows current market movement without a target or waiting label', () => {
         const prices = makePrices([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         render(
             <AnalysisMarketCard
@@ -30,14 +30,36 @@ describe('AnalysisMarketCard', () => {
         expect(screen.getByTestId('digit-frequency-volatility-25-1s-8')).toHaveClass('aat-market-card__digit--second-most');
         expect(screen.getByTestId('digit-frequency-volatility-25-1s-9')).toHaveClass('aat-market-card__digit--most');
         expect(screen.queryByText(/most frequent|least frequent/i)).not.toBeInTheDocument();
-        expect(screen.getByText('Entry point · latest ticks')).toBeInTheDocument();
-        expect(screen.getByTestId('status-over-under-entry-volatility-25-1s')).toHaveTextContent('Ov Ov Ov Ov Ov Ov Ov Ov Ov');
-        expect(screen.getByTestId('status-over-under-entry-volatility-25-1s')).toHaveTextContent('Target: Ov Ov Ov U U Ov U U U');
-        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveTextContent('RRRRRRRRR');
-        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveTextContent('Target: RRRFFRFFF');
-        expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s')).toHaveTextContent('EOOOOOOOOOO');
-        expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s')).toHaveTextContent('Target: EEEOEEEEOOO');
-        expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s')).toHaveTextContent('Wait');
+        expect(screen.getByText('Recent movement · latest ticks')).toBeInTheDocument();
+        expect(screen.getByTestId('status-over-under-entry-volatility-25-1s-sequence')).toHaveTextContent('Ov Ov Ov Ov Ov Ov Ov Ov Ov');
+        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s-sequence')).toHaveTextContent('RRRRRRRRR');
+        expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s-sequence')).toHaveTextContent('EOOOOOOOOOO');
+        expect(screen.queryByText(/^Target:/)).not.toBeInTheDocument();
+        expect(screen.queryByText('Wait')).not.toBeInTheDocument();
+    });
+
+    it('shows Entry only when the live sequence matches', () => {
+        const prices = [5, 6, 7, 3, 2, 8, 1, 0, 3].map(digit => 100 + digit / 100);
+        render(
+            <AnalysisMarketCard
+                marketLabel='Volatility 25 (1s)'
+                livePrice={100.03}
+                pipSize={2}
+                prices={prices}
+                tickWindow={9}
+                connected
+                aiResult={null}
+                overUnderBarrier={4}
+                overUnderEntryValid
+                riseFallEntryValid={false}
+                evenOddEntryValid={false}
+            />,
+        );
+
+        expect(screen.getByTestId('status-over-under-entry-volatility-25-1s')).toHaveTextContent('Entry');
+        expect(screen.getByTestId('status-over-under-entry-volatility-25-1s-sequence')).toHaveTextContent('Ov Ov Ov U U Ov U U U');
+        expect(screen.queryByText('Wait')).not.toBeInTheDocument();
+        expect(screen.queryByText(/^Target:/)).not.toBeInTheDocument();
     });
 
     it('shows Over/Under percentages for the selected barrier and excludes equal digits', () => {

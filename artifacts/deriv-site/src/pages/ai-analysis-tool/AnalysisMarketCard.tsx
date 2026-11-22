@@ -1,8 +1,5 @@
 import './analysis-market-card.scss';
 import {
-    EVEN_ODD_ENTRY_PATTERN,
-    OVER_UNDER_ENTRY_PATTERN,
-    RISE_FALL_ENTRY_PATTERN,
     getEvenOddSequence,
     getOverUnderSequence,
     getRiseFallSequence,
@@ -147,25 +144,22 @@ function ShareBar({ label, leftLabel, leftValue, rightLabel, rightValue, testId 
     );
 }
 
-function EntryCheck({ label, sequence, pattern, valid, testId }: {
+function MovementSequence({ label, sequence, valid, testId }: {
     label: string;
     sequence: string;
-    pattern: string;
     valid: boolean;
     testId: string;
 }) {
     return (
         <div
-            className={`aat-market-card__entry aat-market-card__entry--${valid ? 'valid' : 'invalid'}`}
-            role="status"
-            aria-label={`${label} ${valid ? 'entry point detected' : 'waiting for entry point'}; latest sequence ${sequence || 'not available'}; target ${pattern}`}
+            className={`aat-market-card__entry${valid ? ' aat-market-card__entry--valid' : ''}`}
+            role="group"
+            aria-label={`${label} latest movement: ${sequence || 'not available'}${valid ? '; entry point detected' : ''}`}
             data-testid={testId}
         >
-            <span className="aat-market-card__entry-mark" aria-hidden="true">{valid ? '✓' : '×'}</span>
             <span className="aat-market-card__entry-label">{label}</span>
             <code data-testid={`${testId}-sequence`}>{sequence || '—'}</code>
-            <span className="aat-market-card__entry-pattern">Target: {pattern}</span>
-            <span className="aat-market-card__entry-state">{valid ? 'Entry' : 'Wait'}</span>
+            {valid && <span className="aat-market-card__entry-state">Entry</span>}
         </div>
     );
 }
@@ -312,26 +306,23 @@ export default function AnalysisMarketCard({
                         <p className="aat-market-card__pending" role="status" data-testid={`status-ai-pending-${marketId}`}>Collecting signal…</p>
                     )}
                 </div>
-                <div className="aat-market-card__entries" aria-label="Latest-tick entry point patterns">
-                    <div className="aat-market-card__entries-heading">Entry point · latest ticks</div>
-                    <EntryCheck
+                <div className="aat-market-card__entries" aria-label="Recent market movement">
+                    <div className="aat-market-card__entries-heading">Recent movement · latest ticks</div>
+                    <MovementSequence
                         label="Over / Under"
                         sequence={overUnderSequence}
-                        pattern={OVER_UNDER_ENTRY_PATTERN}
                         valid={overUnderEntryValid}
                         testId={`status-over-under-entry-${marketId}`}
                     />
-                    <EntryCheck
+                    <MovementSequence
                         label="Even / Odd"
                         sequence={evenOddSequence}
-                        pattern={EVEN_ODD_ENTRY_PATTERN}
                         valid={evenOddEntryValid}
                         testId={`status-even-odd-entry-${marketId}`}
                     />
-                    <EntryCheck
+                    <MovementSequence
                         label="Rise / Fall"
                         sequence={riseFallSequence}
-                        pattern={RISE_FALL_ENTRY_PATTERN}
                         valid={riseFallEntryValid}
                         testId={`status-rise-fall-entry-${marketId}`}
                     />
