@@ -7,6 +7,12 @@ Blockly's runtime `jsonInit` validates that every declared `args0` entry is refe
 
 In isolated Jest workspaces, `javascriptGenerator.init(workspace)` may leave the legacy `Blockly.JavaScript.variableDB_` unset even though custom `variables_get` generators use it. Assign `javascriptGenerator.nameDB_` to that property before generating code that contains variables.
 
+During XML-import preflight, count only active Blockly nodes: a `<shadow>` is a fallback and is not instantiated when the same input also contains a real `<block>`. Validate the real block's connection without treating the skipped shadow as a failed import.
+
+**Why:** Valid Blockly XML may serialize both a shadow fallback and its replacement block, while the imported workspace contains only the real block. Counting both falsely rejects valid generated strategies.
+
+**How to apply:** Exclude shadow nodes overridden by a direct block sibling in the same value or statement input from imported-node counts and ID checks; keep standalone shadows in validation.
+
 **Why:** A production build can succeed while a malformed block or generator prevents a strategy from loading or running; standalone Jest workspaces can also leave the legacy variable database unset.
 
 **How to apply:** When adding custom blocks, assert runtime initialization and generated `Bot.*` code. For Boolean/Number blocks, assert the tuple and generate a representative connected workspace before publishing. In Jest, initialize the legacy variable database before generating expressions with variable references.
