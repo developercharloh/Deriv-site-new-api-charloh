@@ -205,6 +205,59 @@
     gap: 9px;
     width: 100%;
     padding-bottom: 6px;
+    max-height: min(68vh, 700px);
+    max-height: min(68dvh, 700px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.aat__wide-summary {
+    padding: 4px 7px;
+    color: #465670;
+    background: #f5f7fc;
+    border: 1px solid #dbe2ec;
+    border-radius: 7px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-align: center;
+}
+
+.aat__wide-group {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.aat__wide-group-heading {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 9px;
+    color: #28364d;
+    background: rgba(255, 255, 255, 0.97);
+    border-bottom: 1px solid #dbe2ec;
+    border-radius: 6px 6px 0 0;
+
+    h2 {
+        margin: 0;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    span {
+        color: #64748b;
+        font-size: 9px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
 }
 .aat__disclaimer {
     margin: 0;

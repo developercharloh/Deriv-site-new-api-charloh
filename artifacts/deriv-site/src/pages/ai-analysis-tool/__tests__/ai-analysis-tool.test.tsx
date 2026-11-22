@@ -222,19 +222,23 @@ describe('AI Analysis site-session lifecycle', () => {
         expect(jest.getTimerCount()).toBe(0);
     });
 
-    it('loads every continuous volatility index in Wide Eye through the site connection', () => {
+    it('loads every continuous and jump index in Wide Eye through the site connection', () => {
         const view = render(<AiAnalysisTool />);
         fireEvent.click(screen.getByTestId('button-wide-eye'));
 
         const requests = site.send.mock.calls
             .map(([request]) => request)
             .filter(request => typeof request.ticks_history === 'string')
-            .slice(-8);
+            .slice(-13);
         expect(requests.map(request => request.ticks_history)).toEqual([
             '1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V',
             '1HZ50V', '1HZ75V', '1HZ90V', '1HZ100V',
+            'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
         ]);
-        expect(view.container.querySelectorAll('.aat__wide-list .aat-market-card')).toHaveLength(8);
+        expect(view.container.querySelectorAll('.aat__wide-list .aat-market-card')).toHaveLength(13);
+        expect(screen.getByTestId('text-wide-eye-market-summary')).toHaveTextContent('13 markets · 8 continuous · 5 jump');
+        expect(screen.getByTestId('section-wide-eye-continuous')).toHaveTextContent('Continuous Indices');
+        expect(screen.getByTestId('section-wide-eye-jump')).toHaveTextContent('Jump Indices');
 
         const makePrices = (count: number) =>
             Array.from({ length: count }, (_, index) => `100.${String(index % 10).padStart(2, '0')}`);
@@ -245,6 +249,10 @@ describe('AI Analysis site-session lifecycle', () => {
         expect(marketCard).toHaveTextContent('100.07');
         expect(marketCard?.querySelectorAll('.aat-market-card__digit')).toHaveLength(10);
         expect(marketCard?.querySelector('[data-testid="text-ai-recommendation-volatility-25-1s"]')).not.toBeNull();
+
+        site.loadSymbol('JD10', makePrices(120), 2, '200.04');
+        expect(screen.getByTestId('card-market-jump-10')).toHaveTextContent('Live');
+        expect(screen.getByTestId('card-market-jump-10')).toHaveTextContent('200.04');
 
         view.unmount();
         expect(site.listeners.size).toBe(0);

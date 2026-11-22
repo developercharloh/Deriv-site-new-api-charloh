@@ -35,17 +35,21 @@ const BotRedirector: React.FC<{ setActiveTab: (t: number) => void }> = observer(
 // ─── Markets ──────────────────────────────────────────────────────────────────
 // Sourced from the same canonical list used by the Charts section (advanced-dtrader).
 // Order: continuous (1s) → standard (2s) → jump → crash → boom
+const JUMP_MARKETS: { code: string; label: string; short: string }[] = [
+    { code: 'JD10',  label: 'Jump 10',  short: 'J10'  },
+    { code: 'JD25',  label: 'Jump 25',  short: 'J25'  },
+    { code: 'JD50',  label: 'Jump 50',  short: 'J50'  },
+    { code: 'JD75',  label: 'Jump 75',  short: 'J75'  },
+    { code: 'JD100', label: 'Jump 100', short: 'J100' },
+];
+
 const MARKETS: { code: string; label: string; short: string }[] = [
     // Continuous (1-second tick) volatility indices
     ...DERIV_CONTINUOUS_VOLATILITIES.map(v => ({ code: v.code, label: v.label.replace(' Index', ''), short: v.short })),
     // Standard (2-second tick) volatility indices
     ...DERIV_STANDARD_VOLATILITIES.map(v => ({ code: v.code, label: v.label.replace(' Index', ''), short: v.short })),
     // Jump indices
-    { code: 'JD10',     label: 'Jump 10',    short: 'J10'   },
-    { code: 'JD25',     label: 'Jump 25',    short: 'J25'   },
-    { code: 'JD50',     label: 'Jump 50',    short: 'J50'   },
-    { code: 'JD75',     label: 'Jump 75',    short: 'J75'   },
-    { code: 'JD100',    label: 'Jump 100',   short: 'J100'  },
+    ...JUMP_MARKETS,
     // Crash indices
     { code: 'CRASH300N', label: 'Crash 300',  short: 'C300'  },
     { code: 'CRASH500',  label: 'Crash 500',  short: 'C500'  },
@@ -68,10 +72,23 @@ const ANALYSIS_TYPES = [
     { value: 'asians_low',      label: 'Asians Low'         },
 ];
 
-const WIDE_EYE_MARKETS = DERIV_CONTINUOUS_VOLATILITIES.map(market => ({
-    code: market.code,
-    label: market.label.replace(' Index', ''),
-}));
+const WIDE_EYE_GROUPS = [
+    {
+        id: 'continuous',
+        label: 'Continuous Indices',
+        markets: DERIV_CONTINUOUS_VOLATILITIES.map(market => ({
+            code: market.code,
+            label: market.label.replace(' Index', ''),
+        })),
+    },
+    {
+        id: 'jump',
+        label: 'Jump Indices',
+        markets: JUMP_MARKETS.map(({ code, label }) => ({ code, label })),
+    },
+] as const;
+
+const WIDE_EYE_MARKETS = WIDE_EYE_GROUPS.flatMap(group => group.markets);
 
 type AnalysisType = typeof ANALYSIS_TYPES[number]['value'];
 type AnalysisView = 'normal' | 'wide-eye';
@@ -561,34 +578,52 @@ const AiAnalysisTool: React.FC = observer(() => {
                     evenOddEntryValid={connected === 'live' && matchesEvenOddEntryPattern(prices, pipSize)}
                 />
             ) : (
-                <div className='aat__wide-list' data-testid='list-wide-eye-markets'>
-                    {WIDE_EYE_MARKETS.map(wideMarket => {
-                        const feed = wideMarketData[wideMarket.code] ?? {
-                            prices: [],
-                            pipSize: 2,
-                            livePrice: null,
-                            connected: false,
-                        };
-                        const result = feed.connected
-                            ? runAI(feed.prices, feed.pipSize, analysisType, overBarrier)
-                            : null;
+                <>
+                    <div className='aat__wide-summary' data-testid='text-wide-eye-market-summary'>
+                        {WIDE_EYE_MARKETS.length} markets · {WIDE_EYE_GROUPS[0].markets.length} continuous · {WIDE_EYE_GROUPS[1].markets.length} jump
+                    </div>
+                    <div className='aat__wide-list' data-testid='list-wide-eye-markets'>
+                        {WIDE_EYE_GROUPS.map(group => (
+                            <section
+                                className='aat__wide-group'
+                                key={group.id}
+                                aria-label={`${group.label}, ${group.markets.length} markets`}
+                                data-testid={`section-wide-eye-${group.id}`}
+                            >
+                                <header className='aat__wide-group-heading'>
+                                    <h2>{group.label}</h2>
+                                    <span>{group.markets.length} markets</span>
+                                </header>
+                                {group.markets.map(wideMarket => {
+                                    const feed = wideMarketData[wideMarket.code] ?? {
+                                        prices: [],
+                                        pipSize: 2,
+                                        livePrice: null,
+                                        connected: false,
+                                    };
+                                    const result = feed.connected
+                                        ? runAI(feed.prices, feed.pipSize, analysisType, overBarrier)
+                                        : null;
 
-                        return (
-                            <AnalysisMarketCard
-                                key={wideMarket.code}
-                                marketLabel={wideMarket.label}
-                                livePrice={feed.connected ? feed.livePrice : null}
-                                pipSize={feed.pipSize}
-                                prices={feed.prices}
-                                tickWindow={tickWindow}
-                                connected={feed.connected}
-                                aiResult={result}
-                                riseFallEntryValid={feed.connected && matchesRiseFallEntryPattern(feed.prices)}
-                                evenOddEntryValid={feed.connected && matchesEvenOddEntryPattern(feed.prices, feed.pipSize)}
-                            />
-                        );
-                    })}
-                </div>
+                                    return (
+                                        <AnalysisMarketCard
+                                            key={wideMarket.code}
+                                            marketLabel={wideMarket.label}
+                                            livePrice={feed.connected ? feed.livePrice : null}
+                                            pipSize={feed.pipSize}
+                                            prices={feed.prices}
+                                            tickWindow={tickWindow}
+                                            connected={feed.connected}
+                                            aiResult={result}
+                                            riseFallEntryValid={feed.connected && matchesRiseFallEntryPattern(feed.prices)}
+                                            evenOddEntryValid={feed.connected && matchesEvenOddEntryPattern(feed.prices, feed.pipSize)}
+                                        />
+                                    );
+                                })}
+                            </section>
+                        ))}
+                    </div>
+                </>
             )}
 
             <p className='aat__disclaimer'>Pattern checks and recommendations are analysis only; review before trading.</p>

@@ -28,8 +28,10 @@ describe('AnalysisMarketCard', () => {
         expect(screen.getByTestId('digit-frequency-volatility-25-1s-8')).toHaveClass('aat-market-card__digit--second-most');
         expect(screen.getByTestId('digit-frequency-volatility-25-1s-9')).toHaveClass('aat-market-card__digit--most');
         expect(screen.queryByText(/most frequent|least frequent/i)).not.toBeInTheDocument();
+        expect(screen.getByText('Entry point · latest ticks')).toBeInTheDocument();
         expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveTextContent('RRRFFRFFF');
-        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveTextContent('Valid');
+        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveTextContent('Entry');
+        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveAttribute('aria-label', expect.stringContaining('entry point detected'));
         expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s')).toHaveTextContent('EEEOEEEEOOO');
         expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s')).toHaveTextContent('Wait');
     });

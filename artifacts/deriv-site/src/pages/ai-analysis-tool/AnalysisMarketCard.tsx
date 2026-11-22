@@ -142,13 +142,13 @@ function EntryCheck({ label, sequence, valid, testId }: {
         <div
             className={`aat-market-card__entry aat-market-card__entry--${valid ? 'valid' : 'invalid'}`}
             role="status"
-            aria-label={`${label} ${valid ? 'valid' : 'not valid'}; sequence ${sequence}`}
+            aria-label={`${label} ${valid ? 'entry point detected' : 'waiting for entry point'}; sequence ${sequence}`}
             data-testid={testId}
         >
             <span className="aat-market-card__entry-mark" aria-hidden="true">{valid ? '✓' : '×'}</span>
             <span className="aat-market-card__entry-label">{label}</span>
             <code>{sequence}</code>
-            <span className="aat-market-card__entry-state">{valid ? 'Valid' : 'Wait'}</span>
+            <span className="aat-market-card__entry-state">{valid ? 'Entry' : 'Wait'}</span>
         </div>
     );
 }
@@ -277,7 +277,8 @@ export default function AnalysisMarketCard({
                         <p className="aat-market-card__pending" role="status" data-testid={`status-ai-pending-${marketId}`}>Collecting signal…</p>
                     )}
                 </div>
-                <div className="aat-market-card__entries" aria-label="Entry validity checks">
+                <div className="aat-market-card__entries" aria-label="Latest-tick entry point patterns">
+                    <div className="aat-market-card__entries-heading">Entry point · latest ticks</div>
                     <EntryCheck label="Rise / Fall" sequence={RISE_FALL_ENTRY_PATTERN} valid={riseFallEntryValid} testId={`status-rise-fall-entry-${marketId}`} />
                     <EntryCheck label="Even / Odd" sequence={EVEN_ODD_ENTRY_PATTERN} valid={evenOddEntryValid} testId={`status-even-odd-entry-${marketId}`} />
                 </div>

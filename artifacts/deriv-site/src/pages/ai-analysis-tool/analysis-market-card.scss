@@ -419,6 +419,15 @@
         gap: 5px;
     }
 
+    &__entries-heading {
+        color: #64738a;
+        font-size: 7px;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+        line-height: 1.1;
+        text-transform: uppercase;
+    }
+
     &__entry {
         display: grid;
         grid-template-columns: 15px minmax(0, 1fr) auto;
