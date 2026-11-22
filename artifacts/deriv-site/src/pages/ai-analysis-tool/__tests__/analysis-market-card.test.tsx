@@ -18,7 +18,9 @@ describe('AnalysisMarketCard', () => {
                 tickWindow={120}
                 connected
                 aiResult={null}
-                riseFallEntryValid
+                overUnderBarrier={4}
+                overUnderEntryValid={false}
+                riseFallEntryValid={false}
                 evenOddEntryValid={false}
             />,
         );
@@ -29,11 +31,76 @@ describe('AnalysisMarketCard', () => {
         expect(screen.getByTestId('digit-frequency-volatility-25-1s-9')).toHaveClass('aat-market-card__digit--most');
         expect(screen.queryByText(/most frequent|least frequent/i)).not.toBeInTheDocument();
         expect(screen.getByText('Entry point · latest ticks')).toBeInTheDocument();
-        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveTextContent('RRRFFRFFF');
-        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveTextContent('Entry');
-        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveAttribute('aria-label', expect.stringContaining('entry point detected'));
-        expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s')).toHaveTextContent('EEEOEEEEOOO');
+        expect(screen.getByTestId('status-over-under-entry-volatility-25-1s')).toHaveTextContent('Ov Ov Ov Ov Ov Ov Ov Ov Ov');
+        expect(screen.getByTestId('status-over-under-entry-volatility-25-1s')).toHaveTextContent('Target: Ov Ov Ov U U Ov U U U');
+        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveTextContent('RRRRRRRRR');
+        expect(screen.getByTestId('status-rise-fall-entry-volatility-25-1s')).toHaveTextContent('Target: RRRFFRFFF');
+        expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s')).toHaveTextContent('EOOOOOOOOOO');
+        expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s')).toHaveTextContent('Target: EEEOEEEEOOO');
         expect(screen.getByTestId('status-even-odd-entry-volatility-25-1s')).toHaveTextContent('Wait');
+    });
+
+    it('shows Over/Under percentages for the selected barrier and excludes equal digits', () => {
+        const prices = Array.from({ length: 10 }, (_, digit) => 100 + digit / 100);
+        render(
+            <AnalysisMarketCard
+                marketLabel='Volatility 25 (1s)'
+                livePrice={100.09}
+                pipSize={2}
+                prices={prices}
+                tickWindow={10}
+                connected
+                aiResult={null}
+                overUnderBarrier={4}
+                overUnderEntryValid={false}
+                riseFallEntryValid={false}
+                evenOddEntryValid={false}
+            />,
+        );
+
+        expect(screen.getByTestId('bar-over-under-volatility-25-1s')).toHaveTextContent('Over 4: 50.0%');
+        expect(screen.getByTestId('bar-over-under-volatility-25-1s')).toHaveTextContent('Under 4: 40.0%');
+        expect(screen.getByTestId('text-over-under-equal-volatility-25-1s')).toHaveTextContent('At barrier: 10.0% · 10 ticks');
+    });
+
+    it('respects the valid Over 0–8 and Under 1–9 barrier ranges', () => {
+        const prices = Array.from({ length: 10 }, (_, digit) => 100 + digit / 100);
+        const { rerender } = render(
+            <AnalysisMarketCard
+                marketLabel='Volatility 25 (1s)'
+                livePrice={100.09}
+                pipSize={2}
+                prices={prices}
+                tickWindow={10}
+                connected
+                aiResult={null}
+                overUnderBarrier={0}
+                overUnderEntryValid={false}
+                riseFallEntryValid={false}
+                evenOddEntryValid={false}
+            />,
+        );
+
+        expect(screen.getByTestId('bar-over-under-volatility-25-1s')).toHaveTextContent('Over 0: 90.0%');
+        expect(screen.getByTestId('bar-over-under-volatility-25-1s')).toHaveTextContent('Under 0: N/A');
+
+        rerender(
+            <AnalysisMarketCard
+                marketLabel='Volatility 25 (1s)'
+                livePrice={100.09}
+                pipSize={2}
+                prices={prices}
+                tickWindow={10}
+                connected
+                aiResult={null}
+                overUnderBarrier={9}
+                overUnderEntryValid={false}
+                riseFallEntryValid={false}
+                evenOddEntryValid={false}
+            />,
+        );
+        expect(screen.getByTestId('bar-over-under-volatility-25-1s')).toHaveTextContent('Over 9: N/A');
+        expect(screen.getByTestId('bar-over-under-volatility-25-1s')).toHaveTextContent('Under 9: 90.0%');
     });
 
     it('keeps all digit circles neutral until tick history arrives', () => {
@@ -46,6 +113,8 @@ describe('AnalysisMarketCard', () => {
                 tickWindow={120}
                 connected={false}
                 aiResult={null}
+                overUnderBarrier={4}
+                overUnderEntryValid={false}
                 riseFallEntryValid={false}
                 evenOddEntryValid={false}
             />,
@@ -65,6 +134,8 @@ describe('AnalysisMarketCard', () => {
                 tickWindow={120}
                 connected
                 aiResult={null}
+                overUnderBarrier={4}
+                overUnderEntryValid={false}
                 riseFallEntryValid={false}
                 evenOddEntryValid={false}
             />,

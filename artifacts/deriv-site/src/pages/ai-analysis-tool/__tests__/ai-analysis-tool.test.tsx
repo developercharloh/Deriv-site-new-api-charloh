@@ -87,6 +87,8 @@ describe('AI Analysis site-session lifecycle', () => {
         const view = render(<AiAnalysisTool />);
         expect(screen.queryByText(/Statistical analysis only/)).not.toBeInTheDocument();
         expect(screen.getByTestId('input-tick-window')).toHaveValue(120);
+        expect(screen.getByTestId('button-barrier-4')).toBeInTheDocument();
+        expect(screen.getByText('Over 0–8 · Under 1–9')).toBeInTheDocument();
         const makePrices = (count: number, decimals: number) =>
             Array.from({ length: count }, (_, index) => `100.${String(index % 10).padStart(decimals, '0')}`);
         site.load('market-one', makePrices(1000, 2), 2, '100.03', 2);
@@ -96,6 +98,11 @@ describe('AI Analysis site-session lifecycle', () => {
         expect(view.container.querySelectorAll('.aat-market-card__digit')).toHaveLength(10);
         expect(screen.getByTestId('text-ai-recommendation-volatility-25-1s')).toBeInTheDocument();
         expect(screen.getByTestId('text-ai-confidence-volatility-25-1s')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('button-barrier-6'));
+        expect(screen.getByTestId('bar-over-under-volatility-25-1s')).toHaveTextContent('Over 6: 30.0%');
+        expect(screen.getByTestId('bar-over-under-volatility-25-1s')).toHaveTextContent('Under 6: 60.0%');
+        expect(screen.getByTestId('text-over-under-equal-volatility-25-1s')).toHaveTextContent('At barrier: 10.0%');
+        fireEvent.click(screen.getByTestId('button-barrier-4'));
         const selectors = screen.getAllByRole('combobox');
         fireEvent.change(selectors[1], { target: { value: 'matches_differs' } });
         expect(screen.getByTestId('select-analysis-type')).toHaveValue('matches_differs');

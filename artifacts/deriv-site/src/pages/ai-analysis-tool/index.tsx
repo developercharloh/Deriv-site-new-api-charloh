@@ -11,6 +11,7 @@ import {
 } from '@/utils/deriv-volatilities';
 import {
     matchesEvenOddEntryPattern,
+    matchesOverUnderEntryPattern,
     matchesRiseFallEntryPattern,
 } from './analysis-entry-patterns';
 import AnalysisMarketCard from './AnalysisMarketCard';
@@ -161,11 +162,14 @@ function runAI(prices: number[], pip: number, type: AnalysisType, barrier: numbe
         case 'only_ups':
         case 'only_downs': {
             const upCt = prices.slice(1).filter((p, i) => p > prices[i]).length;
-            const dnCt = (prices.length - 1) - upCt;
-            if (type === 'only_ups')   { winFn = i => i > 0 && prices[i] > prices[i - 1]; winSide = 'ONLY UPS';   loseSide = 'ONLY DOWNS'; basePct = upCt / (N - 1); }
-            else if (type === 'only_downs') { winFn = i => i > 0 && prices[i] < prices[i - 1]; winSide = 'ONLY DOWNS'; loseSide = 'ONLY UPS'; basePct = dnCt / (N - 1); }
-            else if (upCt >= dnCt) { winFn = i => i > 0 && prices[i] > prices[i - 1]; winSide = type === 'rise_fall' ? 'RISE' : 'HIGHER'; loseSide = type === 'rise_fall' ? 'FALL' : 'LOWER'; basePct = upCt / (N - 1); }
-            else { winFn = i => i > 0 && prices[i] < prices[i - 1]; winSide = type === 'rise_fall' ? 'FALL' : 'LOWER'; loseSide = type === 'rise_fall' ? 'RISE' : 'HIGHER'; basePct = dnCt / (N - 1); }
+            const dnCt = prices.slice(1).filter((p, i) => p < prices[i]).length;
+            const directionalCount = upCt + dnCt;
+            const upRate = directionalCount ? upCt / directionalCount : 0.5;
+            const downRate = directionalCount ? dnCt / directionalCount : 0.5;
+            if (type === 'only_ups')   { winFn = i => i > 0 && prices[i] > prices[i - 1]; winSide = 'ONLY UPS';   loseSide = 'ONLY DOWNS'; basePct = upRate; }
+            else if (type === 'only_downs') { winFn = i => i > 0 && prices[i] < prices[i - 1]; winSide = 'ONLY DOWNS'; loseSide = 'ONLY UPS'; basePct = downRate; }
+            else if (upRate >= downRate) { winFn = i => i > 0 && prices[i] > prices[i - 1]; winSide = type === 'rise_fall' ? 'RISE' : 'HIGHER'; loseSide = type === 'rise_fall' ? 'FALL' : 'LOWER'; basePct = upRate; }
+            else { winFn = i => i > 0 && prices[i] < prices[i - 1]; winSide = type === 'rise_fall' ? 'FALL' : 'LOWER'; loseSide = type === 'rise_fall' ? 'RISE' : 'HIGHER'; basePct = downRate; }
             break;
         }
         case 'asians_high':
@@ -552,9 +556,8 @@ const AiAnalysisTool: React.FC = observer(() => {
                 </div>
             </div>
 
-            {analysisType === 'over_under' && (
-                <div className='aat__barrier-row'>
-                    <span className='aat__barrier-lbl'>Barrier</span>
+            <div className='aat__barrier-row'>
+                    <span className='aat__barrier-lbl'>Over/Under barrier</span>
                     <div className='aat__barrier-btns'>
                         {[0,1,2,3,4,5,6,7,8,9].map(b => (
                             <button key={b} type='button' aria-pressed={overBarrier === b} data-testid={`button-barrier-${b}`} className={`aat__barrier-btn${overBarrier === b ? ' aat__barrier-btn--sel' : ''}`} onClick={() => setOverBarrier(b)}>
@@ -562,8 +565,8 @@ const AiAnalysisTool: React.FC = observer(() => {
                             </button>
                         ))}
                     </div>
-                </div>
-            )}
+                    <span className='aat__barrier-range'>Over 0–8 · Under 1–9</span>
+            </div>
 
             {analysisView === 'normal' ? (
                 <AnalysisMarketCard
@@ -574,6 +577,8 @@ const AiAnalysisTool: React.FC = observer(() => {
                     tickWindow={tickWindow}
                     connected={connected === 'live'}
                     aiResult={connected === 'live' ? aiResult : null}
+                    overUnderBarrier={overBarrier}
+                    overUnderEntryValid={connected === 'live' && matchesOverUnderEntryPattern(prices, pipSize, overBarrier)}
                     riseFallEntryValid={connected === 'live' && matchesRiseFallEntryPattern(prices)}
                     evenOddEntryValid={connected === 'live' && matchesEvenOddEntryPattern(prices, pipSize)}
                 />
@@ -615,6 +620,8 @@ const AiAnalysisTool: React.FC = observer(() => {
                                             tickWindow={tickWindow}
                                             connected={feed.connected}
                                             aiResult={result}
+                                            overUnderBarrier={overBarrier}
+                                            overUnderEntryValid={feed.connected && matchesOverUnderEntryPattern(feed.prices, feed.pipSize, overBarrier)}
                                             riseFallEntryValid={feed.connected && matchesRiseFallEntryPattern(feed.prices)}
                                             evenOddEntryValid={feed.connected && matchesEvenOddEntryPattern(feed.prices, feed.pipSize)}
                                         />

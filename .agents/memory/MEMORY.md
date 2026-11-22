@@ -35,6 +35,7 @@
 - [Uploaded option blocks](deriv-uploaded-option-blocks.md) — imported pattern XML can depend on serialized option-variable block types that must be registered before Blockly conversion.
 - [Parity contract barriers](parity-contract-barriers.md) — DIGITEVEN and DIGITODD requests must omit prediction, selected_tick, and barrier; only Over/Under use digit barriers.
 - [AI signal scanner safety](deriv-ai-signals-scanner.md) — settle failed history requests, bound scan latency, and require fresh live confirmation before execution.
+- [AI Analysis entry patterns](ai-analysis-entry-patterns.md) — compare barrier digits and parity over the same last-X window; equality and flat moves are neutral, and signals never trade.
 - [AI Signals qualification](deriv-ai-signal-quality-policy.md) — show only setups that pass every defined check with fresh data; hide all unqualified candidates.
 - [Blockly dependent dropdown restoration](deriv-blockly-dropdown-restoration.md) — preserve XML selections before import and replay market parents before child fields after API options load.
 - [Blockly template variable imports](deriv-template-variable-imports.md) — `domToVariables` needs the `<variables>` element, not the full `<xml>` root, or root blocks can be misread as variable declarations.

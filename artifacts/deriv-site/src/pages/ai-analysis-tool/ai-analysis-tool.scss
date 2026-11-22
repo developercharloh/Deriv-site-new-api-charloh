@@ -270,18 +270,24 @@
 
 // ─── Barrier selector ─────────────────────────────────────────────────────────
 .aat__barrier-row {
-    display: flex; align-items: center; gap: 6px;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 5px 7px;
     padding: 6px 8px;
     background: #f4f5ff;
     border: 1.5px solid #c4c9e5; border-radius: 10px;
 }
 .aat__barrier-lbl {
     font-size: 9px; font-weight: 800; color: #334155;
-    flex-shrink: 0; min-width: 36px;
+    flex: 1 0 auto;
 }
-.aat__barrier-btns { display: flex; gap: 3px; flex-wrap: nowrap; flex: 1; justify-content: space-between; }
+.aat__barrier-range {
+    color: #64748b;
+    font-size: 8px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.aat__barrier-btns { display: flex; gap: 2px; flex: 1 0 100%; justify-content: space-between; }
 .aat__barrier-btn {
-    width: 26px; height: 26px; border-radius: 50%;
+    width: 24px; height: 24px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     border: 2px solid #b8c2d0;
     background: #fff;

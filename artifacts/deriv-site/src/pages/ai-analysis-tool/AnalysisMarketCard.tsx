@@ -1,7 +1,11 @@
 import './analysis-market-card.scss';
 import {
     EVEN_ODD_ENTRY_PATTERN,
+    OVER_UNDER_ENTRY_PATTERN,
     RISE_FALL_ENTRY_PATTERN,
+    getEvenOddSequence,
+    getOverUnderSequence,
+    getRiseFallSequence,
 } from './analysis-entry-patterns';
 
 export interface AnalysisMarketModel {
@@ -26,6 +30,8 @@ export interface AnalysisMarketCardProps {
     tickWindow: number;
     connected: boolean;
     aiResult: AnalysisMarketAIResult | null;
+    overUnderBarrier: number;
+    overUnderEntryValid: boolean;
     riseFallEntryValid: boolean;
     evenOddEntryValid: boolean;
 }
@@ -39,8 +45,10 @@ interface Distribution {
     odd: number;
     rise: number;
     fall: number;
-    over: number;
-    under: number;
+    flat: number;
+    over: number | null;
+    under: number | null;
+    atBarrier: number;
 }
 
 const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
@@ -52,7 +60,7 @@ function getLastDigit(price: number, pipSize: number): number {
     return /^\d$/.test(lastCharacter) ? Number(lastCharacter) : 0;
 }
 
-function getDistribution(prices: number[], pipSize: number): Distribution {
+function getDistribution(prices: number[], pipSize: number, barrier: number): Distribution {
     const digits = prices.map(price => getLastDigit(price, pipSize));
     const counts = Array.from({ length: 10 }, () => 0);
     digits.forEach(digit => { counts[digit] += 1; });
@@ -60,8 +68,13 @@ function getDistribution(prices: number[], pipSize: number): Distribution {
     const percentages = counts.map(count => total ? (count / total) * 100 : 0);
     const evenCount = digits.filter(digit => digit % 2 === 0).length;
     const riseCount = prices.slice(1).reduce((count, price, index) => count + (price > prices[index] ? 1 : 0), 0);
+    const fallCount = prices.slice(1).reduce((count, price, index) => count + (price < prices[index] ? 1 : 0), 0);
     const comparisons = Math.max(0, prices.length - 1);
-    const overCount = digits.filter(digit => digit > 4).length;
+    const overCount = digits.filter(digit => digit > barrier).length;
+    const underCount = digits.filter(digit => digit < barrier).length;
+    const equalCount = digits.filter(digit => digit === barrier).length;
+    const overBarrierValid = barrier >= 0 && barrier <= 8;
+    const underBarrierValid = barrier >= 1 && barrier <= 9;
 
     return {
         counts,
@@ -71,9 +84,11 @@ function getDistribution(prices: number[], pipSize: number): Distribution {
         even: total ? (evenCount / total) * 100 : 50,
         odd: total ? ((total - evenCount) / total) * 100 : 50,
         rise: comparisons ? (riseCount / comparisons) * 100 : 50,
-        fall: comparisons ? ((comparisons - riseCount) / comparisons) * 100 : 50,
-        over: total ? (overCount / total) * 100 : 50,
-        under: total ? ((total - overCount) / total) * 100 : 50,
+        fall: comparisons ? (fallCount / comparisons) * 100 : 50,
+        flat: comparisons ? ((comparisons - riseCount - fallCount) / comparisons) * 100 : 0,
+        over: total && overBarrierValid ? (overCount / total) * 100 : overBarrierValid ? 0 : null,
+        under: total && underBarrierValid ? (underCount / total) * 100 : underBarrierValid ? 0 : null,
+        atBarrier: total ? (equalCount / total) * 100 : 0,
     };
 }
 
@@ -100,13 +115,13 @@ function getRankClasses(counts: number[]): string[] {
 function ShareBar({ label, leftLabel, leftValue, rightLabel, rightValue, testId }: {
     label: string;
     leftLabel: string;
-    leftValue: number;
+    leftValue: number | null;
     rightLabel: string;
-    rightValue: number;
+    rightValue: number | null;
     testId: string;
 }) {
-    const left = clampPercent(leftValue);
-    const right = clampPercent(rightValue);
+    const left = clampPercent(leftValue ?? 0);
+    const right = clampPercent(rightValue ?? 0);
 
     return (
         <div className="aat-market-card__bar-row" role="group" aria-label={`${label} proportions`} data-testid={testId}>
@@ -122,19 +137,20 @@ function ShareBar({ label, leftLabel, leftValue, rightLabel, rightValue, testId 
                     aria-hidden="true"
                 />
                 <span className="aat-market-card__bar-label aat-market-card__bar-label--left">
-                    {leftLabel}: {left.toFixed(1)}%
+                    {leftLabel}: {leftValue === null ? 'N/A' : `${left.toFixed(1)}%`}
                 </span>
                 <span className="aat-market-card__bar-label aat-market-card__bar-label--right">
-                    {rightLabel}: {right.toFixed(1)}%
+                    {rightLabel}: {rightValue === null ? 'N/A' : `${right.toFixed(1)}%`}
                 </span>
             </div>
         </div>
     );
 }
 
-function EntryCheck({ label, sequence, valid, testId }: {
+function EntryCheck({ label, sequence, pattern, valid, testId }: {
     label: string;
     sequence: string;
+    pattern: string;
     valid: boolean;
     testId: string;
 }) {
@@ -142,12 +158,13 @@ function EntryCheck({ label, sequence, valid, testId }: {
         <div
             className={`aat-market-card__entry aat-market-card__entry--${valid ? 'valid' : 'invalid'}`}
             role="status"
-            aria-label={`${label} ${valid ? 'entry point detected' : 'waiting for entry point'}; sequence ${sequence}`}
+            aria-label={`${label} ${valid ? 'entry point detected' : 'waiting for entry point'}; latest sequence ${sequence || 'not available'}; target ${pattern}`}
             data-testid={testId}
         >
             <span className="aat-market-card__entry-mark" aria-hidden="true">{valid ? '✓' : '×'}</span>
             <span className="aat-market-card__entry-label">{label}</span>
-            <code>{sequence}</code>
+            <code data-testid={`${testId}-sequence`}>{sequence || '—'}</code>
+            <span className="aat-market-card__entry-pattern">Target: {pattern}</span>
             <span className="aat-market-card__entry-state">{valid ? 'Entry' : 'Wait'}</span>
         </div>
     );
@@ -161,15 +178,20 @@ export default function AnalysisMarketCard({
     tickWindow,
     connected,
     aiResult,
+    overUnderBarrier,
+    overUnderEntryValid,
     riseFallEntryValid,
     evenOddEntryValid,
 }: AnalysisMarketCardProps) {
     const safeWindow = Math.max(0, Math.floor(tickWindow));
     const safePrices = safeWindow > 0 ? prices.slice(-safeWindow) : [];
-    const distribution = getDistribution(safePrices, pipSize);
+    const distribution = getDistribution(safePrices, pipSize, overUnderBarrier);
     const rankClasses = getRankClasses(distribution.counts);
     const precision = Math.max(0, Math.min(12, Math.floor(pipSize)));
     const marketId = marketLabel.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+    const overUnderSequence = getOverUnderSequence(safePrices, pipSize, overUnderBarrier);
+    const evenOddSequence = getEvenOddSequence(safePrices, pipSize);
+    const riseFallSequence = getRiseFallSequence(safePrices);
 
     return (
         <article
@@ -240,9 +262,22 @@ export default function AnalysisMarketCard({
             </section>
 
             <section className="aat-market-card__shares" aria-label="Market proportions">
+                <ShareBar
+                    label={`Over ${overUnderBarrier} and Under ${overUnderBarrier}`}
+                    leftLabel={`Over ${overUnderBarrier}`}
+                    leftValue={distribution.over}
+                    rightLabel={`Under ${overUnderBarrier}`}
+                    rightValue={distribution.under}
+                    testId={`bar-over-under-${marketId}`}
+                />
+                <span className="aat-market-card__neutral-note" data-testid={`text-over-under-equal-${marketId}`}>
+                    At barrier: {distribution.atBarrier.toFixed(1)}% · {safePrices.length.toLocaleString()} ticks
+                </span>
                 <ShareBar label="Even and odd" leftLabel="Even" leftValue={distribution.even} rightLabel="Odd" rightValue={distribution.odd} testId={`bar-even-odd-${marketId}`} />
                 <ShareBar label="Rise and fall" leftLabel="Rise" leftValue={distribution.rise} rightLabel="Fall" rightValue={distribution.fall} testId={`bar-rise-fall-${marketId}`} />
-                <ShareBar label="Over 4 and under 5" leftLabel="Over 4" leftValue={distribution.over} rightLabel="Under 5" rightValue={distribution.under} testId={`bar-over-under-${marketId}`} />
+                <span className="aat-market-card__neutral-note" data-testid={`text-rise-fall-flat-${marketId}`}>
+                    Flat: {distribution.flat.toFixed(1)}% of price comparisons
+                </span>
             </section>
 
             <section className="aat-market-card__footer" aria-label="AI analysis and valid entries">
@@ -279,8 +314,27 @@ export default function AnalysisMarketCard({
                 </div>
                 <div className="aat-market-card__entries" aria-label="Latest-tick entry point patterns">
                     <div className="aat-market-card__entries-heading">Entry point · latest ticks</div>
-                    <EntryCheck label="Rise / Fall" sequence={RISE_FALL_ENTRY_PATTERN} valid={riseFallEntryValid} testId={`status-rise-fall-entry-${marketId}`} />
-                    <EntryCheck label="Even / Odd" sequence={EVEN_ODD_ENTRY_PATTERN} valid={evenOddEntryValid} testId={`status-even-odd-entry-${marketId}`} />
+                    <EntryCheck
+                        label="Over / Under"
+                        sequence={overUnderSequence}
+                        pattern={OVER_UNDER_ENTRY_PATTERN}
+                        valid={overUnderEntryValid}
+                        testId={`status-over-under-entry-${marketId}`}
+                    />
+                    <EntryCheck
+                        label="Even / Odd"
+                        sequence={evenOddSequence}
+                        pattern={EVEN_ODD_ENTRY_PATTERN}
+                        valid={evenOddEntryValid}
+                        testId={`status-even-odd-entry-${marketId}`}
+                    />
+                    <EntryCheck
+                        label="Rise / Fall"
+                        sequence={riseFallSequence}
+                        pattern={RISE_FALL_ENTRY_PATTERN}
+                        valid={riseFallEntryValid}
+                        testId={`status-rise-fall-entry-${marketId}`}
+                    />
                 </div>
             </section>
         </article>
