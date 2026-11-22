@@ -65,6 +65,25 @@ describe('AI strategy intent validation', () => {
         expect(() => validateRequiredBotSections(nestedRoots)).toThrow('missing required bot sections');
     });
 
+    it('explains which required bot section is missing so generation can retry accurately', () => {
+        const missingPurchase = `<xml is_dbot="true">
+            <block type="trade_definition"/>
+            <block type="before_purchase"/>
+            <block type="after_purchase"/>
+        </xml>`;
+        expect(() => validateRequiredBotSections(missingPurchase)).toThrow(
+            'no purchase block was included',
+        );
+
+        const missingSettlement = `<xml is_dbot="true">
+            <block type="trade_definition"/>
+            <block type="before_purchase"><statement name="BEFOREPURCHASE_STACK"><block type="purchase"/></statement></block>
+        </xml>`;
+        expect(() => validateRequiredBotSections(missingSettlement)).toThrow(
+            'after_purchase=0',
+        );
+    });
+
     it('detects requested digit contracts and strict digit rules', () => {
         expect(inferStrategyIntent(requestedStrategy)).toEqual({
             digitTradeTypes: ['DIGITOVER', 'DIGITUNDER'],
@@ -76,6 +95,15 @@ describe('AI strategy intent validation', () => {
                 { count: 4, condition: 'LESS_THAN', threshold: 4 },
                 { count: 3, condition: 'GREATER_THAN', threshold: 5 },
             ],
+            usesDigitOverUnder: true,
+        });
+    });
+
+    it('recognizes a concise Over bot request as a Digit Over contract', () => {
+        expect(inferStrategyIntent('Create over 3 bot on volatility 10 1s')).toEqual({
+            digitTradeTypes: ['DIGITOVER'],
+            digitContracts: [{ type: 'DIGITOVER', prediction: 3 }],
+            digitRules: [],
             usesDigitOverUnder: true,
         });
     });
