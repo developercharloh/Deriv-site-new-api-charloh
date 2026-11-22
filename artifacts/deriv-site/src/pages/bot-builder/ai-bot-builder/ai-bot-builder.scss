@@ -431,37 +431,65 @@
     animation: aib-spin 750ms linear infinite;
 }
 
+.ai-bot-builder__panel--generating {
+    width: min(330px, calc(100vw - 24px));
+    max-height: none;
+    gap: 10px;
+    overflow: hidden;
+    padding: 12px 14px;
+}
+
+.ai-bot-builder__panel--generating .ai-bot-builder__mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+}
+
+.ai-bot-builder__panel--generating .ai-bot-builder__mark svg {
+    width: 17px;
+    height: 17px;
+}
+
+.ai-bot-builder__panel--generating .ai-bot-builder__heading h2 {
+    font-size: 15px;
+}
+
 .ai-bot-builder__loading {
-    display: grid;
-    gap: 8px;
-    margin-top: 18px;
-    padding: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 10px 11px;
     border: 1px solid #e1e9e7;
     border-radius: 9px;
     background: #f3f8f6;
 }
 
-.ai-bot-builder__skeleton {
-    display: block;
-    width: 100%;
-    height: 10px;
-    border-radius: 5px;
-    background: #e3ece9;
-    animation: aib-skeleton 1.2s ease-in-out infinite alternate;
+.ai-bot-builder__loading-spinner {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    border: 2px solid #c8dfdb;
+    border-top-color: var(--aib-accent);
+    border-radius: 50%;
+    animation: aib-spin 750ms linear infinite;
 }
 
-.ai-bot-builder__skeleton--title {
-    width: 44%;
-    height: 13px;
+.ai-bot-builder__loading-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
 }
 
-.ai-bot-builder__skeleton--short {
-    width: 68%;
+.ai-bot-builder__loading-copy strong {
+    color: var(--aib-ink);
+    font-size: 12px;
 }
 
-.ai-bot-builder__loading-label {
+.ai-bot-builder__loading-copy span {
     color: var(--aib-muted);
-    font-size: 11px;
+    font-size: 10px;
+    line-height: 1.35;
 }
 
 .ai-bot-builder__result {
@@ -650,10 +678,6 @@
     to { transform: rotate(360deg); }
 }
 
-@keyframes aib-skeleton {
-    to { opacity: .45; }
-}
-
 @media (max-width: 767px) {
     .ai-bot-builder__launcher-group {
         left: 14px;
@@ -679,6 +703,12 @@
         width: calc(100vw - 24px);
         max-height: min(66dvh, calc(100dvh - 220px - env(safe-area-inset-bottom, 0px)));
         padding: 17px;
+    }
+
+    .ai-bot-builder__panel--generating {
+        width: min(320px, calc(100vw - 24px));
+        max-height: none;
+        padding: 11px 12px;
     }
 
     .ai-bot-builder__history-item {

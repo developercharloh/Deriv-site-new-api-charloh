@@ -211,6 +211,19 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
             : trimmedPrompt.length > MAX_PROMPT_LENGTH
               ? localize('Your strategy description must be 1,400 characters or fewer.')
               : '';
+    const isGenerating = generateStrategy.isPending || buildStage !== null;
+    const generationStatus =
+        buildStage === 'checking'
+            ? localize('Checking blocks…')
+            : buildStage === 'validating'
+              ? localize('Validating blocks…')
+              : localize('Creating bot…');
+    const generationDetail =
+        buildStage === 'checking'
+            ? localize('Finding the blocks this strategy can use.')
+            : buildStage === 'validating'
+              ? localize('Checking every block and connection before loading.')
+              : localize('Building your strategy and registering any missing blocks.');
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -239,6 +252,8 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
             });
             if (historyStorageKeyRef.current !== requestStorageKey) return;
             setBuildStage('validating');
+            await new Promise<void>(resolve => window.setTimeout(resolve, 220));
+            if (historyStorageKeyRef.current !== requestStorageKey) return;
             const customBlocks = validateAiGeneratedBlocks(generated.customBlocks ?? []);
             rollbackGeneratedBlocks = registerAiGeneratedBlocks(customBlocks);
             const verifiedStrategy = { ...generated, customBlocks };
@@ -383,10 +398,10 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
             {isOpen && (
                 <section
                     id='ai-bot-builder-panel'
-                    className={`ai-bot-builder__panel${launcherNearTop ? ' ai-bot-builder__panel--below-launcher' : ''}`}
+                    className={`ai-bot-builder__panel${launcherNearTop ? ' ai-bot-builder__panel--below-launcher' : ''}${isGenerating ? ' ai-bot-builder__panel--generating' : ''}`}
                     style={panelPositionStyle}
                     aria-label={localize('AI Bot Builder')}
-                    aria-describedby='ai-bot-builder-description'
+                    aria-describedby={isGenerating ? undefined : 'ai-bot-builder-description'}
                     data-testid='panel-ai-bot-builder'
                 >
                     <header className='ai-bot-builder__header'>
@@ -410,11 +425,13 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                         </button>
                     </header>
 
-                    <p id='ai-bot-builder-description' className='ai-bot-builder__intro'>
-                        {localize('Describe a strategy, refine a saved bot, and review every block before loading it.')}
-                    </p>
+                    {!isGenerating && (
+                        <p id='ai-bot-builder-description' className='ai-bot-builder__intro'>
+                            {localize('Describe a strategy, refine a saved bot, and review every block before loading it.')}
+                        </p>
+                    )}
 
-                    <div className='ai-bot-builder__history-toolbar'>
+                    {!isGenerating && <div className='ai-bot-builder__history-toolbar'>
                         <button
                             type='button'
                             className={`ai-bot-builder__history-toggle${showHistory ? ' ai-bot-builder__history-toggle--active' : ''}`}
@@ -440,9 +457,9 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                                 {localize('New strategy')}
                             </button>
                         )}
-                    </div>
+                    </div>}
 
-                    {showHistory && (
+                    {!isGenerating && showHistory && (
                         <section
                             className='ai-bot-builder__history'
                             aria-label={localize('Saved bot strategies')}
@@ -481,7 +498,7 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                         </section>
                     )}
 
-                    {!showHistory && <form className='ai-bot-builder__form' onSubmit={handleSubmit}>
+                    {!isGenerating && !showHistory && <form className='ai-bot-builder__form' onSubmit={handleSubmit}>
                         {editingBase && (
                             <div className='ai-bot-builder__refining' data-testid='text-ai-bot-builder-refining'>
                                 <span>{localize('Refining')}</span>
@@ -558,17 +575,18 @@ export function AiBotBuilder({ onLoad, renderPreview, accountId = '' }: AiBotBui
                         </p>
                     </form>}
 
-                    {(generateStrategy.isPending || buildStage !== null) && (
-                        <div className='ai-bot-builder__loading' role='status' aria-live='polite' data-testid='status-ai-bot-builder-loading'>
-                            <span className='ai-bot-builder__skeleton ai-bot-builder__skeleton--title' />
-                            <span className='ai-bot-builder__skeleton' />
-                            <span className='ai-bot-builder__skeleton ai-bot-builder__skeleton--short' />
-                            <span className='ai-bot-builder__loading-label'>
-                                {buildStage === 'checking'
-                                    ? localize('Checking the active toolbox and its real block definitions…')
-                                    : buildStage === 'validating'
-                                      ? localize('Importing every block into a test workspace and checking its connections…')
-                                      : localize('Creating missing safe blocks and completing the strategy…')}
+                    {isGenerating && (
+                        <div
+                            className='ai-bot-builder__loading'
+                            role='status'
+                            aria-live='polite'
+                            data-testid='status-ai-bot-builder-loading'
+                            data-stage={buildStage || 'building'}
+                        >
+                            <span className='ai-bot-builder__loading-spinner' aria-hidden='true' />
+                            <span className='ai-bot-builder__loading-copy'>
+                                <strong>{generationStatus}</strong>
+                                <span>{generationDetail}</span>
                             </span>
                         </div>
                     )}

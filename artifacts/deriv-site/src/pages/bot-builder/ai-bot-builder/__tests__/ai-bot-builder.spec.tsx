@@ -1,6 +1,6 @@
 const mockMutateAsync = jest.fn();
 const mockValidateGeneratedBotXml = jest.fn();
-const mockRegisterAiGeneratedBlocks = jest.fn(() => jest.fn());
+const mockRegisterAiGeneratedBlocks = jest.fn((_value?: unknown) => jest.fn());
 const mockBlockCatalog =
     '<xml><block type="trade_definition"/><block type="before_purchase"/><block type="after_purchase"/><block type="purchase"/></xml>';
 
@@ -19,7 +19,7 @@ jest.mock('../blockly-preview', () => ({
 }));
 
 jest.mock('../ai-generated-blocks', () => ({
-    registerAiGeneratedBlocks: (...args: unknown[]) => mockRegisterAiGeneratedBlocks(...args),
+    registerAiGeneratedBlocks: (value: unknown) => mockRegisterAiGeneratedBlocks(value),
     validateAiGeneratedBlocks: (value: unknown) => value,
 }));
 
@@ -27,7 +27,7 @@ jest.mock('@deriv-com/translations', () => ({
     localize: (text: string) => text,
 }));
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AiBotBuilder from '../ai-bot-builder';
 
 const generatedStrategy = {
@@ -104,7 +104,7 @@ describe('AiBotBuilder', () => {
         });
 
         fireEvent.click(screen.getByTestId('button-toggle-ai-bot-history'));
-        fireEvent.click(screen.getByRole('button', { name: 'Refine', exact: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refine' }));
         expect(screen.getByTestId('text-ai-bot-builder-refining')).toHaveTextContent('One trade');
         fireEvent.change(screen.getByTestId('input-ai-bot-builder-prompt'), {
             target: { value: 'Change the stake to 0.50 and keep one trade.' },
@@ -120,7 +120,9 @@ describe('AiBotBuilder', () => {
                 },
             })
         );
-        expect(JSON.parse(localStorage.getItem('deriv-ai-bot-builder-history:CR12345') || '[]')).toHaveLength(2);
+        await waitFor(() =>
+            expect(JSON.parse(localStorage.getItem('deriv-ai-bot-builder-history:CR12345') || '[]')).toHaveLength(2),
+        );
     });
 
     it('saves, displays, reloads, and sends custom block definitions when refining', async () => {
@@ -156,7 +158,7 @@ describe('AiBotBuilder', () => {
             .toEqual([customBlock]);
 
         fireEvent.click(screen.getByTestId('button-toggle-ai-bot-history'));
-        fireEvent.click(screen.getByRole('button', { name: 'Refine', exact: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refine' }));
         fireEvent.change(screen.getByTestId('input-ai-bot-builder-prompt'), {
             target: { value: 'Keep the strategy and use the latest digit.' },
         });
@@ -174,6 +176,40 @@ describe('AiBotBuilder', () => {
             }),
         );
         expect(mockRegisterAiGeneratedBlocks).toHaveBeenCalledWith([customBlock]);
+    });
+
+    it('collapses to a compact card and shows creation and validation stages', async () => {
+        let resolveGeneration!: (strategy: typeof generatedStrategy) => void;
+        mockMutateAsync.mockReturnValue(
+            new Promise(resolve => {
+                resolveGeneration = resolve;
+            }),
+        );
+        render(<AiBotBuilder onLoad={jest.fn()} renderPreview={() => <div>Block preview</div>} />);
+
+        fireEvent.click(screen.getByTestId('button-open-ai-bot-builder'));
+        fireEvent.change(screen.getByTestId('input-ai-bot-builder-prompt'), {
+            target: { value: 'Build a bot that makes one trade and stops.' },
+        });
+        fireEvent.click(screen.getByTestId('button-generate-ai-strategy'));
+
+        const panel = screen.getByTestId('panel-ai-bot-builder');
+        const status = await screen.findByTestId('status-ai-bot-builder-loading');
+        expect(panel).toHaveClass('ai-bot-builder__panel--generating');
+        expect(status).toHaveTextContent('Creating bot…');
+        expect(status).toHaveAttribute('data-stage', 'building');
+        expect(screen.queryByTestId('input-ai-bot-builder-prompt')).not.toBeInTheDocument();
+
+        await act(async () => resolveGeneration(generatedStrategy));
+        expect(await screen.findByTestId('status-ai-bot-builder-loading')).toHaveTextContent(
+            'Validating blocks…',
+        );
+        expect(screen.getByTestId('status-ai-bot-builder-loading')).toHaveAttribute(
+            'data-stage',
+            'validating',
+        );
+        expect(await screen.findByTestId('result-ai-bot-builder')).toBeInTheDocument();
+        expect(panel).not.toHaveClass('ai-bot-builder__panel--generating');
     });
 
     it('keeps bot history isolated when the active account changes', async () => {
