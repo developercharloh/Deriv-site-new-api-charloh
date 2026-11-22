@@ -7,8 +7,8 @@ Use the selected Over/Under barrier to classify recent last digits: Over is a la
 
 Even/Odd comes from the final decimal digit. Rise/Fall comes from comparing consecutive prices; a flat comparison is neither. The displayed patterns are advisory entry-point signals only and must never start trades automatically.
 
-The Over/Under entry pattern currently reuses the nine-step Rise/Fall shape, translating R to Ov and F to U.
+The Over/Under entry pattern reuses the nine-step Rise/Fall shape, translating R to Ov and F to U; the user confirmed this target.
 
-**Why:** The user asked for explicit barrier-based symbol streams and percentages, correct even/odd classification, recent Rise/Fall, and non-automatic entry signals. No separate Over/Under target pattern was supplied, so the implementation reuses the existing nine-step binary pattern shape.
+**Why:** The user asked for explicit barrier-based symbol streams and percentages, correct even/odd classification, recent Rise/Fall, and non-automatic entry signals, then confirmed reusing the existing nine-step pattern for Over/Under.
 
 **How to apply:** Keep the selected barrier and tick window consistent across Normal and Wide Eye cards. If the user supplies a dedicated Over/Under target sequence, replace the derived shape without changing digit classification or percentage semantics.
