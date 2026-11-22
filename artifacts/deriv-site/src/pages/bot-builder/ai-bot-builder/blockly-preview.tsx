@@ -4,7 +4,6 @@ import { localize } from '@deriv-com/translations';
 type BlocklyApi = {
     Blocks: Record<string, unknown>;
     Themes?: Record<string, unknown>;
-  Workspace?: new () => any;
   Events?: {
       disable?: () => void;
       enable?: () => void;
@@ -66,19 +65,40 @@ function getBlockNodes(root: Element): Element[] {
 }
 
 function verifyBlocklyWorkspaceImport(root: Element, Blockly: BlocklyApi) {
-    if (!Blockly.Workspace) {
-        throw new Error(localize('The workspace cannot verify this strategy yet. Try again in a moment.'));
-    }
-
     const validationRoot = root.cloneNode(true) as Element;
     const xmlBlocks = getBlockNodes(validationRoot);
     xmlBlocks.forEach((node, index) => node.setAttribute('id', `ai-builder-check-${index}`));
-    const workspace = new Blockly.Workspace();
+    const host = document.createElement('div');
+    host.setAttribute('aria-hidden', 'true');
+    Object.assign(host.style, {
+        position: 'fixed',
+        left: '-10000px',
+        top: '0',
+        width: '1024px',
+        height: '768px',
+        visibility: 'hidden',
+        pointerEvents: 'none',
+    });
+    document.body.appendChild(host);
+    const activeWorkspace = Blockly.derivWorkspace;
+    let workspace: any;
     let eventsDisabled = false;
 
     try {
         Blockly.Events?.disable?.();
         eventsDisabled = Boolean(Blockly.Events?.enable);
+        workspace = Blockly.inject(host, {
+            readOnly: true,
+            toolbox: null,
+            renderer: 'zelos',
+            theme: Blockly.Themes?.zelos_renderer,
+            media: `${(window as any).__webpack_public_path__ || ''}assets/media/`,
+            scrollbars: false,
+            trashcan: false,
+            sounds: false,
+            move: { scrollbars: false, drag: false, wheel: false },
+            zoom: { controls: false, wheel: false, startScale: 0.65, minScale: 0.3, maxScale: 1.2 },
+        });
         Blockly.Xml.domToWorkspace(validationRoot, workspace);
 
         const imported = workspace.getAllBlocks(false);
@@ -136,7 +156,9 @@ function verifyBlocklyWorkspaceImport(root: Element, Blockly: BlocklyApi) {
         throw new Error(localize('Blockly could not validate this strategy. Regenerate it before loading.'));
     } finally {
         if (eventsDisabled) Blockly.Events?.enable?.();
-        workspace.dispose?.();
+        workspace?.dispose?.();
+        if (Blockly.derivWorkspace !== activeWorkspace) Blockly.derivWorkspace = activeWorkspace;
+        host.remove();
     }
 }
 

@@ -117,6 +117,44 @@ function parseBlocklyBlocks(xml: string): ParsedBlock[] {
   return blocks;
 }
 
+export function validateRequiredBotSections(xml: string): void {
+  const root = xml.match(/^\s*<xml\b([^>]*)>/i);
+  if (!root || !/\bis_dbot\s*=\s*(["'])true\1/i.test(root[1])) {
+    throw new StrategyValidationError("The generated Blockly document is missing required bot sections.");
+  }
+
+  const topLevelTypes: string[] = [];
+  let depth = 0;
+  for (const match of xml.matchAll(/<\/?(?:block|shadow)\b[^>]*>/gi)) {
+    const tag = match[0];
+    if (/^<\//.test(tag)) {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+
+    if (depth === 0 && /^<block\b/i.test(tag)) {
+      topLevelTypes.push(getAttribute(tag, "type") || "");
+    }
+    if (!/\/\s*>$/.test(tag)) depth += 1;
+  }
+
+  const blockTypes = parseBlocklyBlocks(xml).map(block => block.type);
+  const requiredTypes = ["trade_definition", "before_purchase", "after_purchase"];
+  const hasExactlyOneTopLevelOfEach = requiredTypes.every(
+    type => topLevelTypes.filter(topLevelType => topLevelType === type).length === 1,
+  );
+  const hasExactlyOneOfEach = requiredTypes.every(
+    type => blockTypes.filter(blockType => blockType === type).length === 1,
+  );
+  const hasPurchase = blockTypes.some(type =>
+    ["purchase", "apollo_purchase", "apollo_purchase2"].includes(type),
+  );
+
+  if (!hasExactlyOneTopLevelOfEach || !hasExactlyOneOfEach || !hasPurchase) {
+    throw new StrategyValidationError("The generated Blockly document is missing required bot sections.");
+  }
+}
+
 function toNumber(value: string): number | undefined {
   const normalized = value.trim().toLowerCase();
   if (Object.prototype.hasOwnProperty.call(NUMBER_WORDS, normalized)) {

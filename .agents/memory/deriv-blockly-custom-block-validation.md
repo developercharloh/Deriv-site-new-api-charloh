@@ -10,3 +10,9 @@ In isolated Jest workspaces, `javascriptGenerator.init(workspace)` may leave the
 **Why:** A production build can succeed while a malformed block or generator prevents a strategy from loading or running; standalone Jest workspaces can also leave the legacy variable database unset.
 
 **How to apply:** When adding custom blocks, assert runtime initialization and generated `Bot.*` code. For Boolean/Number blocks, assert the tuple and generate a representative connected workspace before publishing. In Jest, initialize the legacy variable database before generating expressions with variable references.
+
+Do not use a headless `Blockly.Workspace` to validate imported XML when custom mutation callbacks may call `this.initSvg()`. Use a temporary isolated `Blockly.inject` workspace for XML import checks, then dispose it and restore the active Deriv workspace reference.
+
+**Why:** Blockly's rendered block methods are unavailable on headless blocks, so valid XML using mutator-backed inputs can fail preflight with `this.initSvg is not a function` before it reaches the real rendered workspace.
+
+**How to apply:** Keep the validation workspace offscreen and read-only, disable Blockly events during import, and assert that it is disposed even when validation throws.

@@ -8,6 +8,7 @@ import {
   StrategyValidationError,
   validateBlocklyBlocksAvailable,
   validateDigitRuleSupport,
+  validateRequiredBotSections,
   validateStrategyMatchesIntent,
 } from "./strategy-intent";
 
@@ -66,23 +67,15 @@ function extractXml(value: string): string {
     throw new Error("The generated Blockly document is not allowed.");
   }
 
-  const root = /^<xml\b[^>]*>[\s\S]*<\/xml>$/.test(xml);
-  const blockTypes = [...xml.matchAll(/<block\b[^>]*\btype=(["'])([^"']+)\1/gi)].map(
-    match => match[2],
-  );
-  const countType = (type: string) => blockTypes.filter(value => value === type).length;
+  const root = /^\s*<xml\b[^>]*>[\s\S]*<\/xml>\s*$/.test(xml);
 
-  if (
-    !root ||
-    countType("trade_definition") !== 1 ||
-    countType("before_purchase") !== 1 ||
-    countType("after_purchase") !== 1 ||
-    !blockTypes.some(type => type === "purchase" || type === "apollo_purchase2")
-  ) {
+  if (!root) {
     throw new Error("The generated Blockly document is missing required bot sections.");
   }
+  validateRequiredBotSections(xml);
 
-  if (blockTypes.length < 4 || blockTypes.length > 250) {
+  const blockCount = [...xml.matchAll(/<block\b/gi)].length;
+  if (blockCount < 4 || blockCount > 250) {
     throw new Error("The generated Blockly document has an invalid number of blocks.");
   }
 

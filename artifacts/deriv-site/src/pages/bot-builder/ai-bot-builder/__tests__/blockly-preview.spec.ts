@@ -173,6 +173,7 @@ describe('validateGeneratedBotXml', () => {
     it('verifies that generated fields and input connections load into a real workspace', () => {
         class TestWorkspace {
             blocks: any[] = [];
+            isRendered = true;
             getAllBlocks() {
                 return this.blocks;
             }
@@ -182,9 +183,11 @@ describe('validateGeneratedBotXml', () => {
             dispose() {}
         }
 
-        (window as any).Blockly.Workspace = TestWorkspace;
+        const inject = jest.fn(() => new TestWorkspace());
+        (window as any).Blockly.inject = inject;
         (window as any).Blockly.Events = { disable: jest.fn(), enable: jest.fn() };
         (window as any).Blockly.Xml.domToWorkspace = (xml: Element, workspace: TestWorkspace) => {
+            if (!workspace.isRendered) throw new TypeError('this.initSvg is not a function');
             const nodes = Array.from(xml.getElementsByTagName('*')).filter(
                 node => node.localName === 'block' || node.localName === 'shadow',
             );
@@ -216,6 +219,10 @@ describe('validateGeneratedBotXml', () => {
         };
 
         expect(() => validateGeneratedBotXml(validXml, { verifyWorkspace: true })).not.toThrow();
+        expect(inject).toHaveBeenCalledWith(
+            expect.any(HTMLDivElement),
+            expect.objectContaining({ readOnly: true, renderer: 'zelos' }),
+        );
 
         const invalidFieldXml = validXml.replace(
             '<block type="trade_definition">',

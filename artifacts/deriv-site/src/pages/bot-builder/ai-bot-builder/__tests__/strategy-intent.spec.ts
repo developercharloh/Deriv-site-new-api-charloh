@@ -2,6 +2,7 @@ import {
     inferStrategyIntent,
     validateBlocklyBlocksAvailable,
     validateDigitRuleSupport,
+    validateRequiredBotSections,
     validateStrategyMatchesIntent,
 } from '../../../../../../api-server/src/routes/openai/strategy-intent';
 
@@ -41,6 +42,26 @@ const xml = (
 </xml>`;
 
 describe('AI strategy intent validation', () => {
+    it('requires the trade, purchase, and settlement blocks at the XML root', () => {
+        const completeBot = `<xml is_dbot="true">
+            <block type="trade_definition"/>
+            <block type="before_purchase"><statement name="BEFOREPURCHASE_STACK"><block type="purchase"/></statement></block>
+            <block type="after_purchase"/>
+        </xml>`;
+        expect(() => validateRequiredBotSections(completeBot)).not.toThrow();
+
+        const nestedRoots = `<xml is_dbot="true">
+            <block type="before_purchase">
+                <statement name="BEFOREPURCHASE_STACK">
+                    <block type="trade_definition"/>
+                    <block type="after_purchase"/>
+                    <block type="purchase"/>
+                </statement>
+            </block>
+        </xml>`;
+        expect(() => validateRequiredBotSections(nestedRoots)).toThrow('missing required bot sections');
+    });
+
     it('detects requested digit contracts and strict digit rules', () => {
         expect(inferStrategyIntent(requestedStrategy)).toEqual({
             digitTradeTypes: ['DIGITOVER', 'DIGITUNDER'],
