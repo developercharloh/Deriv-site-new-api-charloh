@@ -1,0 +1,534 @@
+.aat-market-card {
+    --aat-card-ink: #17233a;
+    --aat-card-muted: #66758b;
+    --aat-card-border: #d8e0e9;
+    --aat-card-green: #0aa879;
+    --aat-card-red: #df3e4d;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    padding: 12px;
+    overflow: hidden;
+    color: var(--aat-card-ink);
+    background: #fdfefe;
+    border: 1px solid #d9e0e9;
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(17, 31, 52, 0.13);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+
+    &:focus-visible {
+        outline: 3px solid #326fd1;
+        outline-offset: 3px;
+    }
+
+    &, * { box-sizing: border-box; }
+
+    &__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    &__identity {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        gap: 2px;
+    }
+
+    &__title {
+        margin: 0;
+        overflow: hidden;
+        color: #182337;
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__price {
+        color: #087b61;
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.15;
+    }
+
+    &__connection {
+        display: inline-flex;
+        align-items: center;
+        flex: 0 0 auto;
+        gap: 5px;
+        padding: 4px 8px;
+        color: #855400;
+        background: #fff5d9;
+        border: 1px solid #f0dda3;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 800;
+        line-height: 1;
+
+        &--live {
+            color: #087443;
+            background: #e5f7ef;
+            border-color: #b9e5d0;
+        }
+    }
+
+    &__connection-dot {
+        width: 6px;
+        height: 6px;
+        flex: 0 0 auto;
+        background: currentColor;
+        border-radius: 50%;
+    }
+
+    &__distribution, &__recent, &__shares, &__ai {
+        min-width: 0;
+    }
+
+    &__section-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 4px;
+
+        h3 {
+            margin: 0;
+            color: #28364d;
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        > span {
+            color: #7a8798;
+            font-size: 9px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+    }
+
+    &__digit-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        align-items: center;
+        justify-items: center;
+        row-gap: 5px;
+        padding-top: 13px;
+    }
+
+    &__digit {
+        position: relative;
+        display: flex;
+        width: 42px;
+        height: 42px;
+        max-width: 100%;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1px;
+        border: 1.5px solid #dce3eb;
+        border-radius: 50%;
+        background: #fbfcfe;
+        box-shadow: 0 2px 6px rgba(18, 36, 58, 0.12);
+        color: #445168;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+
+        &--least {
+            color: #fff;
+            background: #df3e4d;
+            border-color: #df3e4d;
+            box-shadow: 0 3px 9px rgba(223, 62, 77, 0.25);
+        }
+
+        &--second-least {
+            color: #fff;
+            background: #e99a12;
+            border-color: #e99a12;
+        }
+
+        &--second-most {
+            color: #fff;
+            background: #2874db;
+            border-color: #2874db;
+        }
+
+        &--most {
+            color: #fff;
+            background: #0ca77c;
+            border-color: #0ca77c;
+            box-shadow: 0 3px 9px rgba(12, 167, 124, 0.24);
+        }
+
+        &--active { z-index: 1; }
+    }
+
+    &__digit-number {
+        font-size: 13px;
+        font-weight: 900;
+    }
+
+    &__digit-percent {
+        font-size: 8px;
+        font-weight: 700;
+        opacity: 0.88;
+    }
+
+    &__pointer {
+        position: absolute;
+        top: -9px;
+        left: 50%;
+        width: 0;
+        height: 0;
+        transform: translateX(-50%);
+        border-right: 5px solid transparent;
+        border-bottom: 7px solid #e04450;
+        border-left: 5px solid transparent;
+        filter: drop-shadow(0 1px 1px rgba(87, 21, 28, 0.25));
+        animation: aat-market-pointer-in 180ms ease-out both;
+    }
+
+    &__recent-list {
+        display: grid;
+        grid-template-columns: repeat(10, minmax(0, 1fr));
+        gap: 4px;
+        min-height: 24px;
+    }
+
+    &__recent-digit {
+        display: flex;
+        min-width: 0;
+        height: 24px;
+        align-items: center;
+        justify-content: center;
+        color: #a12d3c;
+        background: #fff3f3;
+        border: 1px solid #f0d1d4;
+        border-radius: 6px;
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 11px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+
+        &--even {
+            color: #08734e;
+            background: #ecfbf3;
+            border-color: #c5ead6;
+        }
+    }
+
+    &__no-data {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        padding: 0 8px;
+        color: var(--aat-card-muted);
+        font-size: 10px;
+    }
+
+    &__shares {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    &__bar-row {
+        padding: 3px 5px;
+        background: #fff;
+        border: 1px solid #e4e9ef;
+        border-radius: 10px;
+    }
+
+    &__bar {
+        position: relative;
+        display: flex;
+        height: 23px;
+        overflow: hidden;
+        background: #f1f4f8;
+        border-radius: 999px;
+        isolation: isolate;
+    }
+
+    &__bar-side {
+        position: absolute;
+        z-index: 0;
+        top: 0;
+        bottom: 0;
+        transition: width 220ms ease;
+
+        &--left {
+            left: 0;
+            background: linear-gradient(90deg, #10b981, #27c79d);
+        }
+
+        &--right {
+            right: 0;
+            background: linear-gradient(90deg, #ee4d43, #f26b70);
+        }
+    }
+
+    &__bar-label {
+        position: absolute;
+        z-index: 1;
+        top: 0;
+        display: flex;
+        height: 100%;
+        align-items: center;
+        overflow: hidden;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        &--left {
+            left: 7px;
+            justify-content: flex-start;
+        }
+
+        &--right {
+            right: 7px;
+            justify-content: flex-end;
+        }
+    }
+
+    &__footer {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+        gap: 7px;
+        align-items: stretch;
+    }
+
+    &__ai {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 7px 8px;
+        background: #f5f7fc;
+        border: 1px solid #e0e5ee;
+        border-radius: 9px;
+    }
+
+    &__ai-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+
+        h3 {
+            margin: 0;
+            color: #405071;
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+    }
+
+    &__strength {
+        color: #576887;
+        font-size: 8px;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    &__recommendation {
+        overflow: hidden;
+        color: #087443;
+        font-size: 13px;
+        font-weight: 900;
+        line-height: 1.1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__confidence {
+        display: flex;
+        justify-content: space-between;
+        gap: 4px;
+        color: #64738a;
+        font-size: 9px;
+
+        strong { color: #253b57; font-variant-numeric: tabular-nums; }
+    }
+
+    &__confidence-track {
+        height: 4px;
+        overflow: hidden;
+        background: #dce4ed;
+        border-radius: 999px;
+
+        span {
+            display: block;
+            height: 100%;
+            background: linear-gradient(90deg, #3730a3, #0ca77c);
+            border-radius: inherit;
+            transition: width 220ms ease;
+        }
+    }
+
+    &__models {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+
+        li {
+            display: inline-flex;
+            min-width: 0;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 4px;
+            border: 1px solid #d8e2eb;
+            border-radius: 5px;
+            color: #526077;
+            font-size: 8px;
+
+            strong { color: #26354a; }
+        }
+
+        .aat-market-card__model--yes {
+            background: #eaf8f0;
+            border-color: #c4e7d2;
+        }
+    }
+
+    &__pending {
+        margin: auto 0;
+        color: #718096;
+        font-size: 10px;
+    }
+
+    &__entries {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 5px;
+    }
+
+    &__entry {
+        display: grid;
+        grid-template-columns: 15px minmax(0, 1fr) auto;
+        grid-template-rows: auto auto;
+        align-items: center;
+        column-gap: 5px;
+        padding: 5px 6px;
+        border: 1px solid;
+        border-radius: 8px;
+
+        &--valid {
+            color: #087443;
+            background: #eef9f3;
+            border-color: #c5e8d3;
+        }
+
+        &--invalid {
+            color: #8b5c00;
+            background: #fff8e7;
+            border-color: #f0dfad;
+        }
+    }
+
+    &__entry-mark {
+        grid-row: 1 / 3;
+        display: flex;
+        width: 15px;
+        height: 15px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    &__entry-label {
+        min-width: 0;
+        overflow: hidden;
+        font-size: 9px;
+        font-weight: 800;
+        line-height: 1.15;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__entry code {
+        grid-column: 2 / 3;
+        overflow: hidden;
+        color: #55647a;
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 8px;
+        letter-spacing: 0.035em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__entry-state {
+        grid-column: 3;
+        grid-row: 1 / 3;
+        font-size: 8px;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+}
+
+@keyframes aat-market-pointer-in {
+    from { opacity: 0; transform: translate(-50%, -3px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (max-width: 380px) {
+    .aat-market-card {
+        padding: 10px;
+        gap: 7px;
+
+        &__digit {
+            width: 38px;
+            height: 38px;
+        }
+
+        &__footer { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); }
+        &__entry { padding: 4px; column-gap: 3px; }
+    }
+}
+
+@media (min-width: 700px) {
+    .aat-market-card {
+        max-width: 620px;
+        padding: 14px;
+        gap: 10px;
+
+        &__digit-grid { row-gap: 7px; }
+        &__digit { width: 46px; height: 46px; }
+        &__digit-number { font-size: 14px; }
+        &__digit-percent { font-size: 9px; }
+        &__recent-digit { height: 27px; }
+        &__bar { height: 25px; }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .aat-market-card,
+    .aat-market-card *,
+    .aat-market-card *::before,
+    .aat-market-card *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

@@ -114,8 +114,57 @@
     .aat__status--connecting & { animation: aat-blink 1s ease-in-out infinite; }
 }
 
+.aat__view-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    padding: 3px;
+    background: #f1f3f6;
+    border: 1px solid #d9e0e8;
+    border-radius: 8px;
+}
+
+.aat__view-button {
+    display: flex;
+    min-width: 0;
+    min-height: 34px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 10px;
+    color: #344256;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+
+    &:focus-visible {
+        outline: 3px solid #2874db;
+        outline-offset: 2px;
+    }
+
+    &--active {
+        color: #fff;
+        background: #9c0000;
+        box-shadow: 0 2px 5px rgba(91, 14, 18, 0.2);
+    }
+}
+
+.aat__view-eye {
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+}
+
 // ─── Dropdowns ────────────────────────────────────────────────────────────────
 .aat__droprows { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+.aat__droprows--wide { grid-template-columns: 1fr 1fr; }
 .aat__drop-card {
     display: flex; flex-direction: column; gap: 2px;
     padding: 6px 8px 6px;
@@ -135,6 +184,35 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     option { background: #fff; color: var(--aat-ink); }
     &:focus { color: var(--aat-green); }
+}
+.aat__tick-input {
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    color: var(--aat-ink);
+    background: transparent;
+    border: 0;
+    outline: none;
+    font-size: 12px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+
+    &:focus-visible { color: var(--aat-green); }
+}
+.aat__wide-list {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    width: 100%;
+    padding-bottom: 6px;
+}
+.aat__disclaimer {
+    margin: 0;
+    padding: 2px 4px 5px;
+    color: #64748b;
+    font-size: 9px;
+    line-height: 1.35;
+    text-align: center;
 }
 
 // ─── Barrier selector ─────────────────────────────────────────────────────────

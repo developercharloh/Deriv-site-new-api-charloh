@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
@@ -9,6 +9,11 @@ import {
     DERIV_CONTINUOUS_VOLATILITIES,
     DERIV_STANDARD_VOLATILITIES,
 } from '@/utils/deriv-volatilities';
+import {
+    matchesEvenOddEntryPattern,
+    matchesRiseFallEntryPattern,
+} from './analysis-entry-patterns';
+import AnalysisMarketCard from './AnalysisMarketCard';
 import './ai-analysis-tool.scss';
 
 // ─── Bot Redirector ───────────────────────────────────────────────────────────
@@ -63,62 +68,24 @@ const ANALYSIS_TYPES = [
     { value: 'asians_low',      label: 'Asians Low'         },
 ];
 
-const TICK_WINDOWS = [100, 500, 1000, 5000];
-const SPARKLINE_N  = 60;
-const PATTERN_MAX  = 30;
+const WIDE_EYE_MARKETS = DERIV_CONTINUOUS_VOLATILITIES.map(market => ({
+    code: market.code,
+    label: market.label.replace(' Index', ''),
+}));
 
 type AnalysisType = typeof ANALYSIS_TYPES[number]['value'];
+type AnalysisView = 'normal' | 'wide-eye';
+type WideMarketSnapshot = {
+    prices: number[];
+    pipSize: number;
+    livePrice: number | null;
+    connected: boolean;
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const lastDigitOf = (q: number, pip: number): number => {
     const s = q.toFixed(pip);
     return parseInt(s[s.length - 1], 10);
-};
-
-const patternLabel = (
-    prices: number[],
-    idx: number,
-    pip: number,
-    type: AnalysisType,
-    barrier: number,
-    matchTarget: number,
-): { label: string; win: boolean; neutral?: boolean } => {
-    const p = prices[idx];
-    const d = lastDigitOf(p, pip);
-
-    switch (type) {
-        case 'even_odd':
-            return d % 2 === 0
-                ? { label: 'E', win: true }
-                : { label: 'O', win: false };
-        case 'matches_differs':
-            return d === matchTarget
-                ? { label: 'M', win: true }
-                : { label: 'D', win: false };
-        case 'over_under':
-            if (d === barrier) return { label: 'N', win: false, neutral: true };
-            return d > barrier
-                ? { label: 'Ov', win: true }
-                : { label: 'Un', win: false };
-        case 'rise_fall':
-        case 'higher_lower':
-        case 'only_ups':
-        case 'only_downs': {
-            if (idx === 0) return { label: '-', win: false };
-            const up = p > prices[idx - 1];
-            if (type === 'rise_fall') return up ? { label: 'R', win: true } : { label: 'F', win: false };
-            if (type === 'higher_lower') return up ? { label: 'H', win: true } : { label: 'L', win: false };
-            if (type === 'only_ups') return up ? { label: '↑', win: true } : { label: '↓', win: false };
-            return up ? { label: '↑', win: false } : { label: '↓', win: true };
-        }
-        case 'asians_high':
-        case 'asians_low': {
-            const avg = prices.slice(Math.max(0, idx - 4), idx + 1).reduce((s, v) => s + v, 0) / Math.min(5, idx + 1);
-            const isHigh = p > avg;
-            return { label: isHigh ? 'AH' : 'AL', win: type === 'asians_high' ? isHigh : !isHigh };
-        }
-        default: return { label: '?', win: false };
-    }
 };
 
 // ─── AI Engine (3 models) ─────────────────────────────────────────────────────
@@ -256,54 +223,6 @@ function runAI(prices: number[], pip: number, type: AnalysisType, barrier: numbe
     return { recommendation: winSide, confidence, strength, models: [m1, m2, m3], winSide, loseSide, winPct: Math.round(basePct * 100) };
 }
 
-// ─── Sparkline ────────────────────────────────────────────────────────────────
-const Sparkline: React.FC<{ prices: number[] }> = ({ prices }) => {
-    if (prices.length < 2) return null;
-    const W = 90, H = 30;
-    const mn = Math.min(...prices), mx = Math.max(...prices);
-    const range = mx - mn || 1;
-    const pts = prices.map((p, i) => {
-        const x = (i / (prices.length - 1)) * W;
-        const y = H - ((p - mn) / range) * (H - 2) - 1;
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-    return (
-        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className='aat-sparkline'>
-            <defs>
-                <linearGradient id='spkGrad' x1='0' y1='0' x2='1' y2='0'>
-                    <stop offset='0%' stopColor='#087443' stopOpacity='0.4' />
-                    <stop offset='100%' stopColor='#087443' />
-                </linearGradient>
-            </defs>
-            <polyline points={pts} fill='none' stroke='url(#spkGrad)' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round' />
-        </svg>
-    );
-};
-
-// ─── Confidence Gauge ─────────────────────────────────────────────────────────
-const ConfidenceGauge: React.FC<{ pct: number; strength: string }> = ({ pct, strength }) => {
-    const R = 32, C = 2 * Math.PI * R;
-    const fill = (pct / 100) * C;
-    const col = pct >= 80 ? '#087443' : pct >= 65 ? '#855400' : '#b42336';
-    return (
-        <div className='aat-gauge'>
-            <svg width='78' height='78' viewBox='0 0 78 78'>
-                <circle cx='39' cy='39' r={R} fill='none' stroke='rgba(31,41,55,0.14)' strokeWidth='6' />
-                <circle cx='39' cy='39' r={R} fill='none' stroke={col} strokeWidth='6'
-                    strokeLinecap='round'
-                    strokeDasharray={`${fill} ${C}`}
-                    strokeDashoffset={C * 0.25}
-                    transform='rotate(-90 39 39)'
-                    style={{ transition: 'stroke-dasharray 0.8s ease' }}
-                />
-                <text x='39' y='36' textAnchor='middle' dominantBaseline='middle' fill='#1f2937' fontSize='14' fontWeight='900'>{pct}%</text>
-                <text x='39' y='50' textAnchor='middle' fill={col} fontSize='6' fontWeight='800' letterSpacing='0.5'>{strength}</text>
-            </svg>
-            <span className='aat-gauge__lbl' style={{ color: col }}>Confidence</span>
-        </div>
-    );
-};
-
 // ─── Component ────────────────────────────────────────────────────────────────
 const AiAnalysisTool: React.FC = observer(() => {
     const { dashboard, client } = useStore();
@@ -313,48 +232,23 @@ const AiAnalysisTool: React.FC = observer(() => {
 
     const [sym,          setSym]          = useState('1HZ25V');
     const [analysisType, setAnalysisType] = useState<AnalysisType>('even_odd');
-    const [tickWindow,   setTickWindow]   = useState(1000);
+    const [tickWindow,   setTickWindow]   = useState(120);
+    const [tickWindowDraft, setTickWindowDraft] = useState('120');
+    const [analysisView, setAnalysisView] = useState<AnalysisView>('normal');
     const [overBarrier,  setOverBarrier]  = useState(4);
+    const [wideMarketData, setWideMarketData] = useState<Record<string, WideMarketSnapshot>>({});
 
     const [prices,       setPrices]       = useState<number[]>([]);
     const [pipSize,      setPipSize]      = useState(2);
     const [livePrice,    setLivePrice]    = useState<number | null>(null);
-    const [prevPrice,    setPrevPrice]    = useState<number | null>(null);
-    const [sparkPrices,  setSparkPrices]  = useState<number[]>([]);
     const [connected,    setConnected]    = useState<'connecting' | 'live' | 'error'>('connecting');
     const [connectionError, setConnectionError] = useState('');
     const [retry, setRetry] = useState(0);
     const retryTimerRef = useRef<number | null>(null);
     const retryAttemptRef = useRef(0);
-    const [patternStream, setPatternStream] = useState<{ label: string; win: boolean; neutral?: boolean }[]>([]);
-    const [currentDigit, setCurrentDigit] = useState<number | null>(null);
-    const [arrowKey,     setArrowKey]     = useState(0); // increments on each tick to retrigger animation
-
     const pricesRef = useRef<number[]>([]);
     const pipRef    = useRef(2);
     const livePriceRef = useRef<number | null>(null);
-
-    // Refs so the WS closure always reads the LATEST values even without reconnecting
-    const analysisTypeRef = useRef<AnalysisType>(analysisType);
-    const overBarrierRef  = useRef<number>(overBarrier);
-    useEffect(() => { analysisTypeRef.current = analysisType; }, [analysisType]);
-    useEffect(() => { overBarrierRef.current  = overBarrier;  }, [overBarrier]);
-
-    // ── Build pattern stream from prices ────────────────────────────────────
-    // barrier is passed explicitly so WS closures can read overBarrierRef.current
-    // (stale-closure-safe — does NOT close over overBarrier state).
-    const buildPattern = useCallback((prices: number[], pip: number, type: AnalysisType, barrier: number) => {
-        if (prices.length < 2) return [];
-        const digits = prices.map(p => lastDigitOf(p, pip));
-        const freq   = new Array(10).fill(0);
-        for (const d of digits) freq[d]++;
-        const mostFreq = freq.indexOf(Math.max(...freq));
-        const last = prices.slice(-PATTERN_MAX);
-        return last.map((_, i) => {
-            const realIdx = prices.length - PATTERN_MAX + i;
-            return patternLabel(prices, Math.max(0, realIdx), pip, type, barrier, mostFreq);
-        }).reverse().slice(0, 20);
-    }, []); // no deps — barrier is always passed in explicitly
 
     // Only the site owns the socket, heartbeat, authorization and reconnect.
     useEffect(() => {
@@ -366,10 +260,6 @@ const AiAnalysisTool: React.FC = observer(() => {
         livePriceRef.current = null;
         setPipSize(2);
         setLivePrice(null);
-        setPrevPrice(null);
-        setSparkPrices([]);
-        setPatternStream([]);
-        setCurrentDigit(null);
 
         const api = api_base.api as unknown as AnalysisApiClient | null;
         let freshnessTimer: number | undefined;
@@ -379,6 +269,9 @@ const AiAnalysisTool: React.FC = observer(() => {
                 retryTimerRef.current = null;
             }
         };
+        if (analysisView === 'wide-eye') {
+            return () => clearAutoRetry();
+        }
         const retryForFeedError = (message: string) => {
             if (retryTimerRef.current !== null) return;
             window.clearTimeout(timer);
@@ -417,29 +310,20 @@ const AiAnalysisTool: React.FC = observer(() => {
                 const trimmed = raw.slice(-tickWindow);
                 pricesRef.current = trimmed;
                 setPrices([...trimmed]);
-                setPatternStream(buildPattern(trimmed, pip, analysisTypeRef.current, overBarrierRef.current));
                 const last = raw[raw.length - 1];
                 livePriceRef.current = last;
                 setLivePrice(last);
-                setSparkPrices(raw.slice(-SPARKLINE_N));
-                setCurrentDigit(lastDigitOf(last, pip));
-                setArrowKey(key => key + 1);
             },
             onTick: (tick, tickPipSize) => {
                 if (tickPipSize !== undefined && tickPipSize !== pipRef.current) {
                     pipRef.current = tickPipSize;
                     setPipSize(tickPipSize);
                 }
-                setPrevPrice(livePriceRef.current);
                 livePriceRef.current = tick;
                 setLivePrice(tick);
-                setSparkPrices(previous => [...previous.slice(-(SPARKLINE_N - 1)), tick]);
-                setCurrentDigit(lastDigitOf(tick, pipRef.current));
-                setArrowKey(key => key + 1);
                 const updated = [...pricesRef.current.slice(-(tickWindow - 1)), tick];
                 pricesRef.current = updated;
                 setPrices(updated);
-                setPatternStream(buildPattern(updated, pipRef.current, analysisTypeRef.current, overBarrierRef.current));
             },
             onStatus: (status, message) => {
                 if (status === 'live') {
@@ -452,19 +336,11 @@ const AiAnalysisTool: React.FC = observer(() => {
                     freshnessTimer = window.setTimeout(() => {
                         livePriceRef.current = null;
                         setLivePrice(null);
-                        setPrevPrice(null);
-                        setSparkPrices([]);
-                        setPatternStream([]);
-                        setCurrentDigit(null);
                         retryForFeedError('Live ticks stopped arriving. Check the site connection.');
                     }, 12_000);
                 } else {
                     livePriceRef.current = null;
                     setLivePrice(null);
-                    setPrevPrice(null);
-                    setSparkPrices([]);
-                    setPatternStream([]);
-                    setCurrentDigit(null);
                     retryForFeedError(message ?? 'The site connection could not load market data.');
                 }
             },
@@ -475,43 +351,82 @@ const AiAnalysisTool: React.FC = observer(() => {
             clearAutoRetry();
             cleanup();
         };
-    }, [sym, tickWindow, connectionStatus, accountId, retry, buildPattern]);
+    }, [sym, tickWindow, connectionStatus, accountId, retry, analysisView]);
 
-    // Rebuild pattern stream when analysis type changes (no reconnect needed)
     useEffect(() => {
-        if (pricesRef.current.length > 0) {
-            setPatternStream(buildPattern(pricesRef.current, pipRef.current, analysisType, overBarrier));
-        }
-    }, [analysisType, overBarrier, buildPattern]);
+        if (analysisView !== 'wide-eye') return;
 
-    // ── Computed ─────────────────────────────────────────────────────────────
-    const { digitFreq, evenPct, oddPct, mostFreqDigit, leastFreqDigit } = useMemo(() => {
-        if (prices.length < 10) return { digitFreq: new Array(10).fill(0), evenPct: 50, oddPct: 50, mostFreqDigit: 0, leastFreqDigit: 9 };
-        const digits = prices.map(p => lastDigitOf(p, pipSize));
-        const freq   = new Array(10).fill(0);
-        for (const d of digits) freq[d]++;
-        const pcts     = freq.map(f => parseFloat(((f / digits.length) * 100).toFixed(1)));
-        const evenCt   = digits.filter(d => d % 2 === 0).length;
-        const mostF    = pcts.indexOf(Math.max(...pcts));
-        const leastF   = pcts.indexOf(Math.min(...pcts));
-        return {
-            digitFreq:     pcts,
-            evenPct:       parseFloat(((evenCt / digits.length) * 100).toFixed(1)),
-            oddPct:        parseFloat((((digits.length - evenCt) / digits.length) * 100).toFixed(1)),
-            mostFreqDigit: mostF,
-            leastFreqDigit: leastF,
-        };
-    }, [prices, pipSize]);
+        setWideMarketData(Object.fromEntries(WIDE_EYE_MARKETS.map(market => [market.code, {
+            prices: [],
+            pipSize: 2,
+            livePrice: null,
+            connected: false,
+        }])));
+        const api = api_base.api as unknown as AnalysisApiClient | null;
+        if (connectionStatus !== 'opened' || !api) return;
+
+        const cleanups = WIDE_EYE_MARKETS.map(market => subscribeToAnalysisFeed({
+            api,
+            symbol: market.code,
+            count: Math.max(tickWindow, 200),
+            onHistory: (raw, pip) => {
+                const prices = raw.slice(-tickWindow);
+                setWideMarketData(current => ({
+                    ...current,
+                    [market.code]: {
+                        prices,
+                        pipSize: pip,
+                        livePrice: prices[prices.length - 1] ?? null,
+                        connected: false,
+                    },
+                }));
+            },
+            onTick: (price, pip) => {
+                setWideMarketData(current => {
+                    const existing = current[market.code];
+                    const nextPrices = [...(existing?.prices ?? []).slice(-(tickWindow - 1)), price];
+                    return {
+                        ...current,
+                        [market.code]: {
+                            prices: nextPrices,
+                            pipSize: pip ?? existing?.pipSize ?? 2,
+                            livePrice: price,
+                            connected: true,
+                        },
+                    };
+                });
+            },
+            onStatus: status => {
+                setWideMarketData(current => {
+                    const existing = current[market.code];
+                    return {
+                        ...current,
+                        [market.code]: {
+                            prices: existing?.prices ?? [],
+                            pipSize: existing?.pipSize ?? 2,
+                            livePrice: existing?.livePrice ?? null,
+                            connected: status === 'live',
+                        },
+                    };
+                });
+            },
+        }));
+
+        return () => cleanups.forEach(cleanup => cleanup());
+    }, [analysisView, connectionStatus, accountId, tickWindow, retry]);
 
     const aiResult = useMemo(
         () => runAI(prices, pipSize, analysisType, overBarrier),
         [prices, pipSize, analysisType, overBarrier],
     );
-
-    const priceChange  = livePrice !== null && prevPrice !== null ? livePrice - prevPrice : 0;
-    const pricePct     = prevPrice ? Math.abs(priceChange / prevPrice) * 100 : 0;
-    const priceUp      = priceChange >= 0;
     const market       = MARKETS.find(m => m.code === sym) ?? MARKETS[0];
+    const effectiveConnection = analysisView === 'wide-eye'
+        ? connectionStatus !== 'opened'
+            ? 'error'
+            : Object.values(wideMarketData).some(feed => feed.connected)
+                ? 'live'
+                : 'connecting'
+        : connected;
     const retryAnalysis = () => {
         if (retryTimerRef.current !== null) {
             window.clearTimeout(retryTimerRef.current);
@@ -520,57 +435,112 @@ const AiAnalysisTool: React.FC = observer(() => {
         retryAttemptRef.current = 0;
         setRetry(value => value + 1);
     };
+    const commitTickWindow = () => {
+        const parsed = Number(tickWindowDraft);
+        const next = Number.isFinite(parsed) && parsed >= 10
+            ? Math.min(5000, Math.floor(parsed))
+            : 120;
+        setTickWindow(next);
+        setTickWindowDraft(String(next));
+    };
 
     return (
         <div className='aat'>
-            {/* ── Header ─────────────────────────────────────────────────── */}
             <div className='aat__hd'>
                 <div className='aat__hd-left'>
                     <span className='aat__hd-title'>AI <span className='aat__hd-accent'>ANALYSIS</span> TOOL</span>
                     <span className='aat__hd-sub'>Live Deriv Digit Analysis</span>
                 </div>
-                <div className={`aat__status aat__status--${connected}`}>
+                <div className={`aat__status aat__status--${effectiveConnection}`} role='status' data-testid='status-analysis-connection'>
                     <span className='aat__status-dot' />
-                    {connected === 'live' ? 'Live' : connected === 'connecting' ? 'Connecting' : 'Error'}
+                    {effectiveConnection === 'live' ? 'Live' : effectiveConnection === 'connecting' ? 'Connecting' : 'Offline'}
                 </div>
             </div>
 
-            {connectionError && (
+            <div className='aat__view-switch' role='group' aria-label='Analysis view'>
+                <button
+                    type='button'
+                    className={`aat__view-button${analysisView === 'normal' ? ' aat__view-button--active' : ''}`}
+                    aria-pressed={analysisView === 'normal'}
+                    data-testid='button-normal-tool'
+                    onClick={() => setAnalysisView('normal')}
+                >
+                    Normal Tool
+                </button>
+                <button
+                    type='button'
+                    className={`aat__view-button${analysisView === 'wide-eye' ? ' aat__view-button--active' : ''}`}
+                    aria-pressed={analysisView === 'wide-eye'}
+                    data-testid='button-wide-eye'
+                    onClick={() => setAnalysisView('wide-eye')}
+                >
+                    <svg className='aat__view-eye' viewBox='0 0 20 20' aria-hidden='true'>
+                        <path d='M1.5 10s3.1-5 8.5-5 8.5 5 8.5 5-3.1 5-8.5 5-8.5-5-8.5-5Z' />
+                        <circle cx='10' cy='10' r='2.4' />
+                    </svg>
+                    Wide Eye
+                </button>
+            </div>
+
+            {connectionError && analysisView === 'normal' && (
                 <div className='aat__connection-error' role='status'>
                     {connectionError}{' '}
-                    <button type='button' onClick={retryAnalysis}>Retry analysis</button>
+                    <button type='button' data-testid='button-retry-analysis' onClick={retryAnalysis}>Retry analysis</button>
+                </div>
+            )}
+            {analysisView === 'wide-eye' && effectiveConnection !== 'live' && (
+                <div className='aat__connection-error' role='status'>
+                    {connectionStatus === 'opened' ? 'Loading the live 1-second volatility feeds.' : 'The site connection is unavailable.'}{' '}
+                    <button type='button' data-testid='button-retry-wide-eye' onClick={retryAnalysis}>Retry Wide Eye</button>
                 </div>
             )}
 
-            {/* ── 3 Dropdowns ────────────────────────────────────────────── */}
-            <div className='aat__droprows'>
+            <div className={`aat__droprows${analysisView === 'wide-eye' ? ' aat__droprows--wide' : ''}`}>
+                {analysisView === 'normal' && (
+                    <div className='aat__drop-card'>
+                        <label className='aat__drop-lbl' htmlFor='aat-market-select'>Volatility</label>
+                        <select id='aat-market-select' className='aat__drop' value={sym} onChange={e => setSym(e.target.value)} data-testid='select-volatility'>
+                            {MARKETS.map(m => <option key={m.code} value={m.code}>{m.label}</option>)}
+                        </select>
+                    </div>
+                )}
                 <div className='aat__drop-card'>
-                    <span className='aat__drop-lbl'>Volatility</span>
-                    <select className='aat__drop' value={sym} onChange={e => setSym(e.target.value)}>
-                        {MARKETS.map(m => <option key={m.code} value={m.code}>{m.label}</option>)}
-                    </select>
-                </div>
-                <div className='aat__drop-card'>
-                    <span className='aat__drop-lbl'>Analysis Type</span>
-                    <select className='aat__drop' value={analysisType} onChange={e => setAnalysisType(e.target.value as AnalysisType)}>
+                    <label className='aat__drop-lbl' htmlFor='aat-analysis-select'>Analysis Type</label>
+                    <select id='aat-analysis-select' className='aat__drop' value={analysisType} onChange={e => setAnalysisType(e.target.value as AnalysisType)} data-testid='select-analysis-type'>
                         {ANALYSIS_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                 </div>
-                <div className='aat__drop-card'>
-                    <span className='aat__drop-lbl'>Ticks Analysed</span>
-                    <select className='aat__drop' value={tickWindow} onChange={e => setTickWindow(Number(e.target.value))}>
-                        {TICK_WINDOWS.map(w => <option key={w} value={w}>{w.toLocaleString()}</option>)}
-                    </select>
+                <div className='aat__drop-card aat__tick-control'>
+                    <label className='aat__drop-lbl' htmlFor='aat-tick-window'>Ticks Analysed</label>
+                    <input
+                        id='aat-tick-window'
+                        className='aat__tick-input'
+                        type='number'
+                        inputMode='numeric'
+                        min={10}
+                        max={5000}
+                        step={1}
+                        value={tickWindowDraft}
+                        aria-label='Number of ticks to analyze'
+                        data-testid='input-tick-window'
+                        onChange={event => setTickWindowDraft(event.currentTarget.value)}
+                        onBlur={commitTickWindow}
+                        onKeyDown={event => {
+                            if (event.key === 'Enter') {
+                                event.preventDefault();
+                                commitTickWindow();
+                            }
+                        }}
+                    />
                 </div>
             </div>
 
-            {/* Over/Under barrier selector */}
             {analysisType === 'over_under' && (
                 <div className='aat__barrier-row'>
                     <span className='aat__barrier-lbl'>Barrier</span>
                     <div className='aat__barrier-btns'>
                         {[0,1,2,3,4,5,6,7,8,9].map(b => (
-                            <button key={b} className={`aat__barrier-btn${overBarrier === b ? ' aat__barrier-btn--sel' : ''}`} onClick={() => setOverBarrier(b)}>
+                            <button key={b} type='button' aria-pressed={overBarrier === b} data-testid={`button-barrier-${b}`} className={`aat__barrier-btn${overBarrier === b ? ' aat__barrier-btn--sel' : ''}`} onClick={() => setOverBarrier(b)}>
                                 {b}
                             </button>
                         ))}
@@ -578,146 +548,51 @@ const AiAnalysisTool: React.FC = observer(() => {
                 </div>
             )}
 
-            {/* ── Live Price ─────────────────────────────────────────────── */}
-            <div className='aat__price-card'>
-                <div className='aat__price-left'>
-                    <div className='aat__price-hd'>
-                        <span className='aat__price-label'>Live Price</span>
-                        <span className={`aat__price-dot aat__price-dot--${connected}`} />
-                        <span className='aat__price-streaming'>{connected === 'live' ? 'Streaming' : connected === 'connecting' ? 'Connecting…' : 'Offline'}</span>
-                    </div>
-                    <div className={`aat__price-val aat__price-val--${priceUp ? 'up' : 'down'}`}>
-                        {livePrice !== null ? livePrice.toFixed(pipSize) : '—'}
-                    </div>
-                    <div className='aat__price-change'>
-                        <span className={priceUp ? 'aat__price-change--up' : 'aat__price-change--dn'}>
-                            {priceChange !== 0 ? `${priceUp ? '+' : ''}${priceChange.toFixed(pipSize)} (${pricePct.toFixed(2)}%)` : ''}
-                        </span>
-                    </div>
-                </div>
-                <div className='aat__price-right'>
-                    <Sparkline prices={sparkPrices} />
-                </div>
-            </div>
+            {analysisView === 'normal' ? (
+                <AnalysisMarketCard
+                    marketLabel={market.label}
+                    livePrice={connected === 'live' ? livePrice : null}
+                    pipSize={pipSize}
+                    prices={prices}
+                    tickWindow={tickWindow}
+                    connected={connected === 'live'}
+                    aiResult={connected === 'live' ? aiResult : null}
+                    riseFallEntryValid={connected === 'live' && matchesRiseFallEntryPattern(prices)}
+                    evenOddEntryValid={connected === 'live' && matchesEvenOddEntryPattern(prices, pipSize)}
+                />
+            ) : (
+                <div className='aat__wide-list' data-testid='list-wide-eye-markets'>
+                    {WIDE_EYE_MARKETS.map(wideMarket => {
+                        const feed = wideMarketData[wideMarket.code] ?? {
+                            prices: [],
+                            pipSize: 2,
+                            livePrice: null,
+                            connected: false,
+                        };
+                        const result = feed.connected
+                            ? runAI(feed.prices, feed.pipSize, analysisType, overBarrier)
+                            : null;
 
-            {/* ── Live Pattern Stream ────────────────────────────────────── */}
-            <div className='aat__pattern-card'>
-                <div className='aat__pattern-hd'>
-                    <span className='aat__pattern-title'>⚡ Live Pattern Stream</span>
-                    <span className='aat__pattern-sub'>Last {Math.min(patternStream.length, 20)} Ticks</span>
-                </div>
-                <div className='aat__pattern-stream'>
-                    {patternStream.slice(0, 20).map((p, i) => (
-                        <span key={i} className={`aat__pattern-block aat__pattern-block--${p.neutral ? 'neutral' : p.win ? 'win' : 'lose'}`}>
-                            {p.label}
-                        </span>
-                    ))}
-                    {patternStream.length > 0 && <span className='aat__pattern-more'>›</span>}
-                </div>
-            </div>
-
-            {/* ── AI Recommendation + Confidence ─────────────────────────── */}
-            <div className='aat__ai-row'>
-                <div className='aat__rec-card'>
-                    <div className='aat__rec-hd'>
-                        <span className='aat__rec-icon'>🎯</span>
-                        <span className='aat__rec-title'>AI Recommendation</span>
-                    </div>
-                    {aiResult ? (
-                        <>
-                            <div className='aat__rec-val'>
-                                {aiResult.recommendation}
-                                <span className={`aat__rec-badge aat__rec-badge--${aiResult.strength.toLowerCase().replace(' ','-')}`}>
-                                    {aiResult.strength}
-                                </span>
-                            </div>
-                            <div className='aat__rec-prob-lbl'>Probability</div>
-                            <div className='aat__rec-prob-val'>{aiResult.winPct}%</div>
-                            <div className='aat__rec-prob-bar'>
-                                <div className='aat__rec-prob-fill' style={{ width: `${aiResult.winPct}%` }} />
-                            </div>
-                            <div className='aat__model-votes'>
-                                {aiResult.models.map((m, i) => (
-                                    <div key={i} className={`aat__model-chip aat__model-chip--${m.vote ? 'yes' : 'no'}`}>
-                                        <span className='aat__model-chip-dot' />
-                                        <span className='aat__model-chip-name'>{m.name}</span>
-                                        <span className='aat__model-chip-pct'>{m.pct}%</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </>
-                    ) : (
-                        <div className='aat__rec-loading'>Collecting data…</div>
-                    )}
-                </div>
-                <div className='aat__conf-card'>
-                    <div className='aat__conf-hd'>
-                        <span className='aat__conf-icon'>🛡</span>
-                        <span className='aat__conf-title'>Confidence</span>
-                    </div>
-                    {aiResult ? (
-                        <ConfidenceGauge pct={aiResult.confidence} strength={aiResult.strength} />
-                    ) : (
-                        <div className='aat__rec-loading'>—</div>
-                    )}
-                </div>
-            </div>
-
-            {/* ── Digit Distribution ────────────────────────────────────── */}
-            <div className='aat__dist-card'>
-                <div className='aat__dist-hd'>
-                    <span className='aat__dist-title'>📊 Digit Distribution <span className='aat__dist-sub'>(Last {prices.length.toLocaleString()} Ticks)</span></span>
-                </div>
-                <div className='aat__dist-grid'>
-                    {digitFreq.map((pct, d) => {
-                        const isMost   = d === mostFreqDigit;
-                        const isLeast  = d === leastFreqDigit;
-                        const isActive = d === currentDigit;
-                        const cls = isMost ? 'most' : isLeast ? 'least' : 'normal';
                         return (
-                            <div
-                                key={d}
-                                className={`aat__dist-cell aat__dist-cell--${cls}${isActive ? ' aat__dist-cell--active' : ''}`}
-                            >
-                                {isActive && (
-                                    <span
-                                        key={arrowKey}
-                                        className='aat__dist-arrow'
-                                    >▼</span>
-                                )}
-                                <span className='aat__dist-digit'>{d}</span>
-                                <span className='aat__dist-pct'>{pct}%</span>
-                            </div>
+                            <AnalysisMarketCard
+                                key={wideMarket.code}
+                                marketLabel={wideMarket.label}
+                                livePrice={feed.connected ? feed.livePrice : null}
+                                pipSize={feed.pipSize}
+                                prices={feed.prices}
+                                tickWindow={tickWindow}
+                                connected={feed.connected}
+                                aiResult={result}
+                                riseFallEntryValid={feed.connected && matchesRiseFallEntryPattern(feed.prices)}
+                                evenOddEntryValid={feed.connected && matchesEvenOddEntryPattern(feed.prices, feed.pipSize)}
+                            />
                         );
                     })}
                 </div>
-            </div>
+            )}
 
-            {/* ── Stats Footer ─────────────────────────────────────────── */}
-            <div className='aat__stats-row'>
-                <div className='aat__stat-card'>
-                    <span className='aat__stat-lbl'>Most Frequent</span>
-                    <span className='aat__stat-val aat__stat-val--green'>{mostFreqDigit}</span>
-                    <span className='aat__stat-sub'>{digitFreq[mostFreqDigit]}% ↑</span>
-                </div>
-                <div className='aat__stat-card'>
-                    <span className='aat__stat-lbl'>Least Frequent</span>
-                    <span className='aat__stat-val aat__stat-val--red'>{leastFreqDigit}</span>
-                    <span className='aat__stat-sub'>{digitFreq[leastFreqDigit]}% ↓</span>
-                </div>
-                <div className='aat__stat-card'>
-                    <span className='aat__stat-lbl'>Even %</span>
-                    <span className='aat__stat-val aat__stat-val--green'>{evenPct}%</span>
-                    <span className='aat__stat-sub'>(0,2,4,6,8)</span>
-                </div>
-                <div className='aat__stat-card'>
-                    <span className='aat__stat-lbl'>Odd %</span>
-                    <span className='aat__stat-val aat__stat-val--red'>{oddPct}%</span>
-                    <span className='aat__stat-sub'>(1,3,5,7,9)</span>
-                </div>
-            </div>
+            <p className='aat__disclaimer'>Pattern checks and recommendations are analysis only; review before trading.</p>
 
-            {/* BotRedirector: silent observer — switches to Bot Builder when bot starts */}
             <BotRedirector setActiveTab={setActiveTab} />
         </div>
     );
