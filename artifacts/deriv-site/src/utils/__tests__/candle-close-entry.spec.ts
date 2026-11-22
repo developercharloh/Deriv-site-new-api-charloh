@@ -59,6 +59,17 @@ describe('broker-tick candle-close entry', () => {
         expect(doc.querySelector('block[id="ou_tm_gate"] > mutation')?.getAttribute('else')).toBe('0');
         expect(doc.querySelector('block[id="ou_dir_purchase_check"]')).not.toBeNull();
         expect(doc.querySelector('block[id="ou_dir_purchase_check"] > statement[name="ELSE"] block[id="ou_purchase_under"]')).not.toBeNull();
+        expect(doc.querySelector('block[id="ou_max_trades_init"]')).not.toBeNull();
+        expect(doc.querySelector(
+            'block[type="after_purchase"] statement[name="AFTERPURCHASE_STACK"] > ' +
+            'block[id="ou_increment_completed_trades"] > next > block[id="ou_tp_check"]'
+        )).not.toBeNull();
+        expect(doc.querySelector(
+            'block[id="ou_trade_limit_check"] statement[name="DO0"] block[type="text_print"]'
+        )).not.toBeNull();
+        expect(doc.querySelector(
+            'block[id="ou_trade_limit_check"] statement[name="ELSE"] block[type="trade_again"]'
+        )).not.toBeNull();
         expect(doc.querySelector('block[id="ou_scan_notify"]')).toBeNull();
 
         const configured = configureOverUnderBotXml(rawXml, {
@@ -81,6 +92,10 @@ describe('broker-tick candle-close entry', () => {
             .toBe('25');
         expect(configured.querySelector('block[id="ou_mart_num"] field[name="NUM"]')?.textContent)
             .toBe('1.8');
+        expect(configured.querySelector('block[id="ou_dir_init"] field[name="TEXT"]')?.textContent)
+            .toBe('UNDER');
+        expect(configured.querySelector('block[id="ou_max_trades_num"] field[name="NUM"]')?.textContent)
+            .toBe('50');
         expect(() => configureOverUnderBotXml(rawXml, {
             mode: 'MACD_OVER_4',
             barrier: 9,
@@ -97,6 +112,23 @@ describe('broker-tick candle-close entry', () => {
             stopLoss: 50,
             martingale: 2,
         })).toThrow('Under barriers must be between 1 and 9.');
+
+        const oppositeSide = configureOverUnderBotXml(rawXml, {
+            mode: 'TSI_UNDER_6',
+            side: 'OVER',
+            barrier: 1,
+            stake: 0.35,
+            takeProfit: 15,
+            stopLoss: 50,
+            martingale: 2,
+            maxTrades: 3,
+        });
+        expect(oppositeSide.querySelector('block[id="ou_dir_init"] field[name="TEXT"]')?.textContent)
+            .toBe('OVER');
+        expect(oppositeSide.querySelector('block[id="ou_barrier_num"] field[name="NUM"]')?.textContent)
+            .toBe('1');
+        expect(oppositeSide.querySelector('block[id="ou_max_trades_num"] field[name="NUM"]')?.textContent)
+            .toBe('3');
     });
 
     test('routes a source signal into #21 without adding entry-point or signal-condition blocks', async () => {
@@ -118,6 +150,7 @@ describe('broker-tick candle-close entry', () => {
                     indicatorMode: 'TSI_UNDER_6',
                     contractType: 'DIGITUNDER',
                     recoveryContractType: 'DIGITUNDER',
+                    maxTrades: 4,
                 },
                 0.5,
                 12,
@@ -134,6 +167,32 @@ describe('broker-tick candle-close entry', () => {
                 .toBe('60');
             expect(doc.querySelector('block[id="ou_barrier_num"] field[name="NUM"]')?.textContent).toBe('9');
             expect(doc.querySelector('block[id="ou_dir_init"] field[name="TEXT"]')?.textContent).toBe('UNDER');
+            expect(doc.querySelector('block[id="ou_max_trades_num"] field[name="NUM"]')?.textContent).toBe('4');
+            expect(doc.querySelector('block[id="ou_trade_count_init"] value[name="VALUE"] block[type="math_number"] field[name="NUM"]')?.textContent)
+                .toBe('0');
+
+            const oppositeSignal = await fetchAndPatchBot(
+                'over-under-secret-weapon',
+                {
+                    symbol: '1HZ10V',
+                    symbolLabel: 'Volatility 10 (1s) Index',
+                    direction: 'OVER 1',
+                    entryPoint: 'Digit 1',
+                    confidence: 100,
+                    market: 'over_under',
+                    indicatorMode: 'TSI_UNDER_6',
+                    sourceSide: 'UNDER',
+                    contractType: 'DIGITOVER',
+                    recoveryContractType: 'DIGITOVER',
+                    maxTrades: 2,
+                },
+                0.5,
+                12,
+                25,
+                2,
+            );
+            expect(oppositeSignal.querySelector('block[id="ou_dir_init"] field[name="TEXT"]')?.textContent).toBe('OVER');
+            expect(oppositeSignal.querySelector('block[id="ou_barrier_num"] field[name="NUM"]')?.textContent).toBe('1');
         } finally {
             fetchMock.mockRestore();
         }
@@ -155,6 +214,7 @@ describe('broker-tick candle-close entry', () => {
                     entryPoint: 'One-minute indicator setup',
                     confidence: 100,
                     market: 'even_odd',
+                    maxTrades: 6,
                 },
                 0.9,
                 12,
@@ -166,6 +226,9 @@ describe('broker-tick candle-close entry', () => {
             expect(doc.querySelector('block[id="eob_martingale_value"] field[name="NUM"]')?.textContent).toBe('1.8');
             expect(doc.querySelector('block[id="eob_take_profit_value"] field[name="NUM"]')?.textContent).toBe('12');
             expect(doc.querySelector('block[id="eob_stop_loss_value"] field[name="NUM"]')?.textContent).toBe('35');
+            expect(doc.querySelector('block[id="eob_max_trades_value"] field[name="NUM"]')?.textContent).toBe('6');
+            expect(doc.querySelector('block[id="eob_increment_completed_trades"]')).not.toBeNull();
+            expect(doc.querySelector('block[id="eob_trade_limit_reached"]')).not.toBeNull();
             expect(doc.querySelector('block[id="eob_even_signal"] field[name="SIDE"]')?.textContent).toBe('ODD');
             expect(doc.querySelector('block[id="eob_even_signal"] field[name="MODE"]')?.textContent).toBe('LOCKED');
             expect(doc.querySelector('block[id="eob_purchase_even"] field[name="PURCHASE_LIST"]')?.textContent)

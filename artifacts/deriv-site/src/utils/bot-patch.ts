@@ -32,15 +32,19 @@ export interface BotSignal {
     contractType?:         string;   // e.g. "DIGITOVER", "DIGITUNDER" — for Elite bot (primary)
     recoveryContractType?: string;   // OPPOSITE contract type for recovery (e.g. DIGITUNDER when primary is DIGITOVER)
     indicatorMode?:         OverUnderIndicatorMode;
+    sourceSide?:            'OVER' | 'UNDER';
+    maxTrades?:             number;
 }
 
 export interface OverUnderBotSettings {
     mode: OverUnderIndicatorMode;
+    side?: 'OVER' | 'UNDER';
     barrier?: number;
     stake: number;
     takeProfit: number;
     stopLoss: number;
     martingale: number;
+    maxTrades?: number;
 }
 
 export interface MatchesKingBotSettings {
@@ -342,10 +346,13 @@ export function patchBotXml(
     return doc;
 }
 
-export function configureEvenOddBeastBotXml(doc: Document, side: string): Document {
+export function configureEvenOddBeastBotXml(doc: Document, side: string, maxTrades = 50): Document {
     const selectedSide = String(side ?? '').trim().toUpperCase();
     if (selectedSide !== 'EVEN' && selectedSide !== 'ODD') {
         throw new Error('Even Odd Beast needs an EVEN or ODD signal side.');
+    }
+    if (!Number.isInteger(maxTrades) || maxTrades < 1 || maxTrades > 10000) {
+        throw new Error('Maximum trades must be a whole number from 1 to 10,000.');
     }
 
     const blocks = Array.from(doc.getElementsByTagName('block'));
@@ -365,6 +372,7 @@ export function configureEvenOddBeastBotXml(doc: Document, side: string): Docume
     setField('eob_even_signal', 'SIDE', selectedSide);
     setField('eob_even_signal', 'MODE', 'LOCKED');
     setField('eob_purchase_even', 'PURCHASE_LIST', selectedSide === 'EVEN' ? 'DIGITEVEN' : 'DIGITODD');
+    setField('eob_max_trades_value', 'NUM', String(maxTrades));
 
     const selectionBlock = blockById('eob_select_even_or_odd');
     for (const child of Array.from(selectionBlock.children)) {
@@ -516,24 +524,30 @@ export function configureOverUnderBotXml(
     };
 
     const setup = getOverUnderIndicatorModeConfig(settings.mode);
+    const side = settings.side ?? setup.side;
     const barrier = settings.barrier ?? setup.barrier;
-    const validBarrier = setup.side === 'OVER'
+    const validBarrier = side === 'OVER'
         ? Number.isInteger(barrier) && barrier >= 0 && barrier <= 8
         : Number.isInteger(barrier) && barrier >= 1 && barrier <= 9;
     if (!validBarrier) {
-        throw new Error(setup.side === 'OVER'
+        throw new Error(side === 'OVER'
             ? 'Over barriers must be between 0 and 8.'
             : 'Under barriers must be between 1 and 9.');
     }
+    const maxTrades = settings.maxTrades ?? 50;
+    if (!Number.isInteger(maxTrades) || maxTrades < 1 || maxTrades > 10000) {
+        throw new Error('Maximum trades must be a whole number from 1 to 10,000.');
+    }
     // Trading mode enables immediate purchases as soon as the user presses Run.
     setField('ou_tm_init', 'NUM', 1);
-    setField('ou_dir_text_val', 'TEXT', setup.side);
+    setField('ou_dir_text_val', 'TEXT', side);
     setField('ou_barrier_num', 'NUM', barrier);
     setField('ou_stake_num', 'NUM', settings.stake);
     setField('ou_initial_stake_num', 'NUM', settings.stake);
     setField('ou_tp_num', 'NUM', settings.takeProfit);
     setField('ou_mart_num', 'NUM', settings.martingale);
     setField('sl_ou_num', 'NUM', settings.stopLoss);
+    setField('ou_max_trades_num', 'NUM', String(maxTrades));
 
     const entryPointInit = blockById('ou_ep_init');
     const entryPointNext = Array.from(entryPointInit.children)
@@ -833,22 +847,26 @@ export async function fetchAndPatchBot(
         const direction = signal.direction.trim().toUpperCase();
         const barrier = parseDigitFrom(direction);
         const isUnder = direction.startsWith('UNDER');
+        const side = isUnder ? 'UNDER' : 'OVER';
+        const sourceSide = signal.sourceSide ?? side;
         const mode = signal.indicatorMode ?? (isUnder
             ? barrier === 5 ? 'TSI_UNDER_5' : 'TSI_UNDER_6'
             : barrier === 5 ? 'MACD_OVER_5' : 'MACD_OVER_4');
         if (
             !OVER_UNDER_INDICATOR_MODES.includes(mode) ||
-            getOverUnderIndicatorModeConfig(mode).side !== (isUnder ? 'UNDER' : 'OVER')
+            getOverUnderIndicatorModeConfig(mode).side !== sourceSide
         ) {
             throw new Error('The Over/Under signal does not match one of the supported indicator setups.');
         }
         doc = configureOverUnderBotXml(new XMLSerializer().serializeToString(doc.documentElement), {
             mode,
+            side,
             barrier,
             stake,
             takeProfit,
             stopLoss,
             martingale,
+            maxTrades: signal.maxTrades ?? 50,
         });
     } else if (botId === 'over-destroyer' || botId === 'under-destroyer') {
         applyCandleCloseEntryGate(doc);
@@ -860,7 +878,7 @@ export async function fetchAndPatchBot(
         if (!DERIV_CONTINUOUS_VOLATILITIES.some(symbol => symbol.code === signal.symbol)) {
             throw new Error('Even Odd Beast signals are limited to Continuous Volatility Indices.');
         }
-        doc = configureEvenOddBeastBotXml(doc, side);
+        doc = configureEvenOddBeastBotXml(doc, side, signal.maxTrades ?? 50);
     } else if (botId === 'matches-king') {
         if (signal.market !== 'matches_differs') {
             throw new Error('Matches King requires a Matches signal.');

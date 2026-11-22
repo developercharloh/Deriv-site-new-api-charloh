@@ -14,6 +14,8 @@
     <variable id="ou_scan_txt_id">scan_text</variable>
     <variable id="ou_txt_id">text</variable>
     <variable id="sl_ou_id">StopLoss</variable>
+    <variable id="ou_trade_count_id">CompletedTrades</variable>
+    <variable id="ou_max_trades_id">MaximumTrades</variable>
   </variables>
 
   <!-- ── TRADE DEFINITION ── -->
@@ -153,6 +155,26 @@
                                                         <field name="NUM">50</field>
                                                       </block>
                                                     </value>
+                                                    <next>
+                                                      <block type="variables_set" id="ou_trade_count_init">
+                                                        <field name="VAR" id="ou_trade_count_id">CompletedTrades</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="ou_trade_count_num">
+                                                            <field name="NUM">0</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="ou_max_trades_init">
+                                                            <field name="VAR" id="ou_max_trades_id">MaximumTrades</field>
+                                                            <value name="VALUE">
+                                                              <block type="math_number" id="ou_max_trades_num">
+                                                                <field name="NUM">0</field>
+                                                              </block>
+                                                            </value>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
                                                   </block>
                                                 </next>
                                               </block>
@@ -211,6 +233,12 @@
   <!-- ── AFTER PURCHASE ── -->
   <block type="after_purchase" id="ou_after_purchase" x="886" y="60">
     <statement name="AFTERPURCHASE_STACK">
+      <block type="math_change" id="ou_increment_completed_trades">
+        <field name="VAR" id="ou_trade_count_id">CompletedTrades</field>
+        <value name="DELTA">
+          <shadow type="math_number" id="ou_completed_trades_delta"><field name="NUM">1</field></shadow>
+        </value>
+        <next>
       <block type="controls_if" id="ou_tp_check" collapsed="true">
         <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
         <value name="IF0">
@@ -416,7 +444,56 @@
                       </block>
                     </value>
                     <statement name="DO0">
-                      <block type="trade_again" id="ou_trade_again"></block>
+                      <block type="controls_if" id="ou_trade_limit_check">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_operation" id="ou_trade_limit_enabled">
+                            <field name="OP">AND</field>
+                            <value name="A">
+                              <block type="logic_compare" id="ou_trade_limit_is_enabled">
+                                <field name="OP">GT</field>
+                                <value name="A">
+                                  <block type="variables_get" id="ou_max_trades_enabled_get">
+                                    <field name="VAR" id="ou_max_trades_id">MaximumTrades</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="math_number" id="ou_zero_max_trades">
+                                    <field name="NUM">0</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_compare" id="ou_trade_count_reached">
+                                <field name="OP">GTE</field>
+                                <value name="A">
+                                  <block type="variables_get" id="ou_trade_count_get">
+                                    <field name="VAR" id="ou_trade_count_id">CompletedTrades</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="ou_max_trades_get">
+                                    <field name="VAR" id="ou_max_trades_id">MaximumTrades</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="text_print" id="ou_trade_limit_message">
+                            <value name="TEXT">
+                              <shadow type="text" id="ou_trade_limit_text">
+                                <field name="TEXT">Over/Under Secret Weapon: Maximum trades reached. Bot stopped.</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="trade_again" id="ou_trade_again"></block>
+                        </statement>
+                      </block>
                     </statement>
                     <statement name="ELSE">
                       <block type="variables_set" id="reset_tm_ml_ou">
@@ -471,6 +548,8 @@
             </next>
           </block>
         </statement>
+      </block>
+        </next>
       </block>
     </statement>
   </block>

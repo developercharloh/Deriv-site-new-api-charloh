@@ -282,6 +282,14 @@ describe('Free Bots template catalog', () => {
         expect(document.querySelector('block[id="eob_set_martingale"] field[name="NUM"]')?.textContent).toBe('2');
         expect(document.querySelector('block[id="eob_set_take_profit"] field[name="NUM"]')?.textContent).toBe('10');
         expect(document.querySelector('block[id="eob_set_stop_loss"] field[name="NUM"]')?.textContent).toBe('50');
+        expect(document.querySelector('block[id="eob_set_max_trades"] field[name="NUM"]')?.textContent).toBe('50');
+        expect(document.querySelector('block[id="eob_set_completed_trades"] field[name="NUM"]')?.textContent).toBe('0');
+        expect(document.querySelector(
+            'block[type="after_purchase"] statement[name="AFTERPURCHASE_STACK"] > ' +
+            'block[id="eob_increment_completed_trades"] > next > block[id="eob_martingale_after_settlement"]'
+        )).not.toBeNull();
+        expect(document.querySelector('block[id="eob_trade_limit_reached"]')).not.toBeNull();
+        expect(document.querySelector('block[id="eob_trade_limit_message"]')).not.toBeNull();
         expect(document.querySelector('statement[name="ELSE"] block[type="trade_again"]')).not.toBeNull();
         expect(catalog).toContain("id: 'even-odd-beast',\n        section: 'premium'");
         expect(catalog).toContain("name: 'Even Odd Beast'");

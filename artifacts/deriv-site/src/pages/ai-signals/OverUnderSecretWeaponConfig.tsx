@@ -3,11 +3,13 @@ import { X } from '@/utils/lucide-shim';
 import type { OverUnderSignalSelection } from './over-under-signal-board';
 
 export interface SecretWeaponRunSettings {
+    side: 'OVER' | 'UNDER';
     barrier: number;
     stake: number;
     takeProfit: number;
     stopLoss: number;
     martingale: number;
+    maxTrades: number;
 }
 
 interface Props {
@@ -21,19 +23,30 @@ interface Props {
 const STORAGE_KEY = 'fb_cfg_over-under-secret-weapon';
 const OVER_BARRIERS = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 const UNDER_BARRIERS = [9, 8, 7, 6, 5, 4, 3, 2, 1];
+const barriersForSide = (side: 'OVER' | 'UNDER') => side === 'OVER' ? OVER_BARRIERS : UNDER_BARRIERS;
 
 function savedSettings() {
     try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
         return {
+            side: saved?.side === 'OVER' || saved?.side === 'UNDER' ? saved.side : undefined,
             stake: typeof saved?.stake === 'string' ? saved.stake : '0.35',
             takeProfit: typeof saved?.takeProfit === 'string' ? saved.takeProfit : '15',
             stopLoss: typeof saved?.stopLoss === 'string' ? saved.stopLoss : '50',
             martingale: typeof saved?.martingale === 'string' ? saved.martingale : '2',
             barrier: Number.isInteger(Number(saved?.barrier)) ? Number(saved.barrier) : undefined,
+            maxTrades: typeof saved?.maxTrades === 'string' ? saved.maxTrades : '50',
         };
     } catch {
-        return { stake: '0.35', takeProfit: '15', stopLoss: '50', martingale: '2', barrier: undefined };
+        return {
+            side: undefined,
+            stake: '0.35',
+            takeProfit: '15',
+            stopLoss: '50',
+            martingale: '2',
+            barrier: undefined,
+            maxTrades: '50',
+        };
     }
 }
 
@@ -45,23 +58,39 @@ export function OverUnderSecretWeaponConfig({
     onSave,
 }: Props) {
     const initial = savedSettings();
-    const barriers = selection.setup.side === 'OVER' ? OVER_BARRIERS : UNDER_BARRIERS;
+    const initialSide = initial.side ?? selection.setup.side;
+    const [side, setSide] = useState<'OVER' | 'UNDER'>(initialSide);
+    const barriers = barriersForSide(side);
     const [barrier, setBarrier] = useState(
         initial.barrier !== undefined && barriers.includes(initial.barrier)
             ? initial.barrier
-            : selection.setup.barrier,
+            : selection.setup.side === initialSide
+                ? selection.setup.barrier
+                : initialSide === 'OVER' ? 4 : 5,
     );
     const [stake, setStake] = useState(initial.stake);
     const [takeProfit, setTakeProfit] = useState(initial.takeProfit);
     const [stopLoss, setStopLoss] = useState(initial.stopLoss);
     const [martingale, setMartingale] = useState(initial.martingale);
+    const [maxTrades, setMaxTrades] = useState(initial.maxTrades);
+
+    const changeSide = (nextSide: 'OVER' | 'UNDER') => {
+        setSide(nextSide);
+        if (!barriersForSide(nextSide).includes(barrier)) {
+            setBarrier(selection.setup.side === nextSide
+                ? selection.setup.barrier
+                : nextSide === 'OVER' ? 4 : 5);
+        }
+    };
 
     const submit = () => onSave({
+        side,
         barrier,
         stake: Number(stake),
         takeProfit: Number(takeProfit),
         stopLoss: Number(stopLoss),
         martingale: Number(martingale),
+        maxTrades: Number(maxTrades),
     });
 
     return (
@@ -98,11 +127,25 @@ export function OverUnderSecretWeaponConfig({
                 <p className='ou-secret-weapon__note'>
                     Signal conditions stay on the source board. Save & Run starts #21 on the connected Demo or Real account
                     for the selected market, with no entry-point wait. It buys on the next normal bot cycle and continues
-                    until you stop it or a saved risk limit is reached. Confirm your account and risk settings before starting.
+                    until you stop it or a saved risk limit is reached. Choose either trade direction; the bot stops after
+                    the selected number of completed trades. Confirm your account and settings before starting.
                 </p>
 
                 <label className='ai-runcfg__field'>
-                    <span>{selection.setup.side} barrier digit</span>
+                    <span>Trade direction</span>
+                    <select
+                        className='ai-runcfg__select'
+                        value={side}
+                        onChange={event => changeSide(event.target.value as 'OVER' | 'UNDER')}
+                        disabled={loading}
+                        data-testid='secret-weapon-side'
+                    >
+                        <option value='OVER'>Over</option>
+                        <option value='UNDER'>Under</option>
+                    </select>
+                </label>
+                <label className='ai-runcfg__field'>
+                    <span>{side} barrier digit</span>
                     <select
                         className='ai-runcfg__select'
                         value={barrier}
@@ -110,7 +153,7 @@ export function OverUnderSecretWeaponConfig({
                         disabled={loading}
                         data-testid='secret-weapon-barrier'
                     >
-                        {barriers.map(value => <option key={value} value={value}>{selection.setup.side} {value}</option>)}
+                        {barriers.map(value => <option key={value} value={value}>{side} {value}</option>)}
                     </select>
                 </label>
 
@@ -129,6 +172,19 @@ export function OverUnderSecretWeaponConfig({
                 <label className='ai-runcfg__field'>
                     <span>Martingale multiplier</span>
                     <input type='number' min='1' step='0.1' value={martingale} onChange={event => setMartingale(event.target.value)} disabled={loading} />
+                </label>
+                <label className='ai-runcfg__field'>
+                    <span>Maximum trades</span>
+                    <input
+                        type='number'
+                        min='1'
+                        max='10000'
+                        step='1'
+                        value={maxTrades}
+                        onChange={event => setMaxTrades(event.target.value)}
+                        disabled={loading}
+                        data-testid='secret-weapon-max-trades'
+                    />
                 </label>
 
                 {error && <div className='ai-panel__run-err' role='alert'>{error}</div>}

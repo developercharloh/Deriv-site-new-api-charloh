@@ -1292,8 +1292,11 @@ const AiSignalsPage: React.FC = () => {
             if (!Number.isFinite(settings.martingale) || settings.martingale < 1) {
                 throw new Error('Martingale must be at least 1×.');
             }
+            if (!Number.isInteger(settings.maxTrades) || settings.maxTrades < 1 || settings.maxTrades > 10000) {
+                throw new Error('Maximum trades must be a whole number from 1 to 10,000.');
+            }
 
-            const side = selected.setup.side;
+            const side = settings.side;
             const contractType = side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER';
             const signal: BotSignal = {
                 symbol: selected.symbol.code,
@@ -1303,8 +1306,10 @@ const AiSignalsPage: React.FC = () => {
                 confidence: 100,
                 market: 'over_under',
                 indicatorMode: selected.setup.mode,
+                sourceSide: selected.setup.side,
                 contractType,
                 recoveryContractType: contractType,
+                maxTrades: settings.maxTrades,
             };
             const document = await fetchAndPatchBot(
                 'over-under-secret-weapon',
@@ -1332,11 +1337,13 @@ const AiSignalsPage: React.FC = () => {
             try {
                 localStorage.setItem('fb_cfg_over-under-secret-weapon', JSON.stringify({
                     mode: selected.setup.mode,
+                    side,
                     barrier: settings.barrier,
                     stake: String(settings.stake),
                     takeProfit: String(settings.takeProfit),
                     stopLoss: String(settings.stopLoss),
                     martingale: String(settings.martingale),
+                    maxTrades: String(settings.maxTrades),
                 }));
             } catch { /* retain this run even if browser storage is unavailable */ }
 
@@ -1381,6 +1388,9 @@ const AiSignalsPage: React.FC = () => {
             if (!Number.isFinite(settings.martingale) || settings.martingale < 1) {
                 throw new Error('Martingale must be at least 1×.');
             }
+            if (!Number.isInteger(settings.maxTrades) || settings.maxTrades < 1 || settings.maxTrades > 10000) {
+                throw new Error('Maximum trades must be a whole number from 1 to 10,000.');
+            }
 
             const signal: BotSignal = {
                 symbol: selected.symbol.code,
@@ -1389,6 +1399,7 @@ const AiSignalsPage: React.FC = () => {
                 entryPoint: 'One-minute indicator setup',
                 confidence: 100,
                 market: 'even_odd',
+                maxTrades: settings.maxTrades,
             };
             const document = await fetchAndPatchBot(
                 'even-odd-beast',
